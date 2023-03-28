@@ -53,6 +53,28 @@ func (b *TextBox) DrawInline(dst *ebiten.Image, x, y int) int {
 	return x + advance
 }
 
+type ListItemMarkerBox struct {
+	Marker InlineBox
+}
+
+var _ InlineBox = (*ListItemMarkerBox)(nil)
+
+func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
+	bounds, _ := b.Marker.BoundsAndAdvance()
+	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), 0
+}
+
+func (b *ListItemMarkerBox) SpaceWidth() int {
+	return b.Marker.SpaceWidth()
+}
+
+func (b *ListItemMarkerBox) DrawInline(dst *ebiten.Image, x, y int) int {
+	_, advance := b.Marker.BoundsAndAdvance()
+	space := b.Marker.SpaceWidth()
+	b.Marker.DrawInline(dst, x-advance-space, y)
+	return x - space
+}
+
 type LineBox struct {
 	parts []InlineBox
 	space int

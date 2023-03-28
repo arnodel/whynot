@@ -80,7 +80,6 @@ func (b *TextBlock) Margins() Margins {
 }
 
 type ListItemBlock struct {
-	indent  int
 	marker  Inline
 	margins Margins
 	parts   []Inline
@@ -105,9 +104,13 @@ func (b *ListItemBlock) GetBounds(faceSelector FaceSelector, width int) image.Re
 
 func (b *ListItemBlock) GetBox(faceSelector FaceSelector, width int) Box {
 	lines := []Box{}
-	boxes := make([]InlineBox, len(b.parts))
+	boxes := make([]InlineBox, len(b.parts)+1)
+
+	boxes[0] = &ListItemMarkerBox{
+		Marker: b.marker.GetInlineBox(faceSelector),
+	}
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(faceSelector)
+		boxes[i+1] = part.GetInlineBox(faceSelector)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)

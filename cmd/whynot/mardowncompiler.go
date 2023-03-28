@@ -30,7 +30,7 @@ func parseMarkdown(f string) Block {
 		},
 		listItemStyle: partStyle{
 			TextStyle: TextStyle{Size: 16},
-			Margins:   Margins{Top: 5, Bottom: 5, Left: 20},
+			Margins:   Margins{Top: 5, Bottom: 5, Left: 40},
 		},
 		listStyle: partStyle{
 			Margins: Margins{Top: 10, Bottom: 10},
@@ -152,7 +152,6 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	default:
 		panic("Unsupported marker")
 	}
-	items = appendString(items, markerString, 0, c.listItemStyle.Size)
 
 	contents := node.FirstChild()
 	switch contents.Kind() {
@@ -166,7 +165,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		log.Panicf("Unuspported node kind: %s", contents.Kind())
 	}
 
-	return &TextBlock{parts: items, margins: c.listItemStyle.Margins}
+	return &ListItemBlock{parts: items, margins: c.listItemStyle.Margins, marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle}}
 }
 
 func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64) []Inline {
