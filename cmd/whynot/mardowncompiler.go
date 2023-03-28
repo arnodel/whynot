@@ -71,6 +71,7 @@ func parseMarkdown(f string) Block {
 			TextStyle: TextStyle{Size: 16, Family: Monospace},
 			Margins:   Margins{Top: 20, Bottom: 20, Left: 20},
 		},
+		codeColor: color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -82,6 +83,7 @@ type MarkdownCompiler struct {
 	listItemStyle  partStyle
 	listStyle      partStyle
 	codeBlockStyle partStyle
+	codeColor      color.Color
 }
 
 type partStyle struct {
@@ -148,7 +150,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			items[i] = &InlineText{
 				text:  string(line.Value(c.source)),
 				style: c.codeBlockStyle.TextStyle,
-				color: color.White,
+				color: c.codeColor,
 			}
 		}
 		return &CodeBlock{
@@ -191,9 +193,9 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64) []Inline {
 	switch node.Kind() {
 	case gmast.KindString:
-		return appendString(items, string(node.(*gmast.String).Value), getStyle(baseLevel, size))
+		return appendString(items, string(node.(*gmast.String).Value), getStyle(baseLevel, size), color.White)
 	case gmast.KindText:
-		return appendString(items, string(node.Text(c.source)), getStyle(baseLevel, size))
+		return appendString(items, string(node.Text(c.source)), getStyle(baseLevel, size), color.White)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
 		baseLevel += node.(*gmast.Emphasis).Level
@@ -205,7 +207,7 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 	case gmast.KindCodeSpan:
 		style := getStyle(baseLevel, size)
 		style.Family = Monospace
-		return appendString(items, string(node.Text(c.source)), style)
+		return appendString(items, string(node.Text(c.source)), style, c.codeColor)
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}
@@ -225,12 +227,12 @@ func getStyle(level int, size float64) TextStyle {
 	return textStyle
 }
 
-func appendString(items []Inline, s string, style TextStyle) []Inline {
+func appendString(items []Inline, s string, style TextStyle, color color.Color) []Inline {
 	textParts := strings.Fields(s)
 	for _, part := range textParts {
 		items = append(items, &InlineText{
 			text:  part,
-			color: color.White,
+			color: color,
 			style: style,
 		})
 	}
