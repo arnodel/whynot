@@ -15,11 +15,14 @@ func main() {
 	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
-	var dpi = 72 * ebiten.DeviceScaleFactor()
+	var scale = ebiten.DeviceScaleFactor()
 
 	game := &whynotController{
-		faceSelector: NewGoFontFaceSelector(dpi),
-		block:        block,
+		ctx: RenderingContext{
+			Scale:        scale,
+			FaceSelector: NewGoFontFaceSelector(72 * scale),
+		},
+		block: block,
 	}
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
@@ -27,9 +30,9 @@ func main() {
 }
 
 type whynotController struct {
-	faceSelector FaceSelector
-	block        Block
-	offsetY      float64
+	ctx     RenderingContext
+	block   Block
+	offsetY float64
 }
 
 func (c *whynotController) Update() error {
@@ -39,12 +42,13 @@ func (c *whynotController) Update() error {
 }
 
 func (c *whynotController) Draw(screen *ebiten.Image) {
-	box := c.block.GetBox(c.faceSelector, screen.Bounds().Dx())
+	box := c.block.GetBox(c.ctx, screen.Bounds().Dx())
 	box.Draw(screen, 0, int(c.offsetY))
 }
 
 func (c *whynotController) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.DeviceScaleFactor()
-	c.faceSelector.SetDPI(s * 72)
+	c.ctx.SetDPI(s * 72)
+	c.ctx.Scale = s
 	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
 }

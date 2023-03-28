@@ -3,20 +3,34 @@ package main
 import (
 	"image"
 	"image/color"
+	"math"
 )
 
+type RenderingContext struct {
+	Scale float64
+	FaceSelector
+}
+
+func (c RenderingContext) ScaleMargins(m Margins) Margins {
+	m.Left *= c.Scale
+	m.Right *= c.Scale
+	m.Top *= c.Scale
+	m.Bottom *= c.Scale
+	return m
+}
+
 type Margins struct {
-	Top, Bottom, Left, Right int
+	Top, Bottom, Left, Right float64
 }
 
 type Block interface {
-	GetBounds(faceSelector FaceSelector, width int) image.Rectangle
-	GetBox(faceSelector FaceSelector, width int) Box
+	GetBounds(ctx RenderingContext, width int) image.Rectangle
+	GetBox(ctx RenderingContext, width int) Box
 	Margins() Margins
 }
 
 type Inline interface {
-	GetInlineBox(FaceSelector) InlineBox
+	GetInlineBox(RenderingContext) InlineBox
 }
 
 type InlineText struct {
@@ -27,8 +41,8 @@ type InlineText struct {
 
 var _ Inline = (*InlineText)(nil)
 
-func (t *InlineText) GetInlineBox(faceSelector FaceSelector) InlineBox {
-	face, err := faceSelector.SelectFace(t.style)
+func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
+	face, err := ctx.SelectFace(t.style)
 	if err != nil {
 		panic(err)
 	}
@@ -47,20 +61,20 @@ type CodeBlock struct {
 
 var _ Block = (*CodeBlock)(nil)
 
-func (b *CodeBlock) GetBounds(faceSelector FaceSelector, width int) image.Rectangle {
+func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	for _, line := range b.lines {
-		box := line.GetInlineBox(faceSelector)
+		box := line.GetInlineBox(ctx)
 		bounds, _ := box.BoundsAndAdvance()
 		height += bounds.Dy()
 	}
 	return image.Rect(0, 0, width, height)
 }
 
-func (b *CodeBlock) GetBox(faceSelector FaceSelector, width int) Box {
+func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	lineBoxes := make([]Box, len(b.lines))
 	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{[]InlineBox{line.GetInlineBox(faceSelector)}, b.space}
+		lineBoxes[i] = &LineBox{[]InlineBox{line.GetInlineBox(ctx)}, b.space}
 	}
 	return &StackBox{boxes: lineBoxes}
 }
@@ -77,11 +91,11 @@ type TextBlock struct {
 
 var _ Block = (*TextBlock)(nil)
 
-func (b *TextBlock) GetBounds(faceSelector FaceSelector, width int) image.Rectangle {
+func (b *TextBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	boxes := make([]InlineBox, len(b.parts))
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(faceSelector)
+		boxes[i] = part.GetInlineBox(ctx)
 	}
 	for len(boxes) > 0 {
 		i, lineBounds := splitBoxes(boxes, width)
@@ -91,11 +105,11 @@ func (b *TextBlock) GetBounds(faceSelector FaceSelector, width int) image.Rectan
 	return image.Rect(0, 0, width, height)
 }
 
-func (b *TextBlock) GetBox(faceSelector FaceSelector, width int) Box {
+func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	lines := []Box{}
 	boxes := make([]InlineBox, len(b.parts))
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(faceSelector)
+		boxes[i] = part.GetInlineBox(ctx)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
@@ -118,11 +132,11 @@ type ListItemBlock struct {
 
 var _ Block = (*ListItemBlock)(nil)
 
-func (b *ListItemBlock) GetBounds(faceSelector FaceSelector, width int) image.Rectangle {
+func (b *ListItemBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	boxes := make([]InlineBox, len(b.parts))
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(faceSelector)
+		boxes[i] = part.GetInlineBox(ctx)
 	}
 	for len(boxes) > 0 {
 		i, lineBounds := splitBoxes(boxes, width)
@@ -132,15 +146,15 @@ func (b *ListItemBlock) GetBounds(faceSelector FaceSelector, width int) image.Re
 	return image.Rect(0, 0, width, height)
 }
 
-func (b *ListItemBlock) GetBox(faceSelector FaceSelector, width int) Box {
+func (b *ListItemBlock) GetBox(ctx RenderingContext, width int) Box {
 	lines := []Box{}
 	boxes := make([]InlineBox, len(b.parts)+1)
 
 	boxes[0] = &ListItemMarkerBox{
-		Marker: b.marker.GetInlineBox(faceSelector),
+		Marker: b.marker.GetInlineBox(ctx),
 	}
 	for i, part := range b.parts {
-		boxes[i+1] = part.GetInlineBox(faceSelector)
+		boxes[i+1] = part.GetInlineBox(ctx)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
@@ -161,35 +175,35 @@ type StackBlock struct {
 
 var _ Block = (*StackBlock)(nil)
 
-func (b *StackBlock) GetBounds(faceSelecctor FaceSelector, width int) image.Rectangle {
+func (b *StackBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	return image.Rectangle{}
 }
 
-func (b *StackBlock) GetBox(faceSelector FaceSelector, width int) Box {
+func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
 	boxes := make([]Box, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
-		margins := block.Margins()
+		margins := ctx.ScaleMargins(block.Margins())
 		if i > 0 {
-			gap := maxInt(bottomMargin, margins.Top)
+			gap := maxInt(bottomMargin, int(margins.Top))
 			if gap > 0 {
 				boxes = append(boxes, NewEmptyBox(width, gap))
 			}
 		}
 		if margins.Left > 0 || margins.Right > 0 {
-			box := block.GetBox(faceSelector, width-margins.Left-margins.Right)
-			boxes = append(boxes, NewContainerBox(box, width, box.Bounds().Dy(), margins.Left, 0))
+			box := block.GetBox(ctx, width-int(margins.Left+margins.Right))
+			boxes = append(boxes, NewContainerBox(box, width, box.Bounds().Dy(), int(margins.Left), 0))
 		} else {
-			boxes = append(boxes, block.GetBox(faceSelector, width))
+			boxes = append(boxes, block.GetBox(ctx, width))
 		}
-		bottomMargin = margins.Bottom
+		bottomMargin = int(margins.Bottom)
 	}
 	return &StackBox{boxes: boxes}
 }
 
 func (b *StackBlock) Margins() Margins {
 	return Margins{
-		Top:    maxInt(b.blocks[0].Margins().Top, b.margins.Top),
-		Bottom: maxInt(b.blocks[len(b.blocks)-1].Margins().Bottom, b.margins.Bottom),
+		Top:    math.Max(b.blocks[0].Margins().Top, b.margins.Top),
+		Bottom: math.Max(b.blocks[len(b.blocks)-1].Margins().Bottom, b.margins.Bottom),
 	}
 }
