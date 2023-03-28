@@ -67,6 +67,10 @@ func parseMarkdown(f string) Block {
 				LevelOffset: 2,
 			},
 		},
+		codeBlockStyle: partStyle{
+			TextStyle: TextStyle{Size: 16, Family: Monospace},
+			Margins:   Margins{Top: 20, Bottom: 20, Left: 20},
+		},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -77,6 +81,7 @@ type MarkdownCompiler struct {
 	paragraphStyle partStyle
 	listItemStyle  partStyle
 	listStyle      partStyle
+	codeBlockStyle partStyle
 }
 
 type partStyle struct {
@@ -135,6 +140,21 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			index++
 		}
 		return &StackBlock{blocks: items, margins: c.listStyle.Margins}
+	case gmast.KindFencedCodeBlock:
+		lineCount := node.Lines().Len()
+		items := make([]Inline, lineCount)
+		for i := 0; i < lineCount; i++ {
+			line := node.Lines().At(i)
+			items[i] = &InlineText{
+				text:  string(line.Value(c.source)),
+				style: c.codeBlockStyle.TextStyle,
+				color: color.White,
+			}
+		}
+		return &CodeBlock{
+			margins: c.codeBlockStyle.Margins,
+			lines:   items,
+		}
 	}
 	panic("Unsupported block")
 }

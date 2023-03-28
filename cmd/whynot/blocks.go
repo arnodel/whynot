@@ -39,6 +39,36 @@ func (t *InlineText) GetInlineBox(faceSelector FaceSelector) InlineBox {
 	}
 }
 
+type CodeBlock struct {
+	margins Margins
+	lines   []Inline
+	space   int
+}
+
+var _ Block = (*CodeBlock)(nil)
+
+func (b *CodeBlock) GetBounds(faceSelector FaceSelector, width int) image.Rectangle {
+	height := 0
+	for _, line := range b.lines {
+		box := line.GetInlineBox(faceSelector)
+		bounds, _ := box.BoundsAndAdvance()
+		height += bounds.Dy()
+	}
+	return image.Rect(0, 0, width, height)
+}
+
+func (b *CodeBlock) GetBox(faceSelector FaceSelector, width int) Box {
+	lineBoxes := make([]Box, len(b.lines))
+	for i, line := range b.lines {
+		lineBoxes[i] = &LineBox{[]InlineBox{line.GetInlineBox(faceSelector)}, b.space}
+	}
+	return &StackBox{boxes: lineBoxes}
+}
+
+func (b *CodeBlock) Margins() Margins {
+	return b.margins
+}
+
 type TextBlock struct {
 	margins Margins
 	parts   []Inline

@@ -1,7 +1,15 @@
-# Big Heading
+# Big Title
 
 Hello *I am highlighted*, __I am doubly highlighted__.
 Louis how are you? here is `some code` and *`highlighted code`* and **`doubly highlighted code`**
+
+This is how you can implement _Fibonacci_ in Python.
+```
+def fib(n, a = 0, b = 1):
+    while n > 0:
+        a, b = b, a + b
+    return a
+```
 
 A list of things:
 * item *1*
