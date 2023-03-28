@@ -1,7 +1,7 @@
 # Big Heading
 
 Hello *I am highlighted*, __I am doubly highlighted__.
-Louis how are you?
+Louis how are you? here is `some code` and *`highlighted code`* and **`doubly highlighted code`**
 
 A list of things:
 * item *1*

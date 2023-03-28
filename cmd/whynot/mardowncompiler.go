@@ -171,9 +171,9 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64) []Inline {
 	switch node.Kind() {
 	case gmast.KindString:
-		return appendString(items, string(node.(*gmast.String).Value), baseLevel, size)
+		return appendString(items, string(node.(*gmast.String).Value), getStyle(baseLevel, size))
 	case gmast.KindText:
-		return appendString(items, string(node.Text(c.source)), baseLevel, size)
+		return appendString(items, string(node.Text(c.source)), getStyle(baseLevel, size))
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
 		baseLevel += node.(*gmast.Emphasis).Level
@@ -182,22 +182,30 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 			child = child.NextSibling()
 		}
 		return items
+	case gmast.KindCodeSpan:
+		style := getStyle(baseLevel, size)
+		style.Family = Monospace
+		return appendString(items, string(node.Text(c.source)), style)
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}
 	return nil
 }
 
-var levelToStyles = []TextStyle{
+var levelToStyles = [4]TextStyle{
 	{0, font.StyleNormal, font.WeightNormal, Proportional},
 	{0, font.StyleItalic, font.WeightNormal, Proportional},
 	{0, font.StyleNormal, font.WeightBold, Proportional},
 	{0, font.StyleItalic, font.WeightBold, Proportional},
 }
 
-func appendString(items []Inline, s string, level int, size float64) []Inline {
-	style := levelToStyles[level%4]
-	style.Size = size
+func getStyle(level int, size float64) TextStyle {
+	textStyle := levelToStyles[level%len(levelToStyles)]
+	textStyle.Size = size
+	return textStyle
+}
+
+func appendString(items []Inline, s string, style TextStyle) []Inline {
 	textParts := strings.Fields(s)
 	for _, part := range textParts {
 		items = append(items, &InlineText{
