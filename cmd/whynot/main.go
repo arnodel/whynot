@@ -1,16 +1,25 @@
 package main
 
 import (
+	"flag"
 	"log"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func main() {
+	flag.Parse()
+	f := "test.md"
+	if flag.NArg() != 0 {
+		f = flag.Arg(0)
+	}
+	source, err := os.ReadFile(f)
+	if err != nil {
+		panic(err)
+	}
+	block := parseMarkdown(source)
 
-	block := parseMarkdown("test.md")
-
-	log.Printf("block found")
 	ebiten.SetWindowSize(1024, 768)
 	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)

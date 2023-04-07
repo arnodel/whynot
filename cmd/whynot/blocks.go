@@ -4,6 +4,8 @@ import (
 	"image"
 	"image/color"
 	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type RenderingContext struct {
@@ -50,6 +52,20 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 		Text:  t.text,
 		Face:  face,
 		Color: t.color,
+	}
+}
+
+type InlineImage struct {
+	image *ebiten.Image
+	title string
+	src   string
+}
+
+var _ Inline = (*InlineImage)(nil)
+
+func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
+	return &ImageBox{
+		image: i.image,
 	}
 }
 

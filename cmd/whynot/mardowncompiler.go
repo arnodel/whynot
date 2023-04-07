@@ -3,21 +3,18 @@ package main
 import (
 	"fmt"
 	"image/color"
+	_ "image/jpeg"
 	"log"
-	"os"
 	"strings"
 
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/yuin/goldmark"
 	gmast "github.com/yuin/goldmark/ast"
 	gmtext "github.com/yuin/goldmark/text"
 	"golang.org/x/image/font"
 )
 
-func parseMarkdown(f string) Block {
-	source, err := os.ReadFile(f)
-	if err != nil {
-		panic(err)
-	}
+func parseMarkdown(source []byte) Block {
 	parser := goldmark.DefaultParser()
 	reader := gmtext.NewReader(source)
 	node := parser.Parse(reader)
@@ -208,6 +205,13 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 		style := getStyle(baseLevel, size)
 		style.Family = Monospace
 		return appendString(items, string(node.Text(c.source)), style, c.codeColor)
+	case gmast.KindImage:
+		imgNode := node.(*gmast.Image)
+		img, _, _ := ebitenutil.NewImageFromFile(string(imgNode.Destination))
+		return append(items, &InlineImage{
+			image: img,
+			title: string(imgNode.Title),
+		})
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}

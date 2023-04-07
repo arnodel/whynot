@@ -75,6 +75,28 @@ func (b *ListItemMarkerBox) DrawInline(dst *ebiten.Image, x, y int) int {
 	return x - space
 }
 
+type ImageBox struct {
+	image *ebiten.Image
+}
+
+var _ InlineBox = (*ImageBox)(nil)
+
+func (b *ImageBox) BoundsAndAdvance() (image.Rectangle, int) {
+	bounds := b.image.Bounds()
+	return bounds, bounds.Dx()
+}
+
+func (b *ImageBox) SpaceWidth() int {
+	return 0
+}
+
+func (b *ImageBox) DrawInline(dst *ebiten.Image, x, y int) int {
+	geoM := ebiten.GeoM{}
+	geoM.Translate(float64(x), float64(y))
+	dst.DrawImage(b.image, &ebiten.DrawImageOptions{GeoM: geoM})
+	return b.image.Bounds().Dx()
+}
+
 type LineBox struct {
 	parts []InlineBox
 	space int

@@ -21,6 +21,7 @@ Here is an overview of the Markdown features that are implemented.
 Here are some features that are not yet implemented
 * Nested lists
 * Links
+* Images
 
 ## Examples
 
@@ -59,3 +60,7 @@ This is how a list with long items looks like.
 8. Another item
 9. Another item
 10. 10th item
+
+## Cute!
+
+![cat.jpg](cat.jpeg "lovely cat")
