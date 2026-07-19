@@ -2,10 +2,6 @@ package main
 
 import (
 	"image"
-	"image/color"
-	"math"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type RenderingContext struct {
@@ -21,28 +17,6 @@ func (c RenderingContext) ScaleMargins(m Margins) Margins {
 	return m
 }
 
-type Margins struct {
-	Top, Bottom, Left, Right float64
-}
-
-type Block interface {
-	GetBounds(ctx RenderingContext, width int) image.Rectangle
-	GetBox(ctx RenderingContext, width int) Box
-	Margins() Margins
-}
-
-type Inline interface {
-	GetInlineBox(RenderingContext) InlineBox
-}
-
-type InlineText struct {
-	text  string
-	style TextStyle
-	color color.Color
-}
-
-var _ Inline = (*InlineText)(nil)
-
 func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	face, err := ctx.SelectFace(t.style)
 	if err != nil {
@@ -55,27 +29,11 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
-type InlineImage struct {
-	image *ebiten.Image
-	title string
-	src   string
-}
-
-var _ Inline = (*InlineImage)(nil)
-
 func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 	return &ImageBox{
 		image: i.image,
 	}
 }
-
-type CodeBlock struct {
-	margins Margins
-	lines   []Inline
-	space   int
-}
-
-var _ Block = (*CodeBlock)(nil)
 
 func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
@@ -94,18 +52,6 @@ func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	return &StackBox{boxes: lineBoxes}
 }
-
-func (b *CodeBlock) Margins() Margins {
-	return b.margins
-}
-
-type TextBlock struct {
-	margins Margins
-	parts   []Inline
-	space   int
-}
-
-var _ Block = (*TextBlock)(nil)
 
 func (b *TextBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
@@ -134,19 +80,6 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	return &StackBox{boxes: lines}
 }
-
-func (b *TextBlock) Margins() Margins {
-	return b.margins
-}
-
-type ListItemBlock struct {
-	marker  Inline
-	margins Margins
-	parts   []Inline
-	space   int
-}
-
-var _ Block = (*ListItemBlock)(nil)
 
 func (b *ListItemBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
@@ -180,17 +113,6 @@ func (b *ListItemBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{boxes: lines}
 }
 
-func (b *ListItemBlock) Margins() Margins {
-	return b.margins
-}
-
-type StackBlock struct {
-	blocks  []Block
-	margins Margins
-}
-
-var _ Block = (*StackBlock)(nil)
-
 func (b *StackBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	return image.Rectangle{}
 }
@@ -217,9 +139,30 @@ func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{boxes: boxes}
 }
 
-func (b *StackBlock) Margins() Margins {
-	return Margins{
-		Top:    math.Max(b.blocks[0].Margins().Top, b.margins.Top),
-		Bottom: math.Max(b.blocks[len(b.blocks)-1].Margins().Bottom, b.margins.Bottom),
+func splitBoxes(boxes []InlineBox, width int) (int, image.Rectangle) {
+	if len(boxes) == 0 {
+		return 0, image.Rectangle{}
 	}
+	bounds, advance := boxes[0].BoundsAndAdvance()
+	left := bounds.Min.X
+	if left < 0 {
+		bounds = bounds.Add(image.Pt(-left, 0))
+		advance -= left
+	}
+	prevSpace := boxes[0].SpaceWidth()
+	for i, box := range boxes[1:] {
+		boxBounds, boxAdvance := box.BoundsAndAdvance()
+
+		space := box.SpaceWidth()
+		advance += maxInt(space, prevSpace)
+		prevSpace = space
+
+		movedBoxBounds := boxBounds.Add(image.Pt(advance, 0))
+		bounds = bounds.Union(movedBoxBounds)
+		if bounds.Max.X > width {
+			return i + 1, bounds
+		}
+		advance += boxAdvance
+	}
+	return len(boxes), bounds
 }

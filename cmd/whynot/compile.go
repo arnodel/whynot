@@ -73,22 +73,6 @@ func parseMarkdown(source []byte) Block {
 	return compiler.CompileDocument(node)
 }
 
-type MarkdownCompiler struct {
-	source         []byte
-	headingStyles  [6]partStyle
-	paragraphStyle partStyle
-	listItemStyle  partStyle
-	listStyle      partStyle
-	codeBlockStyle partStyle
-	codeColor      color.Color
-}
-
-type partStyle struct {
-	TextStyle
-	Margins
-	LevelOffset int
-}
-
 func (c *MarkdownCompiler) CompileNode(node gmast.Node) Block {
 	switch node.Type() {
 	case gmast.TypeDocument:
