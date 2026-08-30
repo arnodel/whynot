@@ -42,6 +42,10 @@ type whynotController struct {
 	ctx     RenderingContext
 	block   Block
 	offsetY float64
+
+	box      Box
+	boxWidth int
+	boxScale float64
 }
 
 func (c *whynotController) Update() error {
@@ -51,13 +55,22 @@ func (c *whynotController) Update() error {
 }
 
 func (c *whynotController) Draw(screen *ebiten.Image) {
-	box := c.block.GetBox(c.ctx, screen.Bounds().Dx())
-	box.Draw(screen, 0, int(c.offsetY))
+	c.box.Draw(screen, 0, int(c.offsetY))
 }
 
 func (c *whynotController) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.DeviceScaleFactor()
 	c.ctx.SetDPI(s * 72)
 	c.ctx.Scale = s
-	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
+
+	width := int(float64(outsideWidth) * s)
+	height := int(float64(outsideHeight) * s)
+
+	if width != c.boxWidth || s != c.boxScale {
+		c.box = c.block.GetBox(c.ctx, width)
+		c.boxWidth = width
+		c.boxScale = s
+	}
+
+	return width, height
 }
