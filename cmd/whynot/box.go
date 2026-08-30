@@ -23,24 +23,44 @@ type TextBox struct {
 	Text  string
 	Face  font.Face
 	Color color.Color
+
+	boundsComputed bool
+	bounds         image.Rectangle
+	advance        int
+
+	spaceComputed bool
+	spaceWidth    int
 }
 
 var _ InlineBox = (*TextBox)(nil)
 
+// Text/Face never change after construction, and a TextBox is always
+// rebuilt from scratch (never mutated) whenever the source Block tree is
+// re-laid out, so this measurement is valid for the entire lifetime of
+// the instance: compute it once, on first use.
 func (b *TextBox) BoundsAndAdvance() (image.Rectangle, int) {
-	bounds, advance := font.BoundString(b.Face, b.Text)
-	metrics := b.Face.Metrics()
-	return image.Rect(
-		bounds.Min.X.Floor(),
-		-metrics.Ascent.Ceil(),
-		bounds.Max.X.Ceil(),
-		metrics.Descent.Ceil(),
-	), advance.Ceil()
+	if !b.boundsComputed {
+		bounds, advance := font.BoundString(b.Face, b.Text)
+		metrics := b.Face.Metrics()
+		b.bounds = image.Rect(
+			bounds.Min.X.Floor(),
+			-metrics.Ascent.Ceil(),
+			bounds.Max.X.Ceil(),
+			metrics.Descent.Ceil(),
+		)
+		b.advance = advance.Ceil()
+		b.boundsComputed = true
+	}
+	return b.bounds, b.advance
 }
 
 func (b *TextBox) SpaceWidth() int {
-	adv, _ := b.Face.GlyphAdvance(' ')
-	return adv.Ceil()
+	if !b.spaceComputed {
+		adv, _ := b.Face.GlyphAdvance(' ')
+		b.spaceWidth = adv.Ceil()
+		b.spaceComputed = true
+	}
+	return b.spaceWidth
 }
 
 type ListItemMarkerBox struct {
@@ -76,24 +96,36 @@ func (b *ImageBox) SpaceWidth() int {
 type LineBox struct {
 	parts []InlineBox
 	space int
+
+	boundsComputed bool
+	bounds         image.Rectangle
+	advance        int
 }
 
 var _ Box = (*LineBox)(nil)
 
+// Same reasoning as TextBox: parts/space are fixed at construction and a
+// LineBox is never reused across a re-layout, so this is safe to compute
+// once and reuse for the instance's whole life.
 func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
-	bounds, advance := b.parts[0].BoundsAndAdvance()
-	left := bounds.Min.X
-	if left < 0 {
-		bounds = bounds.Add(image.Pt(-left, 0))
-		advance -= left
+	if !b.boundsComputed {
+		bounds, advance := b.parts[0].BoundsAndAdvance()
+		left := bounds.Min.X
+		if left < 0 {
+			bounds = bounds.Add(image.Pt(-left, 0))
+			advance -= left
+		}
+		for _, box := range b.parts[1:] {
+			advance += b.space
+			boxBounds, boxAdvance := box.BoundsAndAdvance()
+			bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
+			advance += boxAdvance
+		}
+		b.bounds = bounds
+		b.advance = advance
+		b.boundsComputed = true
 	}
-	for _, box := range b.parts[1:] {
-		advance += b.space
-		boxBounds, boxAdvance := box.BoundsAndAdvance()
-		bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
-		advance += boxAdvance
-	}
-	return bounds, advance
+	return b.bounds, b.advance
 }
 
 func (b *LineBox) Bounds() image.Rectangle {
@@ -103,14 +135,21 @@ func (b *LineBox) Bounds() image.Rectangle {
 
 type StackBox struct {
 	boxes []Box
+
+	boundsComputed bool
+	bounds         image.Rectangle
 }
 
 func (b *StackBox) Bounds() image.Rectangle {
-	var bounds image.Rectangle
-	for _, box := range b.boxes {
-		bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
+	if !b.boundsComputed {
+		var bounds image.Rectangle
+		for _, box := range b.boxes {
+			bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
+		}
+		b.bounds = bounds
+		b.boundsComputed = true
 	}
-	return bounds
+	return b.bounds
 }
 
 type EmptyBox struct {

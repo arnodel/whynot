@@ -48,7 +48,7 @@ func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	lineBoxes := make([]Box, len(b.lines))
 	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{[]InlineBox{line.GetInlineBox(ctx)}, b.space}
+		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}, space: b.space}
 	}
 	return &StackBox{boxes: lineBoxes}
 }
@@ -75,7 +75,7 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{boxes[:i], b.space})
+		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
 		boxes = boxes[i:]
 	}
 	return &StackBox{boxes: lines}
@@ -107,7 +107,7 @@ func (b *ListItemBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{boxes[:i], b.space})
+		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
 		boxes = boxes[i:]
 	}
 	return &StackBox{boxes: lines}
