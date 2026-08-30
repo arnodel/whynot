@@ -1,20 +1,18 @@
 module github.com/arnodel/whynot
 
-go 1.20
+go 1.25.0
 
 require (
-	github.com/hajimehoshi/ebiten/v2 v2.4.18
+	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.12
 	github.com/yuin/goldmark v1.5.4
-	golang.org/x/image v0.6.0
+	golang.org/x/image v0.44.0
 )
 
 require (
-	github.com/ebitengine/purego v0.0.0-20220905075623-aeed57cda744 // indirect
-	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20220806181222-55e207c401ad // indirect
-	github.com/hajimehoshi/file2byteslice v0.0.0-20210813153925-5340248a8f41 // indirect
-	github.com/jezek/xgb v1.0.1 // indirect
-	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
-	golang.org/x/mobile v0.0.0-20220722155234-aaac322e2105 // indirect
-	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.11.0-alpha.6 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
