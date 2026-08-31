@@ -142,6 +142,8 @@ Commodo nisi do nostrud magna ut ut ut ad proident in in excepteur et laborum. E
 
 ### Section 10
 
+![cat.jpg](cat.jpeg "a very serious cat")
+
 Qui elit tempor consequat fugiat magna sint nostrud est aliquip dolor eu esse qui officia velit. Mollit reprehenderit fugiat commodo veniam sit in laboris sit consequat elit culpa est esse nisi enim incididunt. Ut commodo laborum elit laboris fugiat esse minim minim ut in. Esse sit esse aliqua quis deserunt dolor minim officia amet tempor elit nisi laboris dolor est qui lorem in nostrud. Dolore voluptate minim reprehenderit elit dolor aliqua aliqua labore est cillum do dolore nulla incididunt voluptate irure reprehenderit magna enim. Cupidatat officia in minim esse laboris minim eu dolor aute dolore minim lorem nulla amet veniam in laboris ut. Aliqua in do ut velit in ad tempor in proident ipsum ea exercitation aliquip sed. This is *ut* and this is **important**.
 
 Non sint ad excepteur deserunt eu velit eu incididunt qui laboris enim proident do. Amet aute dolor in ea ut do voluptate ad eu enim do tempor voluptate qui sit cupidatat ad cupidatat enim. Incididunt in exercitation quis excepteur ea duis irure. Incididunt adipiscing nulla officia ut adipiscing cillum lorem occaecat tempor aute.
@@ -314,6 +316,8 @@ def fib(n, a = 0, b = 1):
 
 ### Section 20
 
+![cat.jpg](cat.jpeg "the same cat, later")
+
 Laborum lorem incididunt ullamco mollit culpa cillum veniam non ut veniam esse eu occaecat ullamco anim nisi excepteur labore in. In labore id magna deserunt cillum duis consectetur eiusmod. Deserunt labore fugiat duis sunt dolor non laboris excepteur aute occaecat quis sed. Culpa dolore minim ipsum officia ut nulla non id eiusmod et aliqua nulla pariatur ut ad sed cillum nostrud voluptate. Pariatur et nisi occaecat deserunt consequat commodo pariatur esse culpa pariatur.
 
 Sunt ut et ex officia deserunt nisi magna sit incididunt adipiscing sed deserunt sit minim eu reprehenderit ut irure incididunt. Do id deserunt in nostrud aute deserunt officia mollit ea voluptate dolor amet cupidatat et fugiat proident in eu non. Amet amet minim irure ad officia cupidatat magna dolor fugiat officia labore officia culpa culpa. This is *amet* and this is **important**. Enim mollit elit nulla ea deserunt eu esse duis reprehenderit elit sit consectetur dolore cillum velit. See `anim_fn()` for details. Sit voluptate eu incididunt occaecat velit esse excepteur velit elit aliquip aliquip ut dolor eiusmod sed dolor labore voluptate ad.
@@ -483,6 +487,8 @@ Elit aliquip ipsum ut ut aute eu enim pariatur do laboris fugiat in tempor velit
 
 ### Section 30
 
+![cat.jpg](cat.jpeg "cat, for scale")
+
 Amet aute sint ullamco laboris sunt eu labore nostrud culpa et velit in excepteur nulla lorem dolore laboris mollit duis. See `enim_fn()` for details. Ea dolor sint ut lorem sint amet ipsum sit ut dolore id. In in ad cupidatat ut nulla quis nulla adipiscing occaecat dolore fugiat minim pariatur in id enim cupidatat nisi. Dolore mollit et nulla ea enim reprehenderit exercitation tempor. Sit cupidatat ipsum ut sit eiusmod eu sit dolore. Esse veniam ut laboris irure quis laborum aliquip eu ea adipiscing consequat eiusmod aliqua dolor. This is *velit* and this is **important**. Ut labore sunt et ut aliqua duis ea veniam tempor do deserunt cillum exercitation nulla incididunt officia dolor. Do officia do exercitation sint eu in proident enim veniam irure ipsum minim amet.
 
 Ex et quis sit laborum dolor id anim ut ullamco cillum labore ullamco sit reprehenderit magna laboris eiusmod dolore. This is *voluptate* and this is **important**. Consequat qui nostrud tempor velit aute in deserunt cupidatat anim pariatur quis. Minim nostrud consequat nulla ut dolor ad exercitation officia cupidatat proident occaecat. Commodo in ut fugiat occaecat nostrud esse dolore sed proident ad amet anim ex excepteur aute est. Nulla sit labore veniam reprehenderit occaecat veniam esse aliquip do ullamco dolore dolore. In et ipsum in ipsum in ullamco in reprehenderit nisi. Sed fugiat duis ullamco est ullamco ut consequat do sint cupidatat in in nostrud nostrud adipiscing. Deserunt deserunt consectetur consequat sint et et proident ad reprehenderit fugiat ut dolor duis dolor lorem in duis dolore pariatur.
@@ -651,6 +657,8 @@ Ipsum voluptate do ut sunt in ut et elit magna nostrud eiusmod veniam tempor tem
 
 ### Section 40
 
+![cat.jpg](cat.jpeg "an important cat")
+
 Enim sed elit sed deserunt velit elit cupidatat eiusmod proident ipsum tempor in cillum sed ea in proident esse qui. Deserunt irure officia in quis nisi ad consectetur esse excepteur in in reprehenderit. Pariatur in in proident ut aliqua fugiat sint sit magna in eu ut pariatur cillum ipsum cupidatat minim ut veniam. Incididunt dolor nulla culpa ut commodo voluptate nostrud dolor deserunt nulla. Irure consequat nisi quis officia deserunt cupidatat cupidatat enim officia. Elit esse ut sed reprehenderit qui aute aliqua ut id deserunt ullamco sint officia ipsum dolor enim voluptate. This is *occaecat* and this is **important**.
 
 Est duis voluptate dolore dolore dolore culpa sed dolor proident. Sint aliquip exercitation reprehenderit nisi in culpa consequat voluptate in quis dolore reprehenderit. Nisi ut aliquip officia culpa dolor in anim incididunt fugiat aliqua reprehenderit eiusmod est officia in commodo sed proident fugiat. See `deserunt_fn()` for details. Quis consequat aliqua cillum elit culpa aliquip laboris lorem reprehenderit esse qui aliqua commodo in officia in laborum nostrud quis. Et aute elit quis est mollit duis aliquip eu occaecat ipsum irure ea exercitation aliqua aute sit. Sint eiusmod dolore in aliqua proident eu enim. Non in ut consequat sunt consequat nostrud sunt duis enim dolore reprehenderit dolor et adipiscing reprehenderit qui. Aliqua in eu sit cupidatat reprehenderit nulla minim reprehenderit amet duis reprehenderit consectetur.
@@ -811,6 +819,8 @@ Deserunt consequat elit ad elit non eiusmod cupidatat occaecat dolor excepteur. 
 Occaecat occaecat ex deserunt sit exercitation et lorem in nostrud nostrud pariatur enim non ex. Nulla cupidatat ut eiusmod esse sed est ut magna culpa dolor amet elit commodo. This is *reprehenderit* and this is **important**. See `anim_fn()` for details. Sint occaecat incididunt dolor in sit sed labore adipiscing proident officia in et ex. Dolor ea ut sed commodo lorem in aliquip. Sed in minim consectetur ex mollit amet irure deserunt nulla est deserunt laboris sed nostrud in non et. Eu aute ut excepteur eu incididunt ut ullamco officia duis adipiscing officia qui commodo.
 
 ### Section 50
+
+![cat.jpg](cat.jpeg "cat (unchanged)")
 
 Proident ipsum sed ea ad cupidatat magna sit ullamco. Adipiscing anim sunt ad ut tempor excepteur elit enim sit ea incididunt eiusmod ut dolore. Anim mollit proident aliqua labore eiusmod non dolor laborum mollit aute anim sit do pariatur ea irure laborum. Enim et proident esse id anim nisi non mollit dolore. See `ea_fn()` for details. Ipsum minim elit sit ea consectetur sint culpa in culpa tempor veniam quis eu eiusmod. Pariatur tempor eiusmod enim anim deserunt commodo ad occaecat mollit ut in. Nulla qui adipiscing commodo consectetur esse nisi et ea tempor occaecat labore esse occaecat consectetur deserunt aliquip minim officia. Laboris in eu esse ut sunt nulla veniam aute consectetur sint duis.
 
@@ -984,6 +994,8 @@ Ipsum in quis dolore nulla dolor et et ut eiusmod ipsum aliquip laborum dolore c
 Ut in reprehenderit exercitation in laborum irure excepteur. Consectetur dolore et amet quis lorem magna officia ullamco ipsum ea aliqua. Sint exercitation occaecat magna anim ut ea ea commodo sunt labore est nisi in ullamco. This is *anim* and this is **important**. See `in_fn()` for details. Excepteur consectetur sint deserunt pariatur ea lorem minim.
 
 ### Section 60
+
+![cat.jpg](cat.jpeg "the cat returns")
 
 In laborum sunt magna officia et sunt commodo nostrud dolor occaecat et ut fugiat commodo amet nostrud dolor exercitation mollit. Id sed mollit deserunt exercitation culpa non esse anim laboris nisi ullamco pariatur duis culpa proident ipsum ex incididunt nisi. Ipsum ipsum labore velit quis anim sint dolor veniam dolore nulla magna velit ea ad consectetur ea sed ad. Eiusmod amet esse proident in magna lorem commodo consequat sed dolor. Deserunt commodo incididunt ullamco enim commodo dolore ut.
 
