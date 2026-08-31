@@ -4,7 +4,6 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 )
 
@@ -14,13 +13,13 @@ import (
 // type-specific drawing logic.
 type Box interface {
 	Bounds() image.Rectangle
-	drawContents(dst *ebiten.Image, x, y int)
+	drawContents(dst Canvas, x, y int)
 }
 
 type InlineBox interface {
 	BoundsAndAdvance() (image.Rectangle, int)
 	SpaceWidth() int
-	DrawInline(dst *ebiten.Image, x, y int) int
+	DrawInline(dst Canvas, x, y int) int
 }
 
 type TextBox struct {

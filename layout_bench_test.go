@@ -89,7 +89,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := ebiten.NewImage(width, viewportHeight)
+	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
 
 	DrawBox(box, dst, 0, offsetY) // warm caches
 
@@ -129,7 +129,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -(totalHeight + 100000)
 
-	dst := ebiten.NewImage(width, viewportHeight)
+	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
 
 	DrawBox(box, dst, 0, offsetY) // warm caches
 
@@ -166,7 +166,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 
 	box := block.GetBox(ctx, width)
 	totalHeight := box.Bounds().Dy()
-	dst := ebiten.NewImage(width, totalHeight)
+	dst := NewEbitenCanvas(ebiten.NewImage(width, totalHeight))
 
 	DrawBox(box, dst, 0, 0) // warm caches
 
@@ -212,7 +212,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	totalHeight := probeBox.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := ebiten.NewImage(width, viewportHeight)
+	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

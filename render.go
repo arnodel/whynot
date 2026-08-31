@@ -7,63 +7,38 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/font"
 )
 
-func (b *TextBox) DrawInline(dst *ebiten.Image, x, y int) int {
-	bounds, advance := b.BoundsAndAdvance()
-	// drawRect(dst, bounds.Add(image.Pt(x, y)), color.Gray{Y: 128})
-	_ = bounds
-	text.Draw(dst, b.Text, b.Face, x, y, b.Color)
+func (b *TextBox) DrawInline(dst Canvas, x, y int) int {
+	_, advance := b.BoundsAndAdvance()
+	dst.DrawText(b.Text, b.Face, x, y, b.Color)
 	return x + advance
 }
 
-func (b *ListItemMarkerBox) DrawInline(dst *ebiten.Image, x, y int) int {
+func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int) int {
 	_, advance := b.Marker.BoundsAndAdvance()
 	space := b.Marker.SpaceWidth()
 	b.Marker.DrawInline(dst, x-advance-space, y)
 	return x - space
 }
 
-// loadedImageCache is a stopgap: ImageBox only carries a path now (see
-// block.go/layout.go), so drawing has to load pixels from somewhere. This
-// is not where that cache belongs long-term - it wants to live in a
-// Canvas implementation with a lifetime independent of any one ImageBox,
-// so it survives resizes (which rebuild the Box tree, including
-// ImageBox, from scratch) instead of just frames. Placeholder until the
-// Canvas abstraction lands.
-var loadedImageCache = map[string]*ebiten.Image{}
-
-func loadImage(src string) *ebiten.Image {
-	if img, ok := loadedImageCache[src]; ok {
-		return img
-	}
-	img, _, _ := ebitenutil.NewImageFromFile(src)
-	loadedImageCache[src] = img
-	return img
-}
-
-func (b *ImageBox) DrawInline(dst *ebiten.Image, x, y int) int {
-	img := loadImage(b.src)
-	if img == nil {
-		return x
-	}
-	geoM := ebiten.GeoM{}
-	geoM.Translate(float64(x), float64(y))
-	dst.DrawImage(img, &ebiten.DrawImageOptions{GeoM: geoM})
-	return x + img.Bounds().Dx()
+func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
+	dst.DrawImage(b.src, x, y)
+	return x + b.bounds.Dx()
 }
 
 // DrawBox is the sole entry point for drawing a Box: it skips drawContents
 // entirely when box's bounds don't overlap dst, so every Box gets that for
 // free regardless of who's calling it or where it sits in the tree.
-func DrawBox(box Box, dst *ebiten.Image, x, y int) {
+func DrawBox(box Box, dst Canvas, x, y int) {
 	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
 		return
 	}
 	box.drawContents(dst, x, y)
 }
 
-func (b *LineBox) drawContents(dst *ebiten.Image, x, y int) {
+func (b *LineBox) drawContents(dst Canvas, x, y int) {
 	lineBounds, _ := b.BoundsAndAdvance()
 	y -= lineBounds.Min.Y
 
@@ -82,7 +57,7 @@ func (b *LineBox) drawContents(dst *ebiten.Image, x, y int) {
 	}
 }
 
-func (b *StackBox) drawContents(dst *ebiten.Image, x, y int) {
+func (b *StackBox) drawContents(dst Canvas, x, y int) {
 	viewport := dst.Bounds()
 	for _, box := range b.boxes {
 		childBounds := box.Bounds()
@@ -96,11 +71,56 @@ func (b *StackBox) drawContents(dst *ebiten.Image, x, y int) {
 	}
 }
 
-func (b *EmptyBox) drawContents(dst *ebiten.Image, x, y int) {
+func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
 }
 
-func (b *ContainerBox) drawContents(dst *ebiten.Image, x, y int) {
+func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
 	DrawBox(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
+}
+
+// EbitenCanvas implements Canvas by drawing onto an *ebiten.Image. It's the
+// only ebiten-specific piece left in the package - a placeholder for what
+// should eventually move to its own package, kept here for now so the
+// Canvas abstraction itself can be proven out first.
+type EbitenCanvas struct {
+	dst *ebiten.Image
+}
+
+func NewEbitenCanvas(dst *ebiten.Image) *EbitenCanvas {
+	return &EbitenCanvas{dst: dst}
+}
+
+func (c *EbitenCanvas) Bounds() image.Rectangle {
+	return c.dst.Bounds()
+}
+
+func (c *EbitenCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
+	text.Draw(c.dst, s, face, x, y, clr)
+}
+
+func (c *EbitenCanvas) DrawImage(src string, x, y int) {
+	img := loadImage(src)
+	if img == nil {
+		return
+	}
+	geoM := ebiten.GeoM{}
+	geoM.Translate(float64(x), float64(y))
+	c.dst.DrawImage(img, &ebiten.DrawImageOptions{GeoM: geoM})
+}
+
+// loadedImageCache is a stopgap, not where this belongs long-term: it wants
+// to live as a field on whatever Canvas implementation eventually moves to
+// its own package, not package-level state here. Kept simple for now since
+// relocating it is a mechanical follow-up once that package exists.
+var loadedImageCache = map[string]*ebiten.Image{}
+
+func loadImage(src string) *ebiten.Image {
+	if img, ok := loadedImageCache[src]; ok {
+		return img
+	}
+	img, _, _ := ebitenutil.NewImageFromFile(src)
+	loadedImageCache[src] = img
+	return img
 }
 
 func drawRect(dst *ebiten.Image, rect image.Rectangle, clr color.Color) {

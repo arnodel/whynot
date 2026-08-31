@@ -47,7 +47,7 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	g.view.Draw(screen, 0, 0)
+	g.view.Draw(whynot.NewEbitenCanvas(screen), 0, 0)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

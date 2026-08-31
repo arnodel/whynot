@@ -1,8 +1,6 @@
 package whynot
 
-import "github.com/hajimehoshi/ebiten/v2"
-
-// View renders a parsed Markdown document for an ebiten game. It owns the
+// View renders a parsed Markdown document onto a Canvas. It owns the
 // layout cache (rebuilt only when width or scale change, not every frame),
 // viewport culling, and scroll-position anchoring across resizes - the
 // parts of rendering a reflowing document that are easy to get wrong and
@@ -12,7 +10,7 @@ import "github.com/hajimehoshi/ebiten/v2"
 // A View doesn't read input itself: call Scroll with deltas from whatever
 // input source is appropriate for the embedding game, and call Layout
 // whenever the available width or the display scale changes (typically
-// from the embedding ebiten.Game's own Layout method).
+// from the embedding game's own layout/resize callback).
 type View struct {
 	block   Block
 	ctx     RenderingContext
@@ -42,7 +40,7 @@ func (v *View) Scroll(dy float64) {
 // at the current scroll position. Content outside dst's bounds is skipped
 // rather than drawn and clipped, so Draw's cost tracks what's visible, not
 // the document's total size.
-func (v *View) Draw(dst *ebiten.Image, x, y int) {
+func (v *View) Draw(dst Canvas, x, y int) {
 	if v.box == nil {
 		return
 	}
