@@ -50,7 +50,7 @@ type whynotController struct {
 
 func (c *whynotController) Update() error {
 	_, dy := ebiten.Wheel()
-	c.offsetY += dy * ebiten.DeviceScaleFactor()
+	c.offsetY += dy * ebiten.DeviceScaleFactor() * 2
 	return nil
 }
 
