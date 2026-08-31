@@ -31,7 +31,17 @@ func (b *ImageBox) DrawInline(dst *ebiten.Image, x, y int) int {
 	return b.image.Bounds().Dx()
 }
 
-func (b *LineBox) Draw(dst *ebiten.Image, x, y int) {
+// DrawBox is the sole entry point for drawing a Box: it skips drawContents
+// entirely when box's bounds don't overlap dst, so every Box gets that for
+// free regardless of who's calling it or where it sits in the tree.
+func DrawBox(box Box, dst *ebiten.Image, x, y int) {
+	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
+		return
+	}
+	box.drawContents(dst, x, y)
+}
+
+func (b *LineBox) drawContents(dst *ebiten.Image, x, y int) {
 	lineBounds, _ := b.BoundsAndAdvance()
 	y -= lineBounds.Min.Y
 
@@ -50,18 +60,18 @@ func (b *LineBox) Draw(dst *ebiten.Image, x, y int) {
 	}
 }
 
-func (b *StackBox) Draw(dst *ebiten.Image, x, y int) {
+func (b *StackBox) drawContents(dst *ebiten.Image, x, y int) {
 	for _, box := range b.boxes {
-		box.Draw(dst, x, y)
+		DrawBox(box, dst, x, y)
 		y += box.Bounds().Max.Y
 	}
 }
 
-func (b *EmptyBox) Draw(dst *ebiten.Image, x, y int) {
+func (b *EmptyBox) drawContents(dst *ebiten.Image, x, y int) {
 }
 
-func (b *ContainerBox) Draw(dst *ebiten.Image, x, y int) {
-	b.inner.Draw(dst, x+b.innerPos.X, y+b.innerPos.Y)
+func (b *ContainerBox) drawContents(dst *ebiten.Image, x, y int) {
+	DrawBox(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
 }
 
 func drawRect(dst *ebiten.Image, rect image.Rectangle, clr color.Color) {

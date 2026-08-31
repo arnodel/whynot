@@ -55,7 +55,7 @@ func (c *whynotController) Update() error {
 }
 
 func (c *whynotController) Draw(screen *ebiten.Image) {
-	c.box.Draw(screen, 0, int(c.offsetY))
+	DrawBox(c.box, screen, 0, int(c.offsetY))
 }
 
 func (c *whynotController) Layout(outsideWidth, outsideHeight int) (int, int) {

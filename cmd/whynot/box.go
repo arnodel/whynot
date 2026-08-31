@@ -8,9 +8,13 @@ import (
 	"golang.org/x/image/font"
 )
 
+// Box is drawn via the package-level DrawBox, not by calling drawContents
+// directly, so that every Box gets the same off-screen skip for free
+// regardless of where it sits in the tree. drawContents holds only the
+// type-specific drawing logic.
 type Box interface {
 	Bounds() image.Rectangle
-	Draw(dst *ebiten.Image, x, y int)
+	drawContents(dst *ebiten.Image, x, y int)
 }
 
 type InlineBox interface {
