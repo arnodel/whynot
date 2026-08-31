@@ -67,9 +67,30 @@ func (c *whynotController) Layout(outsideWidth, outsideHeight int) (int, int) {
 	height := int(float64(outsideHeight) * s)
 
 	if width != c.boxWidth || s != c.boxScale {
+		// Reflowing at a new width changes every block's height, so the raw
+		// pixel offsetY (measured against the old tree) would point at
+		// different content in the new one. Anchor on which outer-stack
+		// entry is at the top of the viewport now, and how far through it,
+		// then re-derive offsetY from the same (index, ratio) against the
+		// rebuilt tree, so the same content stays at the top.
+		var anchorIndex int
+		var anchorRatio float64
+		anchored := false
+		if oldStack, ok := c.box.(*StackBox); ok {
+			anchorIndex, anchorRatio, anchored = oldStack.anchorAt(-int(c.offsetY))
+		}
+
 		c.box = c.block.GetBox(c.ctx, width)
 		c.boxWidth = width
 		c.boxScale = s
+
+		if anchored {
+			if newStack, ok := c.box.(*StackBox); ok {
+				if y, ok := newStack.positionOf(anchorIndex, anchorRatio); ok {
+					c.offsetY = -float64(y)
+				}
+			}
+		}
 	}
 
 	return width, height

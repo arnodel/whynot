@@ -156,6 +156,49 @@ func (b *StackBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
+// anchorAt finds which direct child contains local y-coordinate y, and how
+// far through that child's height y falls (0 = top, 1 = bottom). y before
+// the first child anchors to its top; y at or past the end of the last
+// child anchors to its bottom. ok is false only if there are no children.
+func (b *StackBox) anchorAt(y int) (index int, ratio float64, ok bool) {
+	if len(b.boxes) == 0 {
+		return 0, 0, false
+	}
+	if y < 0 {
+		return 0, 0, true
+	}
+	pos := 0
+	for i, box := range b.boxes {
+		h := box.Bounds().Max.Y
+		if y < pos+h {
+			if h == 0 {
+				return i, 0, true
+			}
+			return i, float64(y-pos) / float64(h), true
+		}
+		pos += h
+	}
+	return len(b.boxes) - 1, 1, true
+}
+
+// positionOf is the inverse of anchorAt: the local y-coordinate that is
+// ratio of the way through child index's height. ok is false if index is
+// out of range for this StackBox.
+func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
+	if index < 0 || index >= len(b.boxes) {
+		return 0, false
+	}
+	pos := 0
+	for i, box := range b.boxes {
+		h := box.Bounds().Max.Y
+		if i == index {
+			return pos + int(ratio*float64(h)), true
+		}
+		pos += h
+	}
+	return 0, false
+}
+
 type EmptyBox struct {
 	bounds image.Rectangle
 }
