@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
 func main() {
@@ -27,7 +28,8 @@ func main() {
 
 	scale := ebiten.DeviceScaleFactor()
 	game := &game{
-		view: whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale)),
+		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale)),
+		renderer: ebitenrenderer.New(),
 	}
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
@@ -37,7 +39,8 @@ func main() {
 // game adapts a whynot.View to ebiten's Game interface: it owns window/input
 // plumbing only, all rendering behavior lives in the library.
 type game struct {
-	view *whynot.View
+	view     *whynot.View
+	renderer *ebitenrenderer.Renderer
 }
 
 func (g *game) Update() error {
@@ -47,7 +50,7 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	g.view.Draw(whynot.NewEbitenCanvas(screen), 0, 0)
+	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

@@ -1,10 +1,16 @@
-package whynot
+// External test package: benchmarks that need to actually draw (not just
+// lay out) depend on ebitenrenderer, which itself depends on whynot - an
+// import cycle if this file were `package whynot` like box_test.go.
+package whynot_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
 func benchmarkGetBox(b *testing.B, path string) {
@@ -12,10 +18,10 @@ func benchmarkGetBox(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := Parse(source)
-	ctx := RenderingContext{
+	block := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	const width = 1024
 
@@ -46,10 +52,10 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := Parse(source)
-	ctx := RenderingContext{
+	block := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	box := block.GetBox(ctx, 1024)
 
@@ -77,10 +83,10 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := Parse(source)
-	ctx := RenderingContext{
+	block := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -89,13 +95,13 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	DrawBox(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBox(box, dst, 0, offsetY) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBox(box, dst, 0, offsetY)
 	}
 }
 
@@ -117,10 +123,10 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := Parse(source)
-	ctx := RenderingContext{
+	block := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -129,13 +135,13 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -(totalHeight + 100000)
 
-	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	DrawBox(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBox(box, dst, 0, offsetY) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBox(box, dst, 0, offsetY)
 	}
 }
 
@@ -157,22 +163,22 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := Parse(source)
-	ctx := RenderingContext{
+	block := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	const width = 1024
 
 	box := block.GetBox(ctx, width)
 	totalHeight := box.Bounds().Dy()
-	dst := NewEbitenCanvas(ebiten.NewImage(width, totalHeight))
+	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, totalHeight))
 
-	DrawBox(box, dst, 0, 0) // warm caches
+	whynot.DrawBox(box, dst, 0, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		DrawBox(box, dst, 0, 0)
+		whynot.DrawBox(box, dst, 0, 0)
 	}
 }
 
@@ -197,10 +203,10 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	if err != nil {
 		b.Fatal(err)
 	}
-	rawBlock := Parse(source)
-	ctx := RenderingContext{
+	rawBlock := whynot.Parse(source)
+	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: whynot.NewGoFontFaceSelector(72),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -212,7 +218,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	totalHeight := probeBox.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := NewEbitenCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -220,7 +226,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		box := rawBlock.GetBox(ctx, width) // fresh tree: cold CodeBlock caches
 		b.StartTimer()
 
-		DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBox(box, dst, 0, offsetY)
 	}
 }
 
