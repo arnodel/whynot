@@ -24,11 +24,33 @@ func (b *ListItemMarkerBox) DrawInline(dst *ebiten.Image, x, y int) int {
 	return x - space
 }
 
+// loadedImageCache is a stopgap: ImageBox only carries a path now (see
+// block.go/layout.go), so drawing has to load pixels from somewhere. This
+// is not where that cache belongs long-term - it wants to live in a
+// Canvas implementation with a lifetime independent of any one ImageBox,
+// so it survives resizes (which rebuild the Box tree, including
+// ImageBox, from scratch) instead of just frames. Placeholder until the
+// Canvas abstraction lands.
+var loadedImageCache = map[string]*ebiten.Image{}
+
+func loadImage(src string) *ebiten.Image {
+	if img, ok := loadedImageCache[src]; ok {
+		return img
+	}
+	img, _, _ := ebitenutil.NewImageFromFile(src)
+	loadedImageCache[src] = img
+	return img
+}
+
 func (b *ImageBox) DrawInline(dst *ebiten.Image, x, y int) int {
+	img := loadImage(b.src)
+	if img == nil {
+		return x
+	}
 	geoM := ebiten.GeoM{}
 	geoM.Translate(float64(x), float64(y))
-	dst.DrawImage(b.image, &ebiten.DrawImageOptions{GeoM: geoM})
-	return b.image.Bounds().Dx()
+	dst.DrawImage(img, &ebiten.DrawImageOptions{GeoM: geoM})
+	return x + img.Bounds().Dx()
 }
 
 // DrawBox is the sole entry point for drawing a Box: it skips drawContents

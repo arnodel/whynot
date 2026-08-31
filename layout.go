@@ -2,6 +2,8 @@ package whynot
 
 import (
 	"image"
+	_ "image/jpeg" // registers the JPEG format with image.DecodeConfig
+	"os"
 )
 
 type RenderingContext struct {
@@ -29,9 +31,22 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
+// GetInlineBox probes src's dimensions via a cheap header-only read (no
+// full decode, no rendering backend involved - reading an image's size
+// isn't a backend-specific operation the way loading its pixels for
+// drawing is). A missing or unreadable file yields a zero-size box rather
+// than failing layout outright.
 func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
+	var bounds image.Rectangle
+	if f, err := os.Open(i.src); err == nil {
+		defer f.Close()
+		if cfg, _, err := image.DecodeConfig(f); err == nil {
+			bounds = image.Rectangle{Max: image.Pt(cfg.Width, cfg.Height)}
+		}
+	}
 	return &ImageBox{
-		image: i.image,
+		src:    i.src,
+		bounds: bounds,
 	}
 }
 

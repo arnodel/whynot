@@ -4,8 +4,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type Margins struct {
@@ -31,9 +29,8 @@ type InlineText struct {
 var _ Inline = (*InlineText)(nil)
 
 type InlineImage struct {
-	image *ebiten.Image
-	title string
 	src   string
+	title string
 }
 
 var _ Inline = (*InlineImage)(nil)

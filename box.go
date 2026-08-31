@@ -83,14 +83,14 @@ func (b *ListItemMarkerBox) SpaceWidth() int {
 }
 
 type ImageBox struct {
-	image *ebiten.Image
+	src    string
+	bounds image.Rectangle
 }
 
 var _ InlineBox = (*ImageBox)(nil)
 
 func (b *ImageBox) BoundsAndAdvance() (image.Rectangle, int) {
-	bounds := b.image.Bounds()
-	return bounds, bounds.Dx()
+	return b.bounds, b.bounds.Dx()
 }
 
 func (b *ImageBox) SpaceWidth() int {

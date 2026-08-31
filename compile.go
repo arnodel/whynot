@@ -3,11 +3,9 @@ package whynot
 import (
 	"fmt"
 	"image/color"
-	_ "image/jpeg"
 	"log"
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/yuin/goldmark"
 	gmast "github.com/yuin/goldmark/ast"
 	gmtext "github.com/yuin/goldmark/text"
@@ -192,9 +190,8 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 		return appendString(items, string(node.Text(c.source)), style, c.codeColor)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
-		img, _, _ := ebitenutil.NewImageFromFile(string(imgNode.Destination))
 		return append(items, &InlineImage{
-			image: img,
+			src:   string(imgNode.Destination),
 			title: string(imgNode.Title),
 		})
 	default:
