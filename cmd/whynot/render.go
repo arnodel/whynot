@@ -61,9 +61,16 @@ func (b *LineBox) drawContents(dst *ebiten.Image, x, y int) {
 }
 
 func (b *StackBox) drawContents(dst *ebiten.Image, x, y int) {
+	viewport := dst.Bounds()
 	for _, box := range b.boxes {
+		childBounds := box.Bounds()
+		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
+			// This child, and every one after it, starts below the
+			// viewport: nothing further down can be visible.
+			break
+		}
 		DrawBox(box, dst, x, y)
-		y += box.Bounds().Max.Y
+		y += childBounds.Max.Y
 	}
 }
 

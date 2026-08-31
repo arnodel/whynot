@@ -107,6 +107,46 @@ func BenchmarkStackBoxDrawBottom(b *testing.B) {
 	benchmarkStackBoxDraw(b, "test-large.md", 1)
 }
 
+// benchmarkStackBoxDrawOffscreen scrolls the whole document above the
+// viewport, so nothing is visible and nothing ever triggers the early
+// "past the viewport" break: every top-level child gets a Bounds() check
+// and a skipped Draw(). This isolates the scan-and-skip cost with zero
+// real drawing mixed in.
+func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	block := parseMarkdown(source)
+	ctx := RenderingContext{
+		Scale:        1,
+		FaceSelector: NewGoFontFaceSelector(72),
+	}
+	const width = 1024
+	const viewportHeight = 768
+
+	box := block.GetBox(ctx, width)
+	totalHeight := box.Bounds().Dy()
+	offsetY := -(totalHeight + 100000)
+
+	dst := ebiten.NewImage(width, viewportHeight)
+
+	DrawBox(box, dst, 0, offsetY) // warm caches
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		DrawBox(box, dst, 0, offsetY)
+	}
+}
+
+func BenchmarkStackBoxDrawOffscreen(b *testing.B) {
+	benchmarkStackBoxDrawOffscreen(b, "test.md")
+}
+
+func BenchmarkStackBoxDrawOffscreenLarge(b *testing.B) {
+	benchmarkStackBoxDrawOffscreen(b, "test-large.md")
+}
+
 // benchmarkStackBoxDrawUnculled sizes dst to cover the entire document, so
 // its Bounds() (the "viewport") overlaps every child: nothing gets culled,
 // and every single word gets a real DrawInline call. This is what Draw()
@@ -142,4 +182,52 @@ func BenchmarkStackBoxDrawUnculled(b *testing.B) {
 
 func BenchmarkStackBoxDrawUnculledLarge(b *testing.B) {
 	benchmarkStackBoxDrawUnculled(b, "test-large.md")
+}
+
+// benchmarkStackBoxDrawCold measures a single Draw() call on a freshly built
+// (cold) tree: TextBlock/ListItemBlock content is pre-warmed by splitBoxes
+// during GetBox(), but CodeBlock content isn't (no line-splitting needed),
+// so it stays genuinely cold until something calls Bounds()/Draw() on it.
+// The culling scan calls Bounds() on every preceding sibling to check
+// overlap, even skipped ones, so this checks whether scanning past
+// off-screen code blocks on the way to a scrolled-down viewport re-triggers
+// real font.BoundString measurement that a warm scan wouldn't pay for.
+func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	rawBlock := parseMarkdown(source)
+	ctx := RenderingContext{
+		Scale:        1,
+		FaceSelector: NewGoFontFaceSelector(72),
+	}
+	const width = 1024
+	const viewportHeight = 768
+
+	// Learn the total height once, from a throwaway tree, so offsetY can be
+	// fixed before the timed loop without warming the trees we're about to
+	// measure.
+	probeBox := rawBlock.GetBox(ctx, width)
+	totalHeight := probeBox.Bounds().Dy()
+	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
+
+	dst := ebiten.NewImage(width, viewportHeight)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		box := rawBlock.GetBox(ctx, width) // fresh tree: cold CodeBlock caches
+		b.StartTimer()
+
+		DrawBox(box, dst, 0, offsetY)
+	}
+}
+
+func BenchmarkStackBoxDrawColdTop(b *testing.B) {
+	benchmarkStackBoxDrawCold(b, "test-large.md", 0)
+}
+
+func BenchmarkStackBoxDrawColdBottom(b *testing.B) {
+	benchmarkStackBoxDrawCold(b, "test-large.md", 1)
 }
