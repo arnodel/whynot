@@ -1,4 +1,4 @@
-package main
+package whynot
 
 import (
 	"fmt"
@@ -14,11 +14,12 @@ import (
 	"golang.org/x/image/font"
 )
 
-func parseMarkdown(source []byte) Block {
+// Parse compiles Markdown source into a Block tree ready for layout via
+// Block.GetBox.
+func Parse(source []byte) Block {
 	parser := goldmark.DefaultParser()
 	reader := gmtext.NewReader(source)
 	node := parser.Parse(reader)
-	node.Dump(source, 2)
 	compiler := MarkdownCompiler{
 		source: source,
 		paragraphStyle: partStyle{

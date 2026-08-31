@@ -1,4 +1,4 @@
-package main
+package whynot
 
 import (
 	"os"
@@ -12,7 +12,7 @@ func benchmarkGetBox(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := parseMarkdown(source)
+	block := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -30,11 +30,11 @@ func benchmarkGetBox(b *testing.B, path string) {
 }
 
 func BenchmarkGetBox(b *testing.B) {
-	benchmarkGetBox(b, "test.md")
+	benchmarkGetBox(b, "testdata/test.md")
 }
 
 func BenchmarkGetBoxLarge(b *testing.B) {
-	benchmarkGetBox(b, "test-large.md")
+	benchmarkGetBox(b, "testdata/test-large.md")
 }
 
 // benchmarkBoxBoundsWarm measures repeated Bounds() calls on an already-built
@@ -46,7 +46,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := parseMarkdown(source)
+	block := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -62,11 +62,11 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 }
 
 func BenchmarkBoxBoundsWarm(b *testing.B) {
-	benchmarkBoxBoundsWarm(b, "test.md")
+	benchmarkBoxBoundsWarm(b, "testdata/test.md")
 }
 
 func BenchmarkBoxBoundsWarmLarge(b *testing.B) {
-	benchmarkBoxBoundsWarm(b, "test-large.md")
+	benchmarkBoxBoundsWarm(b, "testdata/test-large.md")
 }
 
 // benchmarkStackBoxDraw measures DrawBox cost with the viewport scrolled to
@@ -77,7 +77,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := parseMarkdown(source)
+	block := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -100,11 +100,11 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 }
 
 func BenchmarkStackBoxDrawTop(b *testing.B) {
-	benchmarkStackBoxDraw(b, "test-large.md", 0)
+	benchmarkStackBoxDraw(b, "testdata/test-large.md", 0)
 }
 
 func BenchmarkStackBoxDrawBottom(b *testing.B) {
-	benchmarkStackBoxDraw(b, "test-large.md", 1)
+	benchmarkStackBoxDraw(b, "testdata/test-large.md", 1)
 }
 
 // benchmarkStackBoxDrawOffscreen scrolls the whole document above the
@@ -117,7 +117,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := parseMarkdown(source)
+	block := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -140,11 +140,11 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 }
 
 func BenchmarkStackBoxDrawOffscreen(b *testing.B) {
-	benchmarkStackBoxDrawOffscreen(b, "test.md")
+	benchmarkStackBoxDrawOffscreen(b, "testdata/test.md")
 }
 
 func BenchmarkStackBoxDrawOffscreenLarge(b *testing.B) {
-	benchmarkStackBoxDrawOffscreen(b, "test-large.md")
+	benchmarkStackBoxDrawOffscreen(b, "testdata/test-large.md")
 }
 
 // benchmarkStackBoxDrawUnculled sizes dst to cover the entire document, so
@@ -157,7 +157,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := parseMarkdown(source)
+	block := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -177,11 +177,11 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 }
 
 func BenchmarkStackBoxDrawUnculled(b *testing.B) {
-	benchmarkStackBoxDrawUnculled(b, "test.md")
+	benchmarkStackBoxDrawUnculled(b, "testdata/test.md")
 }
 
 func BenchmarkStackBoxDrawUnculledLarge(b *testing.B) {
-	benchmarkStackBoxDrawUnculled(b, "test-large.md")
+	benchmarkStackBoxDrawUnculled(b, "testdata/test-large.md")
 }
 
 // benchmarkStackBoxDrawCold measures a single Draw() call on a freshly built
@@ -197,7 +197,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	if err != nil {
 		b.Fatal(err)
 	}
-	rawBlock := parseMarkdown(source)
+	rawBlock := Parse(source)
 	ctx := RenderingContext{
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
@@ -225,9 +225,9 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 }
 
 func BenchmarkStackBoxDrawColdTop(b *testing.B) {
-	benchmarkStackBoxDrawCold(b, "test-large.md", 0)
+	benchmarkStackBoxDrawCold(b, "testdata/test-large.md", 0)
 }
 
 func BenchmarkStackBoxDrawColdBottom(b *testing.B) {
-	benchmarkStackBoxDrawCold(b, "test-large.md", 1)
+	benchmarkStackBoxDrawCold(b, "testdata/test-large.md", 1)
 }

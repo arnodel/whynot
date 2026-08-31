@@ -1,11 +1,25 @@
 # Architecture
 
-Why Not renders a Markdown document to an `ebiten.Image` in four layers.
-Each layer's job is to know less than the one below it: the parser
-knows nothing about fonts, the semantic tree knows nothing about pixel
-widths, and so on. That separation is the good part of the current
-design and is worth keeping. What's missing is *lifecycle* — knowing
-which layer to redo when, and when to leave one alone.
+Why Not is a library for rendering a Markdown document into an
+`ebiten.Image`, plus a thin CLI that demonstrates it. The library lives at
+the repo root (package `whynot`, `github.com/arnodel/whynot`); `cmd/whynot`
+is a small `ebiten.Game` wrapper around it, and `cmd/test` is an unrelated
+scratch program.
+
+## Package layout
+
+| Path | What it is |
+|---|---|
+| repo root | the library (package `whynot`) |
+| `cmd/whynot/` | CLI demo: window setup + input plumbing only, all rendering behavior lives in the library |
+| `cmd/test/` | unrelated scratch program, not part of this project |
+| `testdata/` | fixture Markdown/images used by the library's own tests (`go test` ignores this directory as a package) |
+
+## The four-layer rendering pipeline
+
+Rendering happens in four layers. Each layer's job is to know less than the
+one below it: the parser knows nothing about fonts, the semantic tree knows
+nothing about pixel widths, and so on.
 
 ```mermaid
 flowchart TD
@@ -19,180 +33,119 @@ flowchart TD
         C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox,\nEmptyBox, ContainerBox)"]
     end
     subgraph L3["Layer 3 — Screen (render.go, ebiten)"]
-        D -- "Draw(dst, x, y)" --> E["pixels on ebiten.Image"]
+        D -- "DrawBox(box, dst, x, y)" --> E["pixels on ebiten.Image"]
     end
 ```
 
-## Layer 0 — Parse
+### Layer 0 — Parse
 
-`goldmark` turns the raw `[]byte` into a `gmast.Node` tree. This is
-off-the-shelf and outside our control; it's the source of truth for
-document structure (headings, lists, emphasis nesting, etc.).
+`goldmark` turns the raw `[]byte` into a `gmast.Node` tree. Off-the-shelf,
+outside our control; it's the source of truth for document structure.
 
-## Layer 1 — Semantic tree (`Block` / `Inline`)
+### Layer 1 — Semantic tree (`Block` / `Inline`)
 
 `MarkdownCompiler.CompileNode`/`CompileBlock`/`AppendInlineNode`
-([compile.go](cmd/whynot/compile.go), config data in
-[markdown.go](cmd/whynot/markdown.go)) walk the goldmark tree once and
-produce a tree of `Block` and `Inline` values
-([block.go](cmd/whynot/block.go)):
+([compile.go](compile.go), config data in [markdown.go](markdown.go)) walk
+the goldmark tree once and produce a tree of `Block` and `Inline` values
+([block.go](block.go)): `TextBlock`, `ListItemBlock`, `CodeBlock`,
+`StackBlock` for blocks; `InlineText`, `InlineImage` for inline content.
+This is where Markdown semantics get resolved into rendering intent
+(emphasis → `TextStyle`, heading level → font size + `Margins`, etc.) — a
+`Block` tree describes *what* to draw, not *how it fits*.
 
-- `Block`: `TextBlock`, `ListItemBlock`, `CodeBlock`, `StackBlock` —
-  paragraphs, list items, code blocks, and vertical stacks of blocks
-  (documents, lists).
-- `Inline`: `InlineText`, `InlineImage` — a run of styled text or an
-  image.
+Built once per document, by `Parse` ([compile.go](compile.go)), and never
+rebuilt — `Block`s are immutable for the life of the program.
 
-This is where Markdown semantics get resolved into rendering intent:
-emphasis nesting becomes a concrete `TextStyle` (bold/italic/weight),
-heading level becomes a concrete font size and `Margins`, list marker
-characters get computed. Nothing here knows about pixel widths, fonts
-as loaded glyphs, or the screen — a `Block` tree is a description of
-*what* to draw, not *how it fits*.
-
-This tree is built exactly once, at startup (`main.go:21`), from the
-whole document. It never changes afterwards — there's no editing, so
-this is correctly a build-once artifact.
-
-## Layer 2 — Layout tree (`Box` / `InlineBox`)
+### Layer 2 — Layout tree (`Box` / `InlineBox`)
 
 `Block.GetBox(ctx, width)` / `Inline.GetInlineBox(ctx)`
-([layout.go](cmd/whynot/layout.go)) take a concrete pixel `width` and a
+([layout.go](layout.go)) take a concrete pixel `width` and a
 `RenderingContext` (DPI scale + font face cache) and produce a `Box` /
-`InlineBox` tree ([box.go](cmd/whynot/box.go)): `TextBox`, `ImageBox`,
-`LineBox` (one wrapped line), `StackBox` (vertical list with margins
-already resolved to gaps), `ContainerBox` (indentation offset),
-`EmptyBox` (margin spacer).
+`InlineBox` tree ([box.go](box.go)): `TextBox`, `ImageBox`, `LineBox` (one
+wrapped line), `StackBox` (vertical stack with margins resolved to gaps),
+`ContainerBox` (indentation), `EmptyBox` (margin spacer). Line-wrapping
+happens here (`splitBoxes`), as does font selection and glyph measurement
+(`font.BoundString`).
 
-This is where line-wrapping happens (`splitBoxes` in
-[layout.go:142](cmd/whynot/layout.go#L142)) and where fonts actually
-get selected and measured (`font.BoundString` in
-[box.go:30](cmd/whynot/box.go#L30)). A `Box` knows its own pixel
-`Bounds()` ([box.go](cmd/whynot/box.go)) and can `Draw()` itself at an
-`(x, y)` ([render.go](cmd/whynot/render.go)) — it is a fully resolved
-layout, not a description.
+Rebuilt only when `width` or DPI scale change (see `View.Layout` below) —
+unlike `Block`, a `Box` tree is fully replaced on every rebuild rather than
+mutated, which is what makes the memoization described next safe.
 
-**This is the layer that should be recomputed only when `width`
-changes** (i.e. on window resize) — nothing about it depends on scroll
-position or frame number.
+### Layer 3 — Screen
 
-## Layer 3 — Screen
+`DrawBox(box, dst, x, y)` ([render.go](render.go)) is the *only* way a
+`Box` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
+skips `drawContents` (the type-specific drawing logic) entirely if they
+don't overlap. Every `Box` implementation gets that off-screen skip for
+free this way, including `ContainerBox` delegating to its inner box,
+rather than each type having to remember to check. `StackBox.drawContents`
+also breaks out of its child loop once a child starts past the viewport's
+bottom edge — safe because children are laid out top-to-bottom with no
+overlap, so nothing further down can be visible either.
 
-`box.Draw(screen, 0, int(offsetY))` in
-[main.go:53-56](cmd/whynot/main.go#L53-L56) walks the already-resolved
-`Box` tree and issues `ebiten` draw calls, offset by the current
-scroll position.
+## `View`: tying the layers together with the right lifecycle
 
-**This is the only layer that should run every frame** — it's "take
-what's already laid out and paint the part that's visible."
+[view.go](view.go)'s `View` is what a caller actually uses. It owns:
 
-## File organization vs. the layers
+- the `Block` tree (built once, in `NewView`)
+- the current `Box` tree, **cached** and only rebuilt in `Layout` when
+  `width` or `scale` actually change — not on every `Draw` call
+- the scroll offset, and viewport culling via `DrawBox` in `Draw`
+- **resize anchoring**: when `Layout` rebuilds the tree at a new width,
+  reflow changes every block's height, so the old pixel scroll offset
+  would point at different content. `StackBox.anchorAt`/`positionOf`
+  ([box.go](box.go)) find which top-level entry is at the top of the
+  viewport and how far through it (as an index + ratio, not a raw pixel
+  count), and `Layout` re-derives the offset from the same anchor against
+  the rebuilt tree, so the same content stays at the top across a resize.
 
-Files are now split by *data vs. transition*, not just by type family,
-so each layer boundary has an actual file to live in instead of being
-implied by which method you're reading:
+A caller doesn't read input itself through `View` — `Scroll(dy)` takes a
+delta from whatever input source the embedding game uses, and `Layout`
+should be called whenever available width or display scale change
+(typically from the embedding `ebiten.Game`'s own `Layout`). `cmd/whynot`'s
+`main.go` is the minimal example of wiring this up.
 
-| File | What's in it | Layer(s) |
-|---|---|---|
-| `main.go` | game loop/controller, plus layer-0 invocation (`os.ReadFile` → `parseMarkdown`), plus layer-3 invocation (`GetBox` + `Draw` every frame) | 0 + 3, mixed with app control |
-| `markdown.go` | `MarkdownCompiler` / `partStyle` — the style config data the compiler works from | 0/1 config data |
-| `compile.go` | `parseMarkdown` + `MarkdownCompiler` methods — the 0→1 transition (goldmark → `Block`/`Inline`) | 0→1 |
-| `block.go` | `Block`/`Inline` type defs, `Margins`, and the trivial `Margins()` getters | 1 (data) |
-| `layout.go` | `RenderingContext`, `GetBox`/`GetInlineBox`/`GetBounds` methods, `splitBoxes` — the 1→2 transition | 1→2 |
-| `box.go` | `Box`/`InlineBox` type defs + their self-describing `Bounds`/`BoundsAndAdvance`/`SpaceWidth` methods | 2 (data) |
-| `render.go` | `Draw`/`DrawInline` methods for every box type — the 2→3 transition | 2→3 |
-| `textstyle.go` | font face selection/caching | cross-cutting infra used by layer 2, not a layer itself |
+## Known issues
 
-This gives the caching fix (issue #1 below) an obvious home: it's
-entirely a `layout.go` concern (cache what `GetBox` produces) plus a
-one-line change in `main.go` (call it from `Layout()`, not `Draw()`).
-Before this split, `GetBox` was just a method on `Block` that
-`main.go` happened to call from the wrong place, with nothing in the
-file layout signaling that resize-time and frame-time work were
-getting conflated — that's fixed now; the *caching itself* isn't done
-yet, only the seam to do it in.
+These are real, understood, and not yet fixed:
 
----
+- **Unhandled edge cases (will panic).** `StackBlock.Margins()`
+  ([block.go:85](block.go#L85)) indexes `b.blocks[0]`/`b.blocks[len-1]`
+  unconditionally — an empty list or document crashes. Any unrecognized
+  goldmark node kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock`
+  and `AppendInlineNode` ([compile.go](compile.go)) — e.g. links today —
+  taking down the whole program instead of degrading gracefully.
+- **Duplication across `TextBlock`/`ListItemBlock`/`CodeBlock`.** All three
+  repeat the same "turn `Inline`s into `InlineBox`es, then `splitBoxes`-loop
+  or one-box-per-line" shape in [layout.go](layout.go). A shared
+  `linesFromInline(ctx, parts, width) []Box` helper would remove the
+  copy-paste.
+- **Silent image failures.** `ebitenutil.NewImageFromFile` errors are
+  discarded in `AppendInlineNode` ([compile.go:195](compile.go#L195)) — a
+  missing/broken image just renders nothing with no signal why.
+- **`Block.GetBounds` is dead, duplicated code** — a second implementation
+  of `GetBox`'s line-splitting logic that nothing calls; `Box.Bounds()`
+  already gives you this once a `Box` exists.
 
-## Main issues
+## What's next: bounding layout cost by viewport, not document size
 
-### 1. No lifecycle — layers 1–3 all run every frame
+`GetBox` is not lazy: `StackBlock.GetBox` unconditionally lays out (and,
+for text blocks, fully measures via `splitBoxes`) *every* block in the
+document, regardless of scroll position. On a ~1000-line test document this
+costs **~45ms** (`BenchmarkGetBoxLarge`), paid in full on every resize even
+if only the last few lines are visible. This is a different, larger cost
+than the one culling already solves — culling bounds *drawing* to the
+viewport; this would bound *layout construction* to it too.
 
-`Draw()` calls `c.block.GetBox(c.ctx, width)` unconditionally
-([main.go:54](cmd/whynot/main.go#L54)), which reruns *all* of Layer 2
-— every font lookup, every glyph measurement, every line split — at
-60fps, even though `width` only changes on resize and the `Block` tree
-never changes at all. This is the single biggest structural gap: the
-code has the right layer boundaries but doesn't use them to avoid
-redundant work. It "works" today only because the test document is
-tiny.
-
-### 2. No viewport culling
-
-`StackBox.Draw` ([render.go:53](cmd/whynot/render.go#L53)) draws every
-child regardless of whether it's within the visible scroll window.
-Combined with #1, a long document would re-measure *and* re-draw
-content the user can't currently see, every frame. Once layout is
-cached (fixing #1), culling to the visible `y` range is the natural
-next step and is what actually makes scrolling a long document cheap.
-
-### 3. Dead/duplicated layout code
-
-`Block.GetBounds` is a second, hand-duplicated implementation of the
-line-splitting logic in `GetBox` (compare
-[layout.go:56-69](cmd/whynot/layout.go#L56-L69) with
-[layout.go:70-83](cmd/whynot/layout.go#L70-L83)), and
-`StackBlock.GetBounds` is just a stub returning `image.Rectangle{}`
-([layout.go:116-118](cmd/whynot/layout.go#L116-L118)). Once you have a
-`Box`, `Box.Bounds()` already gives you this — `GetBounds` looks like
-an earlier approach that was superseded by `GetBox` but never removed.
-Now that both live in `layout.go`, the duplication is easy to see
-side by side.
-
-### 4. Unhandled edge cases (will panic)
-
-- `StackBlock.Margins()` indexes `b.blocks[0]` /
-  `b.blocks[len(b.blocks)-1]` unconditionally
-  ([block.go:85-90](cmd/whynot/block.go#L85-L90)) — an empty
-  list or empty document crashes.
-- Any unrecognized goldmark node kind hits `panic(...)` /
-  `log.Panicf(...)` in `CompileBlock` and `AppendInlineNode`
-  (e.g. links today) — one unsupported Markdown construct takes down
-  the whole app instead of degrading (render as plain text, skip, or
-  log-and-continue).
-
-### 5. Duplication across `TextBlock` / `ListItemBlock` / `CodeBlock`
-
-All three repeat the same "turn `Inline`s into `InlineBox`es, then
-either `splitBoxes`-loop or one-box-per-line" shape. A shared
-`linesFromInline(ctx, parts, width) []Box` helper would remove the
-copy-paste and be the single place to fix once instead of three times.
-
-### 6. Silent failures
-
-`ebitenutil.NewImageFromFile` errors are discarded in
-`AppendInlineNode` ([compile.go:194](cmd/whynot/compile.go#L194))
-— a missing/broken image just renders nothing with no signal why.
-
----
-
-## The fundamental fix: three explicit lifecycles instead of one
-
-The layer boundaries (`Block` / `Box` / screen) are already right. What's
-missing is treating them as three different *update frequencies*
-instead of recomputing everything every frame:
-
-| Tier | Recompute when... | Currently |
-|---|---|---|
-| Parse → `Block` tree | Document changes (never, today) | ✅ done once, correct |
-| `Block` → `Box` tree | `width` changes (resize) | ❌ redone every frame |
-| `Box` tree → pixels, culled to viewport | Every frame (cheap) | ❌ redraws everything, not just visible |
-
-Concretely: cache the `Box` tree on the controller, keyed on width;
-rebuild it in `Layout()` (which already fires on resize) instead of in
-`Draw()`; and give `StackBox.Draw` a visible-range so it skips
-children entirely above/below the viewport. That one change fixes the
-performance issue and sets up culling as a small follow-on, and it's
-the change I'd make before adding more Markdown features — features
-land on top of this shape either way, so it's cheaper to fix now than
-after `CodeBlock`/`TextBlock`/`ListItemBlock` grow more variants.
+The planned approach: make the `(index, ratio)` anchor `View` already
+computes for resize the *primary* representation of scroll position (not
+just a transient resize-time computation), and make layout construction
+incremental — start at the anchor block and build forward only as far as
+needed to fill the viewport, using the same "stop once past the viewport"
+logic `StackBox.drawContents` already has. Live scrolling should update the
+anchor as `(index, pixel offset within that box)`, not `(index, ratio)` —
+a wheel delta is naturally a pixel quantity, and ratio only earns its
+keep at the point where box height itself changes (i.e. specifically at
+resize). This is a bigger change than anything implemented so far: it
+turns `GetBox` from "eagerly transform the whole tree" into "produce boxes
+on demand," not an additive fix on top of the current contract.
