@@ -6,18 +6,16 @@ import (
 	"log"
 	"strings"
 
-	"github.com/yuin/goldmark"
-	gmast "github.com/yuin/goldmark/ast"
-	gmtext "github.com/yuin/goldmark/text"
+	gmast "github.com/yuin/goldmark/v2/ast"
+	"github.com/yuin/goldmark/v2/parser"
 	"golang.org/x/image/font"
 )
 
 // Parse compiles Markdown source into a Block tree ready for layout via
 // Block.GetBox.
 func Parse(source []byte) Block {
-	parser := goldmark.DefaultParser()
-	reader := gmtext.NewReader(source)
-	node := parser.Parse(reader)
+	p := parser.New()
+	node := p.Parse(source)
 	compiler := MarkdownCompiler{
 		source: source,
 		paragraphStyle: partStyle{
@@ -73,10 +71,10 @@ func Parse(source []byte) Block {
 }
 
 func (c *MarkdownCompiler) CompileNode(node gmast.Node) Block {
-	switch node.Type() {
-	case gmast.TypeDocument:
+	if node.Kind() == gmast.KindDocument {
 		return c.CompileDocument(node)
-	case gmast.TypeBlock:
+	}
+	if _, ok := node.(gmast.BlockNode); ok {
 		return c.CompileBlock(node)
 	}
 	return nil
@@ -117,31 +115,37 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		var index = 1
 		child := node.FirstChild()
 		for child != nil {
-			items = append(items, c.CompileListItem(child, index, list.Marker))
+			items = append(items, c.CompileListItem(child, index, list.Marker, list.IsTight))
 			child = child.NextSibling()
 			index++
 		}
 		return &StackBlock{blocks: items, margins: c.listStyle.Margins}
-	case gmast.KindFencedCodeBlock:
-		lineCount := node.Lines().Len()
-		items := make([]Inline, lineCount)
-		for i := 0; i < lineCount; i++ {
-			line := node.Lines().At(i)
-			items[i] = &InlineText{
-				text:  string(line.Value(c.source)),
-				style: c.codeBlockStyle.TextStyle,
-				color: c.codeColor,
+	case gmast.KindCodeBlock:
+		cb := node.(*gmast.CodeBlock)
+		if cb.CodeBlockKind == gmast.CodeBlockKindFenced {
+			segs := cb.Value.Segments()
+			items := make([]Inline, len(segs))
+			for i, seg := range segs {
+				items[i] = &InlineText{
+					text:  string(seg.Bytes(c.source)),
+					style: c.codeBlockStyle.TextStyle,
+					color: c.codeColor,
+				}
 			}
-		}
-		return &CodeBlock{
-			margins: c.codeBlockStyle.Margins,
-			lines:   items,
+			return &CodeBlock{
+				margins: c.codeBlockStyle.Margins,
+				lines:   items,
+			}
 		}
 	}
 	panic("Unsupported block")
 }
 
-func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker byte) Block {
+func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker byte, tight bool) Block {
+	if !tight {
+		log.Panicf("Unsupported: loose list item")
+	}
+
 	var items []Inline
 	var markerString string
 	switch marker {
@@ -157,7 +161,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 
 	contents := node.FirstChild()
 	switch contents.Kind() {
-	case gmast.KindTextBlock:
+	case gmast.KindParagraph:
 		child := contents.FirstChild()
 		for child != nil {
 			items = c.AppendInlineNode(items, child, 0, c.listItemStyle.Size)
@@ -172,27 +176,33 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 
 func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64) []Inline {
 	switch node.Kind() {
-	case gmast.KindString:
-		return appendString(items, string(node.(*gmast.String).Value), getStyle(baseLevel, size), color.White)
 	case gmast.KindText:
-		return appendString(items, string(node.Text(c.source)), getStyle(baseLevel, size), color.White)
+		t := node.(*gmast.Text)
+		return appendString(items, t.Value.Value(c.source), getStyle(baseLevel, size), color.White)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
-		baseLevel += node.(*gmast.Emphasis).Level
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel, size)
+			items = c.AppendInlineNode(items, child, baseLevel+1, size)
+			child = child.NextSibling()
+		}
+		return items
+	case gmast.KindStrong:
+		child := node.FirstChild()
+		for child != nil {
+			items = c.AppendInlineNode(items, child, baseLevel+2, size)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindCodeSpan:
 		style := getStyle(baseLevel, size)
 		style.Family = Monospace
-		return appendString(items, string(node.Text(c.source)), style, c.codeColor)
+		cs := node.(*gmast.CodeSpan)
+		return appendString(items, cs.Value.Value(c.source), style, c.codeColor)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
 		return append(items, &InlineImage{
-			src:   string(imgNode.Destination),
-			title: string(imgNode.Title),
+			src:   imgNode.Destination.Value(c.source),
+			title: imgNode.Title.Value(c.source),
 		})
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())

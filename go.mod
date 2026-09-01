@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.12
-	github.com/yuin/goldmark v1.5.4
+	github.com/yuin/goldmark/v2 v2.0.0
 	golang.org/x/image v0.44.0
 )
 
