@@ -201,49 +201,6 @@ func (b *StackBox) boxAt(i int) Box {
 	return slot.box
 }
 
-// anchorAt finds which direct child contains local y-coordinate y, and how
-// far through that child's height y falls (0 = top, 1 = bottom). y before
-// the first child anchors to its top; y at or past the end of the last
-// child anchors to its bottom. ok is false only if there are no children.
-func (b *StackBox) anchorAt(y int) (index int, ratio float64, ok bool) {
-	if len(b.slots) == 0 {
-		return 0, 0, false
-	}
-	if y < 0 {
-		return 0, 0, true
-	}
-	pos := 0
-	for i := range b.slots {
-		h := b.boxAt(i).Bounds().Max.Y
-		if y < pos+h {
-			if h == 0 {
-				return i, 0, true
-			}
-			return i, float64(y-pos) / float64(h), true
-		}
-		pos += h
-	}
-	return len(b.slots) - 1, 1, true
-}
-
-// positionOf is the inverse of anchorAt: the local y-coordinate that is
-// ratio of the way through child index's height. ok is false if index is
-// out of range for this StackBox.
-func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
-	if index < 0 || index >= len(b.slots) {
-		return 0, false
-	}
-	pos := 0
-	for i := 0; i <= index; i++ {
-		h := b.boxAt(i).Bounds().Max.Y
-		if i == index {
-			return pos + int(ratio*float64(h)), true
-		}
-		pos += h
-	}
-	return 0, false
-}
-
 // stackCursor is a position within a StackBox: which slot, and how far
 // into it. Like a text cursor, it's only meaningful relative to the
 // specific StackBox it was resolved against - the same (index, offset)
@@ -266,10 +223,6 @@ type stackCursor struct {
 // height(lastIndex)) - offset equal to the height, not less than it -
 // rather than reporting an ever-growing out-of-range offset. resolve is
 // idempotent everywhere except exactly that clamped value.
-//
-// resolve({0, y}) and anchorAt(y) agree on index for any y: index 0 can
-// never be adjusted backward (nothing precedes it), so resolve({0, y})'s
-// only path is the same forward scan anchorAt does.
 func (b *StackBox) resolve(c stackCursor) stackCursor {
 	if len(b.slots) == 0 {
 		return stackCursor{}

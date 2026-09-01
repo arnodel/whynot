@@ -180,9 +180,3 @@ These are real, understood, and not yet fixed:
   very long list — still builds and draws its children eagerly once its
   parent slot is resolved, since only `StackBlock.GetBox`'s top-level
   skeleton is lazy. The same anchoring approach could apply recursively.
-- **`anchorAt`/`positionOf`** ([box.go](box.go)) — the earlier,
-  full-tree-scanning way of converting between a pixel position and an
-  `(index, ratio)` anchor — are superseded by `resolve` for everything
-  `View` does, and are currently kept only because their tests
-  (`TestStackBoxResolveMatchesAnchorAt`) cross-check `resolve` against
-  them. Candidates for removal once that's no longer valuable.
