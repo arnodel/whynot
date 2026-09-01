@@ -15,13 +15,15 @@ Here is an overview of the Markdown features that are implemented.
 2. Paragraphs
 3. Highlighting
 4. Inline code
-5. Code blocks
+5. Fenced and indented code blocks
 6. Ordered and unorderd lists
+7. Images
+8. Thematic breaks
 
 Here are some features that are not yet implemented
 * Nested lists
 * Links
-* Images
+* Tables
 
 ## Examples
 
@@ -48,6 +50,13 @@ def fib(n, a = 0, b = 1):
     return a
 ```
 
+Code blocks can also be indented instead of fenced.
+
+    def fib(n, a = 0, b = 1):
+        while n > 0:
+            a, b = b, a + b
+        return a
+
 This is how a list with long items looks like.
 
 1. First item. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
@@ -60,6 +69,10 @@ This is how a list with long items looks like.
 8. Another item
 9. Another item
 10. 10th item
+
+A thematic break separates sections, like the one below.
+
+---
 
 ## Cute!
 
