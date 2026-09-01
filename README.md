@@ -86,7 +86,7 @@ too.
 
 - Headings (all 6 levels), paragraphs
 - Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
-- Inline code and fenced code blocks
+- Inline code, and fenced and indented code blocks
 - Ordered and unordered (tight) lists
 - Images, including a title attribute
 - Scrolling, window resizing with reflow and scroll-position anchoring,
@@ -105,7 +105,7 @@ first, with tables called out separately since it needs real design work
 rather than being an incremental addition.
 
 **Quick wins, no new layout concepts:**
-- [ ] Indented code blocks (fenced already works; this reuses the same path)
+- [x] Indented code blocks (fenced already works; this reuses the same path)
 - [ ] Thematic breaks (`---`)
 - [ ] Typographer (smart quotes/dashes)
 - [ ] Task lists (`- [ ]`)

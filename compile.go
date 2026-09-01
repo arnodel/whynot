@@ -122,20 +122,18 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		return &StackBlock{blocks: items, margins: c.listStyle.Margins}
 	case gmast.KindCodeBlock:
 		cb := node.(*gmast.CodeBlock)
-		if cb.CodeBlockKind == gmast.CodeBlockKindFenced {
-			segs := cb.Value.Segments()
-			items := make([]Inline, len(segs))
-			for i, seg := range segs {
-				items[i] = &InlineText{
-					text:  string(seg.Bytes(c.source)),
-					style: c.codeBlockStyle.TextStyle,
-					color: c.codeColor,
-				}
+		segs := cb.Value.Segments()
+		items := make([]Inline, len(segs))
+		for i, seg := range segs {
+			items[i] = &InlineText{
+				text:  string(seg.Bytes(c.source)),
+				style: c.codeBlockStyle.TextStyle,
+				color: c.codeColor,
 			}
-			return &CodeBlock{
-				margins: c.codeBlockStyle.Margins,
-				lines:   items,
-			}
+		}
+		return &CodeBlock{
+			margins: c.codeBlockStyle.Margins,
+			lines:   items,
 		}
 	}
 	panic("Unsupported block")

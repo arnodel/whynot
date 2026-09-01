@@ -132,6 +132,25 @@ func TestParseFencedCodeBlock(t *testing.T) {
 	}
 }
 
+func TestParseIndentedCodeBlock(t *testing.T) {
+	doc := Parse([]byte("    line one\n    line two"))
+	stack := doc.(*StackBlock)
+	code, ok := stack.blocks[0].(*CodeBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *CodeBlock", stack.blocks[0])
+	}
+	want := []string{"line one\n", "line two\n"}
+	if len(code.lines) != len(want) {
+		t.Fatalf("got %d lines, want %d: %#v", len(code.lines), len(want), code.lines)
+	}
+	for i, line := range code.lines {
+		text, ok := line.(*InlineText)
+		if !ok || text.text != want[i] {
+			t.Errorf("line %d = %#v, want %q", i, line, want[i])
+		}
+	}
+}
+
 func TestParseEmphasisAndStrong(t *testing.T) {
 	cases := []struct {
 		name       string
