@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
@@ -87,6 +88,10 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 	opts.GeoM.Translate(float64(x), float64(y)-ascent)
 	opts.ColorScale.SetWithColor(clr)
 	text.Draw(c.dst, s, goXFace, opts)
+}
+
+func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
+	vector.DrawFilledRect(c.dst, float32(x), float32(y), float32(w), float32(h), clr, false)
 }
 
 func (c *Canvas) DrawImage(src string, x, y int) {

@@ -89,6 +89,7 @@ too.
 - Inline code, and fenced and indented code blocks
 - Ordered and unordered (tight) lists
 - Images, including a title attribute
+- Thematic breaks (`---`)
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
 - Large documents: layout and drawing are lazy, built outward from the
@@ -106,7 +107,7 @@ rather than being an incremental addition.
 
 **Quick wins, no new layout concepts:**
 - [x] Indented code blocks (fenced already works; this reuses the same path)
-- [ ] Thematic breaks (`---`)
+- [x] Thematic breaks (`---`)
 - [ ] Typographer (smart quotes/dashes)
 - [ ] Task lists (`- [ ]`)
 

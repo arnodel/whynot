@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"image"
 	"testing"
 
 	"golang.org/x/image/font"
@@ -148,6 +149,29 @@ func TestParseIndentedCodeBlock(t *testing.T) {
 		if !ok || text.text != want[i] {
 			t.Errorf("line %d = %#v, want %q", i, line, want[i])
 		}
+	}
+}
+
+func TestParseThematicBreak(t *testing.T) {
+	doc := Parse([]byte("---"))
+	stack := doc.(*StackBlock)
+	rule, ok := stack.blocks[0].(*ThematicBreakBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *ThematicBreakBlock", stack.blocks[0])
+	}
+	if rule.margins != (Margins{Top: 20, Bottom: 20}) {
+		t.Errorf("margins = %+v, want {Top: 20, Bottom: 20}", rule.margins)
+	}
+
+	ctx := RenderingContext{Scale: 1}
+	box := rule.GetBox(ctx, 100)
+	ruleBox, ok := box.(*RuleBox)
+	if !ok {
+		t.Fatalf("GetBox = %T, want *RuleBox", box)
+	}
+	want := image.Rect(0, 0, 100, thematicBreakThickness)
+	if got := ruleBox.Bounds(); got != want {
+		t.Errorf("Bounds() = %v, want %v", got, want)
 	}
 }
 

@@ -5,13 +5,15 @@ import (
 )
 
 type MarkdownCompiler struct {
-	source         []byte
-	headingStyles  [6]partStyle
-	paragraphStyle partStyle
-	listItemStyle  partStyle
-	listStyle      partStyle
-	codeBlockStyle partStyle
-	codeColor      color.Color
+	source               []byte
+	headingStyles        [6]partStyle
+	paragraphStyle       partStyle
+	listItemStyle        partStyle
+	listStyle            partStyle
+	codeBlockStyle       partStyle
+	codeColor            color.Color
+	thematicBreakMargins Margins
+	thematicBreakColor   color.Color
 }
 
 type partStyle struct {

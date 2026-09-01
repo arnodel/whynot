@@ -65,7 +65,9 @@ func Parse(source []byte) Block {
 			TextStyle: TextStyle{Size: 16, Family: Monospace},
 			Margins:   Margins{Top: 20, Bottom: 20, Left: 20},
 		},
-		codeColor: color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		codeColor:            color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		thematicBreakMargins: Margins{Top: 20, Bottom: 20},
+		thematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -134,6 +136,11 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		return &CodeBlock{
 			margins: c.codeBlockStyle.Margins,
 			lines:   items,
+		}
+	case gmast.KindThematicBreak:
+		return &ThematicBreakBlock{
+			margins: c.thematicBreakMargins,
+			color:   c.thematicBreakColor,
 		}
 	}
 	panic("Unsupported block")

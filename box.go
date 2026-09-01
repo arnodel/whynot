@@ -309,6 +309,26 @@ func (b *ContainerBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
+// RuleBox is a single filled horizontal bar - the box for a thematic break
+// (`---`). Its own height is just the bar's thickness; the visual spacing
+// above and below comes from ThematicBreakBlock's Margins, same as any
+// other block.
+type RuleBox struct {
+	width     int
+	thickness int
+	color     color.Color
+}
+
+var _ Box = (*RuleBox)(nil)
+
+func (b *RuleBox) Bounds() image.Rectangle {
+	return image.Rect(0, 0, b.width, b.thickness)
+}
+
+func (b *RuleBox) drawContents(dst Canvas, x, y int) {
+	dst.DrawRect(x, y, b.width, b.thickness, b.color)
+}
+
 func maxInt(a, b int) int {
 	if a > b {
 		return a

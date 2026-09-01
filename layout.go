@@ -50,6 +50,23 @@ func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
+// thematicBreakThickness is the rule's height, in unscaled pixels - scaled
+// by ctx.Scale the same way Margins are, so it stays proportionate at
+// higher DPI.
+const thematicBreakThickness = 2
+
+func (b *ThematicBreakBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
+	return image.Rect(0, 0, width, int(thematicBreakThickness*ctx.Scale))
+}
+
+func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
+	return &RuleBox{
+		width:     width,
+		thickness: int(thematicBreakThickness * ctx.Scale),
+		color:     b.color,
+	}
+}
+
 func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	for _, line := range b.lines {

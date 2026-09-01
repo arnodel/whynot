@@ -18,4 +18,5 @@ type Canvas interface {
 	Bounds() image.Rectangle
 	DrawText(s string, face font.Face, x, y int, clr color.Color)
 	DrawImage(src string, x, y int)
+	DrawRect(x, y, w, h int, clr color.Color)
 }

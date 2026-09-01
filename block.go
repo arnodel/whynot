@@ -35,6 +35,20 @@ type InlineImage struct {
 
 var _ Inline = (*InlineImage)(nil)
 
+// ThematicBreakBlock is a horizontal rule (`---`). Unlike the other Block
+// types it has no inline content to lay out - just a color and the margins
+// that give it its vertical spacing.
+type ThematicBreakBlock struct {
+	margins Margins
+	color   color.Color
+}
+
+var _ Block = (*ThematicBreakBlock)(nil)
+
+func (b *ThematicBreakBlock) Margins() Margins {
+	return b.margins
+}
+
 type CodeBlock struct {
 	margins Margins
 	lines   []Inline
