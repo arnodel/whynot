@@ -69,6 +69,29 @@ func (b *StackBox) drawContents(dst Canvas, x, y int) {
 func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
 }
 
+// DrawFrom draws starting at slot index, offset pixels into it, so that
+// point lands at (x, y) on dst. Unlike DrawBox, it never calls Bounds() on
+// the whole tree first and never resolves (or draws) slots before index -
+// intended for View to call directly at the scroll anchor, rather than
+// going through DrawBox at the top level and paying for a full resolve on
+// every call.
+func (b *StackBox) DrawFrom(dst Canvas, index, offset, x, y int) {
+	if index < 0 || index >= len(b.slots) {
+		return
+	}
+	viewport := dst.Bounds()
+	y -= offset
+	for i := index; i < len(b.slots); i++ {
+		box := b.boxAt(i)
+		childBounds := box.Bounds()
+		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
+			break
+		}
+		DrawBox(box, dst, x, y)
+		y += childBounds.Max.Y
+	}
+}
+
 func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
 	DrawBox(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
 }
