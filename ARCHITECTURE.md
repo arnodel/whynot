@@ -164,16 +164,13 @@ These are real, understood, and not yet fixed:
   ([block.go:82](block.go#L82)) indexes `b.blocks[0]`/`b.blocks[len-1]`
   unconditionally — an empty list or document crashes. Any unrecognized
   goldmark node kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock`
-  and `AppendInlineNode` ([compile.go](compile.go)) — e.g. links today —
+  and `AppendInlineNode` ([compile.go](compile.go)) — e.g. raw HTML today —
   taking down the whole program instead of degrading gracefully.
 - **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
   repeat the same "turn `Inline`s into `InlineBox`es, then `splitBoxes`-loop
   or one-box-per-line" shape in [layout.go](layout.go). A shared
   `linesFromInline(ctx, parts, width) []Box` helper would remove the
   copy-paste.
-- **`Block.GetBounds` is dead, duplicated code** — a second implementation
-  of `GetBox`'s line-splitting logic that nothing calls; `Box.Bounds()`
-  already gives you this once a `Box` exists.
 
 ## What's next
 

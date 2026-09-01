@@ -1,7 +1,6 @@
 package whynot
 
 import (
-	"image"
 	"os"
 	"testing"
 )
@@ -11,10 +10,6 @@ import (
 // real font metrics.
 type fixedHeightBlock struct {
 	height int
-}
-
-func (b *fixedHeightBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	return image.Rect(0, 0, width, b.height)
 }
 
 func (b *fixedHeightBlock) GetBox(ctx RenderingContext, width int) Box {
@@ -30,10 +25,6 @@ func (b *fixedHeightBlock) Margins() Margins {
 // tests that exercise Layout's ratio-based re-anchoring.
 type scaledHeightBlock struct {
 	scale float64
-}
-
-func (b *scaledHeightBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	return image.Rect(0, 0, width, int(float64(width)*b.scale))
 }
 
 func (b *scaledHeightBlock) GetBox(ctx RenderingContext, width int) Box {

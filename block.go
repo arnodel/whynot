@@ -1,7 +1,6 @@
 package whynot
 
 import (
-	"image"
 	"image/color"
 	"math"
 )
@@ -11,7 +10,6 @@ type Margins struct {
 }
 
 type Block interface {
-	GetBounds(ctx RenderingContext, width int) image.Rectangle
 	GetBox(ctx RenderingContext, width int) Box
 	Margins() Margins
 }
@@ -57,7 +55,7 @@ func (b *ThematicBreakBlock) Margins() Margins {
 // level's bar drawn independently) just work without the parent needing
 // to know anything about it. inner is the quoted content as a single
 // Block - already a StackBlock if there was more than one, resolved once
-// at compile time rather than rebuilt on every GetBox/GetBounds call.
+// at compile time rather than rebuilt on every GetBox call.
 type BlockquoteBlock struct {
 	inner    Block
 	margins  Margins

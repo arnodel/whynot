@@ -64,10 +64,6 @@ func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 // higher DPI.
 const thematicBreakThickness = 2
 
-func (b *ThematicBreakBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	return image.Rect(0, 0, width, int(thematicBreakThickness*ctx.Scale))
-}
-
 func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &RuleBox{
 		width:     width,
@@ -84,12 +80,6 @@ const (
 	blockquoteBarWidth = 3
 )
 
-func (b *BlockquoteBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	indent := int(blockquoteIndent * ctx.Scale)
-	bounds := b.inner.GetBounds(ctx, width-indent)
-	return image.Rect(0, 0, width, bounds.Dy())
-}
-
 func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 	indent := int(blockquoteIndent * ctx.Scale)
 	return &BlockquoteBox{
@@ -101,36 +91,12 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 }
 
-func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	height := 0
-	for _, line := range b.lines {
-		box := line.GetInlineBox(ctx)
-		bounds, _ := box.BoundsAndAdvance()
-		height += bounds.Dy()
-	}
-	return image.Rect(0, 0, width, height)
-}
-
 func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	lineBoxes := make([]Box, len(b.lines))
 	for i, line := range b.lines {
 		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}, space: b.space}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes)}
-}
-
-func (b *TextBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	height := 0
-	boxes := make([]InlineBox, len(b.parts))
-	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(ctx)
-	}
-	for len(boxes) > 0 {
-		i, lineBounds := splitBoxes(boxes, width)
-		height += lineBounds.Dy()
-		boxes = boxes[i:]
-	}
-	return image.Rect(0, 0, width, height)
 }
 
 func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
@@ -145,20 +111,6 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 		boxes = boxes[i:]
 	}
 	return &StackBox{slots: preResolvedSlots(lines)}
-}
-
-func (b *ListItemHeadBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	height := 0
-	boxes := make([]InlineBox, len(b.parts))
-	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(ctx)
-	}
-	for len(boxes) > 0 {
-		i, lineBounds := splitBoxes(boxes, width)
-		height += lineBounds.Dy()
-		boxes = boxes[i:]
-	}
-	return image.Rect(0, 0, width, height)
 }
 
 func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
@@ -177,10 +129,6 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 		boxes = boxes[i:]
 	}
 	return &StackBox{slots: preResolvedSlots(lines)}
-}
-
-func (b *StackBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
-	return image.Rectangle{}
 }
 
 // GetBox builds the slot skeleton only - gap sizes from Margins(), which is
