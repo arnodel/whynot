@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	gmast "github.com/yuin/goldmark/v2/ast"
+	"github.com/yuin/goldmark/v2/extension"
 	"github.com/yuin/goldmark/v2/parser"
 	"golang.org/x/image/font"
 )
@@ -14,7 +15,7 @@ import (
 // Parse compiles Markdown source into a Block tree ready for layout via
 // Block.GetBox.
 func Parse(source []byte) Block {
-	p := parser.New()
+	p := parser.New(parser.WithExtensions(extension.TaskListItemParser))
 	node := p.Parse(source)
 	compiler := MarkdownCompiler{
 		source: source,
@@ -162,6 +163,13 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		markerString = fmt.Sprintf("%d.", index)
 	default:
 		panic("Unsupported marker")
+	}
+	if status, ok := extension.TaskStatusOf(node); ok {
+		if status == extension.TaskStatusCompleted {
+			markerString = "[x]"
+		} else {
+			markerString = "[ ]"
+		}
 	}
 
 	contents := node.FirstChild()

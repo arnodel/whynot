@@ -102,6 +102,35 @@ func TestParseTightList(t *testing.T) {
 	}
 }
 
+func TestParseTaskList(t *testing.T) {
+	doc := Parse([]byte("- [ ] todo item\n- [x] done item\n- plain item"))
+	stack := doc.(*StackBlock)
+	list, ok := stack.blocks[0].(*StackBlock)
+	if !ok || len(list.blocks) != 3 {
+		t.Fatalf("list = %#v, want a 3-item StackBlock", stack.blocks[0])
+	}
+
+	wantMarker := []string{"[ ]", "[x]", "-"}
+	wantWords := [][]string{{"todo", "item"}, {"done", "item"}, {"plain", "item"}}
+	for i, block := range list.blocks {
+		item, ok := block.(*ListItemBlock)
+		if !ok {
+			t.Fatalf("item %d = %T, want *ListItemBlock", i, block)
+		}
+		marker, ok := item.marker.(*InlineText)
+		if !ok || marker.text != wantMarker[i] {
+			t.Errorf("item %d marker = %#v, want %q", i, item.marker, wantMarker[i])
+		}
+		// The checkbox syntax must be fully consumed by the task list
+		// parser - it shouldn't leak into the item's own text as a
+		// leftover "[ ]"/"[x]" word.
+		got := textOf(t, item.parts)
+		if !stringsEqual(got, wantWords[i]) {
+			t.Errorf("item %d words = %v, want %v", i, got, wantWords[i])
+		}
+	}
+}
+
 // TestParseLooseListPanics checks that a loose list (items separated by a
 // blank line) still panics rather than silently rendering, matching v1's
 // behavior of only ever handling tight lists.

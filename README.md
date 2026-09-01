@@ -87,7 +87,7 @@ too.
 - Headings (all 6 levels), paragraphs
 - Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
 - Inline code, and fenced and indented code blocks
-- Ordered and unordered (tight) lists
+- Ordered and unordered (tight) lists, including task lists (`- [ ]`)
 - Images, including a title attribute
 - Thematic breaks (`---`)
 - Scrolling, window resizing with reflow and scroll-position anchoring,
@@ -108,8 +108,14 @@ rather than being an incremental addition.
 **Quick wins, no new layout concepts:**
 - [x] Indented code blocks (fenced already works; this reuses the same path)
 - [x] Thematic breaks (`---`)
-- [ ] Typographer (smart quotes/dashes)
-- [ ] Task lists (`- [ ]`)
+- [ ] Typographer (smart quotes/dashes) - blocked on a real gap in the
+      inline model: goldmark emits the substitution as a separate Text
+      node with no whitespace from its neighbor (e.g. `Alice's` ->
+      `"Alice"`, `"'"`, `"s "` as three siblings), but `appendString` word-
+      splits each sibling independently, so adjacent no-space siblings
+      would render as separately-spaced words. Needs word-adjacency
+      tracking across sibling Inlines first, not scoped to this feature
+- [x] Task lists (`- [ ]`)
 
 **One new concept each:**
 - [ ] Links and autolinks (rendered distinctly; click-through needs input

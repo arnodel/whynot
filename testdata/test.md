@@ -70,6 +70,12 @@ This is how a list with long items looks like.
 9. Another item
 10. 10th item
 
+Task lists work too.
+
+- [x] Write the renderer
+- [x] Support task lists
+- [ ] Support tables
+
 A thematic break separates sections, like the one below.
 
 ---
