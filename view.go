@@ -21,7 +21,7 @@ type View struct {
 	// height, but not which slot content belongs to.
 	cursor stackCursor
 
-	box      Box
+	box      *StackBox
 	boxWidth int
 	boxScale float64
 }
@@ -41,11 +41,10 @@ func NewView(source []byte, faceSelector FaceSelector) *View {
 // ebiten.Wheel()'s dy passed straight through, so callers don't need to
 // negate it.
 func (v *View) Scroll(dy float64) {
-	stack, ok := v.box.(*StackBox)
-	if !ok {
+	if v.box == nil {
 		return
 	}
-	v.cursor = stack.resolve(stackCursor{index: v.cursor.index, offset: v.cursor.offset - dy})
+	v.cursor = v.box.resolve(stackCursor{index: v.cursor.index, offset: v.cursor.offset - dy})
 }
 
 // Draw renders the document onto dst with its top-left corner at (x, y),
@@ -54,11 +53,10 @@ func (v *View) Scroll(dy float64) {
 // tracks what's visible, not the document's total size or how far into it
 // the scroll position is.
 func (v *View) Draw(dst Canvas, x, y int) {
-	stack, ok := v.box.(*StackBox)
-	if !ok {
+	if v.box == nil {
 		return
 	}
-	stack.DrawFrom(dst, v.cursor, x, y)
+	v.box.DrawFrom(dst, v.cursor, x, y)
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
@@ -77,23 +75,22 @@ func (v *View) Layout(width int, scale float64) {
 	}
 
 	ratio := 0.0
-	if oldStack, ok := v.box.(*StackBox); ok && v.cursor.index < len(oldStack.slots) {
-		if h := oldStack.boxAt(v.cursor.index).Bounds().Dy(); h > 0 {
+	if v.box != nil && v.cursor.index < len(v.box.slots) {
+		if h := v.box.boxAt(v.cursor.index).Bounds().Dy(); h > 0 {
 			ratio = v.cursor.offset / float64(h)
 		}
 	}
 
-	v.box = v.block.GetBox(v.ctx, width)
+	v.box = asStackBox(v.block.GetBox(v.ctx, width))
 	v.boxWidth = width
 	v.boxScale = scale
 
-	newStack, ok := v.box.(*StackBox)
-	if !ok || len(newStack.slots) == 0 {
+	if len(v.box.slots) == 0 {
 		return
 	}
-	if v.cursor.index >= len(newStack.slots) {
-		v.cursor.index = len(newStack.slots) - 1
+	if v.cursor.index >= len(v.box.slots) {
+		v.cursor.index = len(v.box.slots) - 1
 	}
-	newHeight := newStack.boxAt(v.cursor.index).Bounds().Dy()
-	v.cursor = newStack.resolve(stackCursor{index: v.cursor.index, offset: ratio * float64(newHeight)})
+	newHeight := v.box.boxAt(v.cursor.index).Bounds().Dy()
+	v.cursor = v.box.resolve(stackCursor{index: v.cursor.index, offset: ratio * float64(newHeight)})
 }

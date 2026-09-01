@@ -145,8 +145,8 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.StopTimer()
 		v := &View{block: block, ctx: ctx}
 		v.Layout(width, 1)
-		if stack, ok := v.box.(*StackBox); ok && len(stack.slots) > 0 {
-			v.cursor.index = len(stack.slots) - 1
+		if len(v.box.slots) > 0 {
+			v.cursor.index = len(v.box.slots) - 1
 			v.cursor.offset = 0
 		}
 		b.StartTimer()

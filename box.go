@@ -171,6 +171,17 @@ func preResolvedSlots(boxes []Box) []stackSlot {
 	return slots
 }
 
+// asStackBox returns box already a *StackBox, or wraps it as a single-slot
+// one otherwise, so callers that need cursor-based scrolling (View) always
+// have a StackBox to work with regardless of what a document's top-level
+// Block produces.
+func asStackBox(box Box) *StackBox {
+	if stack, ok := box.(*StackBox); ok {
+		return stack
+	}
+	return &StackBox{slots: preResolvedSlots([]Box{box})}
+}
+
 func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
