@@ -26,7 +26,7 @@ func main() {
 	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
-	scale := ebiten.DeviceScaleFactor()
+	scale := ebiten.Monitor().DeviceScaleFactor()
 	game := &game{
 		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale)),
 		renderer: ebitenrenderer.New(),
@@ -45,7 +45,7 @@ type game struct {
 
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
-	g.view.Scroll(dy * ebiten.DeviceScaleFactor() * 2)
+	g.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 	return nil
 }
 
@@ -54,7 +54,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	s := ebiten.DeviceScaleFactor()
+	s := ebiten.Monitor().DeviceScaleFactor()
 	width := int(float64(outsideWidth) * s)
 	height := int(float64(outsideHeight) * s)
 	g.view.Layout(width, s)
