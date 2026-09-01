@@ -49,6 +49,26 @@ func (b *ThematicBreakBlock) Margins() Margins {
 	return b.margins
 }
 
+// BlockquoteBlock is a quoted group of ordinary blocks (`> ...`). Unlike
+// list-item indentation, which relies on the parent StackBlock's generic
+// left-margin wrapping, a blockquote positions its own content and draws
+// its own left-edge bar - self-contained, so nested blockquotes (each
+// level's bar drawn independently) just work without the parent needing
+// to know anything about it. inner is the quoted content as a single
+// Block - already a StackBlock if there was more than one, resolved once
+// at compile time rather than rebuilt on every GetBox/GetBounds call.
+type BlockquoteBlock struct {
+	inner    Block
+	margins  Margins
+	barColor color.Color
+}
+
+var _ Block = (*BlockquoteBlock)(nil)
+
+func (b *BlockquoteBlock) Margins() Margins {
+	return b.margins
+}
+
 type CodeBlock struct {
 	margins Margins
 	lines   []Inline

@@ -205,6 +205,86 @@ func TestParseThematicBreak(t *testing.T) {
 	}
 }
 
+// TestParseBlockquote checks that a single-block blockquote's inner is
+// that block directly, not wrapped in a StackBlock (wrapBlocks only wraps
+// when there's more than one).
+func TestParseBlockquote(t *testing.T) {
+	doc := Parse([]byte("> quoted text"))
+	stack := doc.(*StackBlock)
+	bq, ok := stack.blocks[0].(*BlockquoteBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *BlockquoteBlock", stack.blocks[0])
+	}
+	para, ok := bq.inner.(*TextBlock)
+	if !ok {
+		t.Fatalf("inner = %T, want *TextBlock", bq.inner)
+	}
+	got := textOf(t, para.parts)
+	want := []string{"quoted", "text"}
+	if !stringsEqual(got, want) {
+		t.Errorf("words = %v, want %v", got, want)
+	}
+}
+
+// TestParseBlockquoteMultipleBlocks checks that a blockquote spanning more
+// than one block wraps them in a StackBlock, unlike the single-block case.
+func TestParseBlockquoteMultipleBlocks(t *testing.T) {
+	doc := Parse([]byte("> first\n>\n> second"))
+	stack := doc.(*StackBlock)
+	bq := stack.blocks[0].(*BlockquoteBlock)
+	inner, ok := bq.inner.(*StackBlock)
+	if !ok || len(inner.blocks) != 2 {
+		t.Fatalf("inner = %#v, want a 2-block StackBlock", bq.inner)
+	}
+}
+
+// TestParseNestedBlockquote checks that a blockquote inside a blockquote
+// (`> > ...`) compiles recursively - each level gets its own bar when
+// drawn, with no special-casing needed since BlockquoteBlock positions
+// itself rather than relying on its parent.
+func TestParseNestedBlockquote(t *testing.T) {
+	doc := Parse([]byte("> > nested quote"))
+	stack := doc.(*StackBlock)
+	outer := stack.blocks[0].(*BlockquoteBlock)
+	inner, ok := outer.inner.(*BlockquoteBlock)
+	if !ok {
+		t.Fatalf("inner = %T, want *BlockquoteBlock", outer.inner)
+	}
+	para, ok := inner.inner.(*TextBlock)
+	if !ok {
+		t.Fatalf("innermost = %T, want *TextBlock", inner.inner)
+	}
+	got := textOf(t, para.parts)
+	want := []string{"nested", "quote"}
+	if !stringsEqual(got, want) {
+		t.Errorf("words = %v, want %v", got, want)
+	}
+}
+
+func TestBlockquoteBoxIndent(t *testing.T) {
+	bq := &BlockquoteBlock{
+		inner:    &fixedHeightBlock{height: 10},
+		barColor: color.White,
+	}
+	ctx := RenderingContext{Scale: 1}
+	box := bq.GetBox(ctx, 100)
+	bqBox, ok := box.(*BlockquoteBox)
+	if !ok {
+		t.Fatalf("GetBox = %T, want *BlockquoteBox", box)
+	}
+	if bqBox.indent != blockquoteIndent {
+		t.Errorf("indent = %d, want %d", bqBox.indent, blockquoteIndent)
+	}
+	wantInnerWidth := 100 - blockquoteIndent
+	if got := bqBox.inner.Bounds().Dx(); got != wantInnerWidth {
+		t.Errorf("inner width = %d, want %d", got, wantInnerWidth)
+	}
+	want := image.Rect(0, 0, 100, 10)
+	if got := bqBox.Bounds(); got != want {
+		t.Errorf("Bounds() = %v, want %v", got, want)
+	}
+}
+
 func TestParseLink(t *testing.T) {
 	doc := Parse([]byte(`[click *here*](https://example.com "a title")`))
 	stack := doc.(*StackBlock)

@@ -70,6 +70,8 @@ func Parse(source []byte) Block {
 		thematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		thematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
 		linkColor:            color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
+		blockquoteMargins:    Margins{Top: 10, Bottom: 10},
+		blockquoteBarColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -143,6 +145,18 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		return &ThematicBreakBlock{
 			margins: c.thematicBreakMargins,
 			color:   c.thematicBreakColor,
+		}
+	case gmast.KindBlockquote:
+		var items []Block
+		child := node.FirstChild()
+		for child != nil {
+			items = append(items, c.CompileNode(child))
+			child = child.NextSibling()
+		}
+		return &BlockquoteBlock{
+			inner:    wrapBlocks(items),
+			margins:  c.blockquoteMargins,
+			barColor: c.blockquoteBarColor,
 		}
 	}
 	panic("Unsupported block")
@@ -242,6 +256,16 @@ var levelToStyles = [4]TextStyle{
 	{0, font.StyleItalic, font.WeightNormal, Proportional},
 	{0, font.StyleNormal, font.WeightBold, Proportional},
 	{0, font.StyleItalic, font.WeightBold, Proportional},
+}
+
+// wrapBlocks returns blocks[0] directly if there's exactly one, or a
+// StackBlock of all of them otherwise - for a Block field that holds "one
+// or more" blocks without unconditionally wrapping a single child.
+func wrapBlocks(blocks []Block) Block {
+	if len(blocks) == 1 {
+		return blocks[0]
+	}
+	return &StackBlock{blocks: blocks}
 }
 
 func getStyle(level int, size float64) TextStyle {

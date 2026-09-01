@@ -91,6 +91,7 @@ too.
 - Images, including a title attribute
 - Thematic breaks (`---`)
 - Links and autolinks (rendered in a distinct color; not clickable yet)
+- Blockquotes, including nested ones
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
 - Large documents: layout and drawing are lazy, built outward from the
@@ -121,7 +122,7 @@ rather than being an incremental addition.
 **One new concept each:**
 - [x] Links and autolinks (rendered distinctly; click-through needs input
       plumbing this library doesn't have yet)
-- [ ] Blockquotes
+- [x] Blockquotes
 - [ ] Strikethrough (needs a `Canvas` decoration primitive that doesn't
       exist yet)
 - [ ] Nested lists - currently a *silent* gap: a list item's content past

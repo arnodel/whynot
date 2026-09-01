@@ -67,6 +67,31 @@ func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 }
 
+// blockquoteIndent is how far a blockquote's content sits to the right of
+// its bar, and blockquoteBarWidth is the bar's own width - both in
+// unscaled pixels, scaled by ctx.Scale like Margins.
+const (
+	blockquoteIndent   = 16
+	blockquoteBarWidth = 3
+)
+
+func (b *BlockquoteBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
+	indent := int(blockquoteIndent * ctx.Scale)
+	bounds := b.inner.GetBounds(ctx, width-indent)
+	return image.Rect(0, 0, width, bounds.Dy())
+}
+
+func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
+	indent := int(blockquoteIndent * ctx.Scale)
+	return &BlockquoteBox{
+		width:    width,
+		indent:   indent,
+		barWidth: int(blockquoteBarWidth * ctx.Scale),
+		barColor: b.barColor,
+		inner:    b.inner.GetBox(ctx, width-indent),
+	}
+}
+
 func (b *CodeBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	for _, line := range b.lines {

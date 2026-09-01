@@ -309,6 +309,28 @@ func (b *ContainerBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
+// BlockquoteBox draws a vertical bar down the left edge and positions its
+// inner content (the quote's own blocks, already laid out at the reduced
+// width) to the right of it - the visual marker for a `>` blockquote.
+type BlockquoteBox struct {
+	width    int
+	indent   int
+	barWidth int
+	barColor color.Color
+	inner    Box
+}
+
+var _ Box = (*BlockquoteBox)(nil)
+
+func (b *BlockquoteBox) Bounds() image.Rectangle {
+	return image.Rect(0, 0, b.width, b.inner.Bounds().Dy())
+}
+
+func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
+	dst.DrawRect(x, y, b.barWidth, b.inner.Bounds().Dy(), b.barColor)
+	DrawBox(b.inner, dst, x+b.indent, y)
+}
+
 // RuleBox is a single filled horizontal bar - the box for a thematic break
 // (`---`). Its own height is just the bar's thickness; the visual spacing
 // above and below comes from ThematicBreakBlock's Margins, same as any
