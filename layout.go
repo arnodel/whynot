@@ -147,7 +147,7 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{slots: preResolvedSlots(lines)}
 }
 
-func (b *ListItemBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
+func (b *ListItemHeadBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	height := 0
 	boxes := make([]InlineBox, len(b.parts))
 	for i, part := range b.parts {
@@ -161,7 +161,7 @@ func (b *ListItemBlock) GetBounds(ctx RenderingContext, width int) image.Rectang
 	return image.Rect(0, 0, width, height)
 }
 
-func (b *ListItemBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 	lines := []Box{}
 	boxes := make([]InlineBox, len(b.parts)+1)
 

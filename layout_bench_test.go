@@ -191,9 +191,10 @@ func BenchmarkStackBoxDrawUnculledLarge(b *testing.B) {
 }
 
 // benchmarkStackBoxDrawCold measures a single Draw() call on a freshly built
-// (cold) tree: TextBlock/ListItemBlock content is pre-warmed by splitBoxes
-// during GetBox(), but CodeBlock content isn't (no line-splitting needed),
-// so it stays genuinely cold until something calls Bounds()/Draw() on it.
+// (cold) tree: TextBlock/ListItemHeadBlock content is pre-warmed by
+// splitBoxes during GetBox(), but CodeBlock content isn't (no line-splitting
+// needed), so it stays genuinely cold until something calls Bounds()/Draw()
+// on it.
 // The culling scan calls Bounds() on every preceding sibling to check
 // overlap, even skipped ones, so this checks whether scanning past
 // off-screen code blocks on the way to a scrolled-down viewport re-triggers

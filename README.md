@@ -93,6 +93,7 @@ too.
 - Links and autolinks (rendered in a distinct color; not clickable yet)
 - Blockquotes, including nested ones
 - Strikethrough (`~~x~~`)
+- Nested lists, to any depth
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
 - Large documents: layout and drawing are lazy, built outward from the
@@ -125,8 +126,7 @@ rather than being an incremental addition.
       plumbing this library doesn't have yet)
 - [x] Blockquotes
 - [x] Strikethrough
-- [ ] Nested lists - currently a *silent* gap: a list item's content past
-      its first child is dropped rather than causing an error
+- [x] Nested lists
 
 **Needs its own design pass:**
 - [ ] Tables - every layout primitive today (`StackBox`, `ContainerBox`)

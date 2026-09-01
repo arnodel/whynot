@@ -24,6 +24,25 @@ func textOf(t *testing.T, parts []Inline) []string {
 	return words
 }
 
+// listItemParts returns item's ListItemHeadBlock and, if present, its
+// trailing block - item is the StackBlock CompileListItem builds for a
+// single list item (blocks: [head] or [head, trailing]).
+func listItemParts(t *testing.T, item Block) (head *ListItemHeadBlock, trailing Block) {
+	t.Helper()
+	stack, ok := item.(*StackBlock)
+	if !ok || len(stack.blocks) == 0 || len(stack.blocks) > 2 {
+		t.Fatalf("item = %#v, want a StackBlock with 1 or 2 blocks", item)
+	}
+	head, ok = stack.blocks[0].(*ListItemHeadBlock)
+	if !ok {
+		t.Fatalf("item's first block = %T, want *ListItemHeadBlock", stack.blocks[0])
+	}
+	if len(stack.blocks) == 2 {
+		trailing = stack.blocks[1]
+	}
+	return head, trailing
+}
+
 func stringsEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -90,13 +109,10 @@ func TestParseTightList(t *testing.T) {
 				t.Fatalf("list = %#v, want a %d-item StackBlock", stack.blocks[0], len(tc.want))
 			}
 			for i, block := range list.blocks {
-				item, ok := block.(*ListItemBlock)
-				if !ok {
-					t.Fatalf("item %d = %T, want *ListItemBlock", i, block)
-				}
-				marker, ok := item.marker.(*InlineText)
+				head, _ := listItemParts(t, block)
+				marker, ok := head.marker.(*InlineText)
 				if !ok || marker.text != tc.want[i] {
-					t.Errorf("item %d marker = %#v, want %q", i, item.marker, tc.want[i])
+					t.Errorf("item %d marker = %#v, want %q", i, head.marker, tc.want[i])
 				}
 			}
 		})
@@ -114,21 +130,98 @@ func TestParseTaskList(t *testing.T) {
 	wantMarker := []string{"□", "■", "-"}
 	wantWords := [][]string{{"todo", "item"}, {"done", "item"}, {"plain", "item"}}
 	for i, block := range list.blocks {
-		item, ok := block.(*ListItemBlock)
-		if !ok {
-			t.Fatalf("item %d = %T, want *ListItemBlock", i, block)
-		}
-		marker, ok := item.marker.(*InlineText)
+		head, _ := listItemParts(t, block)
+		marker, ok := head.marker.(*InlineText)
 		if !ok || marker.text != wantMarker[i] {
-			t.Errorf("item %d marker = %#v, want %q", i, item.marker, wantMarker[i])
+			t.Errorf("item %d marker = %#v, want %q", i, head.marker, wantMarker[i])
 		}
 		// The checkbox syntax must be fully consumed by the task list
 		// parser - it shouldn't leak into the item's own text as a
 		// leftover "[ ]"/"[x]" word.
-		got := textOf(t, item.parts)
+		got := textOf(t, head.parts)
 		if !stringsEqual(got, wantWords[i]) {
 			t.Errorf("item %d words = %v, want %v", i, got, wantWords[i])
 		}
+	}
+}
+
+// TestParseNestedList checks that a nested list becomes the parent item's
+// trailing block, stacked below its own paragraph text, while a sibling
+// item with no nested content gets no trailing block at all.
+func TestParseNestedList(t *testing.T) {
+	doc := Parse([]byte("- one\n  - nested\n- two"))
+	stack := doc.(*StackBlock)
+	list := stack.blocks[0].(*StackBlock)
+	if len(list.blocks) != 2 {
+		t.Fatalf("list = %#v, want 2 items", list.blocks)
+	}
+
+	oneHead, oneTrailing := listItemParts(t, list.blocks[0])
+	if got := textOf(t, oneHead.parts); !stringsEqual(got, []string{"one"}) {
+		t.Errorf("item 0 words = %v, want [one]", got)
+	}
+	nestedList, ok := oneTrailing.(*StackBlock)
+	if !ok || len(nestedList.blocks) != 1 {
+		t.Fatalf("item 0 trailing = %#v, want a 1-item StackBlock", oneTrailing)
+	}
+	nestedHead, _ := listItemParts(t, nestedList.blocks[0])
+	if got := textOf(t, nestedHead.parts); !stringsEqual(got, []string{"nested"}) {
+		t.Errorf("nested item words = %v, want [nested]", got)
+	}
+
+	_, twoTrailing := listItemParts(t, list.blocks[1])
+	if twoTrailing != nil {
+		t.Errorf("item 1 trailing = %#v, want nil", twoTrailing)
+	}
+}
+
+// TestListItemTrailingGap checks that a gap - the trailing block's own
+// top margin - separates an item's own text from its trailing content
+// (e.g. a nested list), rather than stacking them flush against each
+// other.
+func TestListItemTrailingGap(t *testing.T) {
+	doc := Parse([]byte("- one\n  - nested"))
+	stack := doc.(*StackBlock)
+	list := stack.blocks[0].(*StackBlock)
+	item := list.blocks[0]
+	_, trailing := listItemParts(t, item)
+	if trailing == nil {
+		t.Fatal("trailing = nil, want the nested list")
+	}
+
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	box := item.GetBox(ctx, 200).(*StackBox)
+	if len(box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (head, gap, trailing): %#v", len(box.slots), box.slots)
+	}
+	gapBox, ok := box.boxAt(1).(*EmptyBox)
+	if !ok {
+		t.Fatalf("slot 1 = %T, want *EmptyBox", box.boxAt(1))
+	}
+	wantGap := int(ctx.ScaleMargins(trailing.Margins()).Top)
+	if wantGap == 0 {
+		t.Fatal("test is meaningless if the nested list's own top margin is 0")
+	}
+	if got := gapBox.Bounds().Dy(); got != wantGap {
+		t.Errorf("gap height = %d, want %d", got, wantGap)
+	}
+}
+
+// TestParseListItemNoLeadingParagraph checks that a list item opening
+// directly with a nested list (no text of its own) leaves the marker
+// standing alone rather than panicking - the item's parts end up empty,
+// and the nested list becomes its trailing block.
+func TestParseListItemNoLeadingParagraph(t *testing.T) {
+	doc := Parse([]byte("- - nested only\n"))
+	stack := doc.(*StackBlock)
+	outer := stack.blocks[0].(*StackBlock)
+	head, trailing := listItemParts(t, outer.blocks[0])
+	if len(head.parts) != 0 {
+		t.Errorf("parts = %#v, want none", head.parts)
+	}
+	nestedList, ok := trailing.(*StackBlock)
+	if !ok || len(nestedList.blocks) != 1 {
+		t.Fatalf("trailing = %#v, want a 1-item StackBlock", trailing)
 	}
 }
 

@@ -94,17 +94,22 @@ func (b *TextBlock) Margins() Margins {
 	return b.margins
 }
 
-type ListItemBlock struct {
-	marker  Inline
-	margins Margins
-	parts   []Inline
-	space   int
+// ListItemHeadBlock is a list item's own paragraph text, flowed with the
+// marker hanging off the first line - see GetBox. It always reports zero
+// margins: a list item's indentation and item-to-item spacing belong to
+// the StackBlock CompileListItem wraps it in (along with any trailing
+// content, e.g. a nested list), not to the head on its own - it has no
+// business claiming indentation whether or not there's a trailing part.
+type ListItemHeadBlock struct {
+	marker Inline
+	parts  []Inline
+	space  int
 }
 
-var _ Block = (*ListItemBlock)(nil)
+var _ Block = (*ListItemHeadBlock)(nil)
 
-func (b *ListItemBlock) Margins() Margins {
-	return b.margins
+func (b *ListItemHeadBlock) Margins() Margins {
+	return Margins{}
 }
 
 type StackBlock struct {
@@ -114,9 +119,17 @@ type StackBlock struct {
 
 var _ Block = (*StackBlock)(nil)
 
+// Margins combines Top/Bottom with its first/last child's, the same
+// adjacent-margin collapsing StackBlock.GetBox applies between any two
+// blocks. Left/Right aren't a collapsing concept the way Top/Bottom are -
+// they're just "how far do I sit from my container's edge," a property
+// of this block alone - so they're b.margins' own value, not derived
+// from children.
 func (b *StackBlock) Margins() Margins {
 	return Margins{
 		Top:    math.Max(b.blocks[0].Margins().Top, b.margins.Top),
 		Bottom: math.Max(b.blocks[len(b.blocks)-1].Margins().Bottom, b.margins.Bottom),
+		Left:   b.margins.Left,
+		Right:  b.margins.Right,
 	}
 }

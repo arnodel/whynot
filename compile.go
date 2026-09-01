@@ -191,19 +191,42 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		}
 	}
 
-	contents := node.FirstChild()
-	switch contents.Kind() {
-	case gmast.KindParagraph:
-		child := contents.FirstChild()
+	// A leading Paragraph is the item's own text, flowed with the marker
+	// hanging off its first line (see ListItemHeadBlock.GetBox). Anything
+	// after it - most commonly a nested List - stacks below as trailing
+	// block content. An item with no leading paragraph (e.g. one that
+	// opens directly with a nested list) leaves items empty, so the
+	// marker ends up on a line of its own - GetBox already does the
+	// right thing for that with no special-casing needed.
+	next := node.FirstChild()
+	if next != nil && next.Kind() == gmast.KindParagraph {
+		child := next.FirstChild()
 		for child != nil {
 			items = c.AppendInlineNode(items, child, inlineStyle{size: c.listItemStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
-	default:
-		log.Panicf("Unuspported node kind: %s", contents.Kind())
+		next = next.NextSibling()
 	}
 
-	return &ListItemBlock{parts: items, margins: c.listItemStyle.Margins, marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle}}
+	blocks := []Block{&ListItemHeadBlock{
+		marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle},
+		parts:  items,
+	}}
+	var trailingBlocks []Block
+	for ; next != nil; next = next.NextSibling() {
+		trailingBlocks = append(trailingBlocks, c.CompileNode(next))
+	}
+	if len(trailingBlocks) > 0 {
+		blocks = append(blocks, wrapBlocks(trailingBlocks))
+	}
+
+	// The whole item - head plus any trailing content - is a StackBlock
+	// carrying the item's real margins (crucially Left, for indentation).
+	// Not wrapBlocks: that returns a single block unwrapped when there's
+	// only one, which would lose these margins for the common
+	// no-trailing-content case (ListItemHeadBlock's own Margins() is
+	// always zero).
+	return &StackBlock{blocks: blocks, margins: c.listItemStyle.Margins}
 }
 
 // inlineStyle is the styling state threaded down as AppendInlineNode walks

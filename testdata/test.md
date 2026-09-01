@@ -22,9 +22,9 @@ Here is an overview of the Markdown features that are implemented.
 9. Links and autolinks
 10. Blockquotes
 11. Strikethrough
+12. Nested lists
 
 Here are some features that are not yet implemented
-* Nested lists
 * Tables
 
 > This is a blockquote. It can contain *emphasis*, `inline code`, and
@@ -85,6 +85,35 @@ Task lists work too.
 - [x] Write the renderer
 - [x] Support task lists
 - [ ] Support tables
+
+Lists can nest, to any depth.
+
+- Fruit
+  - Apple
+  - Banana
+    - Cavendish
+    - Plantain
+- Vegetables
+  - Carrot
+
+Nesting also works with numbered lists, mixed marker styles at each
+level, and with items whose own text is long enough to wrap before the
+nested list underneath them begins.
+
+1. First step. This item has a fairly long piece of explanatory text
+   attached to it, long enough that it should wrap onto a second line
+   before the nested list underneath it begins, so we can check that
+   the wrap and the nested list both line up under the same indentation.
+   - Sub-point one
+   - Sub-point two
+2. Second step
+   1. Numbered sub-step one
+   2. Numbered sub-step two
+      * Deeply nested bullet, three levels down
+      * Another one, to check spacing between deeply nested siblings
+3. Third step
+   * Bulleted sub-step, under a numbered parent
+   * Another bulleted sub-step
 
 A thematic break separates sections, like the one below.
 

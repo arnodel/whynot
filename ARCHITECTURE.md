@@ -30,7 +30,7 @@ flowchart TD
         A["[]byte source"] --> B["gmast.Node tree"]
     end
     subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go)"]
-        B --> C["Block / Inline tree\n(TextBlock, ListItemBlock, CodeBlock, StackBlock,\nInlineText, InlineImage)"]
+        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, StackBlock,\nInlineText, InlineImage)"]
     end
     subgraph L2["Layer 2 — Layout tree (layout.go, box.go)"]
         C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox,\nEmptyBox, ContainerBox)"]
@@ -58,7 +58,7 @@ outside our control; it's the source of truth for document structure.
 `MarkdownCompiler.CompileNode`/`CompileBlock`/`AppendInlineNode`
 ([compile.go](compile.go), config data in [markdown.go](markdown.go)) walk
 the goldmark tree once and produce a tree of `Block` and `Inline` values
-([block.go](block.go)): `TextBlock`, `ListItemBlock`, `CodeBlock`,
+([block.go](block.go)): `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `StackBlock` for blocks; `InlineText`, `InlineImage` for inline content.
 This is where Markdown semantics get resolved into rendering intent
 (emphasis → `TextStyle`, heading level → font size + `Margins`, etc.) — a
@@ -166,7 +166,7 @@ These are real, understood, and not yet fixed:
   goldmark node kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock`
   and `AppendInlineNode` ([compile.go](compile.go)) — e.g. links today —
   taking down the whole program instead of degrading gracefully.
-- **Duplication across `TextBlock`/`ListItemBlock`/`CodeBlock`.** All three
+- **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
   repeat the same "turn `Inline`s into `InlineBox`es, then `splitBoxes`-loop
   or one-box-per-line" shape in [layout.go](layout.go). A shared
   `linesFromInline(ctx, parts, width) []Box` helper would remove the
