@@ -139,9 +139,7 @@ func (b *LineBox) Bounds() image.Rectangle {
 // stackSlot is a StackBox child that's either already resolved (box set -
 // true of gap spacers, which are cheap enough to build eagerly) or needs
 // building from a Block on first access (block set). A content slot's
-// width is already margin-reduced if wrap is set, matching what
-// StackBlock.GetBox would have passed to Block.GetBox directly before
-// this became lazy.
+// width is already margin-reduced if wrap is set.
 type stackSlot struct {
 	box   Box
 	block Block
@@ -187,12 +185,9 @@ func (b *StackBox) Bounds() image.Rectangle {
 }
 
 // boxAt returns the child at index i, building it from its Block and
-// memoizing the result on first access if it isn't already resolved. This
-// is the seam that makes StackBox's construction lazy: StackBlock.GetBox
-// only builds the slot skeleton (cheap - margins and gap sizes, not text
-// measurement); the real per-block layout work happens here, on demand, so
-// a caller that only ever asks for slots near a scroll anchor only ever
-// pays for those.
+// memoizing the result on first access if it isn't already resolved. A
+// caller that only ever asks for slots near a scroll cursor only ever
+// pays to build those.
 func (b *StackBox) boxAt(i int) Box {
 	slot := &b.slots[i]
 	if slot.box == nil {
@@ -249,52 +244,58 @@ func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
 	return 0, false
 }
 
-// resolve normalizes (index, offset) so that 0 <= offset < boxAt(index)'s
-// height, walking to neighboring slots as needed rather than scanning from
-// the start. offset < 0 walks backward; offset >= the current slot's
-// height walks forward. Only the slots actually walked over are touched
-// (via boxAt), which is the point once boxAt can build lazily: finding
-// where a scroll delta landed costs work proportional to how far it moved,
-// not to how far into the document the anchor already was.
+// stackCursor is a position within a StackBox: which slot, and how far
+// into it. Like a text cursor, it's only meaningful relative to the
+// specific StackBox it was resolved against - the same (index, offset)
+// pair means something different for a different StackBox. offset is
+// float64 so scroll deltas can accumulate sub-pixel amounts directly;
+// DrawFrom truncates to a pixel only right before it becomes a screen
+// coordinate.
+type stackCursor struct {
+	index  int
+	offset float64
+}
+
+// resolve normalizes c so that 0 <= offset < boxAt(index)'s height,
+// walking to neighboring slots as needed rather than scanning from the
+// start: only the slots actually walked over are touched (via boxAt), so
+// cost is proportional to how far a position moved, not to how far into
+// the document it already was.
 //
-// The invariant has one deliberate exception: past the very end of the
-// document, resolve clamps to (lastIndex, height(lastIndex)) - offset
-// equal to the height, not less than it - rather than reporting an
-// ever-growing out-of-range offset. This mirrors how anchorAt's ratio == 1
-// already represented "the very bottom of the document" as a limit
-// position rather than a position strictly inside a box. resolve is
+// Past the very end of the document, resolve clamps to (lastIndex,
+// height(lastIndex)) - offset equal to the height, not less than it -
+// rather than reporting an ever-growing out-of-range offset. resolve is
 // idempotent everywhere except exactly that clamped value.
 //
-// resolve(0, y) and anchorAt(y) agree on index for any y (anchorAt reports
-// the same position as a ratio instead of a pixel offset): index 0's own
-// height can never be negative-offset-adjusted since there's nothing
-// before it, so resolve(0, y)'s only possible path is the forward walk,
-// which is the same scan anchorAt does.
-func (b *StackBox) resolve(index, offset int) (int, int) {
+// resolve({0, y}) and anchorAt(y) agree on index for any y: index 0 can
+// never be adjusted backward (nothing precedes it), so resolve({0, y})'s
+// only path is the same forward scan anchorAt does.
+func (b *StackBox) resolve(c stackCursor) stackCursor {
 	if len(b.slots) == 0 {
-		return 0, 0
+		return stackCursor{}
 	}
+	index, offset := c.index, c.offset
 
 	for offset < 0 && index > 0 {
 		index--
-		offset += b.boxAt(index).Bounds().Dy()
+		offset += float64(b.boxAt(index).Bounds().Dy())
 	}
 	if offset < 0 {
 		// Walked back to the very first slot and it's still negative:
 		// this position is above the top of the document.
-		return 0, 0
+		return stackCursor{}
 	}
 
 	for {
-		h := b.boxAt(index).Bounds().Dy()
+		h := float64(b.boxAt(index).Bounds().Dy())
 		if offset < h {
-			return index, offset
+			return stackCursor{index: index, offset: offset}
 		}
 		if index == len(b.slots)-1 {
 			// Walked to the very last slot and offset is still at or past
 			// its bottom edge: this position is past the end of the
 			// document. Clamp - see the invariant exception above.
-			return index, h
+			return stackCursor{index: index, offset: h}
 		}
 		offset -= h
 		index++

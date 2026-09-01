@@ -51,11 +51,9 @@ func newTestView(blocks ...Block) *View {
 	}
 }
 
-// TestViewScroll checks Scroll's sign convention against what the
-// previous offsetY-based implementation did (offsetY += dy, content drawn
-// at localY + offsetY): negative dy moves the anchor forward through the
-// document (later content becomes visible, i.e. "scrolling down");
-// positive moves back toward the start.
+// TestViewScroll checks Scroll's sign convention: negative dy moves the
+// cursor forward through the document (later content becomes visible,
+// i.e. "scrolling down"); positive moves back toward the start.
 func TestViewScroll(t *testing.T) {
 	v := newTestView(
 		&fixedHeightBlock{height: 10},
@@ -64,32 +62,34 @@ func TestViewScroll(t *testing.T) {
 	)
 	v.Layout(100, 1)
 
-	if v.index != 0 || v.offset != 0 {
-		t.Fatalf("initial position = (%d, %d), want (0, 0)", v.index, v.offset)
+	if v.cursor != (stackCursor{0, 0}) {
+		t.Fatalf("initial position = %+v, want {0, 0}", v.cursor)
 	}
 
 	v.Scroll(-15)
-	if v.index != 1 || v.offset != 5 {
-		t.Errorf("after Scroll(-15) = (%d, %d), want (1, 5)", v.index, v.offset)
+	if v.cursor != (stackCursor{1, 5}) {
+		t.Errorf("after Scroll(-15) = %+v, want {1, 5}", v.cursor)
 	}
 
 	v.Scroll(15)
-	if v.index != 0 || v.offset != 0 {
-		t.Errorf("after Scroll(15) = (%d, %d), want (0, 0)", v.index, v.offset)
+	if v.cursor != (stackCursor{0, 0}) {
+		t.Errorf("after Scroll(15) = %+v, want {0, 0}", v.cursor)
 	}
 
 	// Scrolling further than the document is long clamps to the end
 	// rather than going out of range.
 	v.Scroll(-1000)
-	if v.index != 2 || v.offset != 30 {
-		t.Errorf("after Scroll(-1000) = (%d, %d), want (2, 30) (clamped to the end)", v.index, v.offset)
+	if v.cursor != (stackCursor{2, 30}) {
+		t.Errorf("after Scroll(-1000) = %+v, want {2, 30} (clamped to the end)", v.cursor)
 	}
 }
 
 // TestViewScrollSubPixel checks that repeated fractional Scroll deltas
 // accumulate correctly instead of being rounded away every call - two
-// calls of -7.5 should move the anchor by 15, the same as one call of
-// -15, not by 14 (2 * int(-7.5) truncated each time).
+// calls of -7.5 should move the cursor by 15, the same as one call of -15,
+// not by 14 (2 * int(-7.5) truncated each time) - now that offset is
+// float64, there's no separate accumulator to get this right or wrong,
+// but it's worth still checking directly.
 func TestViewScrollSubPixel(t *testing.T) {
 	v := newTestView(
 		&fixedHeightBlock{height: 10},
@@ -100,8 +100,8 @@ func TestViewScrollSubPixel(t *testing.T) {
 
 	v.Scroll(-7.5)
 	v.Scroll(-7.5)
-	if v.index != 1 || v.offset != 5 {
-		t.Errorf("after Scroll(-7.5) twice = (%d, %d), want (1, 5)", v.index, v.offset)
+	if v.cursor != (stackCursor{1, 5}) {
+		t.Errorf("after Scroll(-7.5) twice = %+v, want {1, 5}", v.cursor)
 	}
 }
 
@@ -117,15 +117,12 @@ func TestViewLayoutReanchor(t *testing.T) {
 	v.Layout(100, 1) // heights: [100, 200]
 
 	// Anchor halfway through the second block.
-	v.index, v.offset = 1, 100
+	v.cursor = stackCursor{index: 1, offset: 100}
 
 	v.Layout(50, 1) // heights become [50, 100]; same ratio should give offset 50
 
-	if v.index != 1 {
-		t.Fatalf("index after resize = %d, want 1", v.index)
-	}
-	if v.offset != 50 {
-		t.Errorf("offset after resize = %d, want 50 (50%% of the new height 100)", v.offset)
+	if v.cursor != (stackCursor{1, 50}) {
+		t.Errorf("cursor after resize = %+v, want {1, 50} (50%% of the new height 100)", v.cursor)
 	}
 }
 
@@ -149,8 +146,8 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		v := &View{block: block, ctx: ctx}
 		v.Layout(width, 1)
 		if stack, ok := v.box.(*StackBox); ok && len(stack.slots) > 0 {
-			v.index = len(stack.slots) - 1
-			v.offset = 0
+			v.cursor.index = len(stack.slots) - 1
+			v.cursor.offset = 0
 		}
 		b.StartTimer()
 
