@@ -7,6 +7,15 @@ import (
 func (b *TextBox) DrawInline(dst Canvas, x, y int) int {
 	_, advance := b.BoundsAndAdvance()
 	dst.DrawText(b.Text, b.Face, x, y, b.Color)
+	if b.StrikeThickness > 0 {
+		// Halfway up the x-height lands the line through the vertical
+		// middle of lowercase letters - the standard strike position.
+		// DrawRect's y is the bar's top edge, so shift up by half the
+		// thickness to center the bar on that position rather than
+		// drawing it entirely below.
+		xHeight := b.Face.Metrics().XHeight.Ceil()
+		dst.DrawRect(x, y-xHeight/2-b.StrikeThickness/2, advance, b.StrikeThickness, b.Color)
+	}
 	return x + advance
 }
 

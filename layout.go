@@ -19,16 +19,25 @@ func (c RenderingContext) ScaleMargins(m Margins) Margins {
 	return m
 }
 
+// strikeThickness is the strikethrough line's thickness, in unscaled
+// pixels - scaled by ctx.Scale like Margins, so it stays proportionate at
+// higher DPI.
+const strikeThickness = 1
+
 func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	face, err := ctx.SelectFace(t.style)
 	if err != nil {
 		panic(err)
 	}
-	return &TextBox{
+	box := &TextBox{
 		Text:  t.text,
 		Face:  face,
 		Color: t.color,
 	}
+	if t.strike {
+		box.StrikeThickness = int(strikeThickness * ctx.Scale)
+	}
+	return box
 }
 
 // GetInlineBox probes src's dimensions via a cheap header-only read (no

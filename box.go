@@ -27,6 +27,10 @@ type TextBox struct {
 	Face  font.Face
 	Color color.Color
 
+	// StrikeThickness is the strikethrough line's thickness in pixels; 0
+	// means no strikethrough.
+	StrikeThickness int
+
 	boundsComputed bool
 	bounds         image.Rectangle
 	advance        int

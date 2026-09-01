@@ -21,6 +21,7 @@ Here is an overview of the Markdown features that are implemented.
 8. Thematic breaks
 9. Links and autolinks
 10. Blockquotes
+11. Strikethrough
 
 Here are some features that are not yet implemented
 * Nested lists
@@ -50,7 +51,7 @@ Lorem ipsum dolor sit amet, *consectetur adipiscing* elit, sed do eiusmod tempor
 
 ###### Level 6 Heading with *highlight*
 
-You can have `inline code` and you can have inline code in highlighted text, e.g. **this is an important `identifier.`** Code blocks are also supported. For example, this is how you can implement _Fibonacci_ in Python.
+You can have `inline code` and you can have inline code in highlighted text, e.g. **this is an important `identifier.`** You can also have ~~struck-through text~~, even combined with **~~bold strikethrough~~**. Code blocks are also supported. For example, this is how you can implement _Fibonacci_ in Python.
 
 ```
 def fib(n, a = 0, b = 1):

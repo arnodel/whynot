@@ -380,6 +380,58 @@ func TestParseCodeSpan(t *testing.T) {
 	}
 }
 
+// TestParseStrikethrough checks that strike composes with nested styling
+// (baseLevel from Strong here) rather than replacing it - both come from
+// the same threaded inlineStyle, set independently by the node that
+// introduces each.
+func TestParseStrikethrough(t *testing.T) {
+	doc := Parse([]byte("plain ~~struck **and bold**~~ text"))
+	stack := doc.(*StackBlock)
+	para := stack.blocks[0].(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"plain", "struck", "and", "bold", "text"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+
+	plain := para.parts[0].(*InlineText)
+	if plain.strike {
+		t.Errorf("part %q: strike = true, want false", plain.text)
+	}
+
+	struckWords := para.parts[1:4]
+	for _, part := range struckWords {
+		text := part.(*InlineText)
+		if !text.strike {
+			t.Errorf("part %q: strike = false, want true", text.text)
+		}
+	}
+	bold := para.parts[3].(*InlineText)
+	if bold.style.Weight != font.WeightBold {
+		t.Errorf("part %q: weight = %v, want bold", bold.text, bold.style.Weight)
+	}
+
+	trailing := para.parts[4].(*InlineText)
+	if trailing.strike {
+		t.Errorf("part %q: strike = true, want false", trailing.text)
+	}
+}
+
+func TestInlineTextStrikeThickness(t *testing.T) {
+	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72)}
+
+	plain := (&InlineText{text: "x", style: TextStyle{Size: 16}}).GetInlineBox(ctx).(*TextBox)
+	if plain.StrikeThickness != 0 {
+		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
+	}
+
+	struck := (&InlineText{text: "x", style: TextStyle{Size: 16}, strike: true}).GetInlineBox(ctx).(*TextBox)
+	want := int(strikeThickness * ctx.Scale)
+	if struck.StrikeThickness != want {
+		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)
+	}
+}
+
 func TestParseImageWithTitle(t *testing.T) {
 	doc := Parse([]byte(`![alt](cat.jpeg "a lovely cat")`))
 	stack := doc.(*StackBlock)

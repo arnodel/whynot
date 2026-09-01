@@ -21,9 +21,10 @@ type Inline interface {
 }
 
 type InlineText struct {
-	text  string
-	style TextStyle
-	color color.Color
+	text   string
+	style  TextStyle
+	color  color.Color
+	strike bool
 }
 
 var _ Inline = (*InlineText)(nil)

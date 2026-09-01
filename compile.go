@@ -8,6 +8,7 @@ import (
 
 	gmast "github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/extension"
+	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
 	"golang.org/x/image/font"
 )
@@ -15,7 +16,7 @@ import (
 // Parse compiles Markdown source into a Block tree ready for layout via
 // Block.GetBox.
 func Parse(source []byte) Block {
-	p := parser.New(parser.WithExtensions(extension.TaskListItemParser))
+	p := parser.New(parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser))
 	node := p.Parse(source)
 	compiler := MarkdownCompiler{
 		source: source,
@@ -102,7 +103,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		var items []Inline
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 0, c.paragraphStyle.Size, color.White)
+			items = c.AppendInlineNode(items, child, inlineStyle{size: c.paragraphStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
 		return &TextBlock{parts: items, margins: c.paragraphStyle.Margins}
@@ -111,7 +112,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		partStyle := c.headingStyles[node.(*gmast.Heading).Level-1]
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 2, partStyle.Size, color.White)
+			items = c.AppendInlineNode(items, child, inlineStyle{baseLevel: 2, size: partStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
 		return &TextBlock{parts: items, margins: partStyle.Margins}
@@ -195,7 +196,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	case gmast.KindParagraph:
 		child := contents.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 0, c.listItemStyle.Size, color.White)
+			items = c.AppendInlineNode(items, child, inlineStyle{size: c.listItemStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
 	default:
@@ -205,30 +206,46 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	return &ListItemBlock{parts: items, margins: c.listItemStyle.Margins, marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle}}
 }
 
-func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64, clr color.Color) []Inline {
+// inlineStyle is the styling state threaded down as AppendInlineNode walks
+// an inline subtree - it only ever changes at the node that introduces a
+// new value (Emphasis/Strong bump baseLevel, Link overrides color,
+// Strikethrough sets strike); every other node passes its received value
+// straight through to its children.
+type inlineStyle struct {
+	baseLevel int
+	size      float64
+	color     color.Color
+	strike    bool
+}
+
+func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, st inlineStyle) []Inline {
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
-		return appendString(items, t.Value.Value(c.source), getStyle(baseLevel, size), clr)
+		return appendString(items, t.Value.Value(c.source), getStyle(st.baseLevel, st.size), st.color, st.strike)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
+		childStyle := st
+		childStyle.baseLevel++
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel+1, size, clr)
+			items = c.AppendInlineNode(items, child, childStyle)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindStrong:
 		child := node.FirstChild()
+		childStyle := st
+		childStyle.baseLevel += 2
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel+2, size, clr)
+			items = c.AppendInlineNode(items, child, childStyle)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindCodeSpan:
-		style := getStyle(baseLevel, size)
+		style := getStyle(st.baseLevel, st.size)
 		style.Family = Monospace
 		cs := node.(*gmast.CodeSpan)
-		return appendString(items, cs.Value.Value(c.source), style, c.codeColor)
+		return appendString(items, cs.Value.Value(c.source), style, c.codeColor, st.strike)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
 		return append(items, &InlineImage{
@@ -237,14 +254,25 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 		})
 	case gmast.KindLink:
 		child := node.FirstChild()
+		childStyle := st
+		childStyle.color = c.linkColor
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel, size, c.linkColor)
+			items = c.AppendInlineNode(items, child, childStyle)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindAutoLink:
 		al := node.(*gmast.AutoLink)
-		return appendString(items, al.Label.Value(c.source), getStyle(baseLevel, size), c.linkColor)
+		return appendString(items, al.Label.Value(c.source), getStyle(st.baseLevel, st.size), c.linkColor, st.strike)
+	case extast.KindStrikethrough:
+		child := node.FirstChild()
+		childStyle := st
+		childStyle.strike = true
+		for child != nil {
+			items = c.AppendInlineNode(items, child, childStyle)
+			child = child.NextSibling()
+		}
+		return items
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}
@@ -274,13 +302,14 @@ func getStyle(level int, size float64) TextStyle {
 	return textStyle
 }
 
-func appendString(items []Inline, s string, style TextStyle, color color.Color) []Inline {
+func appendString(items []Inline, s string, style TextStyle, color color.Color, strike bool) []Inline {
 	textParts := strings.Fields(s)
 	for _, part := range textParts {
 		items = append(items, &InlineText{
-			text:  part,
-			color: color,
-			style: style,
+			text:   part,
+			color:  color,
+			style:  style,
+			strike: strike,
 		})
 	}
 	return items
