@@ -44,7 +44,7 @@ func (v *View) Scroll(dy float64) {
 	if v.box == nil {
 		return
 	}
-	v.cursor = v.box.resolve(stackCursor{index: v.cursor.index, offset: v.cursor.offset - dy})
+	v.cursor = v.box.moveCursor(v.cursor, -dy)
 }
 
 // Draw renders the document onto dst with its top-left corner at (x, y),
@@ -92,5 +92,5 @@ func (v *View) Layout(width int, scale float64) {
 		v.cursor.index = len(v.box.slots) - 1
 	}
 	newHeight := v.box.boxAt(v.cursor.index).Bounds().Dy()
-	v.cursor = v.box.resolve(stackCursor{index: v.cursor.index, offset: ratio * float64(newHeight)})
+	v.cursor = v.box.normalizeCursor(stackCursor{index: v.cursor.index, offset: ratio * float64(newHeight)})
 }

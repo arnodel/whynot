@@ -224,17 +224,17 @@ type stackCursor struct {
 	offset float64
 }
 
-// resolve normalizes c so that 0 <= offset < boxAt(index)'s height,
+// normalizeCursor adjusts c so that 0 <= offset < boxAt(index)'s height,
 // walking to neighboring slots as needed rather than scanning from the
 // start: only the slots actually walked over are touched (via boxAt), so
 // cost is proportional to how far a position moved, not to how far into
 // the document it already was.
 //
-// Past the very end of the document, resolve clamps to (lastIndex,
+// Past the very end of the document, normalizeCursor clamps to (lastIndex,
 // height(lastIndex)) - offset equal to the height, not less than it -
-// rather than reporting an ever-growing out-of-range offset. resolve is
-// idempotent everywhere except exactly that clamped value.
-func (b *StackBox) resolve(c stackCursor) stackCursor {
+// rather than reporting an ever-growing out-of-range offset. normalizeCursor
+// is idempotent everywhere except exactly that clamped value.
+func (b *StackBox) normalizeCursor(c stackCursor) stackCursor {
 	if len(b.slots) == 0 {
 		return stackCursor{}
 	}
@@ -264,6 +264,17 @@ func (b *StackBox) resolve(c stackCursor) stackCursor {
 		offset -= h
 		index++
 	}
+}
+
+// moveCursor returns c shifted by dy (in the offset's own sign convention:
+// positive moves forward through the document) and normalized, for callers
+// that have a cursor already and want to move it rather than construct a
+// new one from scratch - e.g. View.Scroll. Layout's resize re-anchoring
+// isn't a move like this (offset is recomputed from a ratio through a
+// slot's new height, not shifted from its old value), so it calls
+// normalizeCursor directly instead.
+func (b *StackBox) moveCursor(c stackCursor, dy float64) stackCursor {
+	return b.normalizeCursor(stackCursor{index: c.index, offset: c.offset + dy})
 }
 
 type EmptyBox struct {

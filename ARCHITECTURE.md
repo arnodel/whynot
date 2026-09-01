@@ -133,10 +133,13 @@ cursor rather than the top of the document:
   Each slot's own `Block.GetBox` — the expensive part, including text
   measurement — only runs when `StackBox.boxAt(i)` is asked for that slot,
   and the result is memoized.
-- `StackBox.resolve(cursor)` normalizes a cursor so its offset falls
-  within its slot's height, walking to neighboring slots only as far as
-  the offset moved — not scanning from the start — so it costs the same
-  whether the cursor is near the top of the document or deep inside it.
+- `StackBox.normalizeCursor(cursor)` adjusts a cursor so its offset falls within
+  its slot's height, walking to neighboring slots only as far as needed —
+  not scanning from the start — so it costs the same whether the cursor is
+  near the top of the document or deep inside it. `moveCursor(cursor, dy)`
+  builds on it for the common case of shifting an existing cursor (what
+  `Scroll` does); a resize re-anchor calls `normalizeCursor` directly, since it
+  recomputes a cursor from a ratio rather than shifting one.
 - `StackBox.DrawFrom(dst, cursor, x, y)` draws starting at the cursor: it
   never calls `Bounds()` on the whole tree the way `DrawBox` does, and
   never touches slots before the cursor.
@@ -176,7 +179,7 @@ These are real, understood, and not yet fixed:
 
 - **Extend laziness into nested large structures.** Today only the
   top-level `View`-driven `StackBox` is anchored and drawn lazily via
-  `boxAt`/`resolve`/`DrawFrom`. A single huge nested structure — e.g. one
+  `boxAt`/`normalizeCursor`/`DrawFrom`. A single huge nested structure — e.g. one
   very long list — still builds and draws its children eagerly once its
   parent slot is resolved, since only `StackBlock.GetBox`'s top-level
   skeleton is lazy. The same anchoring approach could apply recursively.
