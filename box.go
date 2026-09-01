@@ -136,17 +136,47 @@ func (b *LineBox) Bounds() image.Rectangle {
 	return bounds.Sub(bounds.Min)
 }
 
+// stackSlot is a StackBox child that's either already resolved (box set -
+// true of gap spacers, which are cheap enough to build eagerly) or needs
+// building from a Block on first access (block set). A content slot's
+// width is already margin-reduced if wrap is set, matching what
+// StackBlock.GetBox would have passed to Block.GetBox directly before
+// this became lazy.
+type stackSlot struct {
+	box   Box
+	block Block
+
+	width      int
+	leftMargin int
+	wrap       bool
+}
+
 type StackBox struct {
-	boxes []Box
+	slots []stackSlot
+	ctx   RenderingContext
+	width int
 
 	boundsComputed bool
 	bounds         image.Rectangle
 }
 
+// preResolvedSlots wraps already-built boxes as pre-resolved slots, for
+// StackBoxes whose children are cheap to build up front (e.g. a
+// paragraph's lines: line-breaking is inherently a whole-paragraph
+// computation, so there's nothing to defer per-line the way there is per
+// top-level block in StackBlock.GetBox).
+func preResolvedSlots(boxes []Box) []stackSlot {
+	slots := make([]stackSlot, len(boxes))
+	for i, box := range boxes {
+		slots[i] = stackSlot{box: box}
+	}
+	return slots
+}
+
 func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
-		for i := range b.boxes {
+		for i := range b.slots {
 			box := b.boxAt(i)
 			bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
 		}
@@ -156,14 +186,24 @@ func (b *StackBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
-// boxAt returns the child at index i. It's currently a trivial accessor
-// over an eagerly-built slice, but it's the seam where per-slot lazy
-// construction will live once StackBlock.GetBox stops eagerly calling
-// Block.GetBox for every block up front: callers below are written against
-// boxAt's behavior (give me the box at i), not against b.boxes directly,
-// so that change won't require touching them.
+// boxAt returns the child at index i, building it from its Block and
+// memoizing the result on first access if it isn't already resolved. This
+// is the seam that makes StackBox's construction lazy: StackBlock.GetBox
+// only builds the slot skeleton (cheap - margins and gap sizes, not text
+// measurement); the real per-block layout work happens here, on demand, so
+// a caller that only ever asks for slots near a scroll anchor only ever
+// pays for those.
 func (b *StackBox) boxAt(i int) Box {
-	return b.boxes[i]
+	slot := &b.slots[i]
+	if slot.box == nil {
+		inner := slot.block.GetBox(b.ctx, slot.width)
+		if slot.wrap {
+			slot.box = NewContainerBox(inner, b.width, inner.Bounds().Dy(), slot.leftMargin, 0)
+		} else {
+			slot.box = inner
+		}
+	}
+	return slot.box
 }
 
 // anchorAt finds which direct child contains local y-coordinate y, and how
@@ -171,15 +211,15 @@ func (b *StackBox) boxAt(i int) Box {
 // the first child anchors to its top; y at or past the end of the last
 // child anchors to its bottom. ok is false only if there are no children.
 func (b *StackBox) anchorAt(y int) (index int, ratio float64, ok bool) {
-	if len(b.boxes) == 0 {
+	if len(b.slots) == 0 {
 		return 0, 0, false
 	}
 	if y < 0 {
 		return 0, 0, true
 	}
 	pos := 0
-	for i, box := range b.boxes {
-		h := box.Bounds().Max.Y
+	for i := range b.slots {
+		h := b.boxAt(i).Bounds().Max.Y
 		if y < pos+h {
 			if h == 0 {
 				return i, 0, true
@@ -188,19 +228,19 @@ func (b *StackBox) anchorAt(y int) (index int, ratio float64, ok bool) {
 		}
 		pos += h
 	}
-	return len(b.boxes) - 1, 1, true
+	return len(b.slots) - 1, 1, true
 }
 
 // positionOf is the inverse of anchorAt: the local y-coordinate that is
 // ratio of the way through child index's height. ok is false if index is
 // out of range for this StackBox.
 func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
-	if index < 0 || index >= len(b.boxes) {
+	if index < 0 || index >= len(b.slots) {
 		return 0, false
 	}
 	pos := 0
-	for i, box := range b.boxes {
-		h := box.Bounds().Max.Y
+	for i := 0; i <= index; i++ {
+		h := b.boxAt(i).Bounds().Max.Y
 		if i == index {
 			return pos + int(ratio*float64(h)), true
 		}
@@ -231,7 +271,7 @@ func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
 // before it, so resolve(0, y)'s only possible path is the forward walk,
 // which is the same scan anchorAt does.
 func (b *StackBox) resolve(index, offset int) (int, int) {
-	if len(b.boxes) == 0 {
+	if len(b.slots) == 0 {
 		return 0, 0
 	}
 
@@ -250,7 +290,7 @@ func (b *StackBox) resolve(index, offset int) (int, int) {
 		if offset < h {
 			return index, offset
 		}
-		if index == len(b.boxes)-1 {
+		if index == len(b.slots)-1 {
 			// Walked to the very last slot and offset is still at or past
 			// its bottom edge: this position is past the end of the
 			// document. Clamp - see the invariant exception above.

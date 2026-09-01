@@ -2,12 +2,19 @@ package whynot
 
 import "testing"
 
+// stackOf builds a StackBox from already-built boxes, as pre-resolved
+// slots - for tests that just want a StackBox with known children and
+// don't need to exercise lazy building via Block.
+func stackOf(boxes ...Box) *StackBox {
+	return &StackBox{slots: preResolvedSlots(boxes)}
+}
+
 func TestStackBoxAnchorAt(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	cases := []struct {
 		y         int
@@ -46,11 +53,11 @@ func TestStackBoxAnchorAtEmpty(t *testing.T) {
 }
 
 func TestStackBoxPositionOf(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	cases := []struct {
 		index  int
@@ -81,11 +88,11 @@ func TestStackBoxPositionOf(t *testing.T) {
 // re-deriving it from the same (unchanged) tree returns the same position -
 // the property the resize-anchor feature in Layout() depends on.
 func TestStackBoxAnchorRoundTrip(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	for y := 0; y < 60; y++ {
 		index, ratio, ok := stack.anchorAt(y)
@@ -103,11 +110,11 @@ func TestStackBoxAnchorRoundTrip(t *testing.T) {
 }
 
 func TestStackBoxResolve(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	cases := []struct {
 		index, offset         int
@@ -149,11 +156,11 @@ func TestStackBoxResolveEmpty(t *testing.T) {
 // takes the backward-walk branch (there's nothing before index 0), so its
 // only possible path is the same forward scan anchorAt does.
 func TestStackBoxResolveMatchesAnchorAt(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	const epsilon = 1e-9
 	for y := -10; y <= 70; y++ {
@@ -178,11 +185,11 @@ func TestStackBoxResolveMatchesAnchorAt(t *testing.T) {
 // already-canonical (index, offset) pair - one already satisfying
 // 0 <= offset < height(index) - unchanged.
 func TestStackBoxResolveIdempotent(t *testing.T) {
-	stack := &StackBox{boxes: []Box{
+	stack := stackOf(
 		NewEmptyBox(0, 10),
 		NewEmptyBox(0, 20),
 		NewEmptyBox(0, 30),
-	}}
+	)
 
 	for index := 0; index < 3; index++ {
 		h := stack.boxAt(index).Bounds().Dy()

@@ -65,7 +65,7 @@ func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	for i, line := range b.lines {
 		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}, space: b.space}
 	}
-	return &StackBox{boxes: lineBoxes}
+	return &StackBox{slots: preResolvedSlots(lineBoxes)}
 }
 
 func (b *TextBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
@@ -93,7 +93,7 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
 		boxes = boxes[i:]
 	}
-	return &StackBox{boxes: lines}
+	return &StackBox{slots: preResolvedSlots(lines)}
 }
 
 func (b *ListItemBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
@@ -125,33 +125,41 @@ func (b *ListItemBlock) GetBox(ctx RenderingContext, width int) Box {
 		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
 		boxes = boxes[i:]
 	}
-	return &StackBox{boxes: lines}
+	return &StackBox{slots: preResolvedSlots(lines)}
 }
 
 func (b *StackBlock) GetBounds(ctx RenderingContext, width int) image.Rectangle {
 	return image.Rectangle{}
 }
 
+// GetBox builds the slot skeleton only - gap sizes from Margins(), which is
+// cheap (no text measurement) - deferring each block's own GetBox call to
+// StackBox.boxAt, on first access to that slot. A resize only needs to
+// re-derive gap sizes and widths up front; the expensive part (actually
+// laying out each block's content) only happens for slots something later
+// asks for, e.g. those near a scroll anchor.
 func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
-	boxes := make([]Box, 0, len(b.blocks))
+	slots := make([]stackSlot, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
 		margins := ctx.ScaleMargins(block.Margins())
 		if i > 0 {
 			gap := maxInt(bottomMargin, int(margins.Top))
 			if gap > 0 {
-				boxes = append(boxes, NewEmptyBox(width, gap))
+				slots = append(slots, stackSlot{box: NewEmptyBox(width, gap)})
 			}
 		}
-		if margins.Left > 0 || margins.Right > 0 {
-			box := block.GetBox(ctx, width-int(margins.Left+margins.Right))
-			boxes = append(boxes, NewContainerBox(box, width, box.Bounds().Dy(), int(margins.Left), 0))
-		} else {
-			boxes = append(boxes, block.GetBox(ctx, width))
-		}
+		leftMargin := int(margins.Left)
+		rightMargin := int(margins.Right)
+		slots = append(slots, stackSlot{
+			block:      block,
+			width:      width - leftMargin - rightMargin,
+			leftMargin: leftMargin,
+			wrap:       leftMargin > 0 || rightMargin > 0,
+		})
 		bottomMargin = int(margins.Bottom)
 	}
-	return &StackBox{boxes: boxes}
+	return &StackBox{slots: slots, ctx: ctx, width: width}
 }
 
 func splitBoxes(boxes []InlineBox, width int) (int, image.Rectangle) {

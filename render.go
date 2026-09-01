@@ -53,7 +53,8 @@ func (b *LineBox) drawContents(dst Canvas, x, y int) {
 
 func (b *StackBox) drawContents(dst Canvas, x, y int) {
 	viewport := dst.Bounds()
-	for _, box := range b.boxes {
+	for i := range b.slots {
+		box := b.boxAt(i)
 		childBounds := box.Bounds()
 		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
 			// This child, and every one after it, starts below the
