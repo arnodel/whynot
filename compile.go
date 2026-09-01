@@ -165,10 +165,13 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		panic("Unsupported marker")
 	}
 	if status, ok := extension.TaskStatusOf(node); ok {
+		// Go's built-in font has no ballot-box/checkmark glyphs (☐ ☑ ✓
+		// etc. all miss) - □/■ are covered and the same width, so the
+		// list stays aligned either way.
 		if status == extension.TaskStatusCompleted {
-			markerString = "[x]"
+			markerString = "■"
 		} else {
-			markerString = "[ ]"
+			markerString = "□"
 		}
 	}
 

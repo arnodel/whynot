@@ -110,7 +110,7 @@ func TestParseTaskList(t *testing.T) {
 		t.Fatalf("list = %#v, want a 3-item StackBlock", stack.blocks[0])
 	}
 
-	wantMarker := []string{"[ ]", "[x]", "-"}
+	wantMarker := []string{"□", "■", "-"}
 	wantWords := [][]string{{"todo", "item"}, {"done", "item"}, {"plain", "item"}}
 	for i, block := range list.blocks {
 		item, ok := block.(*ListItemBlock)
