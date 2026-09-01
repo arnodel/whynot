@@ -146,13 +146,24 @@ type StackBox struct {
 func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
-		for _, box := range b.boxes {
+		for i := range b.boxes {
+			box := b.boxAt(i)
 			bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
 		}
 		b.bounds = bounds
 		b.boundsComputed = true
 	}
 	return b.bounds
+}
+
+// boxAt returns the child at index i. It's currently a trivial accessor
+// over an eagerly-built slice, but it's the seam where per-slot lazy
+// construction will live once StackBlock.GetBox stops eagerly calling
+// Block.GetBox for every block up front: callers below are written against
+// boxAt's behavior (give me the box at i), not against b.boxes directly,
+// so that change won't require touching them.
+func (b *StackBox) boxAt(i int) Box {
+	return b.boxes[i]
 }
 
 // anchorAt finds which direct child contains local y-coordinate y, and how
@@ -196,6 +207,58 @@ func (b *StackBox) positionOf(index int, ratio float64) (y int, ok bool) {
 		pos += h
 	}
 	return 0, false
+}
+
+// resolve normalizes (index, offset) so that 0 <= offset < boxAt(index)'s
+// height, walking to neighboring slots as needed rather than scanning from
+// the start. offset < 0 walks backward; offset >= the current slot's
+// height walks forward. Only the slots actually walked over are touched
+// (via boxAt), which is the point once boxAt can build lazily: finding
+// where a scroll delta landed costs work proportional to how far it moved,
+// not to how far into the document the anchor already was.
+//
+// The invariant has one deliberate exception: past the very end of the
+// document, resolve clamps to (lastIndex, height(lastIndex)) - offset
+// equal to the height, not less than it - rather than reporting an
+// ever-growing out-of-range offset. This mirrors how anchorAt's ratio == 1
+// already represented "the very bottom of the document" as a limit
+// position rather than a position strictly inside a box. resolve is
+// idempotent everywhere except exactly that clamped value.
+//
+// resolve(0, y) and anchorAt(y) agree on index for any y (anchorAt reports
+// the same position as a ratio instead of a pixel offset): index 0's own
+// height can never be negative-offset-adjusted since there's nothing
+// before it, so resolve(0, y)'s only possible path is the forward walk,
+// which is the same scan anchorAt does.
+func (b *StackBox) resolve(index, offset int) (int, int) {
+	if len(b.boxes) == 0 {
+		return 0, 0
+	}
+
+	for offset < 0 && index > 0 {
+		index--
+		offset += b.boxAt(index).Bounds().Dy()
+	}
+	if offset < 0 {
+		// Walked back to the very first slot and it's still negative:
+		// this position is above the top of the document.
+		return 0, 0
+	}
+
+	for {
+		h := b.boxAt(index).Bounds().Dy()
+		if offset < h {
+			return index, offset
+		}
+		if index == len(b.boxes)-1 {
+			// Walked to the very last slot and offset is still at or past
+			// its bottom edge: this position is past the end of the
+			// document. Clamp - see the invariant exception above.
+			return index, h
+		}
+		offset -= h
+		index++
+	}
 }
 
 type EmptyBox struct {
