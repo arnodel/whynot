@@ -90,6 +90,7 @@ too.
 - Ordered and unordered (tight) lists, including task lists (`- [ ]`)
 - Images, including a title attribute
 - Thematic breaks (`---`)
+- Links and autolinks (rendered in a distinct color; not clickable yet)
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
 - Large documents: layout and drawing are lazy, built outward from the
@@ -118,7 +119,7 @@ rather than being an incremental addition.
 - [x] Task lists (`- [ ]`)
 
 **One new concept each:**
-- [ ] Links and autolinks (rendered distinctly; click-through needs input
+- [x] Links and autolinks (rendered distinctly; click-through needs input
       plumbing this library doesn't have yet)
 - [ ] Blockquotes
 - [ ] Strikethrough (needs a `Canvas` decoration primitive that doesn't

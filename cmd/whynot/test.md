@@ -19,11 +19,14 @@ Here is an overview of the Markdown features that are implemented.
 6. Ordered and unorderd lists
 7. Images
 8. Thematic breaks
+9. Links and autolinks
 
 Here are some features that are not yet implemented
 * Nested lists
-* Links
 * Tables
+
+See it in action: [the project's GitHub repo](https://github.com/arnodel/whynot),
+or just visit <https://example.com>.
 
 ## Examples
 

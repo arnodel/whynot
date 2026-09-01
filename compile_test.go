@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"image"
+	"image/color"
 	"testing"
 
 	"golang.org/x/image/font"
@@ -201,6 +202,56 @@ func TestParseThematicBreak(t *testing.T) {
 	want := image.Rect(0, 0, 100, thematicBreakThickness)
 	if got := ruleBox.Bounds(); got != want {
 		t.Errorf("Bounds() = %v, want %v", got, want)
+	}
+}
+
+func TestParseLink(t *testing.T) {
+	doc := Parse([]byte(`[click *here*](https://example.com "a title")`))
+	stack := doc.(*StackBlock)
+	para := stack.blocks[0].(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"click", "here"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	for i, part := range para.parts {
+		text := part.(*InlineText)
+		if text.color == color.White {
+			t.Errorf("part %d color = white, want link color", i)
+		}
+	}
+	// Nested emphasis inside the link text should still apply on top of
+	// the link's color.
+	if para.parts[1].(*InlineText).style.Style != font.StyleItalic {
+		t.Errorf("style of %q = %+v, want italic", "here", para.parts[1].(*InlineText).style)
+	}
+}
+
+func TestParseAutoLink(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"url", "<https://example.com>", "https://example.com"},
+		{"email", "<user@example.com>", "user@example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := Parse([]byte(tc.source))
+			stack := doc.(*StackBlock)
+			para := stack.blocks[0].(*TextBlock)
+			if len(para.parts) != 1 {
+				t.Fatalf("parts = %#v, want 1 part", para.parts)
+			}
+			text := para.parts[0].(*InlineText)
+			if text.text != tc.want {
+				t.Errorf("text = %q, want %q", text.text, tc.want)
+			}
+			if text.color == color.White {
+				t.Errorf("color = white, want link color")
+			}
+		})
 	}
 }
 

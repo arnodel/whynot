@@ -69,6 +69,7 @@ func Parse(source []byte) Block {
 		codeColor:            color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 		thematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		thematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
+		linkColor:            color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -99,7 +100,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		var items []Inline
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 0, c.paragraphStyle.Size)
+			items = c.AppendInlineNode(items, child, 0, c.paragraphStyle.Size, color.White)
 			child = child.NextSibling()
 		}
 		return &TextBlock{parts: items, margins: c.paragraphStyle.Margins}
@@ -108,7 +109,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		partStyle := c.headingStyles[node.(*gmast.Heading).Level-1]
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 2, partStyle.Size)
+			items = c.AppendInlineNode(items, child, 2, partStyle.Size, color.White)
 			child = child.NextSibling()
 		}
 		return &TextBlock{parts: items, margins: partStyle.Margins}
@@ -180,7 +181,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	case gmast.KindParagraph:
 		child := contents.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, 0, c.listItemStyle.Size)
+			items = c.AppendInlineNode(items, child, 0, c.listItemStyle.Size, color.White)
 			child = child.NextSibling()
 		}
 	default:
@@ -190,22 +191,22 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	return &ListItemBlock{parts: items, margins: c.listItemStyle.Margins, marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle}}
 }
 
-func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64) []Inline {
+func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, baseLevel int, size float64, clr color.Color) []Inline {
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
-		return appendString(items, t.Value.Value(c.source), getStyle(baseLevel, size), color.White)
+		return appendString(items, t.Value.Value(c.source), getStyle(baseLevel, size), clr)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel+1, size)
+			items = c.AppendInlineNode(items, child, baseLevel+1, size, clr)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindStrong:
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, baseLevel+2, size)
+			items = c.AppendInlineNode(items, child, baseLevel+2, size, clr)
 			child = child.NextSibling()
 		}
 		return items
@@ -220,6 +221,16 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, bas
 			src:   imgNode.Destination.Value(c.source),
 			title: imgNode.Title.Value(c.source),
 		})
+	case gmast.KindLink:
+		child := node.FirstChild()
+		for child != nil {
+			items = c.AppendInlineNode(items, child, baseLevel, size, c.linkColor)
+			child = child.NextSibling()
+		}
+		return items
+	case gmast.KindAutoLink:
+		al := node.(*gmast.AutoLink)
+		return appendString(items, al.Label.Value(c.source), getStyle(baseLevel, size), c.linkColor)
 	default:
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}

@@ -14,6 +14,7 @@ type MarkdownCompiler struct {
 	codeColor            color.Color
 	thematicBreakMargins Margins
 	thematicBreakColor   color.Color
+	linkColor            color.Color
 }
 
 type partStyle struct {
