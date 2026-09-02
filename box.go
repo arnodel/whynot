@@ -335,6 +335,53 @@ func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
 	DrawBox(b.inner, dst, x+b.indent, y)
 }
 
+// TableBox draws a GFM table: a frame around the whole thing, a rule
+// under the header row, and each cell positioned at its resolved
+// (column, row) offset. columnOffsets/rowOffsets have one more entry
+// than there are columns/rows - the last entry is the table's own
+// right/bottom edge, so Bounds() doesn't need separate width/height
+// fields, and the header rule's position is just rowOffsets[1] (see
+// TableBlock.GetBox for why that boundary is exactly where the rule
+// belongs).
+type TableBox struct {
+	columnOffsets  []int
+	rowOffsets     []int
+	frameThickness int
+	frameColor     color.Color
+	cells          [][]Box
+}
+
+var _ Box = (*TableBox)(nil)
+
+func (b *TableBox) Bounds() image.Rectangle {
+	return image.Rect(0, 0,
+		b.columnOffsets[len(b.columnOffsets)-1],
+		b.rowOffsets[len(b.rowOffsets)-1],
+	)
+}
+
+func (b *TableBox) drawContents(dst Canvas, x, y int) {
+	width := b.columnOffsets[len(b.columnOffsets)-1]
+	height := b.rowOffsets[len(b.rowOffsets)-1]
+
+	dst.DrawRect(x, y, width, b.frameThickness, b.frameColor)                         // top
+	dst.DrawRect(x, y+height-b.frameThickness, width, b.frameThickness, b.frameColor) // bottom
+	dst.DrawRect(x, y, b.frameThickness, height, b.frameColor)                        // left
+	dst.DrawRect(x+width-b.frameThickness, y, b.frameThickness, height, b.frameColor) // right
+
+	// Flush against the top of the first body row - rowOffsets[1] minus
+	// the rule's own thickness, so it sits inside the header->body gap
+	// rather than overlapping either row's content.
+	dst.DrawRect(x+b.frameThickness, y+b.rowOffsets[1]-b.frameThickness,
+		width-2*b.frameThickness, b.frameThickness, b.frameColor)
+
+	for row := range b.cells {
+		for col := range b.cells[row] {
+			DrawBox(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row])
+		}
+	}
+}
+
 // RuleBox is a single filled horizontal bar - the box for a thematic break
 // (`---`). Its own height is just the bar's thickness; the visual spacing
 // above and below comes from ThematicBreakBlock's Margins, same as any

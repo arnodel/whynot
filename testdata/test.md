@@ -119,6 +119,36 @@ A thematic break separates sections, like the one below.
 
 ---
 
+## Tables
+
+A basic table, with a header row:
+
+| Fruit  | Color  | Price |
+|--------|--------|-------|
+| Apple  | Red    | $1    |
+| Banana | Yellow | $0.50 |
+| Kiwi   | Green  | $1.50 |
+
+Column alignment - left, center, and right:
+
+| Left | Center | Right |
+|:-----|:------:|------:|
+| a    | b      | c     |
+| dd   | ee     | ff    |
+
+A column whose content is much longer than the others, plus some inline
+formatting inside cells:
+
+| Item  | Description                                                                                             | Qty |
+|-------|----------------------------------------------------------------------------------------------------------|----:|
+| `foo` | A **very** long description, long enough to show how equal-width columns cope with one much wider column |   3 |
+| bar   | short                                                                                                     |  12 |
+
+A table with a header but no data rows:
+
+| A | B |
+|---|---|
+
 ## Cute!
 
 ![cat.jpg](testdata/cat.jpeg "lovely cat")

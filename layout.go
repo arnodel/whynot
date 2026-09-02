@@ -131,9 +131,96 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{slots: preResolvedSlots(lines)}
 }
 
-// TODO: placeholder until the real column-width layout is designed.
+// tableFrameThickness is the frame/header-rule thickness; tableColumnGap
+// and tableRowGap are the space between columns and between ordinary
+// rows; tableHeaderGap is the (smaller) space between the header row and
+// the rule under it - see TableBox for why that makes rowOffsets[1]
+// exactly the rule's position, with no separate field needed for it. All
+// in unscaled pixels, scaled by ctx.Scale like Margins.
+const (
+	tableFrameThickness = 2
+	tableColumnGap      = 12
+	tableRowGap         = 6
+	tableHeaderGap      = 4
+)
+
+// GetBox lays out columns at equal width (width/numCols) - a starting
+// point, not the real column-width negotiation (natural width per
+// column, shrunk to fit if it overflows) planned next.
 func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
-	return NewEmptyBox(width, 0)
+	frameThickness := int(tableFrameThickness * ctx.Scale)
+	columnGap := int(tableColumnGap * ctx.Scale)
+	rowGap := int(tableRowGap * ctx.Scale)
+	headerGap := int(tableHeaderGap * ctx.Scale)
+
+	// numCols+1 gaps total: one on each side of the frame, plus one
+	// between each pair of adjacent columns - same gap value reused
+	// symmetrically rather than a separate border-padding constant.
+	numCols := len(b.header)
+	innerWidth := width - 2*frameThickness - (numCols+1)*columnGap
+	columnWidth := innerWidth / numCols
+
+	columnOffsets := make([]int, numCols+1)
+	columnOffsets[0] = frameThickness + columnGap
+	for c := range numCols {
+		columnOffsets[c+1] = columnOffsets[c] + columnWidth + columnGap
+		if c == numCols-1 {
+			columnOffsets[c+1] += frameThickness
+		}
+	}
+
+	rows := append([][]tableCell{b.header}, b.rows...)
+	cells := make([][]Box, len(rows))
+	rowHeights := make([]int, len(rows))
+	for r, row := range rows {
+		rowCells := make([]Box, numCols)
+		rowHeight := 0
+		for c, cell := range row {
+			contentBox := cell.content.GetBox(ctx, columnWidth)
+			rowCells[c] = contentBox
+			if h := contentBox.Bounds().Dy(); h > rowHeight {
+				rowHeight = h
+			}
+		}
+		for c, cell := range row {
+			contentWidth := rowCells[c].Bounds().Dx()
+			xOffset := 0
+			switch cell.alignment {
+			case alignCenter:
+				xOffset = (columnWidth - contentWidth) / 2
+			case alignRight:
+				xOffset = columnWidth - contentWidth
+			}
+			rowCells[c] = NewContainerBox(rowCells[c], columnWidth, rowHeight, xOffset, 0)
+		}
+		cells[r] = rowCells
+		rowHeights[r] = rowHeight
+	}
+
+	// Same reasoning as columnOffsets: rowGap pads the top and bottom
+	// against the frame too, not just between rows. The header->body
+	// transition keeps its own smaller headerGap either way.
+	rowOffsets := make([]int, len(rows)+1)
+	rowOffsets[0] = frameThickness + rowGap
+	for r, h := range rowHeights {
+		rowOffsets[r+1] = rowOffsets[r] + h
+		switch {
+		case r == len(rowHeights)-1:
+			rowOffsets[r+1] += rowGap + frameThickness
+		case r == 0:
+			rowOffsets[r+1] += headerGap
+		default:
+			rowOffsets[r+1] += rowGap
+		}
+	}
+
+	return &TableBox{
+		columnOffsets:  columnOffsets,
+		rowOffsets:     rowOffsets,
+		frameThickness: frameThickness,
+		frameColor:     b.frameColor,
+		cells:          cells,
+	}
 }
 
 // GetBox builds the slot skeleton only - gap sizes from Margins(), which is
