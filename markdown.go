@@ -17,6 +17,9 @@ type MarkdownCompiler struct {
 	linkColor            color.Color
 	blockquoteMargins    Margins
 	blockquoteBarColor   color.Color
+	tableCellStyle       partStyle
+	tableMargins         Margins
+	tableFrameColor      color.Color
 }
 
 type partStyle struct {

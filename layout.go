@@ -131,6 +131,11 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{slots: preResolvedSlots(lines)}
 }
 
+// TODO: placeholder until the real column-width layout is designed.
+func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
+	return NewEmptyBox(width, 0)
+}
+
 // GetBox builds the slot skeleton only - gap sizes from Margins(), which is
 // cheap (no text measurement) - deferring each block's own GetBox call to
 // StackBox.boxAt, on first access to that slot. A resize only needs to

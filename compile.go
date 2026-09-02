@@ -16,7 +16,7 @@ import (
 // Parse compiles Markdown source into a Block tree ready for layout via
 // Block.GetBox.
 func Parse(source []byte) Block {
-	p := parser.New(parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser))
+	p := parser.New(parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser))
 	node := p.Parse(source)
 	compiler := MarkdownCompiler{
 		source: source,
@@ -73,6 +73,9 @@ func Parse(source []byte) Block {
 		linkColor:            color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
 		blockquoteMargins:    Margins{Top: 10, Bottom: 10},
 		blockquoteBarColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
+		tableCellStyle:       partStyle{TextStyle: TextStyle{Size: 16}},
+		tableMargins:         Margins{Top: 10, Bottom: 10},
+		tableFrameColor:      color.RGBA{0x80, 0x80, 0x80, 0xFF},
 	}
 	return compiler.CompileDocument(node)
 }
@@ -159,6 +162,8 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			margins:  c.blockquoteMargins,
 			barColor: c.blockquoteBarColor,
 		}
+	case extast.KindTable:
+		return c.CompileTable(node)
 	}
 	panic("Unsupported block")
 }
@@ -227,6 +232,47 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	// no-trailing-content case (ListItemHeadBlock's own Margins() is
 	// always zero).
 	return &StackBlock{blocks: blocks, margins: c.listItemStyle.Margins}
+}
+
+// CompileTable compiles a Table node. The header is mandatory (GFM
+// requires it); the body is not - a table can legitimately have zero
+// data rows, in which case Table has no TableBody child at all.
+func (c *MarkdownCompiler) CompileTable(node gmast.Node) Block {
+	headerNode := node.FirstChild()
+	header := c.CompileTableRow(headerNode)
+
+	var rows [][]tableCell
+	if bodyNode := headerNode.NextSibling(); bodyNode != nil {
+		for row := bodyNode.FirstChild(); row != nil; row = row.NextSibling() {
+			rows = append(rows, c.CompileTableRow(row))
+		}
+	}
+
+	return &TableBlock{
+		header:     header,
+		rows:       rows,
+		margins:    c.tableMargins,
+		frameColor: c.tableFrameColor,
+	}
+}
+
+// CompileTableRow compiles the cells of a TableHeader or a TableRow -
+// both have TableCell children directly, no intermediate node, so one
+// method handles both despite the different AST kinds.
+func (c *MarkdownCompiler) CompileTableRow(node gmast.Node) []tableCell {
+	var cells []tableCell
+	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
+		tc := cellNode.(*extast.TableCell)
+		var parts []Inline
+		for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
+			parts = c.AppendInlineNode(parts, child, inlineStyle{size: c.tableCellStyle.Size, color: color.White})
+		}
+		cells = append(cells, tableCell{
+			content:   &TextBlock{parts: parts},
+			alignment: tableCellAlignment(tc.Alignment),
+		})
+	}
+	return cells
 }
 
 // inlineStyle is the styling state threaded down as AppendInlineNode walks
@@ -307,6 +353,22 @@ var levelToStyles = [4]TextStyle{
 	{0, font.StyleItalic, font.WeightNormal, Proportional},
 	{0, font.StyleNormal, font.WeightBold, Proportional},
 	{0, font.StyleItalic, font.WeightBold, Proportional},
+}
+
+// tableCellAlignment translates goldmark's own alignment enum to
+// whynot's - see cellAlignment's doc comment for why they're kept
+// distinct.
+func tableCellAlignment(a extast.Alignment) cellAlignment {
+	switch a {
+	case extast.AlignLeft:
+		return alignLeft
+	case extast.AlignRight:
+		return alignRight
+	case extast.AlignCenter:
+		return alignCenter
+	default:
+		return alignNone
+	}
 }
 
 // wrapBlocks returns blocks[0] directly if there's exactly one, or a

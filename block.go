@@ -110,6 +110,35 @@ func (b *ListItemHeadBlock) Margins() Margins {
 	return Margins{}
 }
 
+type cellAlignment int
+
+const (
+	alignNone cellAlignment = iota
+	alignLeft
+	alignRight
+	alignCenter
+)
+
+type tableCell struct {
+	content   *TextBlock
+	alignment cellAlignment
+}
+
+// TableBlock is a GFM table. header and each row in rows hold one
+// tableCell per column.
+type TableBlock struct {
+	header     []tableCell
+	rows       [][]tableCell
+	margins    Margins
+	frameColor color.Color
+}
+
+var _ Block = (*TableBlock)(nil)
+
+func (b *TableBlock) Margins() Margins {
+	return b.margins
+}
+
 type StackBlock struct {
 	blocks  []Block
 	margins Margins
