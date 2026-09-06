@@ -100,6 +100,10 @@ func (c *MarkdownCompiler) CompileDocument(node gmast.Node) Block {
 	return &StackBlock{blocks: blocks}
 }
 
+// codeBlockTabExpansion is what a literal tab in a code block's source is
+// replaced with - see the KindCodeBlock case below.
+const codeBlockTabExpansion = "    "
+
 func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 	switch node.Kind() {
 	case gmast.KindParagraph:
@@ -135,8 +139,15 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 		segs := cb.Value.Segments()
 		items := make([]Inline, len(segs))
 		for i, seg := range segs {
+			// A code block's content is verbatim source, tabs included -
+			// unlike indentation elsewhere in the document, this isn't
+			// tab-expanded before it reaches us. Most fonts have no glyph
+			// for a raw tab, rendering it as a placeholder box instead of
+			// whitespace, so expand it here to keep indentation looking
+			// like indentation.
+			text := strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
 			items[i] = &InlineText{
-				text:  string(seg.Bytes(c.source)),
+				text:  text,
 				style: c.codeBlockStyle.TextStyle,
 				color: c.codeColor,
 			}

@@ -440,6 +440,31 @@ func TestParseIndentedCodeBlock(t *testing.T) {
 	}
 }
 
+// TestParseCodeBlockExpandsTabs checks that a literal tab in a fenced code
+// block's source - preserved verbatim by goldmark, unlike leading
+// indentation elsewhere in the document - is expanded to spaces rather
+// than reaching the font as a raw tab character, which renders as a
+// placeholder box instead of whitespace.
+func TestParseCodeBlockExpandsTabs(t *testing.T) {
+	doc := Parse([]byte("```\n\tindented\n```"))
+	stack := doc.(*StackBlock)
+	code, ok := unwrap(stack.blocks[0]).(*CodeBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *CodeBlock", stack.blocks[0])
+	}
+	if len(code.lines) != 1 {
+		t.Fatalf("got %d lines, want 1: %#v", len(code.lines), code.lines)
+	}
+	text, ok := code.lines[0].(*InlineText)
+	if !ok {
+		t.Fatalf("line = %T, want *InlineText", code.lines[0])
+	}
+	want := codeBlockTabExpansion + "indented\n"
+	if text.text != want {
+		t.Errorf("text = %q, want %q", text.text, want)
+	}
+}
+
 func TestParseThematicBreak(t *testing.T) {
 	doc := Parse([]byte("---"))
 	stack := doc.(*StackBlock)
