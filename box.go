@@ -111,9 +111,14 @@ type LineBox struct {
 
 var _ Box = (*LineBox)(nil)
 
-// Same reasoning as TextBox: parts/space are fixed at construction and a
+// Same reasoning as TextBox: parts are fixed at construction and a
 // LineBox is never reused across a re-layout, so this is safe to compute
-// once and reuse for the instance's whole life.
+// once and reuse for the instance's whole life. Inter-word spacing here
+// must match drawContents/splitBoxes exactly (each word's own
+// SpaceWidth(), not a fixed value) - this is what a caller measures via
+// Bounds() to decide how much room the line actually needs, so any
+// mismatch with what actually gets drawn silently under- or
+// over-reports it.
 func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
 	if !b.boundsComputed {
 		bounds, advance := b.parts[0].BoundsAndAdvance()
@@ -122,8 +127,11 @@ func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
 			bounds = bounds.Add(image.Pt(-left, 0))
 			advance -= left
 		}
+		prevSpace := b.parts[0].SpaceWidth()
 		for _, box := range b.parts[1:] {
-			advance += b.space
+			space := box.SpaceWidth()
+			advance += maxInt(prevSpace, space)
+			prevSpace = space
 			boxBounds, boxAdvance := box.BoundsAndAdvance()
 			bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
 			advance += boxAdvance
@@ -336,19 +344,22 @@ func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
 }
 
 // TableBox draws a GFM table: a frame around the whole thing, a rule
-// under the header row, and each cell positioned at its resolved
-// (column, row) offset. columnOffsets/rowOffsets have one more entry
-// than there are columns/rows - the last entry is the table's own
-// right/bottom edge, so Bounds() doesn't need separate width/height
-// fields, and the header rule's position is just rowOffsets[1] (see
-// TableBlock.GetBox for why that boundary is exactly where the rule
-// belongs).
+// under the header row, a rule between each pair of columns, and each
+// cell positioned at its resolved (column, row) offset. columnOffsets/
+// rowOffsets have one more entry than there are columns/rows - the last
+// entry is the table's own right/bottom edge, so Bounds() doesn't need
+// separate width/height fields, and the header rule's position is just
+// rowOffsets[1] (see TableBlock.GetBox for why that boundary is exactly
+// where the rule belongs). Each column rule is centered in the columnGap
+// between adjacent columns' content, at columnOffsets[c] - columnGap/2.
 type TableBox struct {
-	columnOffsets  []int
-	rowOffsets     []int
-	frameThickness int
-	frameColor     color.Color
-	cells          [][]Box
+	columnOffsets       []int
+	rowOffsets          []int
+	frameThickness      int
+	columnGap           int
+	columnRuleThickness int
+	frameColor          color.Color
+	cells               [][]Box
 }
 
 var _ Box = (*TableBox)(nil)
@@ -374,6 +385,16 @@ func (b *TableBox) drawContents(dst Canvas, x, y int) {
 	// rather than overlapping either row's content.
 	dst.DrawRect(x+b.frameThickness, y+b.rowOffsets[1]-b.frameThickness,
 		width-2*b.frameThickness, b.frameThickness, b.frameColor)
+
+	// One rule per internal column boundary (columnOffsets[0] and
+	// columnOffsets[len-1] are the table's own edges, already covered by
+	// the frame), centered in that column's gap and spanning the full
+	// height between the top and bottom frame.
+	for c := 1; c < len(b.columnOffsets)-1; c++ {
+		ruleX := b.columnOffsets[c] - b.columnGap/2 - b.columnRuleThickness/2
+		dst.DrawRect(x+ruleX, y+b.frameThickness,
+			b.columnRuleThickness, height-2*b.frameThickness, b.frameColor)
+	}
 
 	for row := range b.cells {
 		for col := range b.cells[row] {

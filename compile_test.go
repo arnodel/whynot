@@ -207,6 +207,102 @@ func TestListItemTrailingGap(t *testing.T) {
 	}
 }
 
+// TestLineBoxBoundsIncludesInterWordSpacing pins down a real bug found
+// while building tables: LineBox.BoundsAndAdvance used to advance by its
+// own always-zero space field between words, instead of each word's real
+// SpaceWidth() (which drawContents and splitBoxes both correctly use) -
+// so Bounds() silently under-reported a multi-word line's true width by
+// one space-width per gap. Invisible for ordinary paragraphs (nothing
+// else sits flush against their measured edge), but exactly what caused
+// table cells to overlap the next column once their measured width was
+// used to position it.
+func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	widthOf := func(source string) int {
+		t.Helper()
+		doc := Parse([]byte(source))
+		para := doc.(*StackBlock).blocks[0].(*TextBlock)
+		return para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
+	}
+
+	widthA := widthOf("A")
+	widthB := widthOf("B")
+	widthAB := widthOf("A B")
+
+	if widthAB <= widthA+widthB {
+		t.Errorf(`width("A B") = %d, want > width("A")+width("B") = %d+%d=%d (no inter-word gap counted)`,
+			widthAB, widthA, widthB, widthA+widthB)
+	}
+}
+
+// TestSplitBoxesNaturalWidthFits pins down a second bug found while
+// building tables, alongside the inter-word-spacing one: splitBoxes'
+// wrap check compared bounds.Max.X directly against width, but a later
+// word's own bounds can pull bounds.Min.X away from 0 (e.g. a small
+// left-side bearing), making Max.X alone wider than the line's true span
+// (Dx()). So a line built at exactly its own measured natural width -
+// which should always fit on one line, by definition - would still wrap
+// its last word. This specific sentence reliably drifts Min.X to 1.
+func TestSplitBoxesNaturalWidthFits(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
+	para := doc.(*StackBlock).blocks[0].(*TextBlock)
+
+	natWidth := para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
+	box := para.GetBox(ctx, natWidth).(*StackBox)
+	if len(box.slots) != 1 {
+		t.Errorf("built at its own natural width (%d), got %d lines, want 1", natWidth, len(box.slots))
+	}
+}
+
+func TestResolveColumnWidths(t *testing.T) {
+	cases := []struct {
+		name      string
+		natural   []int
+		available int
+		want      []int
+	}{
+		{
+			name:      "fits naturally",
+			natural:   []int{10, 20, 30},
+			available: 100,
+			want:      []int{10, 20, 30},
+		},
+		{
+			// Worked by hand: sorted [10,20,100], K=1 (10 < 60/3=20;
+			// 10+20=30 is not < 60/2=30), so column 0 stays narrow at
+			// 10, and columns 1/2 share the remaining 50 proportionally
+			// to their natural width (20:100).
+			name:      "one narrow, two wide, sharing proportionally",
+			natural:   []int{10, 20, 100},
+			available: 60,
+			want:      []int{10, 8, 41},
+		},
+		{
+			// Same values, shuffled column order, checking the result
+			// maps back to the original (not sorted) positions.
+			name:      "shuffled order maps back correctly",
+			natural:   []int{100, 10, 20},
+			available: 60,
+			want:      []int{41, 10, 8},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveColumnWidths(tc.natural, tc.available)
+			if len(got) != len(tc.want) {
+				t.Fatalf("resolveColumnWidths(%v, %d) = %v, want %v", tc.natural, tc.available, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("resolveColumnWidths(%v, %d) = %v, want %v", tc.natural, tc.available, got, tc.want)
+					break
+				}
+			}
+		})
+	}
+}
+
 // TestParseListItemNoLeadingParagraph checks that a list item opening
 // directly with a nested list (no text of its own) leaves the marker
 // standing alone rather than panicking - the item's parts end up empty,

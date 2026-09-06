@@ -144,6 +144,29 @@ formatting inside cells:
 | `foo` | A **very** long description, long enough to show how equal-width columns cope with one much wider column |   3 |
 | bar   | short                                                                                                     |  12 |
 
+Two columns both needing to wrap, sharing the squeeze between them
+rather than one column dominating:
+
+| Name     | Pros                                                                | Cons                                                       |
+|----------|---------------------------------------------------------------------|-------------------------------------------------------------|
+| Option A | Fast, cheap, and easy to set up with minimal configuration required | Limited flexibility for advanced use cases down the line   |
+| Option B | Highly configurable and extensible for complex scenarios            | Steeper learning curve and more time to get started         |
+
+Several narrow columns next to one wide one:
+
+| ID | Status | Owner | Notes                                                                                                          |
+|----|--------|-------|------------------------------------------------------------------------------------------------------------------|
+| 1  | OK     | Al    | All good                                                                                                        |
+| 2  | FAIL   | Bo    | This one needs a much longer explanation of what went wrong and why, spanning well past the width of the other columns |
+| 3  | OK     | Cy    | Fine                                                                                                            |
+
+Four columns, all roughly equally demanding - no column is narrow
+enough to stay unconstrained, so every one shrinks together:
+
+| First column with a fair bit of text  | Second column also fairly wordy   | Third one too, about the same length | Fourth, similar again          |
+|----------------------------------------|-------------------------------------|-----------------------------------------|-----------------------------------|
+| Some more moderate length content here | And here as well, similar length   | Roughly matching length once more       | And the last one too              |
+
 A table with a header but no data rows:
 
 | A | B |
