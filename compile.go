@@ -109,7 +109,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			items = c.AppendInlineNode(items, child, inlineStyle{size: c.paragraphStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
-		return &TextBlock{parts: items, margins: c.paragraphStyle.Margins}
+		return &MarginBlock{Block: &TextBlock{parts: items}, margins: c.paragraphStyle.Margins}
 	case gmast.KindHeading:
 		var items []Inline
 		partStyle := c.headingStyles[node.(*gmast.Heading).Level-1]
@@ -118,7 +118,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			items = c.AppendInlineNode(items, child, inlineStyle{baseLevel: 2, size: partStyle.Size, color: color.White})
 			child = child.NextSibling()
 		}
-		return &TextBlock{parts: items, margins: partStyle.Margins}
+		return &MarginBlock{Block: &TextBlock{parts: items}, margins: partStyle.Margins}
 	case gmast.KindList:
 		list := node.(*gmast.List)
 		var items []Block
@@ -129,7 +129,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			child = child.NextSibling()
 			index++
 		}
-		return &StackBlock{blocks: items, margins: c.listStyle.Margins}
+		return &MarginBlock{Block: &StackBlock{blocks: items}, margins: c.listStyle.Margins}
 	case gmast.KindCodeBlock:
 		cb := node.(*gmast.CodeBlock)
 		segs := cb.Value.Segments()
@@ -141,14 +141,11 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 				color: c.codeColor,
 			}
 		}
-		return &CodeBlock{
-			margins: c.codeBlockStyle.Margins,
-			lines:   items,
-		}
+		return &MarginBlock{Block: &CodeBlock{lines: items}, margins: c.codeBlockStyle.Margins}
 	case gmast.KindThematicBreak:
-		return &ThematicBreakBlock{
+		return &MarginBlock{
+			Block:   &ThematicBreakBlock{color: c.thematicBreakColor},
 			margins: c.thematicBreakMargins,
-			color:   c.thematicBreakColor,
 		}
 	case gmast.KindBlockquote:
 		var items []Block
@@ -157,10 +154,9 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 			items = append(items, c.CompileNode(child))
 			child = child.NextSibling()
 		}
-		return &BlockquoteBlock{
-			inner:    wrapBlocks(items),
-			margins:  c.blockquoteMargins,
-			barColor: c.blockquoteBarColor,
+		return &MarginBlock{
+			Block:   &BlockquoteBlock{inner: wrapBlocks(items), barColor: c.blockquoteBarColor},
+			margins: c.blockquoteMargins,
 		}
 	case extast.KindTable:
 		return c.CompileTable(node)
@@ -231,7 +227,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	// only one, which would lose these margins for the common
 	// no-trailing-content case (ListItemHeadBlock's own Margins() is
 	// always zero).
-	return &StackBlock{blocks: blocks, margins: c.listItemStyle.Margins}
+	return &MarginBlock{Block: &StackBlock{blocks: blocks}, margins: c.listItemStyle.Margins}
 }
 
 // CompileTable compiles a Table node. The header is mandatory (GFM
@@ -248,11 +244,9 @@ func (c *MarkdownCompiler) CompileTable(node gmast.Node) Block {
 		}
 	}
 
-	return &TableBlock{
-		header:     header,
-		rows:       rows,
-		margins:    c.tableMargins,
-		frameColor: c.tableFrameColor,
+	return &MarginBlock{
+		Block:   &TableBlock{header: header, rows: rows, frameColor: c.tableFrameColor},
+		margins: c.tableMargins,
 	}
 }
 

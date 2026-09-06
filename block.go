@@ -14,6 +14,35 @@ type Block interface {
 	Margins() Margins
 }
 
+// WithoutMargins satisfies Block's Margins() with a zero value, for content
+// that never gets margins of its own (a list item's head, a table cell's
+// content).
+type WithoutMargins struct{}
+
+func (WithoutMargins) Margins() Margins {
+	return Margins{}
+}
+
+// MarginBlock adds margins to an existing Block, collapsing Top/Bottom with
+// whatever it already reports. Left/Right are just MarginBlock's own value:
+// nothing it wraps ever reports a nonzero Left/Right to collapse with -
+// StackBlock, the only Block with any derived margins, only ever derives
+// Top/Bottom from its children.
+type MarginBlock struct {
+	Block
+	margins Margins
+}
+
+func (b *MarginBlock) Margins() Margins {
+	inner := b.Block.Margins()
+	return Margins{
+		Top:    math.Max(inner.Top, b.margins.Top),
+		Bottom: math.Max(inner.Bottom, b.margins.Bottom),
+		Left:   b.margins.Left,
+		Right:  b.margins.Right,
+	}
+}
+
 type Inline interface {
 	GetInlineBox(RenderingContext) InlineBox
 }
@@ -35,18 +64,14 @@ type InlineImage struct {
 var _ Inline = (*InlineImage)(nil)
 
 // ThematicBreakBlock is a horizontal rule (`---`). Unlike the other Block
-// types it has no inline content to lay out - just a color and the margins
-// that give it its vertical spacing.
+// types it has no inline content to lay out - just a color; its vertical
+// spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
-	margins Margins
-	color   color.Color
+	WithoutMargins
+	color color.Color
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
-
-func (b *ThematicBreakBlock) Margins() Margins {
-	return b.margins
-}
 
 // BlockquoteBlock is a quoted group of ordinary blocks (`> ...`). Unlike
 // list-item indentation, which relies on the parent StackBlock's generic
@@ -57,38 +82,26 @@ func (b *ThematicBreakBlock) Margins() Margins {
 // Block - already a StackBlock if there was more than one, resolved once
 // at compile time rather than rebuilt on every GetBox call.
 type BlockquoteBlock struct {
+	WithoutMargins
 	inner    Block
-	margins  Margins
 	barColor color.Color
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
 
-func (b *BlockquoteBlock) Margins() Margins {
-	return b.margins
-}
-
 type CodeBlock struct {
-	margins Margins
-	lines   []Inline
+	WithoutMargins
+	lines []Inline
 }
 
 var _ Block = (*CodeBlock)(nil)
 
-func (b *CodeBlock) Margins() Margins {
-	return b.margins
-}
-
 type TextBlock struct {
-	margins Margins
-	parts   []Inline
+	WithoutMargins
+	parts []Inline
 }
 
 var _ Block = (*TextBlock)(nil)
-
-func (b *TextBlock) Margins() Margins {
-	return b.margins
-}
 
 // ListItemHeadBlock is a list item's own paragraph text, flowed with the
 // marker hanging off the first line - see GetBox. It always reports zero
@@ -97,15 +110,12 @@ func (b *TextBlock) Margins() Margins {
 // content, e.g. a nested list), not to the head on its own - it has no
 // business claiming indentation whether or not there's a trailing part.
 type ListItemHeadBlock struct {
+	WithoutMargins
 	marker Inline
 	parts  []Inline
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
-
-func (b *ListItemHeadBlock) Margins() Margins {
-	return Margins{}
-}
 
 type cellAlignment int
 
@@ -124,36 +134,31 @@ type tableCell struct {
 // TableBlock is a GFM table. header and each row in rows hold one
 // tableCell per column.
 type TableBlock struct {
+	WithoutMargins
 	header     []tableCell
 	rows       [][]tableCell
-	margins    Margins
 	frameColor color.Color
 }
 
 var _ Block = (*TableBlock)(nil)
 
-func (b *TableBlock) Margins() Margins {
-	return b.margins
-}
-
 type StackBlock struct {
-	blocks  []Block
-	margins Margins
+	blocks []Block
 }
 
 var _ Block = (*StackBlock)(nil)
 
-// Margins combines Top/Bottom with its first/last child's, the same
-// adjacent-margin collapsing StackBlock.GetBox applies between any two
-// blocks. Left/Right aren't a collapsing concept the way Top/Bottom are -
-// they're just "how far do I sit from my container's edge," a property
-// of this block alone - so they're b.margins' own value, not derived
-// from children.
+// Margins reports Top/Bottom as its first/last child's own margin - the
+// same collapsing GetBox applies between siblings, extended to its own
+// edges. Left/Right are zero: as a stack of blocks arranged vertically,
+// StackBlock has no notion of a horizontal edge to derive from a child -
+// only whatever wraps it (see MarginBlock) has a real Left/Right.
 func (b *StackBlock) Margins() Margins {
+	if len(b.blocks) == 0 {
+		return Margins{}
+	}
 	return Margins{
-		Top:    math.Max(b.blocks[0].Margins().Top, b.margins.Top),
-		Bottom: math.Max(b.blocks[len(b.blocks)-1].Margins().Bottom, b.margins.Bottom),
-		Left:   b.margins.Left,
-		Right:  b.margins.Right,
+		Top:    b.blocks[0].Margins().Top,
+		Bottom: b.blocks[len(b.blocks)-1].Margins().Bottom,
 	}
 }

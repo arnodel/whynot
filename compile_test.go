@@ -8,6 +8,19 @@ import (
 	"golang.org/x/image/font"
 )
 
+// unwrap peels away MarginBlock wrapping to reach the concrete block doing
+// the actual layout, for tests asserting on that type regardless of how
+// many margin decorations wrap it (in practice at most one).
+func unwrap(b Block) Block {
+	for {
+		mb, ok := b.(*MarginBlock)
+		if !ok {
+			return b
+		}
+		b = mb.Block
+	}
+}
+
 // textOf collects the text of each InlineText in parts, in order. Since
 // appendString splits on whitespace, a single source phrase becomes one
 // InlineText per word.
@@ -29,7 +42,7 @@ func textOf(t *testing.T, parts []Inline) []string {
 // single list item (blocks: [head] or [head, trailing]).
 func listItemParts(t *testing.T, item Block) (head *ListItemHeadBlock, trailing Block) {
 	t.Helper()
-	stack, ok := item.(*StackBlock)
+	stack, ok := unwrap(item).(*StackBlock)
 	if !ok || len(stack.blocks) == 0 || len(stack.blocks) > 2 {
 		t.Fatalf("item = %#v, want a StackBlock with 1 or 2 blocks", item)
 	}
@@ -61,7 +74,7 @@ func TestParseParagraph(t *testing.T) {
 	if !ok || len(stack.blocks) != 1 {
 		t.Fatalf("Parse result = %#v, want a single-block StackBlock", doc)
 	}
-	para, ok := stack.blocks[0].(*TextBlock)
+	para, ok := unwrap(stack.blocks[0]).(*TextBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *TextBlock", stack.blocks[0])
 	}
@@ -75,7 +88,7 @@ func TestParseParagraph(t *testing.T) {
 func TestParseHeading(t *testing.T) {
 	doc := Parse([]byte("### Level three"))
 	stack := doc.(*StackBlock)
-	heading, ok := stack.blocks[0].(*TextBlock)
+	heading, ok := unwrap(stack.blocks[0]).(*TextBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *TextBlock", stack.blocks[0])
 	}
@@ -104,7 +117,7 @@ func TestParseTightList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := Parse([]byte(tc.source))
 			stack := doc.(*StackBlock)
-			list, ok := stack.blocks[0].(*StackBlock)
+			list, ok := unwrap(stack.blocks[0]).(*StackBlock)
 			if !ok || len(list.blocks) != len(tc.want) {
 				t.Fatalf("list = %#v, want a %d-item StackBlock", stack.blocks[0], len(tc.want))
 			}
@@ -122,7 +135,7 @@ func TestParseTightList(t *testing.T) {
 func TestParseTaskList(t *testing.T) {
 	doc := Parse([]byte("- [ ] todo item\n- [x] done item\n- plain item"))
 	stack := doc.(*StackBlock)
-	list, ok := stack.blocks[0].(*StackBlock)
+	list, ok := unwrap(stack.blocks[0]).(*StackBlock)
 	if !ok || len(list.blocks) != 3 {
 		t.Fatalf("list = %#v, want a 3-item StackBlock", stack.blocks[0])
 	}
@@ -151,7 +164,7 @@ func TestParseTaskList(t *testing.T) {
 func TestParseNestedList(t *testing.T) {
 	doc := Parse([]byte("- one\n  - nested\n- two"))
 	stack := doc.(*StackBlock)
-	list := stack.blocks[0].(*StackBlock)
+	list := unwrap(stack.blocks[0]).(*StackBlock)
 	if len(list.blocks) != 2 {
 		t.Fatalf("list = %#v, want 2 items", list.blocks)
 	}
@@ -160,7 +173,7 @@ func TestParseNestedList(t *testing.T) {
 	if got := textOf(t, oneHead.parts); !stringsEqual(got, []string{"one"}) {
 		t.Errorf("item 0 words = %v, want [one]", got)
 	}
-	nestedList, ok := oneTrailing.(*StackBlock)
+	nestedList, ok := unwrap(oneTrailing).(*StackBlock)
 	if !ok || len(nestedList.blocks) != 1 {
 		t.Fatalf("item 0 trailing = %#v, want a 1-item StackBlock", oneTrailing)
 	}
@@ -182,7 +195,7 @@ func TestParseNestedList(t *testing.T) {
 func TestListItemTrailingGap(t *testing.T) {
 	doc := Parse([]byte("- one\n  - nested"))
 	stack := doc.(*StackBlock)
-	list := stack.blocks[0].(*StackBlock)
+	list := unwrap(stack.blocks[0]).(*StackBlock)
 	item := list.blocks[0]
 	_, trailing := listItemParts(t, item)
 	if trailing == nil {
@@ -221,7 +234,7 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 	widthOf := func(source string) int {
 		t.Helper()
 		doc := Parse([]byte(source))
-		para := doc.(*StackBlock).blocks[0].(*TextBlock)
+		para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
 		return para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
 	}
 
@@ -246,7 +259,7 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 func TestSplitBoxesNaturalWidthFits(t *testing.T) {
 	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
 	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
-	para := doc.(*StackBlock).blocks[0].(*TextBlock)
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
 
 	natWidth := para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
 	box := para.GetBox(ctx, natWidth).(*StackBox)
@@ -310,12 +323,12 @@ func TestResolveColumnWidths(t *testing.T) {
 func TestParseListItemNoLeadingParagraph(t *testing.T) {
 	doc := Parse([]byte("- - nested only\n"))
 	stack := doc.(*StackBlock)
-	outer := stack.blocks[0].(*StackBlock)
+	outer := unwrap(stack.blocks[0]).(*StackBlock)
 	head, trailing := listItemParts(t, outer.blocks[0])
 	if len(head.parts) != 0 {
 		t.Errorf("parts = %#v, want none", head.parts)
 	}
-	nestedList, ok := trailing.(*StackBlock)
+	nestedList, ok := unwrap(trailing).(*StackBlock)
 	if !ok || len(nestedList.blocks) != 1 {
 		t.Fatalf("trailing = %#v, want a 1-item StackBlock", trailing)
 	}
@@ -336,7 +349,7 @@ func TestParseLooseListPanics(t *testing.T) {
 func TestParseFencedCodeBlock(t *testing.T) {
 	doc := Parse([]byte("```\nline one\nline two\n```"))
 	stack := doc.(*StackBlock)
-	code, ok := stack.blocks[0].(*CodeBlock)
+	code, ok := unwrap(stack.blocks[0]).(*CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.blocks[0])
 	}
@@ -355,7 +368,7 @@ func TestParseFencedCodeBlock(t *testing.T) {
 func TestParseIndentedCodeBlock(t *testing.T) {
 	doc := Parse([]byte("    line one\n    line two"))
 	stack := doc.(*StackBlock)
-	code, ok := stack.blocks[0].(*CodeBlock)
+	code, ok := unwrap(stack.blocks[0]).(*CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.blocks[0])
 	}
@@ -374,12 +387,16 @@ func TestParseIndentedCodeBlock(t *testing.T) {
 func TestParseThematicBreak(t *testing.T) {
 	doc := Parse([]byte("---"))
 	stack := doc.(*StackBlock)
-	rule, ok := stack.blocks[0].(*ThematicBreakBlock)
+	wrapper, ok := stack.blocks[0].(*MarginBlock)
 	if !ok {
-		t.Fatalf("block = %T, want *ThematicBreakBlock", stack.blocks[0])
+		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	if rule.margins != (Margins{Top: 20, Bottom: 20}) {
-		t.Errorf("margins = %+v, want {Top: 20, Bottom: 20}", rule.margins)
+	if wrapper.margins != (Margins{Top: 20, Bottom: 20}) {
+		t.Errorf("margins = %+v, want {Top: 20, Bottom: 20}", wrapper.margins)
+	}
+	rule, ok := wrapper.Block.(*ThematicBreakBlock)
+	if !ok {
+		t.Fatalf("wrapper.Block = %T, want *ThematicBreakBlock", wrapper.Block)
 	}
 
 	ctx := RenderingContext{Scale: 1}
@@ -400,11 +417,11 @@ func TestParseThematicBreak(t *testing.T) {
 func TestParseBlockquote(t *testing.T) {
 	doc := Parse([]byte("> quoted text"))
 	stack := doc.(*StackBlock)
-	bq, ok := stack.blocks[0].(*BlockquoteBlock)
+	bq, ok := unwrap(stack.blocks[0]).(*BlockquoteBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *BlockquoteBlock", stack.blocks[0])
 	}
-	para, ok := bq.inner.(*TextBlock)
+	para, ok := unwrap(bq.inner).(*TextBlock)
 	if !ok {
 		t.Fatalf("inner = %T, want *TextBlock", bq.inner)
 	}
@@ -420,7 +437,7 @@ func TestParseBlockquote(t *testing.T) {
 func TestParseBlockquoteMultipleBlocks(t *testing.T) {
 	doc := Parse([]byte("> first\n>\n> second"))
 	stack := doc.(*StackBlock)
-	bq := stack.blocks[0].(*BlockquoteBlock)
+	bq := unwrap(stack.blocks[0]).(*BlockquoteBlock)
 	inner, ok := bq.inner.(*StackBlock)
 	if !ok || len(inner.blocks) != 2 {
 		t.Fatalf("inner = %#v, want a 2-block StackBlock", bq.inner)
@@ -434,12 +451,12 @@ func TestParseBlockquoteMultipleBlocks(t *testing.T) {
 func TestParseNestedBlockquote(t *testing.T) {
 	doc := Parse([]byte("> > nested quote"))
 	stack := doc.(*StackBlock)
-	outer := stack.blocks[0].(*BlockquoteBlock)
-	inner, ok := outer.inner.(*BlockquoteBlock)
+	outer := unwrap(stack.blocks[0]).(*BlockquoteBlock)
+	inner, ok := unwrap(outer.inner).(*BlockquoteBlock)
 	if !ok {
 		t.Fatalf("inner = %T, want *BlockquoteBlock", outer.inner)
 	}
-	para, ok := inner.inner.(*TextBlock)
+	para, ok := unwrap(inner.inner).(*TextBlock)
 	if !ok {
 		t.Fatalf("innermost = %T, want *TextBlock", inner.inner)
 	}
@@ -477,7 +494,7 @@ func TestBlockquoteBoxIndent(t *testing.T) {
 func TestParseLink(t *testing.T) {
 	doc := Parse([]byte(`[click *here*](https://example.com "a title")`))
 	stack := doc.(*StackBlock)
-	para := stack.blocks[0].(*TextBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)
 	want := []string{"click", "here"}
 	if !stringsEqual(got, want) {
@@ -509,7 +526,7 @@ func TestParseAutoLink(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := Parse([]byte(tc.source))
 			stack := doc.(*StackBlock)
-			para := stack.blocks[0].(*TextBlock)
+			para := unwrap(stack.blocks[0]).(*TextBlock)
 			if len(para.parts) != 1 {
 				t.Fatalf("parts = %#v, want 1 part", para.parts)
 			}
@@ -539,7 +556,7 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := Parse([]byte(tc.source))
 			stack := doc.(*StackBlock)
-			para := stack.blocks[0].(*TextBlock)
+			para := unwrap(stack.blocks[0]).(*TextBlock)
 			if len(para.parts) != 1 {
 				t.Fatalf("parts = %#v, want 1 part", para.parts)
 			}
@@ -557,7 +574,7 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 func TestParseCodeSpan(t *testing.T) {
 	doc := Parse([]byte("see `code` here"))
 	stack := doc.(*StackBlock)
-	para := stack.blocks[0].(*TextBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)
 	want := []string{"see", "code", "here"}
 	if !stringsEqual(got, want) {
@@ -576,7 +593,7 @@ func TestParseCodeSpan(t *testing.T) {
 func TestParseStrikethrough(t *testing.T) {
 	doc := Parse([]byte("plain ~~struck **and bold**~~ text"))
 	stack := doc.(*StackBlock)
-	para := stack.blocks[0].(*TextBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)
 	want := []string{"plain", "struck", "and", "bold", "text"}
 	if !stringsEqual(got, want) {
@@ -624,7 +641,7 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 func TestParseImageWithTitle(t *testing.T) {
 	doc := Parse([]byte(`![alt](cat.jpeg "a lovely cat")`))
 	stack := doc.(*StackBlock)
-	para := stack.blocks[0].(*TextBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
 	if len(para.parts) != 1 {
 		t.Fatalf("parts = %#v, want 1 part", para.parts)
 	}
@@ -646,7 +663,7 @@ func TestParseImageWithTitle(t *testing.T) {
 func TestParseResolvesEntitiesAndEscapes(t *testing.T) {
 	doc := Parse([]byte(`Fish \& chips and &amp; and \*literal\*`))
 	stack := doc.(*StackBlock)
-	para := stack.blocks[0].(*TextBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)
 	want := []string{"Fish", "&", "chips", "and", "&", "and", "*literal*"}
 	if !stringsEqual(got, want) {
