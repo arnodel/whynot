@@ -95,7 +95,7 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	lineBoxes := make([]Box, len(b.lines))
 	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}, space: b.space}
+		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes)}
 }
@@ -108,7 +108,7 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
+		lines = append(lines, &LineBox{parts: boxes[:i]})
 		boxes = boxes[i:]
 	}
 	return &StackBox{slots: preResolvedSlots(lines)}
@@ -126,7 +126,7 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{parts: boxes[:i], space: b.space})
+		lines = append(lines, &LineBox{parts: boxes[:i]})
 		boxes = boxes[i:]
 	}
 	return &StackBox{slots: preResolvedSlots(lines)}

@@ -102,7 +102,6 @@ func (b *ImageBox) SpaceWidth() int {
 
 type LineBox struct {
 	parts []InlineBox
-	space int
 
 	boundsComputed bool
 	bounds         image.Rectangle

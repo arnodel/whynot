@@ -71,7 +71,6 @@ func (b *BlockquoteBlock) Margins() Margins {
 type CodeBlock struct {
 	margins Margins
 	lines   []Inline
-	space   int
 }
 
 var _ Block = (*CodeBlock)(nil)
@@ -83,7 +82,6 @@ func (b *CodeBlock) Margins() Margins {
 type TextBlock struct {
 	margins Margins
 	parts   []Inline
-	space   int
 }
 
 var _ Block = (*TextBlock)(nil)
@@ -101,7 +99,6 @@ func (b *TextBlock) Margins() Margins {
 type ListItemHeadBlock struct {
 	marker Inline
 	parts  []Inline
-	space  int
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
