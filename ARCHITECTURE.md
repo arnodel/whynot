@@ -30,10 +30,10 @@ flowchart TD
         A["[]byte source"] --> B["gmast.Node tree"]
     end
     subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go)"]
-        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, StackBlock,\nInlineText, InlineImage)"]
+        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
     end
     subgraph L2["Layer 2 — Layout tree (layout.go, box.go)"]
-        C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox,\nEmptyBox, ContainerBox)"]
+        C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
     end
     subgraph L3["Layer 3 — Canvas boundary (render.go, canvas.go)"]
         D -- "DrawBox(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
@@ -59,10 +59,20 @@ outside our control; it's the source of truth for document structure.
 ([compile.go](compile.go), config data in [markdown.go](markdown.go)) walk
 the goldmark tree once and produce a tree of `Block` and `Inline` values
 ([block.go](block.go)): `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
-`StackBlock` for blocks; `InlineText`, `InlineImage` for inline content.
-This is where Markdown semantics get resolved into rendering intent
-(emphasis → `TextStyle`, heading level → font size + `Margins`, etc.) — a
-`Block` tree describes *what* to draw, not *how it fits*.
+`ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
+blocks; `InlineText`, `InlineImage` for inline content. This is where
+Markdown semantics get resolved into rendering intent (emphasis →
+`TextStyle`, heading level → font size + `Margins`, etc.) — a `Block` tree
+describes *what* to draw, not *how it fits*.
+
+Margins aren't a field every `Block` carries: most embed `WithoutMargins`
+(a zero-value `Margins()`) and get real ones only where the compiler wraps
+them in a `MarginBlock{Block, margins}` at construction time. `StackBlock`
+is the one exception with real, non-trivial margins of its own - its
+Top/Bottom is whatever its first/last child reports, the same
+adjacent-margin collapsing `GetBox` applies between siblings, extended to
+its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
+correctly with the outermost child instead of stacking on top of it.
 
 Built once per document, by `Parse` ([compile.go](compile.go)), and never
 rebuilt — `Block`s are immutable for the life of the program.
@@ -160,11 +170,9 @@ up.
 
 These are real, understood, and not yet fixed:
 
-- **Unhandled edge cases (will panic).** `StackBlock.Margins()`
-  ([block.go:82](block.go#L82)) indexes `b.blocks[0]`/`b.blocks[len-1]`
-  unconditionally — an empty list or document crashes. Any unrecognized
-  goldmark node kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock`
-  and `AppendInlineNode` ([compile.go](compile.go)) — e.g. raw HTML today —
+- **Unhandled edge cases (will panic).** Any unrecognized goldmark node
+  kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock` and
+  `AppendInlineNode` ([compile.go](compile.go)) — e.g. raw HTML today —
   taking down the whole program instead of degrading gracefully.
 - **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
   repeat the same "turn `Inline`s into `InlineBox`es, then `splitBoxes`-loop

@@ -35,6 +35,7 @@ it only depends on `goldmark` for parsing. `ebitenrenderer` implements
 package main
 
 import (
+	"image/color"
 	"log"
 	"os"
 
@@ -56,6 +57,7 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
+	screen.Fill(color.Black) // whynot never fills its own background
 	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
 }
 
@@ -94,6 +96,7 @@ too.
 - Blockquotes, including nested ones
 - Strikethrough (`~~x~~`)
 - Nested lists, to any depth
+- Tables (GFM), including column alignment and negotiated column widths
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
 - Large documents: layout and drawing are lazy, built outward from the
@@ -129,16 +132,15 @@ rather than being an incremental addition.
 - [x] Nested lists
 
 **Needs its own design pass:**
-- [ ] Tables - every layout primitive today (`StackBox`, `ContainerBox`)
-      assumes a single 1D vertical stack; a table needs a genuine 2D
-      layout primitive (column widths, row height = max of that row's
-      cells), not an extension of the existing ones
+- [x] Tables - needed a genuine 2D layout primitive (`TableBox`, with
+      negotiated column widths and row height = max of that row's cells),
+      not an extension of the existing 1D `StackBox`/`ContainerBox`
 
 **Lower priority:**
 - [ ] Footnotes, definition lists, raw inline/block HTML
 
 ## Known issues
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues) - notably, an empty
-document or list, or any unsupported Markdown construct, currently
-`panic`s rather than degrading gracefully.
+See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues) - notably, any
+unsupported Markdown construct currently `panic`s rather than degrading
+gracefully.
