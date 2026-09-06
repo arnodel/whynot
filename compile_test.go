@@ -46,7 +46,7 @@ func listItemParts(t *testing.T, item Block) (head *ListItemHeadBlock, trailing 
 	if !ok || len(stack.blocks) == 0 || len(stack.blocks) > 2 {
 		t.Fatalf("item = %#v, want a StackBlock with 1 or 2 blocks", item)
 	}
-	head, ok = stack.blocks[0].(*ListItemHeadBlock)
+	head, ok = unwrap(stack.blocks[0]).(*ListItemHeadBlock)
 	if !ok {
 		t.Fatalf("item's first block = %T, want *ListItemHeadBlock", stack.blocks[0])
 	}
@@ -334,16 +334,72 @@ func TestParseListItemNoLeadingParagraph(t *testing.T) {
 	}
 }
 
-// TestParseLooseListPanics checks that a loose list (items separated by a
-// blank line) still panics rather than silently rendering, matching v1's
-// behavior of only ever handling tight lists.
-func TestParseLooseListPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("Parse on a loose list did not panic")
+// TestParseLooseList checks that a loose list (items separated by a blank
+// line) no longer panics, and that each item's own leading text picks up
+// real paragraph margins instead of a tight item's zero margins.
+func TestParseLooseList(t *testing.T) {
+	doc := Parse([]byte("- one\n\n- two"))
+	stack := doc.(*StackBlock)
+	list, ok := unwrap(stack.blocks[0]).(*StackBlock)
+	if !ok || len(list.blocks) != 2 {
+		t.Fatalf("list = %#v, want a 2-item StackBlock", stack.blocks[0])
+	}
+
+	wantWords := []string{"one", "two"}
+	for i, item := range list.blocks {
+		itemStack, ok := unwrap(item).(*StackBlock)
+		if !ok || len(itemStack.blocks) != 1 {
+			t.Fatalf("item %d = %#v, want a 1-block StackBlock (head only)", i, item)
 		}
-	}()
-	Parse([]byte("- one\n\n- two"))
+		headBlock := itemStack.blocks[0]
+		head, ok := unwrap(headBlock).(*ListItemHeadBlock)
+		if !ok {
+			t.Fatalf("item %d head = %T, want *ListItemHeadBlock", i, headBlock)
+		}
+		if got := textOf(t, head.parts); !stringsEqual(got, []string{wantWords[i]}) {
+			t.Errorf("item %d words = %v, want [%s]", i, got, wantWords[i])
+		}
+		if got := headBlock.Margins(); got != (Margins{Top: 10, Bottom: 10}) {
+			t.Errorf("item %d head margins = %+v, want {Top: 10, Bottom: 10} (paragraphStyle)", i, got)
+		}
+	}
+}
+
+// TestParseLooseListMultiParagraphItem checks that a loose item's second
+// paragraph gets real paragraph margins via the same generic
+// trailing-block path already used for a nested list - no special-casing
+// needed.
+func TestParseLooseListMultiParagraphItem(t *testing.T) {
+	doc := Parse([]byte("- first paragraph\n\n  second paragraph\n"))
+	stack := doc.(*StackBlock)
+	list, ok := unwrap(stack.blocks[0]).(*StackBlock)
+	if !ok || len(list.blocks) != 1 {
+		t.Fatalf("list = %#v, want a 1-item StackBlock", stack.blocks[0])
+	}
+
+	itemStack, ok := unwrap(list.blocks[0]).(*StackBlock)
+	if !ok || len(itemStack.blocks) != 2 {
+		t.Fatalf("item = %#v, want a 2-block StackBlock (head, second paragraph)", list.blocks[0])
+	}
+
+	head, ok := unwrap(itemStack.blocks[0]).(*ListItemHeadBlock)
+	if !ok {
+		t.Fatalf("item block 0 = %T, want *ListItemHeadBlock", itemStack.blocks[0])
+	}
+	if got := textOf(t, head.parts); !stringsEqual(got, []string{"first", "paragraph"}) {
+		t.Errorf("head words = %v, want [first paragraph]", got)
+	}
+
+	second, ok := unwrap(itemStack.blocks[1]).(*TextBlock)
+	if !ok {
+		t.Fatalf("item block 1 = %T, want *TextBlock", itemStack.blocks[1])
+	}
+	if got := textOf(t, second.parts); !stringsEqual(got, []string{"second", "paragraph"}) {
+		t.Errorf("second paragraph words = %v, want [second paragraph]", got)
+	}
+	if got := itemStack.blocks[1].Margins(); got != (Margins{Top: 10, Bottom: 10}) {
+		t.Errorf("second paragraph margins = %+v, want {Top: 10, Bottom: 10}", got)
+	}
 }
 
 func TestParseFencedCodeBlock(t *testing.T) {

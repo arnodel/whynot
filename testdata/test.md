@@ -115,6 +115,21 @@ nested list underneath them begins.
    * Bulleted sub-step, under a numbered parent
    * Another bulleted sub-step
 
+A loose list - items separated by a blank line - gets real paragraph
+spacing between items, instead of a tight list's compact spacing.
+
+- First item, loose because of the blank lines around it.
+
+- Second item, same reason.
+
+- Third item, with a second paragraph of its own, indented to stay
+  part of the same item.
+
+  This second paragraph should also get real paragraph spacing, both
+  above (from the first paragraph) and below (from the next item).
+
+- Fourth and last item.
+
 A thematic break separates sections, like the one below.
 
 ---

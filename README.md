@@ -89,7 +89,7 @@ too.
 - Headings (all 6 levels), paragraphs
 - Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
 - Inline code, and fenced and indented code blocks
-- Ordered and unordered (tight) lists, including task lists (`- [ ]`)
+- Ordered and unordered lists, tight or loose, including task lists (`- [ ]`)
 - Images, including a title attribute
 - Thematic breaks (`---`)
 - Links and autolinks (rendered in a distinct color; not clickable yet)

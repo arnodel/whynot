@@ -165,10 +165,6 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node) Block {
 }
 
 func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker byte, tight bool) Block {
-	if !tight {
-		log.Panicf("Unsupported: loose list item")
-	}
-
 	var items []Inline
 	var markerString string
 	switch marker {
@@ -194,11 +190,11 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 
 	// A leading Paragraph is the item's own text, flowed with the marker
 	// hanging off its first line (see ListItemHeadBlock.GetBox). Anything
-	// after it - most commonly a nested List - stacks below as trailing
-	// block content. An item with no leading paragraph (e.g. one that
-	// opens directly with a nested list) leaves items empty, so the
-	// marker ends up on a line of its own - GetBox already does the
-	// right thing for that with no special-casing needed.
+	// after it - a nested List, or (in a loose list) further paragraphs -
+	// stacks below as trailing block content, each already compiled with
+	// its own real margins by CompileNode. An item with no leading
+	// paragraph leaves items empty, so the marker ends up on a line of
+	// its own - GetBox already handles that with no special-casing.
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
 		child := next.FirstChild()
@@ -209,10 +205,21 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		next = next.NextSibling()
 	}
 
-	blocks := []Block{&ListItemHeadBlock{
+	head := Block(&ListItemHeadBlock{
 		marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle},
 		parts:  items,
-	}}
+	})
+	if !tight {
+		// Loose items get real paragraph spacing on their own leading text
+		// too, not a tight head's zero margins. This also grows the gap
+		// between items with no separate constant: StackBlock.Margins()
+		// reports its first child's margin, so it collapses outward
+		// through the item's own MarginBlock and the list's own
+		// StackBlock, like any sibling gap.
+		head = &MarginBlock{Block: head, margins: c.paragraphStyle.Margins}
+	}
+	blocks := []Block{head}
+
 	var trailingBlocks []Block
 	for ; next != nil; next = next.NextSibling() {
 		trailingBlocks = append(trailingBlocks, c.CompileNode(next))
@@ -225,8 +232,8 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	// carrying the item's real margins (crucially Left, for indentation).
 	// Not wrapBlocks: that returns a single block unwrapped when there's
 	// only one, which would lose these margins for the common
-	// no-trailing-content case (ListItemHeadBlock's own Margins() is
-	// always zero).
+	// no-trailing-content tight case (ListItemHeadBlock's own Margins() is
+	// zero then).
 	return &MarginBlock{Block: &StackBlock{blocks: blocks}, margins: c.listItemStyle.Margins}
 }
 
