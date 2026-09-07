@@ -10,6 +10,7 @@ import (
 type RenderingContext struct {
 	Scale float64
 	FaceSelector
+	StyleSheet StyleSheet
 }
 
 func (c RenderingContext) ScaleMargins(m Margins) Margins {
@@ -20,10 +21,38 @@ func (c RenderingContext) ScaleMargins(m Margins) Margins {
 	return m
 }
 
-// strikeThickness is the strikethrough line's thickness, in unscaled
-// pixels - scaled by ctx.Scale like Margins, so it stays proportionate at
-// higher DPI.
-const strikeThickness = 1
+// The methods below read c.StyleSheet and scale the result by c.Scale in
+// one step - layout code should always go through these rather than
+// c.StyleSheet directly, so scaling can't be forgotten or applied twice.
+// TextStyle/Color have no scaled equivalent: font size is scaled via DPI
+// on the FaceSelector instead, and color doesn't scale at all.
+
+func (c RenderingContext) ScaledStrikeThickness(node *ASTNode) float64 {
+	return c.StyleSheet.StrikeThickness(node) * c.Scale
+}
+
+func (c RenderingContext) ScaledThematicBreakThickness(node *ASTNode) float64 {
+	return c.StyleSheet.ThematicBreakThickness(node) * c.Scale
+}
+
+func (c RenderingContext) ScaledBlockquoteGeometry(node *ASTNode) BlockquoteGeometry {
+	g := c.StyleSheet.BlockquoteGeometry(node)
+	return BlockquoteGeometry{
+		Indent:   g.Indent * c.Scale,
+		BarWidth: g.BarWidth * c.Scale,
+	}
+}
+
+func (c RenderingContext) ScaledTableGeometry(node *ASTNode) TableGeometry {
+	g := c.StyleSheet.TableGeometry(node)
+	return TableGeometry{
+		FrameThickness:      g.FrameThickness * c.Scale,
+		ColumnGap:           g.ColumnGap * c.Scale,
+		RowGap:              g.RowGap * c.Scale,
+		HeaderGap:           g.HeaderGap * c.Scale,
+		ColumnRuleThickness: g.ColumnRuleThickness * c.Scale,
+	}
+}
 
 func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	face, err := ctx.SelectFace(t.style)
@@ -36,7 +65,7 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 		Color: t.color,
 	}
 	if t.strike {
-		box.StrikeThickness = int(strikeThickness * ctx.Scale)
+		box.StrikeThickness = int(ctx.ScaledStrikeThickness(t.node))
 	}
 	return box
 }
@@ -60,33 +89,21 @@ func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
-// thematicBreakThickness is the rule's height, in unscaled pixels - scaled
-// by ctx.Scale the same way Margins are, so it stays proportionate at
-// higher DPI.
-const thematicBreakThickness = 2
-
 func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &RuleBox{
 		width:     width,
-		thickness: int(thematicBreakThickness * ctx.Scale),
+		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
 		color:     b.color,
 	}
 }
 
-// blockquoteIndent is how far a blockquote's content sits to the right of
-// its bar, and blockquoteBarWidth is the bar's own width - both in
-// unscaled pixels, scaled by ctx.Scale like Margins.
-const (
-	blockquoteIndent   = 16
-	blockquoteBarWidth = 3
-)
-
 func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
-	indent := int(blockquoteIndent * ctx.Scale)
+	geom := ctx.ScaledBlockquoteGeometry(b.node)
+	indent := int(geom.Indent)
 	return &BlockquoteBox{
 		width:    width,
 		indent:   indent,
-		barWidth: int(blockquoteBarWidth * ctx.Scale),
+		barWidth: int(geom.BarWidth),
 		barColor: b.barColor,
 		inner:    b.inner.GetBox(ctx, width-indent),
 	}
@@ -131,22 +148,6 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 	return &StackBox{slots: preResolvedSlots(lines)}
 }
-
-// tableFrameThickness is the frame/header-rule thickness; tableColumnGap
-// and tableRowGap are the space between columns and between ordinary
-// rows; tableHeaderGap is the (smaller) space between the header row and
-// the rule under it - see TableBox for why that makes rowOffsets[1]
-// exactly the rule's position, with no separate field needed for it.
-// tableColumnRuleThickness is the thickness of the vertical rule drawn
-// between columns, centered in the column gap. All in unscaled pixels,
-// scaled by ctx.Scale like Margins.
-const (
-	tableFrameThickness      = 2
-	tableColumnGap           = 12
-	tableRowGap              = 6
-	tableHeaderGap           = 4
-	tableColumnRuleThickness = 1
-)
 
 // naturalWidthMeasure is an effectively-unbounded width passed to a
 // cell's GetBox purely to measure its natural (unwrapped) width via the
@@ -213,11 +214,12 @@ func resolveColumnWidths(natural []int, available int) []int {
 }
 
 func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
-	frameThickness := int(tableFrameThickness * ctx.Scale)
-	columnGap := int(tableColumnGap * ctx.Scale)
-	rowGap := int(tableRowGap * ctx.Scale)
-	headerGap := int(tableHeaderGap * ctx.Scale)
-	columnRuleThickness := maxInt(1, int(tableColumnRuleThickness*ctx.Scale))
+	geom := ctx.ScaledTableGeometry(b.node)
+	frameThickness := int(geom.FrameThickness)
+	columnGap := int(geom.ColumnGap)
+	rowGap := int(geom.RowGap)
+	headerGap := int(geom.HeaderGap)
+	columnRuleThickness := maxInt(1, int(geom.ColumnRuleThickness))
 
 	numCols := len(b.header)
 	rows := append([][]tableCell{b.header}, b.rows...)

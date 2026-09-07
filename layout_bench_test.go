@@ -22,6 +22,7 @@ func benchmarkGetBox(b *testing.B, path string) {
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	const width = 1024
 
@@ -56,6 +57,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	box := block.GetBox(ctx, 1024)
 
@@ -87,6 +89,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -127,6 +130,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -167,6 +171,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	const width = 1024
 
@@ -208,6 +213,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		StyleSheet:   whynot.NewDefaultStyleSheet(),
 	}
 	const width = 1024
 	const viewportHeight = 768

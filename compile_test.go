@@ -480,13 +480,14 @@ func TestParseThematicBreak(t *testing.T) {
 		t.Fatalf("wrapper.Block = %T, want *ThematicBreakBlock", wrapper.Block)
 	}
 
-	ctx := RenderingContext{Scale: 1}
+	styleSheet := NewDefaultStyleSheet()
+	ctx := RenderingContext{Scale: 1, StyleSheet: styleSheet}
 	box := rule.GetBox(ctx, 100)
 	ruleBox, ok := box.(*RuleBox)
 	if !ok {
 		t.Fatalf("GetBox = %T, want *RuleBox", box)
 	}
-	want := image.Rect(0, 0, 100, thematicBreakThickness)
+	want := image.Rect(0, 0, 100, int(styleSheet.ThematicBreakThickness(nil)))
 	if got := ruleBox.Bounds(); got != want {
 		t.Errorf("Bounds() = %v, want %v", got, want)
 	}
@@ -553,12 +554,14 @@ func TestBlockquoteBoxIndent(t *testing.T) {
 		inner:    &fixedHeightBlock{height: 10},
 		barColor: color.White,
 	}
-	ctx := RenderingContext{Scale: 1}
+	styleSheet := NewDefaultStyleSheet()
+	ctx := RenderingContext{Scale: 1, StyleSheet: styleSheet}
 	box := bq.GetBox(ctx, 100)
 	bqBox, ok := box.(*BlockquoteBox)
 	if !ok {
 		t.Fatalf("GetBox = %T, want *BlockquoteBox", box)
 	}
+	blockquoteIndent := int(styleSheet.BlockquoteGeometry(nil).Indent)
 	if bqBox.indent != blockquoteIndent {
 		t.Errorf("indent = %d, want %d", bqBox.indent, blockquoteIndent)
 	}
@@ -705,7 +708,8 @@ func TestParseStrikethrough(t *testing.T) {
 }
 
 func TestInlineTextStrikeThickness(t *testing.T) {
-	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72)}
+	styleSheet := NewDefaultStyleSheet()
+	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: styleSheet}
 
 	plain := (&InlineText{text: "x", style: TextStyle{Size: 16}}).GetInlineBox(ctx).(*TextBox)
 	if plain.StrikeThickness != 0 {
@@ -713,7 +717,7 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 	}
 
 	struck := (&InlineText{text: "x", style: TextStyle{Size: 16}, strike: true}).GetInlineBox(ctx).(*TextBox)
-	want := int(strikeThickness * ctx.Scale)
+	want := int(styleSheet.StrikeThickness(nil) * ctx.Scale)
 	if struck.StrikeThickness != want {
 		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)
 	}
