@@ -2,7 +2,6 @@ package whynot
 
 import (
 	"fmt"
-	"image/color"
 	"log"
 	"strings"
 
@@ -10,39 +9,16 @@ import (
 	"github.com/yuin/goldmark/v2/extension"
 	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
-	"golang.org/x/image/font"
 )
 
 // Parse compiles Markdown source into a Block tree ready for layout via
-// Block.GetBox.
+// Block.GetBox. All appearance (fonts, colors, margins, ...) is resolved
+// later, from RenderingContext.StyleSheet against each Block/Inline's own
+// ASTNode - Parse itself only builds structure.
 func Parse(source []byte) Block {
 	p := parser.New(parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser))
 	node := p.Parse(source)
-	compiler := MarkdownCompiler{
-		source: source,
-		paragraphStyle: partStyle{
-			TextStyle: TextStyle{Size: 16},
-		},
-		listItemStyle: partStyle{
-			TextStyle: TextStyle{Size: 16},
-		},
-		headingStyles: [6]partStyle{
-			{TextStyle: TextStyle{Size: 40, Weight: font.WeightBold, Family: SmallCaps}},
-			{TextStyle: TextStyle{Size: 36, Weight: font.WeightBold}},
-			{TextStyle: TextStyle{Size: 32, Weight: font.WeightBold}},
-			{TextStyle: TextStyle{Size: 28, Weight: font.WeightBold}},
-			{TextStyle: TextStyle{Size: 24, Weight: font.WeightBold}},
-			{TextStyle: TextStyle{Size: 20, Weight: font.WeightBold}},
-		},
-		codeBlockStyle: partStyle{
-			TextStyle: TextStyle{Size: 16, Family: Monospace},
-		},
-		codeColor: color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
-		linkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
-		tableCellStyle: partStyle{
-			TextStyle: TextStyle{Size: 16},
-		},
-	}
+	compiler := MarkdownCompiler{source: source}
 	return compiler.CompileDocument(node)
 }
 
@@ -80,18 +56,17 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		var items []Inline
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, inlineStyle{size: c.paragraphStyle.Size, color: color.White, astNode: astNode})
+			items = c.AppendInlineNode(items, child, astNode)
 			child = child.NextSibling()
 		}
 		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
 	case gmast.KindHeading:
 		level := node.(*gmast.Heading).Level
-		partStyle := c.headingStyles[level-1]
 		astNode := parent.AddChild(headingTag(level))
 		var items []Inline
 		child := node.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, inlineStyle{baseLevel: 2, size: partStyle.Size, color: color.White, astNode: astNode})
+			items = c.AppendInlineNode(items, child, astNode)
 			child = child.NextSibling()
 		}
 		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
@@ -120,12 +95,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			// whitespace, so expand it here to keep indentation looking
 			// like indentation.
 			text := strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
-			items[i] = &InlineText{
-				text:  text,
-				style: c.codeBlockStyle.TextStyle,
-				color: c.codeColor,
-				node:  astNode,
-			}
+			items[i] = &InlineText{text: text, node: astNode}
 		}
 		return &MarginBlock{Block: &CodeBlock{lines: items}, node: astNode}
 	case gmast.KindThematicBreak:
@@ -194,14 +164,14 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	if next != nil && next.Kind() == gmast.KindParagraph {
 		child := next.FirstChild()
 		for child != nil {
-			items = c.AppendInlineNode(items, child, inlineStyle{size: c.listItemStyle.Size, color: color.White, astNode: itemNode})
+			items = c.AppendInlineNode(items, child, itemNode)
 			child = child.NextSibling()
 		}
 		next = next.NextSibling()
 	}
 
 	head := Block(&ListItemHeadBlock{
-		marker: &InlineText{text: markerString, color: color.White, style: c.listItemStyle.TextStyle, node: itemNode},
+		marker: &InlineText{text: markerString, node: itemNode},
 		parts:  items,
 	})
 	if !tight {
@@ -268,7 +238,7 @@ func (c *MarkdownCompiler) CompileTableRow(node gmast.Node, parent *ASTNode) []t
 		cellASTNode := parent.AddChild(TagTableCell)
 		var parts []Inline
 		for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
-			parts = c.AppendInlineNode(parts, child, inlineStyle{size: c.tableCellStyle.Size, color: color.White, astNode: cellASTNode})
+			parts = c.AppendInlineNode(parts, child, cellASTNode)
 		}
 		cells = append(cells, tableCell{
 			content:   &TextBlock{parts: parts},
@@ -278,83 +248,62 @@ func (c *MarkdownCompiler) CompileTableRow(node gmast.Node, parent *ASTNode) []t
 	return cells
 }
 
-// inlineStyle is the styling state threaded down as AppendInlineNode walks
-// an inline subtree - it only ever changes at the node that introduces a
-// new value (Emphasis/Strong bump baseLevel, Link overrides color,
-// Strikethrough sets strike); every other node passes its received value
-// straight through to its children. astNode is the same idea applied to
-// the ASTNode tree: the current node's ancestry, updated only by the
-// inline constructs that get their own ASTTag (Emphasis, Strong, Link,
-// Strikethrough), and threaded straight through everywhere else - not
-// found on the produced Block/Inline tree, since that stays flat, but
-// carried alongside it during compilation.
-type inlineStyle struct {
-	baseLevel int
-	size      float64
-	color     color.Color
-	strike    bool
-	astNode   *ASTNode
-}
-
-func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, st inlineStyle) []Inline {
+// AppendInlineNode walks an inline subtree, appending each leaf as an
+// Inline. astNode is node's parent in the ASTNode tree - updated only by
+// the constructs that get their own ASTTag (Emphasis, Strong, Link,
+// CodeSpan, Strikethrough) via AddChild, and threaded straight through
+// everywhere else. Appearance (font, color, strike) is never resolved
+// here - each produced Inline just carries the ASTNode it was created
+// under, resolved later by RenderingContext against a StyleSheet.
+func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
-		return appendString(items, t.Value.Value(c.source), getStyle(st.baseLevel, st.size), st.color, st.strike, st.astNode)
+		return appendString(items, t.Value.Value(c.source), astNode)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
-		childStyle := st
-		childStyle.baseLevel++
-		childStyle.astNode = st.astNode.AddChild(TagEmphasis)
+		childNode := astNode.AddChild(TagEmphasis)
 		for child != nil {
-			items = c.AppendInlineNode(items, child, childStyle)
+			items = c.AppendInlineNode(items, child, childNode)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindStrong:
 		child := node.FirstChild()
-		childStyle := st
-		childStyle.baseLevel += 2
-		childStyle.astNode = st.astNode.AddChild(TagStrong)
+		childNode := astNode.AddChild(TagStrong)
 		for child != nil {
-			items = c.AppendInlineNode(items, child, childStyle)
+			items = c.AppendInlineNode(items, child, childNode)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindCodeSpan:
-		style := getStyle(st.baseLevel, st.size)
-		style.Family = Monospace
 		cs := node.(*gmast.CodeSpan)
-		astNode := st.astNode.AddChild(TagCodeSpan)
-		return appendString(items, cs.Value.Value(c.source), style, c.codeColor, st.strike, astNode)
+		childNode := astNode.AddChild(TagCodeSpan)
+		return appendString(items, cs.Value.Value(c.source), childNode)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
 		return append(items, &InlineImage{
 			src:   imgNode.Destination.Value(c.source),
 			title: imgNode.Title.Value(c.source),
-			node:  st.astNode,
+			node:  astNode,
 		})
 	case gmast.KindLink:
 		child := node.FirstChild()
-		childStyle := st
-		childStyle.color = c.linkColor
-		childStyle.astNode = st.astNode.AddChild(TagLink)
+		childNode := astNode.AddChild(TagLink)
 		for child != nil {
-			items = c.AppendInlineNode(items, child, childStyle)
+			items = c.AppendInlineNode(items, child, childNode)
 			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindAutoLink:
 		al := node.(*gmast.AutoLink)
-		astNode := st.astNode.AddChild(TagLink)
-		return appendString(items, al.Label.Value(c.source), getStyle(st.baseLevel, st.size), c.linkColor, st.strike, astNode)
+		childNode := astNode.AddChild(TagLink)
+		return appendString(items, al.Label.Value(c.source), childNode)
 	case extast.KindStrikethrough:
 		child := node.FirstChild()
-		childStyle := st
-		childStyle.strike = true
-		childStyle.astNode = st.astNode.AddChild(TagStrikethrough)
+		childNode := astNode.AddChild(TagStrikethrough)
 		for child != nil {
-			items = c.AppendInlineNode(items, child, childStyle)
+			items = c.AppendInlineNode(items, child, childNode)
 			child = child.NextSibling()
 		}
 		return items
@@ -362,13 +311,6 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, st 
 		log.Panicf("Unsupported node kind %s", node.Kind())
 	}
 	return nil
-}
-
-var levelToStyles = [4]TextStyle{
-	{0, font.StyleNormal, font.WeightNormal, Proportional},
-	{0, font.StyleItalic, font.WeightNormal, Proportional},
-	{0, font.StyleNormal, font.WeightBold, Proportional},
-	{0, font.StyleItalic, font.WeightBold, Proportional},
 }
 
 // tableCellAlignment translates goldmark's own alignment enum to
@@ -397,22 +339,10 @@ func wrapBlocks(blocks []Block) Block {
 	return &StackBlock{blocks: blocks}
 }
 
-func getStyle(level int, size float64) TextStyle {
-	textStyle := levelToStyles[level%len(levelToStyles)]
-	textStyle.Size = size
-	return textStyle
-}
-
-func appendString(items []Inline, s string, style TextStyle, color color.Color, strike bool, node *ASTNode) []Inline {
+func appendString(items []Inline, s string, node *ASTNode) []Inline {
 	textParts := strings.Fields(s)
 	for _, part := range textParts {
-		items = append(items, &InlineText{
-			text:   part,
-			color:  color,
-			style:  style,
-			strike: strike,
-			node:   node,
-		})
+		items = append(items, &InlineText{text: part, node: node})
 	}
 	return items
 }

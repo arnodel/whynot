@@ -7,10 +7,8 @@ import (
 	"golang.org/x/image/font"
 )
 
-// These pin DefaultStyleSheet's values against MarkdownCompiler's current
-// hardcoded config in Parse - nothing consumes DefaultStyleSheet yet, so
-// this is the only thing keeping the two in sync until a later migration
-// step replaces Parse's literals with this type directly.
+// These pin DefaultStyleSheet's values against whynot's previous
+// hardcoded config in MarkdownCompiler's old Parse implementation.
 
 func TestDefaultStyleSheetMargins(t *testing.T) {
 	s := NewDefaultStyleSheet()
@@ -49,23 +47,27 @@ func TestDefaultStyleSheetMarginsNilNode(t *testing.T) {
 	}
 }
 
+// TestDefaultStyleSheetTextStyle pins each tag's own contribution - the
+// Set mask matters as much as the values, since an unset field is meant
+// to be inherited from an ancestor (see TestResolvedTextStyle) rather
+// than read as its zero value.
 func TestDefaultStyleSheetTextStyle(t *testing.T) {
 	s := NewDefaultStyleSheet()
 	cases := []struct {
 		tag  ASTTag
-		want TextStyle
+		want TextStyleContribution
 	}{
-		{TagParagraph, TextStyle{Size: 16}},
-		{TagHeading1, TextStyle{Size: 40, Weight: font.WeightBold, Family: SmallCaps}},
-		{TagHeading2, TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}},
-		{TagHeading6, TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}},
-		{TagListItem, TextStyle{Size: 16}},
-		{TagCodeBlock, TextStyle{Size: 16, Family: Monospace}},
-		{TagTableCell, TextStyle{Size: 16}},
-		{TagCodeSpan, TextStyle{Family: Monospace}},
-		{TagEmphasis, TextStyle{Style: font.StyleItalic}},
-		{TagStrong, TextStyle{Weight: font.WeightBold}},
-		{TagLink, TextStyle{}},
+		{TagParagraph, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
+		{TagHeading1, TextStyleContribution{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagHeading2, TextStyleContribution{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagHeading6, TextStyleContribution{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagListItem, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
+		{TagCodeBlock, TextStyleContribution{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
+		{TagTableCell, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
+		{TagCodeSpan, TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily}},
+		{TagEmphasis, TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle}},
+		{TagStrong, TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight}},
+		{TagLink, TextStyleContribution{}},
 	}
 	for _, tc := range cases {
 		node := &ASTNode{Tag: tc.tag}
@@ -75,6 +77,17 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 	}
 }
 
+func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
+	s := NewDefaultStyleSheet()
+	if got := s.TextStyle(nil); got != (TextStyleContribution{}) {
+		t.Errorf("TextStyle(nil) = %+v, want zero value", got)
+	}
+}
+
+// TestDefaultStyleSheetColor checks the cascading text color: only tags
+// with a real opinion (code, link) return non-nil - everything else,
+// including the block types with their own BorderColor, returns nil so
+// ResolvedColor's ancestry walk passes through them.
 func TestDefaultStyleSheetColor(t *testing.T) {
 	s := NewDefaultStyleSheet()
 	cases := []struct {
@@ -83,12 +96,12 @@ func TestDefaultStyleSheetColor(t *testing.T) {
 	}{
 		{TagCodeBlock, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
 		{TagCodeSpan, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
-		{TagThematicBreak, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
 		{TagLink, color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
-		{TagBlockquote, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagTable, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagParagraph, color.White},
-		{TagHeading1, color.White},
+		{TagParagraph, nil},
+		{TagHeading1, nil},
+		{TagBlockquote, nil},
+		{TagTable, nil},
+		{TagThematicBreak, nil},
 	}
 	for _, tc := range cases {
 		node := &ASTNode{Tag: tc.tag}
@@ -105,12 +118,65 @@ func TestDefaultStyleSheetColorNilNode(t *testing.T) {
 	}
 }
 
+// TestDefaultStyleSheetBorderColor checks the non-cascading decoration
+// color - a thematic break's rule, a blockquote's bar, a table's frame -
+// resolved directly against exactly the tag it decorates, unlike Color.
+func TestDefaultStyleSheetBorderColor(t *testing.T) {
+	s := NewDefaultStyleSheet()
+	cases := []struct {
+		tag  ASTTag
+		want color.Color
+	}{
+		{TagThematicBreak, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{TagBlockquote, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{TagTable, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{TagParagraph, nil},
+		{TagLink, nil},
+	}
+	for _, tc := range cases {
+		node := &ASTNode{Tag: tc.tag}
+		if got := s.BorderColor(node); got != tc.want {
+			t.Errorf("BorderColor(tag=%v) = %v, want %v", tc.tag, got, tc.want)
+		}
+	}
+}
+
+func TestDefaultStyleSheetBorderColorNilNode(t *testing.T) {
+	s := NewDefaultStyleSheet()
+	if got := s.BorderColor(nil); got != nil {
+		t.Errorf("BorderColor(nil) = %v, want nil", got)
+	}
+}
+
+// TestDefaultStyleSheetStrikeThickness checks that the thickness doubles
+// as the "is this struck at all" signal: 0 unless node or an ancestor
+// carries TagStrikethrough.
+func TestDefaultStyleSheetStrikeThickness(t *testing.T) {
+	s := NewDefaultStyleSheet()
+
+	if got := s.StrikeThickness(nil); got != 0 {
+		t.Errorf("StrikeThickness(nil) = %v, want 0", got)
+	}
+
+	notStruck := &ASTNode{Tag: TagEmphasis}
+	if got := s.StrikeThickness(notStruck); got != 0 {
+		t.Errorf("StrikeThickness(Emphasis) = %v, want 0", got)
+	}
+
+	struck := &ASTNode{Tag: TagStrikethrough}
+	if got := s.StrikeThickness(struck); got != 1 {
+		t.Errorf("StrikeThickness(Strikethrough) = %v, want 1", got)
+	}
+
+	nestedInStruck := struck.AddChild(TagEmphasis)
+	if got := s.StrikeThickness(nestedInStruck); got != 1 {
+		t.Errorf("StrikeThickness(Emphasis nested in Strikethrough) = %v, want 1", got)
+	}
+}
+
 func TestDefaultStyleSheetDimensions(t *testing.T) {
 	s := NewDefaultStyleSheet()
 
-	if got := s.StrikeThickness(nil); got != 1 {
-		t.Errorf("StrikeThickness() = %v, want 1", got)
-	}
 	if got := s.ThematicBreakThickness(nil); got != 2 {
 		t.Errorf("ThematicBreakThickness() = %v, want 2", got)
 	}

@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"image"
+	"image/color"
 	_ "image/jpeg" // registers the JPEG format with image.DecodeConfig
 	"os"
 	"sort"
@@ -56,20 +57,59 @@ func (c RenderingContext) ScaledTableGeometry(node *ASTNode) TableGeometry {
 	}
 }
 
+// ResolvedTextStyle merges node's ancestry's TextStyle contributions into
+// one TextStyle - the nearest ancestor (node itself first) to set a given
+// field wins, so e.g. Strong nested inside Emphasis picks up both a bold
+// weight (from Strong) and an italic style (from Emphasis).
+func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
+	var result TextStyle
+	var resolved TextStyleField
+	for n := node; n != nil && resolved != allTextStyleFields; n = n.Parent {
+		contrib := c.StyleSheet.TextStyle(n)
+		if missing := contrib.Set &^ resolved; missing != 0 {
+			if missing&FieldSize != 0 {
+				result.Size = contrib.Size
+			}
+			if missing&FieldStyle != 0 {
+				result.Style = contrib.Style
+			}
+			if missing&FieldWeight != 0 {
+				result.Weight = contrib.Weight
+			}
+			if missing&FieldFamily != 0 {
+				result.Family = contrib.Family
+			}
+			resolved |= missing
+		}
+	}
+	return result
+}
+
+// ResolvedColor walks node's ancestry (node itself first) for the nearest
+// non-nil Color contribution - mirrors CSS's `color`, which inherits down
+// from the nearest ancestor that sets it.
+func (c RenderingContext) ResolvedColor(node *ASTNode) color.Color {
+	for n := node; ; n = n.Parent {
+		if col := c.StyleSheet.Color(n); col != nil {
+			return col
+		}
+		if n == nil {
+			return nil
+		}
+	}
+}
+
 func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
-	face, err := ctx.SelectFace(t.style)
+	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(t.node))
 	if err != nil {
 		panic(err)
 	}
-	box := &TextBox{
-		Text:  t.text,
-		Face:  face,
-		Color: t.color,
+	return &TextBox{
+		Text:            t.text,
+		Face:            face,
+		Color:           ctx.ResolvedColor(t.node),
+		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
 	}
-	if t.strike {
-		box.StrikeThickness = int(ctx.ScaledStrikeThickness(t.node))
-	}
-	return box
 }
 
 // GetInlineBox probes src's dimensions via a cheap header-only read (no
@@ -95,7 +135,7 @@ func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &RuleBox{
 		width:     width,
 		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
-		color:     ctx.StyleSheet.Color(b.node),
+		color:     ctx.StyleSheet.BorderColor(b.node),
 	}
 }
 
@@ -106,7 +146,7 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 		width:    width,
 		indent:   indent,
 		barWidth: int(geom.BarWidth),
-		barColor: ctx.StyleSheet.Color(b.node),
+		barColor: ctx.StyleSheet.BorderColor(b.node),
 		inner:    b.inner.GetBox(ctx, width-indent),
 	}
 }
@@ -328,7 +368,7 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 		frameThickness:      frameThickness,
 		columnGap:           columnGap,
 		columnRuleThickness: columnRuleThickness,
-		frameColor:          ctx.StyleSheet.Color(b.node),
+		frameColor:          ctx.StyleSheet.BorderColor(b.node),
 		cells:               cells,
 	}
 }

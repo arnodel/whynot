@@ -230,7 +230,7 @@ func TestListItemTrailingGap(t *testing.T) {
 // table cells to overlap the next column once their measured width was
 // used to position it.
 func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDefaultStyleSheet()}
 	widthOf := func(source string) int {
 		t.Helper()
 		doc := Parse([]byte(source))
@@ -257,7 +257,7 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 // which should always fit on one line, by definition - would still wrap
 // its last word. This specific sentence reliably drifts Min.X to 1.
 func TestSplitBoxesNaturalWidthFits(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDefaultStyleSheet()}
 	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
 	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
 
@@ -585,16 +585,17 @@ func TestParseLink(t *testing.T) {
 	if !stringsEqual(got, want) {
 		t.Fatalf("words = %v, want %v", got, want)
 	}
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	for i, part := range para.parts {
 		text := part.(*InlineText)
-		if text.color == color.White {
+		if ctx.ResolvedColor(text.node) == color.White {
 			t.Errorf("part %d color = white, want link color", i)
 		}
 	}
 	// Nested emphasis inside the link text should still apply on top of
 	// the link's color.
-	if para.parts[1].(*InlineText).style.Style != font.StyleItalic {
-		t.Errorf("style of %q = %+v, want italic", "here", para.parts[1].(*InlineText).style)
+	if style := ctx.ResolvedTextStyle(para.parts[1].(*InlineText).node); style.Style != font.StyleItalic {
+		t.Errorf("style of %q = %+v, want italic", "here", style)
 	}
 }
 
@@ -607,6 +608,7 @@ func TestParseAutoLink(t *testing.T) {
 		{"url", "<https://example.com>", "https://example.com"},
 		{"email", "<user@example.com>", "user@example.com"},
 	}
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := Parse([]byte(tc.source))
@@ -619,7 +621,7 @@ func TestParseAutoLink(t *testing.T) {
 			if text.text != tc.want {
 				t.Errorf("text = %q, want %q", text.text, tc.want)
 			}
-			if text.color == color.White {
+			if ctx.ResolvedColor(text.node) == color.White {
 				t.Errorf("color = white, want link color")
 			}
 		})
@@ -637,6 +639,7 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 		{"strong", "**word**", font.StyleNormal, font.WeightBold},
 		{"both", "***word***", font.StyleItalic, font.WeightBold},
 	}
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := Parse([]byte(tc.source))
@@ -649,8 +652,9 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 			if text.text != "word" {
 				t.Errorf("text = %q, want %q", text.text, "word")
 			}
-			if text.style.Style != tc.wantStyle || text.style.Weight != tc.wantWeight {
-				t.Errorf("style = %+v, want Style=%v Weight=%v", text.style, tc.wantStyle, tc.wantWeight)
+			style := ctx.ResolvedTextStyle(text.node)
+			if style.Style != tc.wantStyle || style.Weight != tc.wantWeight {
+				t.Errorf("style = %+v, want Style=%v Weight=%v", style, tc.wantStyle, tc.wantWeight)
 			}
 		})
 	}
@@ -665,16 +669,17 @@ func TestParseCodeSpan(t *testing.T) {
 	if !stringsEqual(got, want) {
 		t.Fatalf("words = %v, want %v", got, want)
 	}
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	code := para.parts[1].(*InlineText)
-	if code.style.Family != Monospace {
-		t.Errorf("code span family = %v, want Monospace", code.style.Family)
+	if style := ctx.ResolvedTextStyle(code.node); style.Family != Monospace {
+		t.Errorf("code span family = %v, want Monospace", style.Family)
 	}
 }
 
-// TestParseStrikethrough checks that strike composes with nested styling
-// (baseLevel from Strong here) rather than replacing it - both come from
-// the same threaded inlineStyle, set independently by the node that
-// introduces each.
+// TestParseStrikethrough checks that being struck composes with nested
+// styling (bold from Strong here) rather than replacing it - struck-ness
+// is a structural ancestry fact (HasAncestorTag), resolved independently
+// of TextStyle.
 func TestParseStrikethrough(t *testing.T) {
 	doc := Parse([]byte("plain ~~struck **and bold**~~ text"))
 	stack := doc.(*StackBlock)
@@ -686,25 +691,26 @@ func TestParseStrikethrough(t *testing.T) {
 	}
 
 	plain := para.parts[0].(*InlineText)
-	if plain.strike {
-		t.Errorf("part %q: strike = true, want false", plain.text)
+	if plain.node.HasAncestorTag(TagStrikethrough) {
+		t.Errorf("part %q: struck = true, want false", plain.text)
 	}
 
 	struckWords := para.parts[1:4]
 	for _, part := range struckWords {
 		text := part.(*InlineText)
-		if !text.strike {
-			t.Errorf("part %q: strike = false, want true", text.text)
+		if !text.node.HasAncestorTag(TagStrikethrough) {
+			t.Errorf("part %q: struck = false, want true", text.text)
 		}
 	}
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	bold := para.parts[3].(*InlineText)
-	if bold.style.Weight != font.WeightBold {
-		t.Errorf("part %q: weight = %v, want bold", bold.text, bold.style.Weight)
+	if style := ctx.ResolvedTextStyle(bold.node); style.Weight != font.WeightBold {
+		t.Errorf("part %q: weight = %v, want bold", bold.text, style.Weight)
 	}
 
 	trailing := para.parts[4].(*InlineText)
-	if trailing.strike {
-		t.Errorf("part %q: strike = true, want false", trailing.text)
+	if trailing.node.HasAncestorTag(TagStrikethrough) {
+		t.Errorf("part %q: struck = true, want false", trailing.text)
 	}
 }
 
@@ -712,13 +718,15 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 	styleSheet := NewDefaultStyleSheet()
 	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: styleSheet}
 
-	plain := (&InlineText{text: "x", style: TextStyle{Size: 16}}).GetInlineBox(ctx).(*TextBox)
+	plainNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagEmphasis)
+	plain := (&InlineText{text: "x", node: plainNode}).GetInlineBox(ctx).(*TextBox)
 	if plain.StrikeThickness != 0 {
 		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
 	}
 
-	struck := (&InlineText{text: "x", style: TextStyle{Size: 16}, strike: true}).GetInlineBox(ctx).(*TextBox)
-	want := int(styleSheet.StrikeThickness(nil) * ctx.Scale)
+	struckNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagStrikethrough)
+	struck := (&InlineText{text: "x", node: struckNode}).GetInlineBox(ctx).(*TextBox)
+	want := int(styleSheet.StrikeThickness(struckNode) * ctx.Scale)
 	if struck.StrikeThickness != want {
 		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)
 	}

@@ -24,24 +24,62 @@ type TableGeometry struct {
 	ColumnRuleThickness float64
 }
 
+// TextStyleField identifies one field of TextStyle, so a
+// TextStyleContribution can say which fields it actually sets - needed
+// because TextStyle's own zero values (font.WeightNormal, font.StyleNormal,
+// Proportional) are real, meaningful values, not "unset" sentinels.
+type TextStyleField uint8
+
+const (
+	FieldSize TextStyleField = 1 << iota
+	FieldStyle
+	FieldWeight
+	FieldFamily
+
+	allTextStyleFields = FieldSize | FieldStyle | FieldWeight | FieldFamily
+)
+
+// TextStyleContribution is what a single node's own tag contributes to
+// TextStyle - only the fields flagged in Set are meaningful; every other
+// field is inherited from further up the node's ancestry (see
+// RenderingContext.ResolvedTextStyle).
+type TextStyleContribution struct {
+	TextStyle
+	Set TextStyleField
+}
+
 // StyleSheet resolves an ASTNode's semantic role to concrete appearance -
 // margins, text styling, color, and a few dimensional constants. Every
 // method takes the node, uniformly, even where nothing in whynot itself
 // varies a value by node today (there's only one table's worth of column
 // gap, for instance) - an implementation is free to ignore it, but the
-// shape leaves room for one that doesn't want to. Not yet consumed
-// anywhere - see DefaultStyleSheet for the values MarkdownCompiler
-// currently hardcodes, ported here as the migration's starting point.
+// shape leaves room for one that doesn't want to. See DefaultStyleSheet
+// for the values MarkdownCompiler used to hardcode, ported here.
 type StyleSheet interface {
 	// Margins returns the margins for node's own tag.
 	Margins(node *ASTNode) Margins
-	// TextStyle returns the text appearance for node's own tag. Doesn't
-	// yet account for ancestry (e.g. Strong nested inside Emphasis) -
-	// inline styling is its own, later migration step.
-	TextStyle(node *ASTNode) TextStyle
-	// Color returns the color for node's own tag.
+	// TextStyle returns node's own tag's contribution to TextStyle -
+	// combined with its ancestors' contributions by
+	// RenderingContext.ResolvedTextStyle, since e.g. Strong nested inside
+	// Emphasis needs both a bold and an italic contribution to survive.
+	TextStyle(node *ASTNode) TextStyleContribution
+	// Color returns node's own tag's contribution to the cascading text
+	// color, or nil if it has no opinion (inherits from an ancestor, or
+	// the document default at the root - see
+	// RenderingContext.ResolvedColor). Mirrors CSS's `color`, which
+	// inherits by default.
 	Color(node *ASTNode) color.Color
+	// BorderColor returns node's own single, non-inherited decoration
+	// color - a thematic break's rule, a blockquote's bar, a table's
+	// frame. Unlike Color, this is always resolved directly against one
+	// node, never by walking ancestry - mirrors CSS's border-color,
+	// which doesn't inherit.
+	BorderColor(node *ASTNode) color.Color
 
+	// StrikeThickness returns the thickness for a strikethrough line at
+	// node, or 0 if node isn't (nor is any ancestor) struck through -
+	// this is both "should this be struck" and "how thick", the same way
+	// TextStyle's Weight being font.WeightNormal means "not bold".
 	StrikeThickness(node *ASTNode) float64
 	ThematicBreakThickness(node *ASTNode) float64
 	BlockquoteGeometry(node *ASTNode) BlockquoteGeometry
@@ -117,9 +155,12 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 			{Top: 14, Bottom: 10},
 			{Top: 10, Bottom: 10},
 		},
-		HeadingSizes:    [6]float64{40, 36, 32, 28, 24, 20},
-		HeadingWeights:  [6]font.Weight{font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold},
-		HeadingFamilies: [6]FontFamily{0: SmallCaps}, // levels 2-6 default to Proportional, the zero value
+		HeadingSizes:   [6]float64{40, 36, 32, 28, 24, 20},
+		HeadingWeights: [6]font.Weight{font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold},
+		// HeadingFamilies is left at its zero value (Proportional for
+		// every level): no bold small-caps font ships in
+		// golang.org/x/image/font/gofont, and headings are bold, so
+		// small caps isn't available as a default.
 
 		ListMargins: Margins{Top: 10, Bottom: 10},
 
@@ -183,37 +224,45 @@ func (s *DefaultStyleSheet) Margins(node *ASTNode) Margins {
 	}
 }
 
-// TextStyle's Emphasis/Strong/CodeSpan cases only reflect that single
-// tag's own contribution (italic, bold, monospace) - they don't yet
-// compose with ancestry the way e.g. Strong-inside-Emphasis needs to.
-// Nothing consumes this yet; see the interface doc.
-func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyle {
+// TextStyle returns each tag's own contribution - only the fields Set
+// flags are meaningful; ResolvedTextStyle merges these across a node's
+// ancestry, so e.g. Strong nested inside Emphasis picks up both.
+func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyleContribution {
 	if node == nil {
-		return TextStyle{}
+		return TextStyleContribution{}
 	}
 	switch node.Tag {
 	case TagParagraph:
-		return TextStyle{Size: s.ParagraphSize}
+		return TextStyleContribution{TextStyle{Size: s.ParagraphSize}, FieldSize}
 	case TagHeading1, TagHeading2, TagHeading3, TagHeading4, TagHeading5, TagHeading6:
 		i := node.Tag - TagHeading1
-		return TextStyle{Size: s.HeadingSizes[i], Weight: s.HeadingWeights[i], Family: s.HeadingFamilies[i]}
+		return TextStyleContribution{
+			TextStyle{Size: s.HeadingSizes[i], Weight: s.HeadingWeights[i], Family: s.HeadingFamilies[i]},
+			FieldSize | FieldWeight | FieldFamily,
+		}
 	case TagListItem:
-		return TextStyle{Size: s.ListItemSize}
+		return TextStyleContribution{TextStyle{Size: s.ListItemSize}, FieldSize}
 	case TagCodeBlock:
-		return TextStyle{Size: s.CodeBlockSize, Family: Monospace}
+		return TextStyleContribution{TextStyle{Size: s.CodeBlockSize, Family: Monospace}, FieldSize | FieldFamily}
 	case TagTableCell:
-		return TextStyle{Size: s.TableCellSize}
+		return TextStyleContribution{TextStyle{Size: s.TableCellSize}, FieldSize}
 	case TagCodeSpan:
-		return TextStyle{Family: Monospace}
+		return TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily}
 	case TagEmphasis:
-		return TextStyle{Style: font.StyleItalic}
+		return TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle}
 	case TagStrong:
-		return TextStyle{Weight: font.WeightBold}
+		return TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight}
 	default:
-		return TextStyle{}
+		return TextStyleContribution{}
 	}
 }
 
+// Color returns node's own contribution to the cascading text color - nil
+// for any tag with no opinion, so ResolvedColor's ancestry walk passes
+// through it to an outer contributor (or the TextColor default at the
+// root). Only Link and the two code tags have an opinion; block-level
+// decoration colors live on BorderColor instead, since e.g. a blockquote's
+// bar color must never leak into its inner text color.
 func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 	if node == nil {
 		return s.TextColor
@@ -221,20 +270,37 @@ func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 	switch node.Tag {
 	case TagCodeBlock, TagCodeSpan:
 		return s.CodeColor
-	case TagThematicBreak:
-		return s.ThematicBreakColor
 	case TagLink:
 		return s.LinkColor
+	default:
+		return nil
+	}
+}
+
+func (s *DefaultStyleSheet) BorderColor(node *ASTNode) color.Color {
+	if node == nil {
+		return nil
+	}
+	switch node.Tag {
+	case TagThematicBreak:
+		return s.ThematicBreakColor
 	case TagBlockquote:
 		return s.BlockquoteBarColor
 	case TagTable:
 		return s.TableFrameColor
 	default:
-		return s.TextColor
+		return nil
 	}
 }
 
+// StrikeThickness returns 0 unless node (or an ancestor) is tagged
+// TagStrikethrough - encoding "should this be struck" and "how thick" in
+// one value, the same way TextStyle's Weight being font.WeightNormal
+// means "not bold".
 func (s *DefaultStyleSheet) StrikeThickness(node *ASTNode) float64 {
+	if !node.HasAncestorTag(TagStrikethrough) {
+		return 0
+	}
 	return s.strikeThickness
 }
 

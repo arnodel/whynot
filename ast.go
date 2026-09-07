@@ -67,3 +67,15 @@ func (n *ASTNode) Path() ASTPath {
 	}
 	return n.path
 }
+
+// HasAncestorTag reports whether n itself, or any of its ancestors, is
+// tagged with tag - for style decisions that are a structural yes/no
+// (e.g. "is this text struck through") rather than a value to resolve.
+func (n *ASTNode) HasAncestorTag(tag ASTTag) bool {
+	for ; n != nil; n = n.Parent {
+		if n.Tag == tag {
+			return true
+		}
+	}
+	return false
+}

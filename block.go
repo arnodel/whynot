@@ -1,7 +1,6 @@
 package whynot
 
 import (
-	"image/color"
 	"math"
 )
 
@@ -60,11 +59,8 @@ type Inline interface {
 }
 
 type InlineText struct {
-	text   string
-	style  TextStyle
-	color  color.Color
-	strike bool
-	node   *ASTNode
+	text string
+	node *ASTNode
 }
 
 var _ Inline = (*InlineText)(nil)
