@@ -26,6 +26,7 @@ const (
 	TagCodeSpan
 	TagEmphasis
 	TagStrong
+	TagStrikethrough
 )
 
 // ASTPath is a tag ancestry, root-to-leaf.
@@ -41,6 +42,14 @@ type ASTNode struct {
 	Parent *ASTNode
 
 	path ASTPath // memoized on first Path() call
+}
+
+// AddChild creates a new ASTNode tagged with tag, parented to n, and
+// returns it - the usual way to extend the tree during compilation.
+// Works with a nil n (a fresh root node): the result only stores n as its
+// Parent rather than dereferencing it.
+func (n *ASTNode) AddChild(tag ASTTag) *ASTNode {
+	return &ASTNode{Tag: tag, Parent: n}
 }
 
 // Path returns the tag ancestry from the root down to and including n - a

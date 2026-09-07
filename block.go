@@ -28,9 +28,14 @@ func (WithoutMargins) Margins() Margins {
 // nothing it wraps ever reports a nonzero Left/Right to collapse with -
 // StackBlock, the only Block with any derived margins, only ever derives
 // Top/Bottom from its children.
+//
+// node is this Block's position in the compiled ASTNode tree - not yet
+// consumed by anything (margins still come from the stored margins field
+// above), wired in ahead of the StyleSheet migration that will use it.
 type MarginBlock struct {
 	Block
 	margins Margins
+	node    *ASTNode
 }
 
 func (b *MarginBlock) Margins() Margins {
@@ -52,6 +57,7 @@ type InlineText struct {
 	style  TextStyle
 	color  color.Color
 	strike bool
+	node   *ASTNode
 }
 
 var _ Inline = (*InlineText)(nil)
@@ -59,6 +65,7 @@ var _ Inline = (*InlineText)(nil)
 type InlineImage struct {
 	src   string
 	title string
+	node  *ASTNode
 }
 
 var _ Inline = (*InlineImage)(nil)
@@ -69,6 +76,7 @@ var _ Inline = (*InlineImage)(nil)
 type ThematicBreakBlock struct {
 	WithoutMargins
 	color color.Color
+	node  *ASTNode
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
@@ -85,6 +93,7 @@ type BlockquoteBlock struct {
 	WithoutMargins
 	inner    Block
 	barColor color.Color
+	node     *ASTNode
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
@@ -138,6 +147,7 @@ type TableBlock struct {
 	header     []tableCell
 	rows       [][]tableCell
 	frameColor color.Color
+	node       *ASTNode
 }
 
 var _ Block = (*TableBlock)(nil)
