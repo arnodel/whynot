@@ -14,6 +14,13 @@ type Block interface {
 	Margins(ctx RenderingContext) Margins
 }
 
+// Marginer is anything that reports its own logical (unscaled) Margins -
+// every Block satisfies it, but it's kept narrow so RenderingContext.
+// ScaledMargins doesn't need the rest of the Block interface.
+type Marginer interface {
+	Margins(ctx RenderingContext) Margins
+}
+
 // WithoutMargins satisfies Block's Margins() with a zero value, for content
 // that never gets margins of its own (a list item's head, a table cell's
 // content).
@@ -29,22 +36,22 @@ func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 // StackBlock, the only Block with any derived margins, only ever derives
 // Top/Bottom from its children.
 //
-// node is this Block's position in the compiled ASTNode tree - not yet
-// consumed by anything (margins still come from the stored margins field
-// above), wired in ahead of the StyleSheet migration that will use it.
+// Its own margins are resolved from ctx.StyleSheet via node - unscaled,
+// matching Block.Margins' convention (StackBlock.GetBox, the one real
+// caller, scales the result via ctx.ScaledMargins).
 type MarginBlock struct {
 	Block
-	margins Margins
-	node    *ASTNode
+	node *ASTNode
 }
 
 func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 	inner := b.Block.Margins(ctx)
+	own := ctx.StyleSheet.Margins(b.node)
 	return Margins{
-		Top:    math.Max(inner.Top, b.margins.Top),
-		Bottom: math.Max(inner.Bottom, b.margins.Bottom),
-		Left:   b.margins.Left,
-		Right:  b.margins.Right,
+		Top:    math.Max(inner.Top, own.Top),
+		Bottom: math.Max(inner.Bottom, own.Bottom),
+		Left:   own.Left,
+		Right:  own.Right,
 	}
 }
 

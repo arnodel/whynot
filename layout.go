@@ -13,19 +13,21 @@ type RenderingContext struct {
 	StyleSheet StyleSheet
 }
 
-func (c RenderingContext) ScaleMargins(m Margins) Margins {
-	m.Left *= c.Scale
-	m.Right *= c.Scale
-	m.Top *= c.Scale
-	m.Bottom *= c.Scale
-	return m
-}
-
-// The methods below read c.StyleSheet and scale the result by c.Scale in
-// one step - layout code should always go through these rather than
-// c.StyleSheet directly, so scaling can't be forgotten or applied twice.
+// The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -
+// typically a Block) and scale the result by c.Scale in one step - layout
+// code should always go through these rather than calling Margins/the
+// StyleSheet directly, so scaling can't be forgotten or applied twice.
 // TextStyle/Color have no scaled equivalent: font size is scaled via DPI
 // on the FaceSelector instead, and color doesn't scale at all.
+
+func (c RenderingContext) ScaledMargins(m Marginer) Margins {
+	margins := m.Margins(c)
+	margins.Left *= c.Scale
+	margins.Right *= c.Scale
+	margins.Top *= c.Scale
+	margins.Bottom *= c.Scale
+	return margins
+}
 
 func (c RenderingContext) ScaledStrikeThickness(node *ASTNode) float64 {
 	return c.StyleSheet.StrikeThickness(node) * c.Scale
@@ -341,7 +343,7 @@ func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
 	slots := make([]stackSlot, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
-		margins := ctx.ScaleMargins(block.Margins(ctx))
+		margins := ctx.ScaledMargins(block)
 		if i > 0 {
 			gap := maxInt(bottomMargin, int(margins.Top))
 			if gap > 0 {

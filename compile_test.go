@@ -202,7 +202,7 @@ func TestListItemTrailingGap(t *testing.T) {
 		t.Fatal("trailing = nil, want the nested list")
 	}
 
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72)}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDefaultStyleSheet()}
 	box := item.GetBox(ctx, 200).(*StackBox)
 	if len(box.slots) != 3 {
 		t.Fatalf("got %d slots, want 3 (head, gap, trailing): %#v", len(box.slots), box.slots)
@@ -211,7 +211,7 @@ func TestListItemTrailingGap(t *testing.T) {
 	if !ok {
 		t.Fatalf("slot 1 = %T, want *EmptyBox", box.boxAt(1))
 	}
-	wantGap := int(ctx.ScaleMargins(trailing.Margins(ctx)).Top)
+	wantGap := int(ctx.ScaledMargins(trailing).Top)
 	if wantGap == 0 {
 		t.Fatal("test is meaningless if the nested list's own top margin is 0")
 	}
@@ -338,6 +338,7 @@ func TestParseListItemNoLeadingParagraph(t *testing.T) {
 // line) no longer panics, and that each item's own leading text picks up
 // real paragraph margins instead of a tight item's zero margins.
 func TestParseLooseList(t *testing.T) {
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	doc := Parse([]byte("- one\n\n- two"))
 	stack := doc.(*StackBlock)
 	list, ok := unwrap(stack.blocks[0]).(*StackBlock)
@@ -359,7 +360,7 @@ func TestParseLooseList(t *testing.T) {
 		if got := textOf(t, head.parts); !stringsEqual(got, []string{wantWords[i]}) {
 			t.Errorf("item %d words = %v, want [%s]", i, got, wantWords[i])
 		}
-		if got := headBlock.Margins(RenderingContext{}); got != (Margins{Top: 10, Bottom: 10}) {
+		if got := headBlock.Margins(ctx); got != (Margins{Top: 10, Bottom: 10}) {
 			t.Errorf("item %d head margins = %+v, want {Top: 10, Bottom: 10} (paragraphStyle)", i, got)
 		}
 	}
@@ -370,6 +371,7 @@ func TestParseLooseList(t *testing.T) {
 // trailing-block path already used for a nested list - no special-casing
 // needed.
 func TestParseLooseListMultiParagraphItem(t *testing.T) {
+	ctx := RenderingContext{StyleSheet: NewDefaultStyleSheet()}
 	doc := Parse([]byte("- first paragraph\n\n  second paragraph\n"))
 	stack := doc.(*StackBlock)
 	list, ok := unwrap(stack.blocks[0]).(*StackBlock)
@@ -397,7 +399,7 @@ func TestParseLooseListMultiParagraphItem(t *testing.T) {
 	if got := textOf(t, second.parts); !stringsEqual(got, []string{"second", "paragraph"}) {
 		t.Errorf("second paragraph words = %v, want [second paragraph]", got)
 	}
-	if got := itemStack.blocks[1].Margins(RenderingContext{}); got != (Margins{Top: 10, Bottom: 10}) {
+	if got := itemStack.blocks[1].Margins(ctx); got != (Margins{Top: 10, Bottom: 10}) {
 		t.Errorf("second paragraph margins = %+v, want {Top: 10, Bottom: 10}", got)
 	}
 }
@@ -472,9 +474,6 @@ func TestParseThematicBreak(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	if wrapper.margins != (Margins{Top: 20, Bottom: 20}) {
-		t.Errorf("margins = %+v, want {Top: 20, Bottom: 20}", wrapper.margins)
-	}
 	rule, ok := wrapper.Block.(*ThematicBreakBlock)
 	if !ok {
 		t.Fatalf("wrapper.Block = %T, want *ThematicBreakBlock", wrapper.Block)
@@ -482,6 +481,9 @@ func TestParseThematicBreak(t *testing.T) {
 
 	styleSheet := NewDefaultStyleSheet()
 	ctx := RenderingContext{Scale: 1, StyleSheet: styleSheet}
+	if got := wrapper.Margins(ctx); got != (Margins{Top: 20, Bottom: 20}) {
+		t.Errorf("Margins(ctx) = %+v, want {Top: 20, Bottom: 20}", got)
+	}
 	box := rule.GetBox(ctx, 100)
 	ruleBox, ok := box.(*RuleBox)
 	if !ok {

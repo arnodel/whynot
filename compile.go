@@ -117,7 +117,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			items = c.AppendInlineNode(items, child, inlineStyle{size: c.paragraphStyle.Size, color: color.White, astNode: astNode})
 			child = child.NextSibling()
 		}
-		return &MarginBlock{Block: &TextBlock{parts: items}, margins: c.paragraphStyle.Margins, node: astNode}
+		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
 	case gmast.KindHeading:
 		level := node.(*gmast.Heading).Level
 		partStyle := c.headingStyles[level-1]
@@ -128,7 +128,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			items = c.AppendInlineNode(items, child, inlineStyle{baseLevel: 2, size: partStyle.Size, color: color.White, astNode: astNode})
 			child = child.NextSibling()
 		}
-		return &MarginBlock{Block: &TextBlock{parts: items}, margins: partStyle.Margins, node: astNode}
+		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
 	case gmast.KindList:
 		list := node.(*gmast.List)
 		astNode := parent.AddChild(TagList)
@@ -140,7 +140,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			child = child.NextSibling()
 			index++
 		}
-		return &MarginBlock{Block: &StackBlock{blocks: items}, margins: c.listStyle.Margins, node: astNode}
+		return &MarginBlock{Block: &StackBlock{blocks: items}, node: astNode}
 	case gmast.KindCodeBlock:
 		astNode := parent.AddChild(TagCodeBlock)
 		cb := node.(*gmast.CodeBlock)
@@ -161,13 +161,12 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 				node:  astNode,
 			}
 		}
-		return &MarginBlock{Block: &CodeBlock{lines: items}, margins: c.codeBlockStyle.Margins, node: astNode}
+		return &MarginBlock{Block: &CodeBlock{lines: items}, node: astNode}
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(TagThematicBreak)
 		return &MarginBlock{
-			Block:   &ThematicBreakBlock{color: c.thematicBreakColor, node: astNode},
-			margins: c.thematicBreakMargins,
-			node:    astNode,
+			Block: &ThematicBreakBlock{color: c.thematicBreakColor, node: astNode},
+			node:  astNode,
 		}
 	case gmast.KindBlockquote:
 		astNode := parent.AddChild(TagBlockquote)
@@ -178,9 +177,8 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			child = child.NextSibling()
 		}
 		return &MarginBlock{
-			Block:   &BlockquoteBlock{inner: wrapBlocks(items), barColor: c.blockquoteBarColor, node: astNode},
-			margins: c.blockquoteMargins,
-			node:    astNode,
+			Block: &BlockquoteBlock{inner: wrapBlocks(items), barColor: c.blockquoteBarColor, node: astNode},
+			node:  astNode,
 		}
 	case extast.KindTable:
 		return c.CompileTable(node, parent)
@@ -247,7 +245,12 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 		// reports its first child's margin, so it collapses outward
 		// through the item's own MarginBlock and the list's own
 		// StackBlock, like any sibling gap.
-		head = &MarginBlock{Block: head, margins: c.paragraphStyle.Margins, node: itemNode}
+		//
+		// A dedicated TagParagraph child, not itemNode itself: the head's
+		// own margins should resolve as a paragraph's (matching what this
+		// looked like before StyleSheet), distinct from itemNode's tag,
+		// which the marker/parts' own inline styling still uses.
+		head = &MarginBlock{Block: head, node: itemNode.AddChild(TagParagraph)}
 	}
 	blocks := []Block{head}
 
@@ -265,7 +268,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	// only one, which would lose these margins for the common
 	// no-trailing-content tight case (ListItemHeadBlock's own Margins() is
 	// zero then).
-	return &MarginBlock{Block: &StackBlock{blocks: blocks}, margins: c.listItemStyle.Margins, node: itemNode}
+	return &MarginBlock{Block: &StackBlock{blocks: blocks}, node: itemNode}
 }
 
 // CompileTable compiles a Table node. The header is mandatory (GFM
@@ -284,9 +287,8 @@ func (c *MarkdownCompiler) CompileTable(node gmast.Node, parent *ASTNode) Block 
 	}
 
 	return &MarginBlock{
-		Block:   &TableBlock{header: header, rows: rows, frameColor: c.tableFrameColor, node: astNode},
-		margins: c.tableMargins,
-		node:    astNode,
+		Block: &TableBlock{header: header, rows: rows, frameColor: c.tableFrameColor, node: astNode},
+		node:  astNode,
 	}
 }
 
