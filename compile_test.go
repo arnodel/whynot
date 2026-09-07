@@ -211,7 +211,7 @@ func TestListItemTrailingGap(t *testing.T) {
 	if !ok {
 		t.Fatalf("slot 1 = %T, want *EmptyBox", box.boxAt(1))
 	}
-	wantGap := int(ctx.ScaleMargins(trailing.Margins()).Top)
+	wantGap := int(ctx.ScaleMargins(trailing.Margins(ctx)).Top)
 	if wantGap == 0 {
 		t.Fatal("test is meaningless if the nested list's own top margin is 0")
 	}
@@ -359,7 +359,7 @@ func TestParseLooseList(t *testing.T) {
 		if got := textOf(t, head.parts); !stringsEqual(got, []string{wantWords[i]}) {
 			t.Errorf("item %d words = %v, want [%s]", i, got, wantWords[i])
 		}
-		if got := headBlock.Margins(); got != (Margins{Top: 10, Bottom: 10}) {
+		if got := headBlock.Margins(RenderingContext{}); got != (Margins{Top: 10, Bottom: 10}) {
 			t.Errorf("item %d head margins = %+v, want {Top: 10, Bottom: 10} (paragraphStyle)", i, got)
 		}
 	}
@@ -397,7 +397,7 @@ func TestParseLooseListMultiParagraphItem(t *testing.T) {
 	if got := textOf(t, second.parts); !stringsEqual(got, []string{"second", "paragraph"}) {
 		t.Errorf("second paragraph words = %v, want [second paragraph]", got)
 	}
-	if got := itemStack.blocks[1].Margins(); got != (Margins{Top: 10, Bottom: 10}) {
+	if got := itemStack.blocks[1].Margins(RenderingContext{}); got != (Margins{Top: 10, Bottom: 10}) {
 		t.Errorf("second paragraph margins = %+v, want {Top: 10, Bottom: 10}", got)
 	}
 }

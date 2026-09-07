@@ -16,7 +16,7 @@ func (b *fixedHeightBlock) GetBox(ctx RenderingContext, width int) Box {
 	return NewEmptyBox(width, b.height)
 }
 
-func (b *fixedHeightBlock) Margins() Margins {
+func (b *fixedHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
@@ -31,7 +31,7 @@ func (b *scaledHeightBlock) GetBox(ctx RenderingContext, width int) Box {
 	return NewEmptyBox(width, int(float64(width)*b.scale))
 }
 
-func (b *scaledHeightBlock) Margins() Margins {
+func (b *scaledHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 

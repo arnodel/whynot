@@ -11,7 +11,7 @@ type Margins struct {
 
 type Block interface {
 	GetBox(ctx RenderingContext, width int) Box
-	Margins() Margins
+	Margins(ctx RenderingContext) Margins
 }
 
 // WithoutMargins satisfies Block's Margins() with a zero value, for content
@@ -19,7 +19,7 @@ type Block interface {
 // content).
 type WithoutMargins struct{}
 
-func (WithoutMargins) Margins() Margins {
+func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
@@ -38,8 +38,8 @@ type MarginBlock struct {
 	node    *ASTNode
 }
 
-func (b *MarginBlock) Margins() Margins {
-	inner := b.Block.Margins()
+func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
+	inner := b.Block.Margins(ctx)
 	return Margins{
 		Top:    math.Max(inner.Top, b.margins.Top),
 		Bottom: math.Max(inner.Bottom, b.margins.Bottom),
@@ -163,12 +163,12 @@ var _ Block = (*StackBlock)(nil)
 // edges. Left/Right are zero: as a stack of blocks arranged vertically,
 // StackBlock has no notion of a horizontal edge to derive from a child -
 // only whatever wraps it (see MarginBlock) has a real Left/Right.
-func (b *StackBlock) Margins() Margins {
+func (b *StackBlock) Margins(ctx RenderingContext) Margins {
 	if len(b.blocks) == 0 {
 		return Margins{}
 	}
 	return Margins{
-		Top:    b.blocks[0].Margins().Top,
-		Bottom: b.blocks[len(b.blocks)-1].Margins().Bottom,
+		Top:    b.blocks[0].Margins(ctx).Top,
+		Bottom: b.blocks[len(b.blocks)-1].Margins(ctx).Bottom,
 	}
 }

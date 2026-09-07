@@ -339,7 +339,7 @@ func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
 	slots := make([]stackSlot, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
-		margins := ctx.ScaleMargins(block.Margins())
+		margins := ctx.ScaleMargins(block.Margins(ctx))
 		if i > 0 {
 			gap := maxInt(bottomMargin, int(margins.Top))
 			if gap > 0 {
