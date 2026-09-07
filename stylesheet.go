@@ -86,34 +86,39 @@ type StyleSheet interface {
 	TableGeometry(node *ASTNode) TableGeometry
 }
 
-// DefaultStyleSheet is whynot's built-in StyleSheet - the values
-// MarkdownCompiler currently hardcodes in Parse, relocated here as the
-// starting point for the migration. A caller who wants to change one
-// thing can construct one with NewDefaultStyleSheet and mutate a field
-// (ParagraphMargins, LinkColor, ...), or embed it in a custom StyleSheet
-// and override individual methods for full control.
+// DefaultStyleSheet is whynot's built-in StyleSheet. A caller who wants to
+// change one thing can construct one with NewDefaultStyleSheet and mutate
+// a field (ParagraphMargins, LinkColor, ParagraphTextStyle.Size, ...), or
+// embed it in a custom StyleSheet and override individual methods for
+// full control. The TextStyleContribution fields (as opposed to a plain
+// TextStyle) mean a tag's contribution can be extended, not just
+// adjusted - e.g. style.EmphasisTextStyle.Weight = font.WeightBold;
+// style.EmphasisTextStyle.Set |= FieldWeight makes emphasis bold as well
+// as italic, which a plain TextStyle field couldn't express: the fields
+// it doesn't set wouldn't be distinguishable from fields deliberately set
+// to their zero value.
 type DefaultStyleSheet struct {
 	ParagraphMargins   Margins
-	ParagraphTextStyle TextStyle
+	ParagraphTextStyle TextStyleContribution
 
 	HeadingMargins    [6]Margins
-	HeadingTextStyles [6]TextStyle
+	HeadingTextStyles [6]TextStyleContribution
 
 	ListMargins Margins
 
 	ListItemMargins   Margins
-	ListItemTextStyle TextStyle
+	ListItemTextStyle TextStyleContribution
 
 	CodeBlockMargins   Margins
-	CodeBlockTextStyle TextStyle
+	CodeBlockTextStyle TextStyleContribution
 	CodeColor          color.Color
 
 	// CodeSpanTextStyle, EmphasisTextStyle, StrongTextStyle: inline spans
 	// have no margins of their own to bundle alongside, unlike the
 	// block-level tags above.
-	CodeSpanTextStyle TextStyle
-	EmphasisTextStyle TextStyle
-	StrongTextStyle   TextStyle
+	CodeSpanTextStyle TextStyleContribution
+	EmphasisTextStyle TextStyleContribution
+	StrongTextStyle   TextStyleContribution
 
 	ThematicBreakMargins Margins
 	ThematicBreakColor   color.Color
@@ -123,14 +128,16 @@ type DefaultStyleSheet struct {
 	BlockquoteMargins  Margins
 	BlockquoteBarColor color.Color
 
-	TableCellTextStyle TextStyle
+	TableCellTextStyle TextStyleContribution
 	TableMargins       Margins
 	TableFrameColor    color.Color
 
-	// TextColor and BaseTextStyle are the root-level fallbacks: TextColor
-	// for tags with no color of their own, BaseTextStyle for any
-	// TextStyle field no ancestor ever claims (guarantees e.g. Size is
-	// never silently left at 0 - see RenderingContext.ResolvedTextStyle).
+	// TextColor is the root-level fallback color for tags with no color
+	// of their own. BaseTextStyle is TextStyle's equivalent - unlike the
+	// per-tag TextStyleContribution fields above, it's a plain TextStyle,
+	// not a TextStyleContribution: being the ultimate fallback means it
+	// always claims every field by definition (see TextStyle below), so
+	// there's no meaningful subset for a Set mask to express.
 	TextColor     color.Color
 	BaseTextStyle TextStyle
 
@@ -152,7 +159,7 @@ var _ StyleSheet = (*DefaultStyleSheet)(nil)
 func NewDefaultStyleSheet() *DefaultStyleSheet {
 	return &DefaultStyleSheet{
 		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
-		ParagraphTextStyle: TextStyle{Size: 16},
+		ParagraphTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
 
 		HeadingMargins: [6]Margins{
 			{Top: 30, Bottom: 10},
@@ -166,27 +173,27 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		// level: no bold small-caps font ships in
 		// golang.org/x/image/font/gofont, and headings are bold, so
 		// small caps isn't available as a default.
-		HeadingTextStyles: [6]TextStyle{
-			{Size: 40, Weight: font.WeightBold},
-			{Size: 36, Weight: font.WeightBold},
-			{Size: 32, Weight: font.WeightBold},
-			{Size: 28, Weight: font.WeightBold},
-			{Size: 24, Weight: font.WeightBold},
-			{Size: 20, Weight: font.WeightBold},
+		HeadingTextStyles: [6]TextStyleContribution{
+			{TextStyle{Size: 40, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
+			{TextStyle{Size: 36, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
+			{TextStyle{Size: 32, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
+			{TextStyle{Size: 28, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
+			{TextStyle{Size: 24, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
+			{TextStyle{Size: 20, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
 		},
 
 		ListMargins: Margins{Top: 10, Bottom: 10},
 
 		ListItemMargins:   Margins{Top: 5, Bottom: 5, Left: 40},
-		ListItemTextStyle: TextStyle{Size: 16},
+		ListItemTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
 
 		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
-		CodeBlockTextStyle: TextStyle{Size: 16, Family: Monospace},
+		CodeBlockTextStyle: TextStyleContribution{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
 		CodeColor:          color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 
-		CodeSpanTextStyle: TextStyle{Family: Monospace},
-		EmphasisTextStyle: TextStyle{Style: font.StyleItalic},
-		StrongTextStyle:   TextStyle{Weight: font.WeightBold},
+		CodeSpanTextStyle: TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily},
+		EmphasisTextStyle: TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle},
+		StrongTextStyle:   TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight},
 
 		ThematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
@@ -196,7 +203,7 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
-		TableCellTextStyle: TextStyle{Size: 16},
+		TableCellTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
 		TableMargins:       Margins{Top: 10, Bottom: 10},
 		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
@@ -254,21 +261,21 @@ func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyleContribution {
 	}
 	switch node.Tag {
 	case TagParagraph:
-		return TextStyleContribution{s.ParagraphTextStyle, FieldSize}
+		return s.ParagraphTextStyle
 	case TagHeading1, TagHeading2, TagHeading3, TagHeading4, TagHeading5, TagHeading6:
-		return TextStyleContribution{s.HeadingTextStyles[node.Tag-TagHeading1], FieldSize | FieldWeight | FieldFamily}
+		return s.HeadingTextStyles[node.Tag-TagHeading1]
 	case TagListItem:
-		return TextStyleContribution{s.ListItemTextStyle, FieldSize}
+		return s.ListItemTextStyle
 	case TagCodeBlock:
-		return TextStyleContribution{s.CodeBlockTextStyle, FieldSize | FieldFamily}
+		return s.CodeBlockTextStyle
 	case TagTableCell:
-		return TextStyleContribution{s.TableCellTextStyle, FieldSize}
+		return s.TableCellTextStyle
 	case TagCodeSpan:
-		return TextStyleContribution{s.CodeSpanTextStyle, FieldFamily}
+		return s.CodeSpanTextStyle
 	case TagEmphasis:
-		return TextStyleContribution{s.EmphasisTextStyle, FieldStyle}
+		return s.EmphasisTextStyle
 	case TagStrong:
-		return TextStyleContribution{s.StrongTextStyle, FieldWeight}
+		return s.StrongTextStyle
 	default:
 		return TextStyleContribution{}
 	}
