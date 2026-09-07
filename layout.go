@@ -60,11 +60,13 @@ func (c RenderingContext) ScaledTableGeometry(node *ASTNode) TableGeometry {
 // ResolvedTextStyle merges node's ancestry's TextStyle contributions into
 // one TextStyle - the nearest ancestor (node itself first) to set a given
 // field wins, so e.g. Strong nested inside Emphasis picks up both a bold
-// weight (from Strong) and an italic style (from Emphasis).
+// weight (from Strong) and an italic style (from Emphasis). Walks one step
+// past the root (node == nil) so StyleSheet's baseline contribution can
+// fill in any field nothing along the way ever claimed.
 func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
 	var result TextStyle
 	var resolved TextStyleField
-	for n := node; n != nil && resolved != allTextStyleFields; n = n.Parent {
+	for n := node; ; n = n.Parent {
 		contrib := c.StyleSheet.TextStyle(n)
 		if missing := contrib.Set &^ resolved; missing != 0 {
 			if missing&FieldSize != 0 {
@@ -81,8 +83,10 @@ func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
 			}
 			resolved |= missing
 		}
+		if resolved == allTextStyleFields || n == nil {
+			return result
+		}
 	}
-	return result
 }
 
 // ResolvedColor walks node's ancestry (node itself first) for the nearest

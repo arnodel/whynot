@@ -93,22 +93,27 @@ type StyleSheet interface {
 // (ParagraphMargins, LinkColor, ...), or embed it in a custom StyleSheet
 // and override individual methods for full control.
 type DefaultStyleSheet struct {
-	ParagraphMargins Margins
-	ParagraphSize    float64
+	ParagraphMargins   Margins
+	ParagraphTextStyle TextStyle
 
-	HeadingMargins  [6]Margins
-	HeadingSizes    [6]float64
-	HeadingWeights  [6]font.Weight
-	HeadingFamilies [6]FontFamily
+	HeadingMargins    [6]Margins
+	HeadingTextStyles [6]TextStyle
 
 	ListMargins Margins
 
-	ListItemMargins Margins
-	ListItemSize    float64
+	ListItemMargins   Margins
+	ListItemTextStyle TextStyle
 
-	CodeBlockMargins Margins
-	CodeBlockSize    float64
-	CodeColor        color.Color
+	CodeBlockMargins   Margins
+	CodeBlockTextStyle TextStyle
+	CodeColor          color.Color
+
+	// CodeSpanTextStyle, EmphasisTextStyle, StrongTextStyle: inline spans
+	// have no margins of their own to bundle alongside, unlike the
+	// block-level tags above.
+	CodeSpanTextStyle TextStyle
+	EmphasisTextStyle TextStyle
+	StrongTextStyle   TextStyle
 
 	ThematicBreakMargins Margins
 	ThematicBreakColor   color.Color
@@ -118,14 +123,16 @@ type DefaultStyleSheet struct {
 	BlockquoteMargins  Margins
 	BlockquoteBarColor color.Color
 
-	TableCellSize   float64
-	TableMargins    Margins
-	TableFrameColor color.Color
+	TableCellTextStyle TextStyle
+	TableMargins       Margins
+	TableFrameColor    color.Color
 
-	// TextColor is the default text color for tags with no color of
-	// their own (paragraphs, headings, list items, table cells,
-	// emphasis, strong, strikethrough).
-	TextColor color.Color
+	// TextColor and BaseTextStyle are the root-level fallbacks: TextColor
+	// for tags with no color of their own, BaseTextStyle for any
+	// TextStyle field no ancestor ever claims (guarantees e.g. Size is
+	// never silently left at 0 - see RenderingContext.ResolvedTextStyle).
+	TextColor     color.Color
+	BaseTextStyle TextStyle
 
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
@@ -144,8 +151,8 @@ var _ StyleSheet = (*DefaultStyleSheet)(nil)
 // exact values MarkdownCompiler.Parse hardcodes today.
 func NewDefaultStyleSheet() *DefaultStyleSheet {
 	return &DefaultStyleSheet{
-		ParagraphMargins: Margins{Top: 10, Bottom: 10},
-		ParagraphSize:    16,
+		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
+		ParagraphTextStyle: TextStyle{Size: 16},
 
 		HeadingMargins: [6]Margins{
 			{Top: 30, Bottom: 10},
@@ -155,21 +162,31 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 			{Top: 14, Bottom: 10},
 			{Top: 10, Bottom: 10},
 		},
-		HeadingSizes:   [6]float64{40, 36, 32, 28, 24, 20},
-		HeadingWeights: [6]font.Weight{font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold, font.WeightBold},
-		// HeadingFamilies is left at its zero value (Proportional for
-		// every level): no bold small-caps font ships in
+		// Family is left at its zero value (Proportional) for every
+		// level: no bold small-caps font ships in
 		// golang.org/x/image/font/gofont, and headings are bold, so
 		// small caps isn't available as a default.
+		HeadingTextStyles: [6]TextStyle{
+			{Size: 40, Weight: font.WeightBold},
+			{Size: 36, Weight: font.WeightBold},
+			{Size: 32, Weight: font.WeightBold},
+			{Size: 28, Weight: font.WeightBold},
+			{Size: 24, Weight: font.WeightBold},
+			{Size: 20, Weight: font.WeightBold},
+		},
 
 		ListMargins: Margins{Top: 10, Bottom: 10},
 
-		ListItemMargins: Margins{Top: 5, Bottom: 5, Left: 40},
-		ListItemSize:    16,
+		ListItemMargins:   Margins{Top: 5, Bottom: 5, Left: 40},
+		ListItemTextStyle: TextStyle{Size: 16},
 
-		CodeBlockMargins: Margins{Top: 20, Bottom: 20, Left: 20},
-		CodeBlockSize:    16,
-		CodeColor:        color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
+		CodeBlockTextStyle: TextStyle{Size: 16, Family: Monospace},
+		CodeColor:          color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+
+		CodeSpanTextStyle: TextStyle{Family: Monospace},
+		EmphasisTextStyle: TextStyle{Style: font.StyleItalic},
+		StrongTextStyle:   TextStyle{Weight: font.WeightBold},
 
 		ThematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
@@ -179,11 +196,12 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
-		TableCellSize:   16,
-		TableMargins:    Margins{Top: 10, Bottom: 10},
-		TableFrameColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
+		TableCellTextStyle: TextStyle{Size: 16},
+		TableMargins:       Margins{Top: 10, Bottom: 10},
+		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
-		TextColor: color.White,
+		TextColor:     color.White,
+		BaseTextStyle: TextStyle{Size: 16},
 
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
@@ -226,32 +244,31 @@ func (s *DefaultStyleSheet) Margins(node *ASTNode) Margins {
 
 // TextStyle returns each tag's own contribution - only the fields Set
 // flags are meaningful; ResolvedTextStyle merges these across a node's
-// ancestry, so e.g. Strong nested inside Emphasis picks up both.
+// ancestry, so e.g. Strong nested inside Emphasis picks up both. At the
+// root (node == nil) it returns BaseTextStyle claiming every field, the
+// fallback ResolvedTextStyle reaches if no ancestor ever set some field -
+// guarantees e.g. Size is never silently left at 0.
 func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyleContribution {
 	if node == nil {
-		return TextStyleContribution{}
+		return TextStyleContribution{s.BaseTextStyle, allTextStyleFields}
 	}
 	switch node.Tag {
 	case TagParagraph:
-		return TextStyleContribution{TextStyle{Size: s.ParagraphSize}, FieldSize}
+		return TextStyleContribution{s.ParagraphTextStyle, FieldSize}
 	case TagHeading1, TagHeading2, TagHeading3, TagHeading4, TagHeading5, TagHeading6:
-		i := node.Tag - TagHeading1
-		return TextStyleContribution{
-			TextStyle{Size: s.HeadingSizes[i], Weight: s.HeadingWeights[i], Family: s.HeadingFamilies[i]},
-			FieldSize | FieldWeight | FieldFamily,
-		}
+		return TextStyleContribution{s.HeadingTextStyles[node.Tag-TagHeading1], FieldSize | FieldWeight | FieldFamily}
 	case TagListItem:
-		return TextStyleContribution{TextStyle{Size: s.ListItemSize}, FieldSize}
+		return TextStyleContribution{s.ListItemTextStyle, FieldSize}
 	case TagCodeBlock:
-		return TextStyleContribution{TextStyle{Size: s.CodeBlockSize, Family: Monospace}, FieldSize | FieldFamily}
+		return TextStyleContribution{s.CodeBlockTextStyle, FieldSize | FieldFamily}
 	case TagTableCell:
-		return TextStyleContribution{TextStyle{Size: s.TableCellSize}, FieldSize}
+		return TextStyleContribution{s.TableCellTextStyle, FieldSize}
 	case TagCodeSpan:
-		return TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily}
+		return TextStyleContribution{s.CodeSpanTextStyle, FieldFamily}
 	case TagEmphasis:
-		return TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle}
+		return TextStyleContribution{s.EmphasisTextStyle, FieldStyle}
 	case TagStrong:
-		return TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight}
+		return TextStyleContribution{s.StrongTextStyle, FieldWeight}
 	default:
 		return TextStyleContribution{}
 	}

@@ -77,10 +77,14 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 	}
 }
 
+// TestDefaultStyleSheetTextStyleNilNode checks that the root claims every
+// field via BaseTextStyle - the fallback ResolvedTextStyle reaches if no
+// real ancestor ever set some field.
 func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
 	s := NewDefaultStyleSheet()
-	if got := s.TextStyle(nil); got != (TextStyleContribution{}) {
-		t.Errorf("TextStyle(nil) = %+v, want zero value", got)
+	want := TextStyleContribution{TextStyle{Size: 16}, allTextStyleFields}
+	if got := s.TextStyle(nil); got != want {
+		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
 	}
 }
 
