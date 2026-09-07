@@ -95,7 +95,7 @@ func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &RuleBox{
 		width:     width,
 		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
-		color:     b.color,
+		color:     ctx.StyleSheet.Color(b.node),
 	}
 }
 
@@ -106,7 +106,7 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 		width:    width,
 		indent:   indent,
 		barWidth: int(geom.BarWidth),
-		barColor: b.barColor,
+		barColor: ctx.StyleSheet.Color(b.node),
 		inner:    b.inner.GetBox(ctx, width-indent),
 	}
 }
@@ -328,7 +328,7 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 		frameThickness:      frameThickness,
 		columnGap:           columnGap,
 		columnRuleThickness: columnRuleThickness,
-		frameColor:          b.frameColor,
+		frameColor:          ctx.StyleSheet.Color(b.node),
 		cells:               cells,
 	}
 }

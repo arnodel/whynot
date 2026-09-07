@@ -165,7 +165,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(TagThematicBreak)
 		return &MarginBlock{
-			Block: &ThematicBreakBlock{color: c.thematicBreakColor, node: astNode},
+			Block: &ThematicBreakBlock{node: astNode},
 			node:  astNode,
 		}
 	case gmast.KindBlockquote:
@@ -177,7 +177,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			child = child.NextSibling()
 		}
 		return &MarginBlock{
-			Block: &BlockquoteBlock{inner: wrapBlocks(items), barColor: c.blockquoteBarColor, node: astNode},
+			Block: &BlockquoteBlock{inner: wrapBlocks(items), node: astNode},
 			node:  astNode,
 		}
 	case extast.KindTable:
@@ -287,7 +287,7 @@ func (c *MarkdownCompiler) CompileTable(node gmast.Node, parent *ASTNode) Block 
 	}
 
 	return &MarginBlock{
-		Block: &TableBlock{header: header, rows: rows, frameColor: c.tableFrameColor, node: astNode},
+		Block: &TableBlock{header: header, rows: rows, node: astNode},
 		node:  astNode,
 	}
 }

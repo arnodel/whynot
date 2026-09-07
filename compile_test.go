@@ -553,8 +553,7 @@ func TestParseNestedBlockquote(t *testing.T) {
 
 func TestBlockquoteBoxIndent(t *testing.T) {
 	bq := &BlockquoteBlock{
-		inner:    &fixedHeightBlock{height: 10},
-		barColor: color.White,
+		inner: &fixedHeightBlock{height: 10},
 	}
 	styleSheet := NewDefaultStyleSheet()
 	ctx := RenderingContext{Scale: 1, StyleSheet: styleSheet}

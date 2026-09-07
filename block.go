@@ -82,8 +82,7 @@ var _ Inline = (*InlineImage)(nil)
 // spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
 	WithoutMargins
-	color color.Color
-	node  *ASTNode
+	node *ASTNode
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
@@ -98,9 +97,8 @@ var _ Block = (*ThematicBreakBlock)(nil)
 // at compile time rather than rebuilt on every GetBox call.
 type BlockquoteBlock struct {
 	WithoutMargins
-	inner    Block
-	barColor color.Color
-	node     *ASTNode
+	inner Block
+	node  *ASTNode
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
@@ -151,10 +149,9 @@ type tableCell struct {
 // tableCell per column.
 type TableBlock struct {
 	WithoutMargins
-	header     []tableCell
-	rows       [][]tableCell
-	frameColor color.Color
-	node       *ASTNode
+	header []tableCell
+	rows   [][]tableCell
+	node   *ASTNode
 }
 
 var _ Block = (*TableBlock)(nil)
