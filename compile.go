@@ -22,60 +22,26 @@ func Parse(source []byte) Block {
 		source: source,
 		paragraphStyle: partStyle{
 			TextStyle: TextStyle{Size: 16},
-			Margins:   Margins{Top: 10, Bottom: 10},
 		},
 		listItemStyle: partStyle{
 			TextStyle: TextStyle{Size: 16},
-			Margins:   Margins{Top: 5, Bottom: 5, Left: 40},
-		},
-		listStyle: partStyle{
-			Margins: Margins{Top: 10, Bottom: 10},
 		},
 		headingStyles: [6]partStyle{
-			{
-				TextStyle:   TextStyle{Size: 40, Weight: font.WeightBold, Family: SmallCaps},
-				Margins:     Margins{Top: 30, Bottom: 10},
-				LevelOffset: 2,
-			},
-			{
-				TextStyle:   TextStyle{Size: 36, Weight: font.WeightBold},
-				Margins:     Margins{Top: 26, Bottom: 10},
-				LevelOffset: 2,
-			},
-			{
-				TextStyle:   TextStyle{Size: 32, Weight: font.WeightBold},
-				Margins:     Margins{Top: 22, Bottom: 10},
-				LevelOffset: 2,
-			},
-			{
-				TextStyle:   TextStyle{Size: 28, Weight: font.WeightBold},
-				Margins:     Margins{Top: 18, Bottom: 10},
-				LevelOffset: 2,
-			},
-			{
-				TextStyle:   TextStyle{Size: 24, Weight: font.WeightBold},
-				Margins:     Margins{Top: 14, Bottom: 10},
-				LevelOffset: 2,
-			},
-			{
-				TextStyle:   TextStyle{Size: 20, Weight: font.WeightBold},
-				Margins:     Margins{Top: 10, Bottom: 10},
-				LevelOffset: 2,
-			},
+			{TextStyle: TextStyle{Size: 40, Weight: font.WeightBold, Family: SmallCaps}},
+			{TextStyle: TextStyle{Size: 36, Weight: font.WeightBold}},
+			{TextStyle: TextStyle{Size: 32, Weight: font.WeightBold}},
+			{TextStyle: TextStyle{Size: 28, Weight: font.WeightBold}},
+			{TextStyle: TextStyle{Size: 24, Weight: font.WeightBold}},
+			{TextStyle: TextStyle{Size: 20, Weight: font.WeightBold}},
 		},
 		codeBlockStyle: partStyle{
 			TextStyle: TextStyle{Size: 16, Family: Monospace},
-			Margins:   Margins{Top: 20, Bottom: 20, Left: 20},
 		},
-		codeColor:            color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
-		thematicBreakMargins: Margins{Top: 20, Bottom: 20},
-		thematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
-		linkColor:            color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
-		blockquoteMargins:    Margins{Top: 10, Bottom: 10},
-		blockquoteBarColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
-		tableCellStyle:       partStyle{TextStyle: TextStyle{Size: 16}},
-		tableMargins:         Margins{Top: 10, Bottom: 10},
-		tableFrameColor:      color.RGBA{0x80, 0x80, 0x80, 0xFF},
+		codeColor: color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		linkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
+		tableCellStyle: partStyle{
+			TextStyle: TextStyle{Size: 16},
+		},
 	}
 	return compiler.CompileDocument(node)
 }
