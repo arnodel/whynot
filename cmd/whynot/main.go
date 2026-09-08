@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	flag.Parse()
 	f := "test.md"
 	if flag.NArg() != 0 {
@@ -26,9 +27,14 @@ func main() {
 	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
+	var opts []whynot.ViewOption
+	if *light {
+		opts = append(opts, whynot.WithStyleSheet(whynot.NewLightStyleSheet()))
+	}
+
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	game := &game{
-		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale)),
+		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale), opts...),
 		renderer: ebitenrenderer.New(),
 	}
 	if err := ebiten.RunGame(game); err != nil {
