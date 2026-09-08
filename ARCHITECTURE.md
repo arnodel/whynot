@@ -30,10 +30,12 @@ flowchart TD
         A["[]byte source"] --> B["gmast.Node tree"]
     end
     subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, ast.go)"]
-        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)\n+ a parallel ASTNode tree (tag + parent only)"]
+        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
+        B --> G["ASTNode tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ASTNode into it)"]
     end
-    subgraph L2["Layer 2 — Layout tree (layout.go, box.go)"]
+    subgraph L2["Layer 2 — Layout tree (layout.go, box.go, stylesheet.go)"]
         C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
+        G -. "ctx.StyleSheet resolves\nMargins / TextStyle / Color / ..." .-> D
     end
     subgraph L3["Layer 3 — Canvas boundary (render.go, canvas.go)"]
         D -- "DrawBox(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
