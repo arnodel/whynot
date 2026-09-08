@@ -237,6 +237,23 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 	}
 }
 
+// NewLightStyleSheet returns whynot's built-in light theme - dark text on
+// a light background. Everything but color is identical to
+// NewDarkStyleSheet (margins, sizes, weights, dimensional constants), so
+// it's built from it rather than repeating them: ThematicBreakColor,
+// BlockquoteBarColor, and TableFrameColor are also left as
+// NewDarkStyleSheet's mid-grey, which reads fine against either a light
+// or dark background, unlike TextColor/BackgroundColor/LinkColor/
+// CodeColor, which need real light-appropriate values.
+func NewLightStyleSheet() *DefaultStyleSheet {
+	s := NewDarkStyleSheet()
+	s.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
+	s.BackgroundColor = color.White
+	s.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
+	s.CodeColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
+	return s
+}
+
 func (s *DefaultStyleSheet) Margins(node *ASTNode) Margins {
 	if node == nil {
 		return Margins{}

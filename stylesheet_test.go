@@ -195,3 +195,47 @@ func TestDefaultStyleSheetDimensions(t *testing.T) {
 		t.Errorf("TableGeometry() = %+v, want %+v", got, wantTable)
 	}
 }
+
+// TestNewLightStyleSheetColors checks that the light theme actually
+// inverts the parts that need to be readable against a light background
+// (background itself, default text, links, code) rather than just being
+// NewDarkStyleSheet under a different name.
+func TestNewLightStyleSheetColors(t *testing.T) {
+	dark := NewDarkStyleSheet()
+	light := NewLightStyleSheet()
+
+	if light.BackgroundColor == dark.BackgroundColor {
+		t.Errorf("light BackgroundColor = dark's (%v), want a light background", light.BackgroundColor)
+	}
+	if light.TextColor == dark.TextColor {
+		t.Errorf("light TextColor = dark's (%v), want a dark foreground", light.TextColor)
+	}
+	if light.LinkColor == dark.LinkColor {
+		t.Errorf("light LinkColor = dark's (%v), want a color readable on a light background", light.LinkColor)
+	}
+	if light.CodeColor == dark.CodeColor {
+		t.Errorf("light CodeColor = dark's (%v), want a color readable on a light background", light.CodeColor)
+	}
+}
+
+// TestNewLightStyleSheetSharesNonColorValues checks that margins, sizes,
+// weights, and dimensional constants aren't duplicated/drifted between
+// the two themes - only color should differ.
+func TestNewLightStyleSheetSharesNonColorValues(t *testing.T) {
+	dark := NewDarkStyleSheet()
+	light := NewLightStyleSheet()
+
+	if light.ParagraphMargins != dark.ParagraphMargins {
+		t.Errorf("ParagraphMargins = %+v, want dark's %+v", light.ParagraphMargins, dark.ParagraphMargins)
+	}
+	if light.HeadingTextStyles != dark.HeadingTextStyles {
+		t.Errorf("HeadingTextStyles = %+v, want dark's %+v", light.HeadingTextStyles, dark.HeadingTextStyles)
+	}
+	struckNode := &ASTNode{Tag: TagStrikethrough}
+	if light.StrikeThickness(struckNode) != dark.StrikeThickness(struckNode) {
+		t.Errorf("StrikeThickness value differs from dark's")
+	}
+	if light.TableGeometry(nil) != dark.TableGeometry(nil) {
+		t.Errorf("TableGeometry = %+v, want dark's %+v", light.TableGeometry(nil), dark.TableGeometry(nil))
+	}
+}
