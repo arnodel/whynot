@@ -1,8 +1,12 @@
 package whynot
 
 import (
+	"image"
+	"image/color"
 	"os"
 	"testing"
+
+	"golang.org/x/image/font"
 )
 
 // fixedHeightBlock always lays out to a fixed height regardless of width,
@@ -38,7 +42,65 @@ func (b *scaledHeightBlock) Margins(ctx RenderingContext) Margins {
 func newTestView(blocks ...Block) *View {
 	return &View{
 		block: &StackBlock{blocks: blocks},
-		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72)},
+		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()},
+	}
+}
+
+// drawnRect records one Canvas.DrawRect call.
+type drawnRect struct {
+	x, y, w, h int
+	color      color.Color
+}
+
+// recordingCanvas is a minimal Canvas fake that only records DrawRect
+// calls - enough to check View.Draw's background fill without a real
+// rendering backend.
+type recordingCanvas struct {
+	bounds image.Rectangle
+	rects  []drawnRect
+}
+
+var _ Canvas = (*recordingCanvas)(nil)
+
+func (c *recordingCanvas) Bounds() image.Rectangle                                      { return c.bounds }
+func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {}
+func (c *recordingCanvas) DrawImage(src string, x, y int)                               {}
+func (c *recordingCanvas) DrawRect(x, y, w, h int, clr color.Color) {
+	c.rects = append(c.rects, drawnRect{x, y, w, h, clr})
+}
+
+// TestViewDrawFillsBackground checks that Draw fills dst's whole bounds
+// with the StyleSheet's Background color before drawing content - offset
+// bounds (not starting at 0,0) to make sure Min.X/Min.Y are actually used,
+// not assumed zero.
+func TestViewDrawFillsBackground(t *testing.T) {
+	v := newTestView(&fixedHeightBlock{height: 10})
+	v.Layout(100, 1)
+
+	dst := &recordingCanvas{bounds: image.Rect(5, 10, 105, 60)}
+	v.Draw(dst, 0, 0)
+
+	if len(dst.rects) == 0 {
+		t.Fatal("Draw issued no DrawRect calls, want at least a background fill")
+	}
+	got := dst.rects[0]
+	want := drawnRect{5, 10, 100, 50, v.ctx.StyleSheet.Background()}
+	if got != want {
+		t.Errorf("background fill = %+v, want %+v", got, want)
+	}
+}
+
+// TestViewDrawFillsBackgroundBeforeLayout checks that the background fill
+// doesn't depend on Layout having been called yet - Draw shouldn't panic
+// or skip the fill just because v.box is still nil.
+func TestViewDrawFillsBackgroundBeforeLayout(t *testing.T) {
+	v := newTestView(&fixedHeightBlock{height: 10})
+
+	dst := &recordingCanvas{bounds: image.Rect(0, 0, 100, 50)}
+	v.Draw(dst, 0, 0)
+
+	if len(dst.rects) != 1 {
+		t.Fatalf("Draw issued %d DrawRect calls, want exactly 1 (the background fill)", len(dst.rects))
 	}
 }
 

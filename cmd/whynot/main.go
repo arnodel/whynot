@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"image/color"
 	"log"
 	"os"
 
@@ -51,12 +50,8 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	// Short-term fix: explicit, rather than relying on ebiten's default per-frame clear (which is
-	// transparent, not black - a real window just happens to show that as black since it ignores
-	// alpha). Whynot itself never fills a background. Long term, background color should presumably
-	// be a themeable/configurable property (e.g. for a future light mode) rather than hardcoded here -
-	// where that lives (app vs library, and how it'd reach the document's own styling) isn't decided.
-	screen.Fill(color.Black)
+	// View.Draw fills the background itself, from the View's StyleSheet -
+	// no separate clear step needed here.
 	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
 }
 

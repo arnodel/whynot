@@ -75,6 +75,13 @@ type StyleSheet interface {
 	// node, never by walking ancestry - mirrors CSS's border-color,
 	// which doesn't inherit.
 	BorderColor(node *ASTNode) color.Color
+	// Background returns the color the document's viewport is filled
+	// with before anything else draws. Unlike every other method here,
+	// it takes no node: it isn't a property of any particular tag, just
+	// painted once, for the whole view, before any content-specific
+	// resolution happens - a node parameter would have nothing real to
+	// mean.
+	Background() color.Color
 
 	// StrikeThickness returns the thickness for a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
@@ -142,6 +149,9 @@ type DefaultStyleSheet struct {
 	// there's no meaningful subset for a Set mask to express.
 	TextColor     color.Color
 	BaseTextStyle TextStyle
+
+	// BackgroundColor is the whole viewport's fill color - see Background.
+	BackgroundColor color.Color
 
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
@@ -211,6 +221,8 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 
 		TextColor:     color.White,
 		BaseTextStyle: TextStyle{Size: 16},
+
+		BackgroundColor: color.Black,
 
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
@@ -317,6 +329,10 @@ func (s *DefaultStyleSheet) BorderColor(node *ASTNode) color.Color {
 	default:
 		return nil
 	}
+}
+
+func (s *DefaultStyleSheet) Background() color.Color {
+	return s.BackgroundColor
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged

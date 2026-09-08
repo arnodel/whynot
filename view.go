@@ -52,7 +52,13 @@ func (v *View) Scroll(dy float64) {
 // content outside dst's bounds, is never resolved or drawn - Draw's cost
 // tracks what's visible, not the document's total size or how far into it
 // the scroll position is.
+//
+// Draw fills dst's whole bounds with the StyleSheet's Background color
+// first - a caller doesn't need its own clear/fill step (or to know the
+// StyleSheet's background color itself) before calling Draw.
 func (v *View) Draw(dst Canvas, x, y int) {
+	bounds := dst.Bounds()
+	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.StyleSheet.Background())
 	if v.box == nil {
 		return
 	}
