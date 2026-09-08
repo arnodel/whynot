@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"math"
 	"os"
 	"testing"
 
@@ -111,6 +112,88 @@ func TestNewViewWithStyleSheet(t *testing.T) {
 	v := NewView([]byte("hello"), NewGoFontFaceSelector(72), WithStyleSheet(custom))
 	if v.ctx.StyleSheet != StyleSheet(custom) {
 		t.Errorf("StyleSheet = %v, want the instance passed via WithStyleSheet", v.ctx.StyleSheet)
+	}
+}
+
+// TestViewSetStyleSheetRebuildsImmediately checks that a StyleSheet swap
+// is visible right away, without waiting for another Layout call -
+// GetBox/GetInlineBox bake in resolved style values (colors, margins
+// collapsed to gaps, font sizes, ...) when the layout tree is built, so
+// without an explicit rebuild inside SetStyleSheet nothing would change
+// until something else happened to trigger a resize.
+func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
+	block := Parse([]byte("hello world"))
+	small := NewDarkStyleSheet()
+	small.ParagraphTextStyle.Size = 10
+	big := NewDarkStyleSheet()
+	big.ParagraphTextStyle.Size = 40
+
+	v := &View{block: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
+	v.Layout(200, 1)
+	smallHeight := v.box.Bounds().Dy()
+
+	v.SetStyleSheet(big)
+	bigHeight := v.box.Bounds().Dy()
+
+	if bigHeight <= smallHeight {
+		t.Fatalf("height after SetStyleSheet = %d, want > %d (a 40pt paragraph should be taller than a 10pt one)", bigHeight, smallHeight)
+	}
+}
+
+// TestViewSetStyleSheetBeforeLayout checks that calling SetStyleSheet
+// before Layout has ever run doesn't panic (and doesn't waste a rebuild
+// at a meaningless zero width) - the eventual first Layout call picks up
+// the StyleSheet on its own.
+func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
+	custom := NewLightStyleSheet()
+	v := newTestView(&fixedHeightBlock{height: 10})
+
+	v.SetStyleSheet(custom)
+	if v.box != nil {
+		t.Fatalf("box built before Layout was ever called")
+	}
+
+	v.Layout(100, 1)
+	if v.ctx.StyleSheet != StyleSheet(custom) {
+		t.Errorf("StyleSheet after the first Layout = %v, want the instance passed to SetStyleSheet", v.ctx.StyleSheet)
+	}
+}
+
+// TestViewSetStyleSheetReanchorsScroll checks that a StyleSheet swap
+// re-anchors the scroll position by ratio through the current slot, the
+// same way a resize does - a new StyleSheet can change content heights
+// (a different font size here) just as reflowing at a new width can, so
+// the raw pixel offset alone would point at different content.
+func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
+	block := Parse([]byte("first\n\nsecond"))
+	small := NewDarkStyleSheet()
+	small.ParagraphTextStyle.Size = 10
+	big := NewDarkStyleSheet()
+	big.ParagraphTextStyle.Size = 40
+
+	v := &View{block: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
+	v.Layout(200, 1)
+
+	// Slot 1 is the margin gap StackBlock.GetBox inserts between the two
+	// paragraphs, not content - the second paragraph is slot 2. Anchor
+	// halfway through it.
+	if len(v.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (paragraph, gap, paragraph): %#v", len(v.box.slots), v.box.slots)
+	}
+	oldHeight := v.box.boxAt(2).Bounds().Dy()
+	v.cursor = stackCursor{index: 2, offset: float64(oldHeight) / 2}
+
+	v.SetStyleSheet(big)
+
+	newHeight := v.box.boxAt(2).Bounds().Dy()
+	if newHeight <= oldHeight {
+		t.Fatalf("height at slot 2 after SetStyleSheet = %d, want > %d", newHeight, oldHeight)
+	}
+	if v.cursor.index != 2 {
+		t.Fatalf("cursor index after SetStyleSheet = %d, want 2", v.cursor.index)
+	}
+	if gotRatio := v.cursor.offset / float64(newHeight); math.Abs(gotRatio-0.5) > 0.02 {
+		t.Errorf("cursor ratio through slot 2 after SetStyleSheet = %.3f, want ~0.5 (preserved through the rebuild)", gotRatio)
 	}
 }
 

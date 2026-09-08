@@ -84,11 +84,7 @@ func (v *View) Draw(dst Canvas, x, y int) {
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
 // * 72, matching main.go's convention). Cheap to call every frame: the
-// layout tree only rebuilds when width or scale actually change. A
-// rebuild re-anchors the scroll position to the same content, not the
-// same pixel offset, so reflowing doesn't change what's visible - and
-// since the cursor is already (index, offset), this only needs one old
-// and one new height, not a scan of the tree.
+// layout tree only rebuilds when width or scale actually change.
 func (v *View) Layout(width int, scale float64) {
 	v.ctx.SetDPI(scale * 72)
 	v.ctx.Scale = scale
@@ -96,7 +92,37 @@ func (v *View) Layout(width int, scale float64) {
 	if width == v.boxWidth && scale == v.boxScale {
 		return
 	}
+	v.boxWidth = width
+	v.boxScale = scale
+	v.rebuild()
+}
 
+// SetStyleSheet swaps the View's StyleSheet and takes effect immediately -
+// GetBox/GetInlineBox resolve and bake in concrete style values (colors,
+// margins collapsed to gaps, ...) when the layout tree is built, so
+// without an explicit rebuild here the change wouldn't be visible until
+// whatever next happened to resize the view. Rebuilding also re-anchors
+// the scroll position by ratio through the current slot, the same way a
+// resize does - a new StyleSheet can change content heights (different
+// margins, font sizes, ...) just as reflowing at a new width can.
+func (v *View) SetStyleSheet(s StyleSheet) {
+	v.ctx.StyleSheet = s
+	if v.box == nil {
+		// Nothing laid out yet - the eventual first Layout call will pick
+		// this StyleSheet up on its own; rebuilding now would only waste
+		// a pass at a meaningless zero width.
+		return
+	}
+	v.rebuild()
+}
+
+// rebuild re-lays-out the document at the current width, re-anchoring the
+// scroll position by ratio through the current slot rather than by raw
+// pixel offset, so a change to content heights (from a resize or a
+// StyleSheet swap) doesn't change what's visible - and since the cursor
+// is already (index, offset), this only needs one old and one new height,
+// not a scan of the tree.
+func (v *View) rebuild() {
 	ratio := 0.0
 	if v.box != nil && v.cursor.index < len(v.box.slots) {
 		if h := v.box.boxAt(v.cursor.index).Bounds().Dy(); h > 0 {
@@ -104,9 +130,7 @@ func (v *View) Layout(width int, scale float64) {
 		}
 	}
 
-	v.box = asStackBox(v.block.GetBox(v.ctx, width))
-	v.boxWidth = width
-	v.boxScale = scale
+	v.box = asStackBox(v.block.GetBox(v.ctx, v.boxWidth))
 
 	if len(v.box.slots) == 0 {
 		return
