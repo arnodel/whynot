@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
@@ -52,6 +53,13 @@ type game struct {
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
 	g.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
+
+	switch {
+	case inpututil.IsKeyJustPressed(ebiten.KeyL):
+		g.view.SetStyleSheet(whynot.NewLightStyleSheet())
+	case inpututil.IsKeyJustPressed(ebiten.KeyD):
+		g.view.SetStyleSheet(whynot.NewDarkStyleSheet())
+	}
 	return nil
 }
 
