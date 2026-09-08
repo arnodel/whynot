@@ -26,13 +26,30 @@ type View struct {
 	boxScale float64
 }
 
+// ViewOption customizes a View at construction, via NewView's opts
+// parameter.
+type ViewOption func(*View)
+
+// WithStyleSheet overrides the StyleSheet NewView otherwise defaults to
+// (NewDarkStyleSheet) - e.g. NewView(source, faceSelector,
+// WithStyleSheet(NewLightStyleSheet())).
+func WithStyleSheet(s StyleSheet) ViewOption {
+	return func(v *View) {
+		v.ctx.StyleSheet = s
+	}
+}
+
 // NewView parses source and returns a View ready to render it once Layout
 // has been called at least once to establish a width.
-func NewView(source []byte, faceSelector FaceSelector) *View {
-	return &View{
+func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View {
+	v := &View{
 		block: Parse(source),
 		ctx:   RenderingContext{FaceSelector: faceSelector, StyleSheet: NewDarkStyleSheet()},
 	}
+	for _, opt := range opts {
+		opt(v)
+	}
+	return v
 }
 
 // Scroll adjusts the vertical scroll position by dy pixels: negative dy

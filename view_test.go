@@ -104,6 +104,16 @@ func TestViewDrawFillsBackgroundBeforeLayout(t *testing.T) {
 	}
 }
 
+// TestNewViewWithStyleSheet checks that WithStyleSheet overrides NewView's
+// default StyleSheet (NewDarkStyleSheet).
+func TestNewViewWithStyleSheet(t *testing.T) {
+	custom := NewDarkStyleSheet()
+	v := NewView([]byte("hello"), NewGoFontFaceSelector(72), WithStyleSheet(custom))
+	if v.ctx.StyleSheet != StyleSheet(custom) {
+		t.Errorf("StyleSheet = %v, want the instance passed via WithStyleSheet", v.ctx.StyleSheet)
+	}
+}
+
 // TestViewScroll checks Scroll's sign convention: negative dy moves the
 // cursor forward through the document (later content becomes visible,
 // i.e. "scrolling down"); positive moves back toward the start.
