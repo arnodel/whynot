@@ -204,8 +204,8 @@ func TestNewLightStyleSheetColors(t *testing.T) {
 	dark := NewDarkStyleSheet()
 	light := NewLightStyleSheet()
 
-	if light.BackgroundColor == dark.BackgroundColor {
-		t.Errorf("light BackgroundColor = dark's (%v), want a light background", light.BackgroundColor)
+	if light.Background == dark.Background {
+		t.Errorf("light Background = dark's (%v), want a light background", light.Background)
 	}
 	if light.TextColor == dark.TextColor {
 		t.Errorf("light TextColor = dark's (%v), want a dark foreground", light.TextColor)

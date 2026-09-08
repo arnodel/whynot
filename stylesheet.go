@@ -75,13 +75,13 @@ type StyleSheet interface {
 	// node, never by walking ancestry - mirrors CSS's border-color,
 	// which doesn't inherit.
 	BorderColor(node *ASTNode) color.Color
-	// Background returns the color the document's viewport is filled
+	// BackgroundColor returns the color the document's viewport is filled
 	// with before anything else draws. Unlike every other method here,
 	// it takes no node: it isn't a property of any particular tag, just
 	// painted once, for the whole view, before any content-specific
 	// resolution happens - a node parameter would have nothing real to
 	// mean.
-	Background() color.Color
+	BackgroundColor() color.Color
 
 	// StrikeThickness returns the thickness for a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
@@ -150,8 +150,11 @@ type DefaultStyleSheet struct {
 	TextColor     color.Color
 	BaseTextStyle TextStyle
 
-	// BackgroundColor is the whole viewport's fill color - see Background.
-	BackgroundColor color.Color
+	// Background is the whole viewport's fill color - see BackgroundColor.
+	// Named without the "Color" suffix only to avoid colliding with the
+	// BackgroundColor method (color.Color already makes the field's own
+	// meaning unambiguous).
+	Background color.Color
 
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
@@ -222,7 +225,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		TextColor:     color.White,
 		BaseTextStyle: TextStyle{Size: 16},
 
-		BackgroundColor: color.Black,
+		Background: color.Black,
 
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
@@ -243,12 +246,12 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 // it's built from it rather than repeating them: ThematicBreakColor,
 // BlockquoteBarColor, and TableFrameColor are also left as
 // NewDarkStyleSheet's mid-grey, which reads fine against either a light
-// or dark background, unlike TextColor/BackgroundColor/LinkColor/
-// CodeColor, which need real light-appropriate values.
+// or dark background, unlike TextColor/Background/LinkColor/CodeColor,
+// which need real light-appropriate values.
 func NewLightStyleSheet() *DefaultStyleSheet {
 	s := NewDarkStyleSheet()
 	s.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
-	s.BackgroundColor = color.White
+	s.Background = color.White
 	s.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
 	s.CodeColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
 	return s
@@ -348,8 +351,8 @@ func (s *DefaultStyleSheet) BorderColor(node *ASTNode) color.Color {
 	}
 }
 
-func (s *DefaultStyleSheet) Background() color.Color {
-	return s.BackgroundColor
+func (s *DefaultStyleSheet) BackgroundColor() color.Color {
+	return s.Background
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged

@@ -85,7 +85,7 @@ func TestViewDrawFillsBackground(t *testing.T) {
 		t.Fatal("Draw issued no DrawRect calls, want at least a background fill")
 	}
 	got := dst.rects[0]
-	want := drawnRect{5, 10, 100, 50, v.ctx.StyleSheet.Background()}
+	want := drawnRect{5, 10, 100, 50, v.ctx.StyleSheet.BackgroundColor()}
 	if got != want {
 		t.Errorf("background fill = %+v, want %+v", got, want)
 	}
