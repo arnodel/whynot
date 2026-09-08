@@ -29,8 +29,8 @@ flowchart TD
     subgraph L0["Layer 0 — Parse (goldmark, external)"]
         A["[]byte source"] --> B["gmast.Node tree"]
     end
-    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go)"]
-        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
+    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, ast.go)"]
+        B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)\n+ a parallel ASTNode tree (tag + parent only)"]
     end
     subgraph L2["Layer 2 — Layout tree (layout.go, box.go)"]
         C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
@@ -43,33 +43,50 @@ flowchart TD
     end
 ```
 
-`textstyle.go` cuts across layers 1 and 2: `TextStyle`/`FontFamily` are part
-of the semantic tree's vocabulary (a `Block` says *which* style it wants),
-while `FaceSelector`/`RenderingContext` resolve a style to a concrete
-`font.Face` during layout, where DPI and pixel sizes are known.
+`stylesheet.go` and `textstyle.go` cut across layers 1 and 2. Layer 1's
+`ASTNode` tree ([ast.go](ast.go)) records only structure - each node's
+semantic tag (`TagParagraph`, `TagHeading1`..`6`, `TagEmphasis`, `TagLink`,
+...) and its parent - no appearance. Layer 2 resolves that tag ancestry
+against a `StyleSheet` ([stylesheet.go](stylesheet.go)) - `Margins`,
+`TextStyle` (via `RenderingContext.ResolvedTextStyle`, merging
+contributions across ancestry so e.g. `Strong` nested inside `Emphasis`
+picks up both), `Color`/`BorderColor`, `StrikeThickness`, table/blockquote
+geometry - during `GetBox`/`GetInlineBox`, so the same parsed document can
+render under a different `StyleSheet` without re-parsing. `TextStyle`
+(the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
+resolves *to* and what `FaceSelector` resolves *from* - the vocabulary
+connecting the two, not something a `Block` carries itself.
 
 ### Layer 0 — Parse
 
 `goldmark` turns the raw `[]byte` into a `gmast.Node` tree. Off-the-shelf,
 outside our control; it's the source of truth for document structure.
 
-### Layer 1 — Semantic tree (`Block` / `Inline`)
+### Layer 1 — Semantic tree (`Block` / `Inline` + `ASTNode`)
 
 `MarkdownCompiler.CompileNode`/`CompileBlock`/`AppendInlineNode`
-([compile.go](compile.go), config data in [markdown.go](markdown.go)) walk
-the goldmark tree once and produce a tree of `Block` and `Inline` values
-([block.go](block.go)): `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
+([compile.go](compile.go); `MarkdownCompiler` itself, in
+[markdown.go](markdown.go), holds nothing but the source bytes) walk the
+goldmark tree once and produce two parallel trees: a `Block`/`Inline` tree
+([block.go](block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
-blocks; `InlineText`, `InlineImage` for inline content. This is where
-Markdown semantics get resolved into rendering intent (emphasis →
-`TextStyle`, heading level → font size + `Margins`, etc.) — a `Block` tree
-describes *what* to draw, not *how it fits*.
+blocks; `InlineText`, `InlineImage` for inline content - and an `ASTNode`
+tree ([ast.go](ast.go)) giving each one a semantic tag (`TagParagraph`,
+`TagHeading1`..`6`, `TagEmphasis`, `TagStrong`, `TagLink`, ...) and a
+parent, mirroring real document nesting *including* inline spans, which
+the `Block`/`Inline` tree itself keeps flat (line-wrapping needs a linear
+sequence; `ASTNode.Parent` is where the nesting actually lives). This is
+where Markdown syntax gets resolved into semantic *structure* - which tag,
+what nests in what - not into appearance: no font, color, or margin value
+is decided here, only recorded via each `Block`/`Inline`'s `node *ASTNode`
+field for `StyleSheet` to resolve later, in Layer 2.
 
 Margins aren't a field every `Block` carries: most embed `WithoutMargins`
 (a zero-value `Margins()`) and get real ones only where the compiler wraps
-them in a `MarginBlock{Block, margins}` at construction time. `StackBlock`
-is the one exception with real, non-trivial margins of its own - its
-Top/Bottom is whatever its first/last child reports, the same
+them in a `MarginBlock{Block, node}` - resolved from `StyleSheet.Margins`
+against that node during `GetBox`, not baked in here at construction time.
+`StackBlock` is the one exception with real, non-trivial margins of its
+own - its Top/Bottom is whatever its first/last child reports, the same
 adjacent-margin collapsing `GetBox` applies between siblings, extended to
 its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
 correctly with the outermost child instead of stacking on top of it.
@@ -81,12 +98,17 @@ rebuilt — `Block`s are immutable for the life of the program.
 
 `Block.GetBox(ctx, width)` / `Inline.GetInlineBox(ctx)`
 ([layout.go](layout.go)) take a concrete pixel `width` and a
-`RenderingContext` (DPI scale + font face cache) and produce a `Box` /
-`InlineBox` tree ([box.go](box.go)): `TextBox`, `ImageBox`, `LineBox` (one
-wrapped line), `StackBox` (vertical stack with margins resolved to gaps),
-`ContainerBox` (indentation), `EmptyBox` (margin spacer). Line-wrapping
-happens here (`splitBoxes`), as does font selection and glyph measurement
-(`font.BoundString`).
+`RenderingContext` (DPI scale, font face cache, and `StyleSheet`) and
+produce a `Box` / `InlineBox` tree ([box.go](box.go)): `TextBox`,
+`ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
+margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
+(margin spacer). This is where appearance actually gets resolved -
+`ctx.StyleSheet.Margins`/`.Color`/`.BorderColor`, `ctx.ResolvedTextStyle`/
+`.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
+dimensional constants, scaled by DPI in one step) - all read against each
+`Block`/`Inline`'s own `*ASTNode`. Line-wrapping happens here
+(`splitBoxes`), as does font selection (`ctx.SelectFace`, given the
+resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
 Rebuilt only when `width` or DPI scale change (see `View.Layout` below) —
 unlike `Block`, a `Box` tree is fully replaced on every rebuild rather than

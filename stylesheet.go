@@ -54,7 +54,7 @@ type PartialTextStyle struct {
 // varies a value by node today (there's only one table's worth of column
 // gap, for instance) - an implementation is free to ignore it, but the
 // shape leaves room for one that doesn't want to. See DefaultStyleSheet
-// for the values MarkdownCompiler used to hardcode, ported here.
+// for whynot's built-in appearance.
 type StyleSheet interface {
 	// Margins returns the margins for node's own tag.
 	Margins(node *ASTNode) Margins
@@ -154,8 +154,7 @@ type DefaultStyleSheet struct {
 
 var _ StyleSheet = (*DefaultStyleSheet)(nil)
 
-// NewDefaultStyleSheet returns whynot's built-in default appearance - the
-// exact values MarkdownCompiler.Parse hardcodes today.
+// NewDefaultStyleSheet returns whynot's built-in default appearance.
 func NewDefaultStyleSheet() *DefaultStyleSheet {
 	return &DefaultStyleSheet{
 		ParagraphMargins:   Margins{Top: 10, Bottom: 10},

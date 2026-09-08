@@ -97,10 +97,9 @@ func TestParseHeading(t *testing.T) {
 	if !stringsEqual(got, want) {
 		t.Errorf("words = %v, want %v", got, want)
 	}
-	// Headings render at baseLevel 2 (bold) regardless of level, so the
-	// only per-level difference is the Margins/Size picked in Parse's
-	// headingStyles, not anything CompileBlock computes from the AST -
-	// nothing further to assert here structurally.
+	// Heading weight/size/margins are resolved later, from StyleSheet
+	// against the node's own tag (TagHeading3 here) - nothing further to
+	// assert here structurally.
 }
 
 func TestParseTightList(t *testing.T) {
