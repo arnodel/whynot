@@ -25,7 +25,7 @@ type TableGeometry struct {
 }
 
 // TextStyleField identifies one field of TextStyle, so a
-// TextStyleContribution can say which fields it actually sets - needed
+// PartialTextStyle can say which fields it actually sets - needed
 // because TextStyle's own zero values (font.WeightNormal, font.StyleNormal,
 // Proportional) are real, meaningful values, not "unset" sentinels.
 type TextStyleField uint8
@@ -39,11 +39,11 @@ const (
 	allTextStyleFields = FieldSize | FieldStyle | FieldWeight | FieldFamily
 )
 
-// TextStyleContribution is what a single node's own tag contributes to
+// PartialTextStyle is what a single node's own tag contributes to
 // TextStyle - only the fields flagged in Set are meaningful; every other
 // field is inherited from further up the node's ancestry (see
 // RenderingContext.ResolvedTextStyle).
-type TextStyleContribution struct {
+type PartialTextStyle struct {
 	TextStyle
 	Set TextStyleField
 }
@@ -62,7 +62,7 @@ type StyleSheet interface {
 	// combined with its ancestors' contributions by
 	// RenderingContext.ResolvedTextStyle, since e.g. Strong nested inside
 	// Emphasis needs both a bold and an italic contribution to survive.
-	TextStyle(node *ASTNode) TextStyleContribution
+	TextStyle(node *ASTNode) PartialTextStyle
 	// Color returns node's own tag's contribution to the cascading text
 	// color, or nil if it has no opinion (inherits from an ancestor, or
 	// the document default at the root - see
@@ -90,7 +90,7 @@ type StyleSheet interface {
 // change one thing can construct one with NewDefaultStyleSheet and mutate
 // a field (ParagraphMargins, LinkColor, ParagraphTextStyle.Size, ...), or
 // embed it in a custom StyleSheet and override individual methods for
-// full control. The TextStyleContribution fields (as opposed to a plain
+// full control. The PartialTextStyle fields (as opposed to a plain
 // TextStyle) mean a tag's contribution can be extended, not just
 // adjusted - e.g. style.EmphasisTextStyle.Weight = font.WeightBold;
 // style.EmphasisTextStyle.Set |= FieldWeight makes emphasis bold as well
@@ -99,26 +99,26 @@ type StyleSheet interface {
 // to their zero value.
 type DefaultStyleSheet struct {
 	ParagraphMargins   Margins
-	ParagraphTextStyle TextStyleContribution
+	ParagraphTextStyle PartialTextStyle
 
 	HeadingMargins    [6]Margins
-	HeadingTextStyles [6]TextStyleContribution
+	HeadingTextStyles [6]PartialTextStyle
 
 	ListMargins Margins
 
 	ListItemMargins   Margins
-	ListItemTextStyle TextStyleContribution
+	ListItemTextStyle PartialTextStyle
 
 	CodeBlockMargins   Margins
-	CodeBlockTextStyle TextStyleContribution
+	CodeBlockTextStyle PartialTextStyle
 	CodeColor          color.Color
 
 	// CodeSpanTextStyle, EmphasisTextStyle, StrongTextStyle: inline spans
 	// have no margins of their own to bundle alongside, unlike the
 	// block-level tags above.
-	CodeSpanTextStyle TextStyleContribution
-	EmphasisTextStyle TextStyleContribution
-	StrongTextStyle   TextStyleContribution
+	CodeSpanTextStyle PartialTextStyle
+	EmphasisTextStyle PartialTextStyle
+	StrongTextStyle   PartialTextStyle
 
 	ThematicBreakMargins Margins
 	ThematicBreakColor   color.Color
@@ -128,14 +128,14 @@ type DefaultStyleSheet struct {
 	BlockquoteMargins  Margins
 	BlockquoteBarColor color.Color
 
-	TableCellTextStyle TextStyleContribution
+	TableCellTextStyle PartialTextStyle
 	TableMargins       Margins
 	TableFrameColor    color.Color
 
 	// TextColor is the root-level fallback color for tags with no color
 	// of their own. BaseTextStyle is TextStyle's equivalent - unlike the
-	// per-tag TextStyleContribution fields above, it's a plain TextStyle,
-	// not a TextStyleContribution: being the ultimate fallback means it
+	// per-tag PartialTextStyle fields above, it's a plain TextStyle,
+	// not a PartialTextStyle: being the ultimate fallback means it
 	// always claims every field by definition (see TextStyle below), so
 	// there's no meaningful subset for a Set mask to express.
 	TextColor     color.Color
@@ -159,7 +159,7 @@ var _ StyleSheet = (*DefaultStyleSheet)(nil)
 func NewDefaultStyleSheet() *DefaultStyleSheet {
 	return &DefaultStyleSheet{
 		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
-		ParagraphTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
+		ParagraphTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
 
 		HeadingMargins: [6]Margins{
 			{Top: 30, Bottom: 10},
@@ -173,7 +173,7 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		// level: no bold small-caps font ships in
 		// golang.org/x/image/font/gofont, and headings are bold, so
 		// small caps isn't available as a default.
-		HeadingTextStyles: [6]TextStyleContribution{
+		HeadingTextStyles: [6]PartialTextStyle{
 			{TextStyle{Size: 40, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
 			{TextStyle{Size: 36, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
 			{TextStyle{Size: 32, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
@@ -185,15 +185,15 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		ListMargins: Margins{Top: 10, Bottom: 10},
 
 		ListItemMargins:   Margins{Top: 5, Bottom: 5, Left: 40},
-		ListItemTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
+		ListItemTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
 
 		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
-		CodeBlockTextStyle: TextStyleContribution{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
+		CodeBlockTextStyle: PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
 		CodeColor:          color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 
-		CodeSpanTextStyle: TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily},
-		EmphasisTextStyle: TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle},
-		StrongTextStyle:   TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight},
+		CodeSpanTextStyle: PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily},
+		EmphasisTextStyle: PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle},
+		StrongTextStyle:   PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight},
 
 		ThematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
@@ -203,7 +203,7 @@ func NewDefaultStyleSheet() *DefaultStyleSheet {
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
-		TableCellTextStyle: TextStyleContribution{TextStyle{Size: 16}, FieldSize},
+		TableCellTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
 		TableMargins:       Margins{Top: 10, Bottom: 10},
 		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
@@ -255,9 +255,9 @@ func (s *DefaultStyleSheet) Margins(node *ASTNode) Margins {
 // root (node == nil) it returns BaseTextStyle claiming every field, the
 // fallback ResolvedTextStyle reaches if no ancestor ever set some field -
 // guarantees e.g. Size is never silently left at 0.
-func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyleContribution {
+func (s *DefaultStyleSheet) TextStyle(node *ASTNode) PartialTextStyle {
 	if node == nil {
-		return TextStyleContribution{s.BaseTextStyle, allTextStyleFields}
+		return PartialTextStyle{s.BaseTextStyle, allTextStyleFields}
 	}
 	switch node.Tag {
 	case TagParagraph:
@@ -277,7 +277,7 @@ func (s *DefaultStyleSheet) TextStyle(node *ASTNode) TextStyleContribution {
 	case TagStrong:
 		return s.StrongTextStyle
 	default:
-		return TextStyleContribution{}
+		return PartialTextStyle{}
 	}
 }
 

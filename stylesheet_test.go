@@ -55,19 +55,19 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 	s := NewDefaultStyleSheet()
 	cases := []struct {
 		tag  ASTTag
-		want TextStyleContribution
+		want PartialTextStyle
 	}{
-		{TagParagraph, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
-		{TagHeading1, TextStyleContribution{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagHeading2, TextStyleContribution{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagHeading6, TextStyleContribution{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagListItem, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
-		{TagCodeBlock, TextStyleContribution{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
-		{TagTableCell, TextStyleContribution{TextStyle{Size: 16}, FieldSize}},
-		{TagCodeSpan, TextStyleContribution{TextStyle{Family: Monospace}, FieldFamily}},
-		{TagEmphasis, TextStyleContribution{TextStyle{Style: font.StyleItalic}, FieldStyle}},
-		{TagStrong, TextStyleContribution{TextStyle{Weight: font.WeightBold}, FieldWeight}},
-		{TagLink, TextStyleContribution{}},
+		{TagParagraph, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{TagHeading1, PartialTextStyle{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagHeading2, PartialTextStyle{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagHeading6, PartialTextStyle{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{TagListItem, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{TagCodeBlock, PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
+		{TagTableCell, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{TagCodeSpan, PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily}},
+		{TagEmphasis, PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle}},
+		{TagStrong, PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight}},
+		{TagLink, PartialTextStyle{}},
 	}
 	for _, tc := range cases {
 		node := &ASTNode{Tag: tc.tag}
@@ -82,7 +82,7 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 // real ancestor ever set some field.
 func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
 	s := NewDefaultStyleSheet()
-	want := TextStyleContribution{TextStyle{Size: 16}, allTextStyleFields}
+	want := PartialTextStyle{TextStyle{Size: 16}, allTextStyleFields}
 	if got := s.TextStyle(nil); got != want {
 		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
 	}
