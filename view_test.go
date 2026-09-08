@@ -129,7 +129,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDefaultStyleSheet()}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {

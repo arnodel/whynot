@@ -11,7 +11,7 @@ import (
 // hardcoded config in MarkdownCompiler's old Parse implementation.
 
 func TestDefaultStyleSheetMargins(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	cases := []struct {
 		tag  ASTTag
 		want Margins
@@ -41,7 +41,7 @@ func TestDefaultStyleSheetMargins(t *testing.T) {
 }
 
 func TestDefaultStyleSheetMarginsNilNode(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	if got := s.Margins(nil); got != (Margins{}) {
 		t.Errorf("Margins(nil) = %+v, want zero value", got)
 	}
@@ -52,7 +52,7 @@ func TestDefaultStyleSheetMarginsNilNode(t *testing.T) {
 // to be inherited from an ancestor (see TestResolvedTextStyle) rather
 // than read as its zero value.
 func TestDefaultStyleSheetTextStyle(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	cases := []struct {
 		tag  ASTTag
 		want PartialTextStyle
@@ -81,7 +81,7 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 // field via BaseTextStyle - the fallback ResolvedTextStyle reaches if no
 // real ancestor ever set some field.
 func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	want := PartialTextStyle{TextStyle{Size: 16}, allTextStyleFields}
 	if got := s.TextStyle(nil); got != want {
 		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
@@ -93,7 +93,7 @@ func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
 // including the block types with their own BorderColor, returns nil so
 // ResolvedColor's ancestry walk passes through them.
 func TestDefaultStyleSheetColor(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	cases := []struct {
 		tag  ASTTag
 		want color.Color
@@ -116,7 +116,7 @@ func TestDefaultStyleSheetColor(t *testing.T) {
 }
 
 func TestDefaultStyleSheetColorNilNode(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	if got := s.Color(nil); got != color.White {
 		t.Errorf("Color(nil) = %v, want %v", got, color.White)
 	}
@@ -126,7 +126,7 @@ func TestDefaultStyleSheetColorNilNode(t *testing.T) {
 // color - a thematic break's rule, a blockquote's bar, a table's frame -
 // resolved directly against exactly the tag it decorates, unlike Color.
 func TestDefaultStyleSheetBorderColor(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	cases := []struct {
 		tag  ASTTag
 		want color.Color
@@ -146,7 +146,7 @@ func TestDefaultStyleSheetBorderColor(t *testing.T) {
 }
 
 func TestDefaultStyleSheetBorderColorNilNode(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 	if got := s.BorderColor(nil); got != nil {
 		t.Errorf("BorderColor(nil) = %v, want nil", got)
 	}
@@ -156,7 +156,7 @@ func TestDefaultStyleSheetBorderColorNilNode(t *testing.T) {
 // as the "is this struck at all" signal: 0 unless node or an ancestor
 // carries TagStrikethrough.
 func TestDefaultStyleSheetStrikeThickness(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 
 	if got := s.StrikeThickness(nil); got != 0 {
 		t.Errorf("StrikeThickness(nil) = %v, want 0", got)
@@ -179,7 +179,7 @@ func TestDefaultStyleSheetStrikeThickness(t *testing.T) {
 }
 
 func TestDefaultStyleSheetDimensions(t *testing.T) {
-	s := NewDefaultStyleSheet()
+	s := NewDarkStyleSheet()
 
 	if got := s.ThematicBreakThickness(nil); got != 2 {
 		t.Errorf("ThematicBreakThickness() = %v, want 2", got)

@@ -31,7 +31,7 @@ type View struct {
 func NewView(source []byte, faceSelector FaceSelector) *View {
 	return &View{
 		block: Parse(source),
-		ctx:   RenderingContext{FaceSelector: faceSelector, StyleSheet: NewDefaultStyleSheet()},
+		ctx:   RenderingContext{FaceSelector: faceSelector, StyleSheet: NewDarkStyleSheet()},
 	}
 }
 

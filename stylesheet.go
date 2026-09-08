@@ -86,17 +86,19 @@ type StyleSheet interface {
 	TableGeometry(node *ASTNode) TableGeometry
 }
 
-// DefaultStyleSheet is whynot's built-in StyleSheet. A caller who wants to
-// change one thing can construct one with NewDefaultStyleSheet and mutate
-// a field (ParagraphMargins, LinkColor, ParagraphTextStyle.Size, ...), or
-// embed it in a custom StyleSheet and override individual methods for
-// full control. The PartialTextStyle fields (as opposed to a plain
-// TextStyle) mean a tag's contribution can be extended, not just
-// adjusted - e.g. style.EmphasisTextStyle.Weight = font.WeightBold;
-// style.EmphasisTextStyle.Set |= FieldWeight makes emphasis bold as well
-// as italic, which a plain TextStyle field couldn't express: the fields
-// it doesn't set wouldn't be distinguishable from fields deliberately set
-// to their zero value.
+// DefaultStyleSheet is the concrete, configurable StyleSheet implementation
+// whynot's built-in themes (NewDarkStyleSheet, NewLightStyleSheet) are both
+// built from - the two differ only in the field values their constructors
+// fill in, not in shape. A caller who wants to change one thing can start
+// from either constructor and mutate a field (ParagraphMargins, LinkColor,
+// ParagraphTextStyle.Size, ...), or embed it in a custom StyleSheet and
+// override individual methods for full control. The PartialTextStyle
+// fields (as opposed to a plain TextStyle) mean a tag's contribution can
+// be extended, not just adjusted - e.g. style.EmphasisTextStyle.Weight =
+// font.WeightBold; style.EmphasisTextStyle.Set |= FieldWeight makes
+// emphasis bold as well as italic, which a plain TextStyle field couldn't
+// express: the fields it doesn't set wouldn't be distinguishable from
+// fields deliberately set to their zero value.
 type DefaultStyleSheet struct {
 	ParagraphMargins   Margins
 	ParagraphTextStyle PartialTextStyle
@@ -154,8 +156,9 @@ type DefaultStyleSheet struct {
 
 var _ StyleSheet = (*DefaultStyleSheet)(nil)
 
-// NewDefaultStyleSheet returns whynot's built-in default appearance.
-func NewDefaultStyleSheet() *DefaultStyleSheet {
+// NewDarkStyleSheet returns whynot's built-in dark theme - light text on a
+// dark background - and is what NewView uses when no StyleSheet is given.
+func NewDarkStyleSheet() *DefaultStyleSheet {
 	return &DefaultStyleSheet{
 		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
 		ParagraphTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
