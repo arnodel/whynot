@@ -34,6 +34,8 @@ var (
 	wheelDy     = flag.Float64("wheel-dy", -50, "wheel dy re-injected on every tick of the scroll phase (negative scrolls down)")
 	scrollTicks = flag.Int("scroll-ticks", 0, "number of ticks to hold the wheel at -wheel-dy before releasing it; 0 skips scrolling")
 	ticks       = flag.Int("ticks", 5, "settle ticks to run after scrolling, immediately before capturing the frame")
+	cursorX     = flag.Float64("cursor-x", -1, "cursor x in device-independent pixels (same space as -w/-h) to move to before capturing; negative skips moving the cursor")
+	cursorY     = flag.Float64("cursor-y", -1, "cursor y in device-independent pixels (same space as -w/-h) to move to before capturing; negative skips moving the cursor")
 )
 
 // driver is the host: an ebiten.Game that drives one guest and composites its final frame into its
@@ -61,6 +63,10 @@ func (d *driver) Update() error {
 	d.screen = ebiten.NewImage(int(float64(*logicalW)*scale), int(float64(*logicalH)*scale))
 	if err := d.guest.SetOutsideScreen(d.screen); err != nil {
 		return err
+	}
+
+	if *cursorX >= 0 && *cursorY >= 0 {
+		d.guest.MoveCursor(*cursorX, *cursorY)
 	}
 
 	// Wheel deltas are consumed and reset every tick (like a real wheel event), unlike a held key -

@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"image"
+	"image/color"
 	"log"
 	"os"
 
@@ -48,11 +50,15 @@ func main() {
 type game struct {
 	view     *whynot.View
 	renderer *ebitenrenderer.Renderer
+
+	hoverX, hoverY int
 }
 
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
 	g.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
+
+	g.hoverX, g.hoverY = ebiten.CursorPosition()
 
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyL):
@@ -64,9 +70,25 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
+	canvas := g.renderer.NewCanvas(screen)
+
 	// View.Draw fills the background itself, from the View's StyleSheet -
 	// no separate clear step needed here.
-	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
+	g.view.Draw(canvas, 0, 0)
+
+	if _, bounds, ok := g.view.BoxAt(g.hoverX, g.hoverY); ok {
+		drawOutline(canvas, bounds, color.RGBA{255, 0, 0, 255})
+	}
+}
+
+// drawOutline draws a thin border around r - Canvas has no dedicated
+// outline primitive, so this is 4 filled rects along the edges.
+func drawOutline(dst whynot.Canvas, r image.Rectangle, clr color.Color) {
+	const thickness = 2
+	dst.DrawRect(r.Min.X, r.Min.Y, r.Dx(), thickness, clr)
+	dst.DrawRect(r.Min.X, r.Max.Y-thickness, r.Dx(), thickness, clr)
+	dst.DrawRect(r.Min.X, r.Min.Y, thickness, r.Dy(), clr)
+	dst.DrawRect(r.Max.X-thickness, r.Min.Y, thickness, r.Dy(), clr)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

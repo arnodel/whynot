@@ -1,5 +1,7 @@
 package whynot
 
+import "image"
+
 // View renders a parsed Markdown document onto a Canvas. It owns the
 // layout cache (rebuilt only when width or scale change, not every frame),
 // viewport culling, and scroll-position anchoring across resizes - the
@@ -80,6 +82,50 @@ func (v *View) Draw(dst Canvas, x, y int) {
 		return
 	}
 	v.box.DrawFrom(dst, v.cursor, x, y)
+}
+
+// BoxAt identifies what's at document position (x, y) - the same
+// coordinate space Draw's own (x, y) places content's origin into, so a
+// caller that always draws at (0, 0) can pass screen coordinates
+// directly; a caller that draws at some other origin subtracts it first,
+// the same way it already does to call Draw itself. bounds is the
+// matched leaf's own bounds, in that same coordinate space - e.g. for
+// drawing an outline around it. ok is false if (x, y) doesn't land on
+// any content - past the end of the document, or in a margin/gap
+// between blocks or lines.
+//
+// y is folded into the current scroll cursor's own offset and resolved
+// via normalizeCursor, the same cursor-relative walk Scroll/Layout
+// already use, so a click far from the current scroll position doesn't
+// force-build every slot between them.
+//
+// One known imprecision: normalizeCursor clamps a position above the
+// very start of the document to the same zero value a position exactly
+// at the start would have, so clicking well above the rendered content
+// resolves as if it landed on the first slot instead of missing
+// entirely. Not worth resolving given callers only ever pass points
+// already within their own rendered viewport.
+func (v *View) BoxAt(x, y int) (source Source, bounds image.Rectangle, ok bool) {
+	if v.box == nil {
+		return nil, image.Rectangle{}, false
+	}
+	c := v.box.normalizeCursor(stackCursor{index: v.cursor.index, offset: v.cursor.offset + float64(y)})
+	if c.index < 0 || c.index >= len(v.box.slots) {
+		return nil, image.Rectangle{}, false
+	}
+	box := v.box.boxAt(c.index)
+	local := image.Pt(x, int(c.offset))
+	if !local.In(box.Bounds()) {
+		return nil, image.Rectangle{}, false
+	}
+	source, bounds, ok = box.hitTest(local)
+	if !ok {
+		return nil, image.Rectangle{}, false
+	}
+	// Shift back from box's own local frame into the same frame (x, y)
+	// arrived in - undoing the cursor-relative adjustment made to y
+	// above (x never needed one).
+	return source, bounds.Add(image.Pt(0, y-int(c.offset))), true
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale

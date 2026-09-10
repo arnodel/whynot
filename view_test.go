@@ -25,6 +25,10 @@ func (b *fixedHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
+func (b *fixedHeightBlock) Node() *ASTNode {
+	return nil
+}
+
 // scaledHeightBlock lays out to a height of width*scale, so a resize
 // genuinely changes its height - unlike fixedHeightBlock, which is for
 // tests that exercise Layout's ratio-based re-anchoring.
@@ -38,6 +42,10 @@ func (b *scaledHeightBlock) GetBox(ctx RenderingContext, width int) Box {
 
 func (b *scaledHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
+}
+
+func (b *scaledHeightBlock) Node() *ASTNode {
+	return nil
 }
 
 func newTestView(blocks ...Block) *View {
@@ -269,6 +277,65 @@ func TestViewLayoutReanchor(t *testing.T) {
 
 	if v.cursor != (stackCursor{1, 50}) {
 		t.Errorf("cursor after resize = %+v, want {1, 50} (50%% of the new height 100)", v.cursor)
+	}
+}
+
+// TestViewBoxAtEndToEnd checks that BoxAt reaches every kind of content in
+// a real document, resolving to the right ASTTag. Exact pixel positions
+// aren't predictable across margins/gaps/nesting, so this scans a coarse
+// grid over the whole rendered document and just checks that *some* point
+// resolves to each expected tag - a topological check, not a geometric
+// one.
+func TestViewBoxAtEndToEnd(t *testing.T) {
+	source := []byte(`# Heading
+
+A paragraph with some text.
+
+` + "```" + `
+code line
+` + "```" + `
+
+- item one
+- item two
+
+> a quoted paragraph
+
+| a | b |
+| - | - |
+| 1 | 2 |
+
+---
+`)
+
+	v := NewView(source, NewGoFontFaceSelector(72))
+	const width = 300
+	v.Layout(width, 1)
+
+	height := v.box.Bounds().Dy()
+	found := map[ASTTag]bool{}
+	for y := 0; y < height; y += 2 {
+		for x := 0; x < width; x += 2 {
+			source, _, ok := v.BoxAt(x, y)
+			if !ok {
+				continue
+			}
+			found[source.Node().Tag] = true
+		}
+	}
+
+	for _, tag := range []ASTTag{
+		TagHeading1,
+		TagParagraph,
+		TagCodeBlock,
+		TagListItem,
+		TagBlockquote,
+		TagTable,
+		TagTableCell,
+		TagThematicBreak,
+	} {
+		if !found[tag] {
+			t.Errorf("no point in the document resolved to tag %v", tag)
+		}
 	}
 }
 

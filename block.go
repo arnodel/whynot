@@ -8,7 +8,19 @@ type Margins struct {
 	Top, Bottom, Left, Right float64
 }
 
+// Source is the common ground between Block and Inline: something with a
+// semantic identity in the compiled ASTNode tree. Box/InlineBox leaves
+// that were built from a single Block or Inline expose it (see Source()
+// on RuleBox, TextBox, ...), so a hit-test result can be traced back to
+// its origin - and, since Block/Inline are the concrete underlying type,
+// a caller can type-assert further (e.g. to Block) for anything beyond
+// the node itself.
+type Source interface {
+	Node() *ASTNode
+}
+
 type Block interface {
+	Source
 	GetBox(ctx RenderingContext, width int) Box
 	Margins(ctx RenderingContext) Margins
 }
@@ -54,7 +66,18 @@ func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 	}
 }
 
+// Node delegates to the wrapped Block rather than returning b.node: the
+// two aren't always the same ASTNode (a loose list item's head wraps a
+// ListItemHeadBlock in a MarginBlock keyed to a synthetic TagParagraph
+// node, purely so its margins resolve like a paragraph's - the wrapped
+// content's own identity, TagListItem, is the more correct answer for
+// hit-testing).
+func (b *MarginBlock) Node() *ASTNode {
+	return b.Block.Node()
+}
+
 type Inline interface {
+	Source
 	GetInlineBox(RenderingContext) InlineBox
 }
 
@@ -65,6 +88,10 @@ type InlineText struct {
 
 var _ Inline = (*InlineText)(nil)
 
+func (t *InlineText) Node() *ASTNode {
+	return t.node
+}
+
 type InlineImage struct {
 	src   string
 	title string
@@ -72,6 +99,10 @@ type InlineImage struct {
 }
 
 var _ Inline = (*InlineImage)(nil)
+
+func (i *InlineImage) Node() *ASTNode {
+	return i.node
+}
 
 // ThematicBreakBlock is a horizontal rule (`---`). Unlike the other Block
 // types it has no inline content to lay out - just a color; its vertical
@@ -82,6 +113,10 @@ type ThematicBreakBlock struct {
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
+
+func (b *ThematicBreakBlock) Node() *ASTNode {
+	return b.node
+}
 
 // BlockquoteBlock is a quoted group of ordinary blocks (`> ...`). Unlike
 // list-item indentation, which relies on the parent StackBlock's generic
@@ -99,19 +134,33 @@ type BlockquoteBlock struct {
 
 var _ Block = (*BlockquoteBlock)(nil)
 
+func (b *BlockquoteBlock) Node() *ASTNode {
+	return b.node
+}
+
 type CodeBlock struct {
 	WithoutMargins
 	lines []Inline
+	node  *ASTNode
 }
 
 var _ Block = (*CodeBlock)(nil)
 
+func (b *CodeBlock) Node() *ASTNode {
+	return b.node
+}
+
 type TextBlock struct {
 	WithoutMargins
 	parts []Inline
+	node  *ASTNode
 }
 
 var _ Block = (*TextBlock)(nil)
+
+func (b *TextBlock) Node() *ASTNode {
+	return b.node
+}
 
 // ListItemHeadBlock is a list item's own paragraph text, flowed with the
 // marker hanging off the first line - see GetBox. It always reports zero
@@ -123,9 +172,14 @@ type ListItemHeadBlock struct {
 	WithoutMargins
 	marker Inline
 	parts  []Inline
+	node   *ASTNode
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
+
+func (b *ListItemHeadBlock) Node() *ASTNode {
+	return b.node
+}
 
 type cellAlignment int
 
@@ -152,11 +206,23 @@ type TableBlock struct {
 
 var _ Block = (*TableBlock)(nil)
 
+func (b *TableBlock) Node() *ASTNode {
+	return b.node
+}
+
 type StackBlock struct {
 	blocks []Block
 }
 
 var _ Block = (*StackBlock)(nil)
+
+// Node always returns nil: a StackBlock aggregates other Blocks, each
+// with their own identity, so it has none of its own - hit-testing that
+// reaches a bare StackBlock should already have recursed into whichever
+// child slot actually matched.
+func (b *StackBlock) Node() *ASTNode {
+	return nil
+}
 
 // Margins reports Top/Bottom as its first/last child's own margin - the
 // same collapsing GetBox applies between siblings, extended to its own

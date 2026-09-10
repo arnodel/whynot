@@ -113,6 +113,7 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 		Face:            face,
 		Color:           ctx.ResolvedColor(t.node),
 		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
+		source:          t,
 	}
 }
 
@@ -132,6 +133,7 @@ func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 	return &ImageBox{
 		src:    i.src,
 		bounds: bounds,
+		source: i,
 	}
 }
 
@@ -140,6 +142,7 @@ func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 		width:     width,
 		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
 		color:     ctx.StyleSheet.BorderColor(b.node),
+		source:    b,
 	}
 }
 
@@ -152,6 +155,7 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 		barWidth: int(geom.BarWidth),
 		barColor: ctx.StyleSheet.BorderColor(b.node),
 		inner:    b.inner.GetBox(ctx, width-indent),
+		source:   b,
 	}
 }
 
@@ -374,6 +378,7 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 		columnRuleThickness: columnRuleThickness,
 		frameColor:          ctx.StyleSheet.BorderColor(b.node),
 		cells:               cells,
+		source:              b,
 	}
 }
 

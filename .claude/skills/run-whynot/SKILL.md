@@ -45,6 +45,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-wheel-dy` | `-50` | wheel dy re-injected every tick of the scroll phase; negative scrolls **down** the document |
 | `-scroll-ticks` | `0` | how many ticks to hold `-wheel-dy` before releasing it; `0` skips scrolling entirely |
 | `-ticks` | `5` | settle ticks run after scrolling, immediately before the frame is captured |
+| `-cursor-x`, `-cursor-y` | `-1`, `-1` | cursor position (device-independent pixels, same space as `-w`/`-h`) to move to before the settle ticks; negative (either one) skips moving the cursor |
 
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
 result - there's no direct "scroll to heading" API, only wheel-notch simulation, so getting to a

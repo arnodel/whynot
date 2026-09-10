@@ -59,7 +59,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			items = c.AppendInlineNode(items, child, astNode)
 			child = child.NextSibling()
 		}
-		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
+		return &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
 	case gmast.KindHeading:
 		level := node.(*gmast.Heading).Level
 		astNode := parent.AddChild(headingTag(level))
@@ -69,7 +69,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			items = c.AppendInlineNode(items, child, astNode)
 			child = child.NextSibling()
 		}
-		return &MarginBlock{Block: &TextBlock{parts: items}, node: astNode}
+		return &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
 	case gmast.KindList:
 		list := node.(*gmast.List)
 		astNode := parent.AddChild(TagList)
@@ -97,7 +97,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			text := strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
 			items[i] = &InlineText{text: text, node: astNode}
 		}
-		return &MarginBlock{Block: &CodeBlock{lines: items}, node: astNode}
+		return &MarginBlock{Block: &CodeBlock{lines: items, node: astNode}, node: astNode}
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(TagThematicBreak)
 		return &MarginBlock{
@@ -173,6 +173,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	head := Block(&ListItemHeadBlock{
 		marker: &InlineText{text: markerString, node: itemNode},
 		parts:  items,
+		node:   itemNode,
 	})
 	if !tight {
 		// Loose items get real paragraph spacing on their own leading text
@@ -241,7 +242,7 @@ func (c *MarkdownCompiler) CompileTableRow(node gmast.Node, parent *ASTNode) []t
 			parts = c.AppendInlineNode(parts, child, cellASTNode)
 		}
 		cells = append(cells, tableCell{
-			content:   &TextBlock{parts: parts},
+			content:   &TextBlock{parts: parts, node: cellASTNode},
 			alignment: tableCellAlignment(tc.Alignment),
 		})
 	}
