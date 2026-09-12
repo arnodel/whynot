@@ -190,6 +190,63 @@ or display scale change (typically from the embedding `ebiten.Game`'s own
 `Layout`). `cmd/whynot`'s `main.go` is the minimal example of wiring this
 up.
 
+## Hit-testing: `View.HitTest`
+
+`View.HitTest(x, y)` ([view.go](view.go)) answers "what's at this
+position" in the same coordinate space `Draw`'s own `(x, y)` places
+content's origin into - the query counterpart to `Draw`, resolving a
+point instead of painting one. Like `Draw`, it's cursor-relative
+([box.go](box.go)'s `normalizeCursor`), so a query far from the current
+scroll position doesn't force-build every slot in between.
+
+It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
+
+- `Source` ([block.go](block.go)) is `Node() *ASTNode` - the common
+  ground between `Block` and `Inline`, letting a resolved position trace
+  back to its origin in the semantic tree (Layer 1). Every `Block`/
+  `Inline` implements it, including `StackBlock`, which reports `nil`
+  since it aggregates unrelated children with no identity of its own.
+- `Hit` ([box.go](box.go)) is `Bounds() image.Rectangle` + `Source()
+  Source` - what `HitTest` returns. Every `BlockLayout`/`InlineLayout`
+  satisfies it directly (no separate wrapper type), so a caller gets the
+  actual matched box back - useful for type-asserting to its concrete
+  type for anything beyond the node itself (e.g. a `*TextBox`'s resolved
+  `Color`/`Face`). Composites without a single identity of their own (a
+  `LineBox` mixing differently-styled inline spans, an aggregate
+  `StackBox`) report a `nil` `Source`, the same as `StackBlock.Node()`.
+
+`BlockLayout.HitTest(p) (Hit, image.Point)` and `InlineLayout.HitTest(p,
+x, y) (Hit, image.Point, nextX int)` mirror `drawContents`/`DrawInline`'s
+own walk exactly - same recursion shape, same accumulated `(x, y)` for
+inline flow - so the query path can't silently drift from the draw path.
+`offset` is where the returned `Hit`'s own `Bounds()` should be placed to
+land in the caller's coordinate space (`hit.Bounds().Add(offset)`),
+rather than a pre-shifted rectangle computed once and threaded through
+every recursion level.
+
+`StackBox` falls back to itself - reporting its own `Source` - when the
+slot a point falls into doesn't cover it (past the end of a short last
+line) or that slot's own `HitTest` declines, the same way
+`BlockquoteBox`/`TableBox` already fall back to their own `Source` on a
+declining child. This only fires when the `StackBox` was built from a
+single owning `Block` (a paragraph's or code block's own wrapped lines,
+tracked via an optional `source Block` field set at those
+`GetBlockLayout` call sites) - never for an aggregate `StackBox` like
+`StackBlock`'s own or the top-level document, which has nothing to fall
+back to.
+
+One known imprecision: `View.HitTest` checks a top-level slot's own
+`Bounds()` before ever calling its `HitTest`, and a `BlockLayout`'s
+`Bounds()` is only as wide as its longest line - not the full page
+width. So the fallback above only reaches as far right as some line in
+that block actually extends; a single short line (e.g. a heading with no
+longer sibling line) has nothing to widen it. Not worth resolving given
+callers only query points already within their own rendered viewport.
+
+`cmd/whynot` uses `HitTest` to outline whatever's under the mouse each
+frame, as a diagnostic - see `game.Draw` in
+[cmd/whynot/main.go](cmd/whynot/main.go).
+
 ## Known issues
 
 These are real, understood, and not yet fixed:
