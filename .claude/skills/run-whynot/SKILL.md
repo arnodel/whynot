@@ -107,12 +107,17 @@ go test ./...
   a single `AdvanceTicks(N)` - the naive version silently scrolls nothing.
 - **The guest is version-locked to the host's ebiten build.** The driver imports
   `github.com/hajimehoshi/ebiten/v2/exp/vmhost` from this module's own `go.mod`
-  (`v2.10.0-alpha.12` as of this writing), and builds the guest from source with `go build`, so
-  they always match automatically. If `go.mod`'s ebiten version changes and this driver stops
-  working, diff it against the freshly-vendored copy at
-  `$(go env GOMODCACHE)/github.com/hajimehoshi/ebiten/v2@<new-version>/.agents/skills/run-ebitengine-app-headless/driver/main.go`
-  - `exp/vmhost`'s API (build tag name, method signatures) has already moved once between nearby
-    alpha versions.
+  (`v2.10.1` as of this writing), and builds the guest from source with `go build`, so they always
+  match automatically. If `go.mod`'s ebiten version changes and this driver stops working, diff it
+  against the freshly-vendored copy at
+  `$(go env GOMODCACHE)/github.com/hajimehoshi/ebiten/v2@<new-version>/skills/run-ebitengine-app-headless/_driver/main.go`
+  - `exp/vmhost`'s API has already moved twice: method signatures shifted between alpha versions,
+    and going from the last alpha (`v2.10.0-alpha.12`) to the stable `v2.10.1` renamed the guest
+    build tag from `ebitenginevm` to `ebitenginevmguest` and moved the vendored skill from
+    `.agents/skills/run-ebitengine-app-headless/driver/main.go` to
+    `skills/run-ebitengine-app-headless/_driver/main.go` - a stale tag silently builds a guest
+    that tries to open a real window instead of connecting to the host, which just hangs until
+    the host's own accept timeout fires.
 - **Don't pass a relative `-source` and rely on the guest's cwd.** The driver resolves `-source` to
   an absolute path *before* passing it to the guest as an argument, specifically so the guest's
   actual working directory (some arbitrary temp dir, since the driver execs a freshly-built binary)

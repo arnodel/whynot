@@ -2,10 +2,12 @@
 // injecting mouse-wheel input, and dumps the rendered frame as a PNG. It is the agent-facing way to
 // run and screenshot whynot without a visible window - see SKILL.md in this directory.
 //
-// Written against ebiten v2.10.0-alpha.12 (the version pinned in go.mod); exp/vmhost is
-// experimental, so if go.mod's ebiten version changes, re-verify this against the matching copy of
-// the run-ebitengine-app-headless skill vendored at
-// $(go env GOMODCACHE)/github.com/hajimehoshi/ebiten/v2@<version>/.agents/skills/run-ebitengine-app-headless/.
+// Written against ebiten v2.10.1 (the version pinned in go.mod); exp/vmhost is experimental, so
+// if go.mod's ebiten version changes, re-verify this against the matching copy of the
+// run-ebitengine-app-headless skill vendored at
+// $(go env GOMODCACHE)/github.com/hajimehoshi/ebiten/v2@<version>/skills/run-ebitengine-app-headless/
+// (that path itself moved here, from .agents/skills/run-ebitengine-app-headless/ pre-v2.10 - the
+// ebitenginevm build tag was also renamed to ebitenginevmguest in the same jump).
 package main
 
 import (
@@ -185,10 +187,12 @@ func xmain() error {
 		return err
 	}
 
-	// Build the guest with the ebitenginevm tag so its RunGame connects to this host instead of
-	// opening a window. cmd/whynot's own source is unchanged.
+	// Build the guest with the ebitenginevmguest tag so its RunGame connects to this host instead
+	// of opening a window. cmd/whynot's own source is unchanged. The tag was renamed from
+	// ebitenginevm to ebitenginevmguest between the alpha this driver was first written against
+	// and the stable v2.10.1 release.
 	guestBin := filepath.Join(dir, "guest")
-	build := exec.Command("go", "build", "-tags", "ebitenginevm", "-o", guestBin, *pkg)
+	build := exec.Command("go", "build", "-tags", "ebitenginevmguest", "-o", guestBin, *pkg)
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
 		return fmt.Errorf("building the guest failed: %w", err)
