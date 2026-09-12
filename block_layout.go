@@ -3,8 +3,6 @@ package whynot
 import (
 	"image"
 	"image/color"
-
-	"golang.org/x/image/font"
 )
 
 // Hit is what HitTest returns for an actual match: something that can
@@ -36,155 +34,14 @@ type BlockLayout interface {
 	HitTest(p image.Point) (hit Hit, offset image.Point)
 }
 
-// InlineLayout's HitTest mirrors DrawInline's own calling convention exactly
-// - same (x, y), same "next x" return - so LineBox.HitTest can drive the
-// identical accumulation loop drawContents does, just calling HitTest
-// instead of DrawInline at each step.
-type InlineLayout interface {
-	BoundsAndAdvance() (image.Rectangle, int)
-	Bounds() image.Rectangle
-	Source() Source
-	SpaceWidth() int
-	DrawInline(dst Canvas, x, y int) int
-	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
-}
-
-type TextBox struct {
-	Text  string
-	Face  font.Face
-	Color color.Color
-
-	// StrikeThickness is the strikethrough line's thickness in pixels; 0
-	// means no strikethrough.
-	StrikeThickness int
-
-	// source is the InlineText this TextBox was built from - see Source.
-	source Inline
-
-	boundsComputed bool
-	bounds         image.Rectangle
-	advance        int
-
-	spaceComputed bool
-	spaceWidth    int
-}
-
-var _ InlineLayout = (*TextBox)(nil)
-
-func (b *TextBox) Source() Source {
-	return b.source
-}
-
-func (b *TextBox) Bounds() image.Rectangle {
-	bounds, _ := b.BoundsAndAdvance()
-	return bounds
-}
-
-func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	bounds, advance := b.BoundsAndAdvance()
-	if p.In(bounds.Add(image.Pt(x, y))) {
-		return b, image.Pt(x, y), x + advance
+// DrawBlockLayout is the sole entry point for drawing a BlockLayout: it skips drawContents
+// entirely when box's bounds don't overlap dst, so every BlockLayout gets that for
+// free regardless of who's calling it or where it sits in the tree.
+func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int) {
+	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
+		return
 	}
-	return nil, image.Point{}, x + advance
-}
-
-// Text/Face never change after construction, and a TextBox is always
-// rebuilt from scratch (never mutated) whenever the source Block tree is
-// re-laid out, so this measurement is valid for the entire lifetime of
-// the instance: compute it once, on first use.
-func (b *TextBox) BoundsAndAdvance() (image.Rectangle, int) {
-	if !b.boundsComputed {
-		bounds, advance := font.BoundString(b.Face, b.Text)
-		metrics := b.Face.Metrics()
-		b.bounds = image.Rect(
-			bounds.Min.X.Floor(),
-			-metrics.Ascent.Ceil(),
-			bounds.Max.X.Ceil(),
-			metrics.Descent.Ceil(),
-		)
-		b.advance = advance.Ceil()
-		b.boundsComputed = true
-	}
-	return b.bounds, b.advance
-}
-
-func (b *TextBox) SpaceWidth() int {
-	if !b.spaceComputed {
-		adv, _ := b.Face.GlyphAdvance(' ')
-		b.spaceWidth = adv.Ceil()
-		b.spaceComputed = true
-	}
-	return b.spaceWidth
-}
-
-type ListItemMarkerBox struct {
-	Marker InlineLayout
-}
-
-var _ InlineLayout = (*ListItemMarkerBox)(nil)
-
-func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
-	bounds, _ := b.Marker.BoundsAndAdvance()
-	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), 0
-}
-
-func (b *ListItemMarkerBox) Bounds() image.Rectangle {
-	bounds, _ := b.BoundsAndAdvance()
-	return bounds
-}
-
-func (b *ListItemMarkerBox) Source() Source {
-	return b.Marker.Source()
-}
-
-func (b *ListItemMarkerBox) SpaceWidth() int {
-	return b.Marker.SpaceWidth()
-}
-
-// HitTest mirrors DrawInline exactly: the marker is drawn hanging off to
-// the left of x (DrawInline's x-advance-space), not at x itself, so a
-// naive check against BoundsAndAdvance's own (zero-width) bounds would
-// never match a click on the visible marker glyph.
-func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	_, advance := b.Marker.BoundsAndAdvance()
-	space := b.Marker.SpaceWidth()
-	if hit, offset, _ := b.Marker.HitTest(p, x-advance-space, y); hit != nil {
-		return hit, offset, x - space
-	}
-	return nil, image.Point{}, x - space
-}
-
-type ImageBox struct {
-	src    string
-	bounds image.Rectangle
-
-	// source is the InlineImage this ImageBox was built from - see Source.
-	source Inline
-}
-
-var _ InlineLayout = (*ImageBox)(nil)
-
-func (b *ImageBox) Source() Source {
-	return b.source
-}
-
-func (b *ImageBox) BoundsAndAdvance() (image.Rectangle, int) {
-	return b.bounds, b.bounds.Dx()
-}
-
-func (b *ImageBox) Bounds() image.Rectangle {
-	return b.bounds
-}
-
-func (b *ImageBox) SpaceWidth() int {
-	return 0
-}
-
-func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	if p.In(b.bounds.Add(image.Pt(x, y))) {
-		return b, image.Pt(x, y), x + b.bounds.Dx()
-	}
-	return nil, image.Point{}, x + b.bounds.Dx()
+	box.drawContents(dst, x, y)
 }
 
 type LineBox struct {
@@ -282,6 +139,25 @@ func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 		prevSpace = space
 	}
 	return nil, image.Point{}
+}
+
+func (b *LineBox) drawContents(dst Canvas, x, y int) {
+	lineBounds, _ := b.BoundsAndAdvance()
+	y -= lineBounds.Min.Y
+
+	bounds, _ := b.parts[0].BoundsAndAdvance()
+	left := bounds.Min.X
+	if left < 0 {
+		x -= left
+	}
+	prevSpace := b.parts[0].SpaceWidth()
+
+	x = b.parts[0].DrawInline(dst, x, y)
+	for _, box := range b.parts[1:] {
+		space := box.SpaceWidth()
+		x = box.DrawInline(dst, x+maxInt(prevSpace, space), y)
+		prevSpace = space
+	}
 }
 
 // stackSlot is a StackBox child that's either already resolved (box set -
@@ -472,6 +348,42 @@ func (b *StackBox) moveCursor(c stackCursor, dy float64) stackCursor {
 	return b.normalizeCursor(stackCursor{index: c.index, offset: c.offset + dy})
 }
 
+func (b *StackBox) drawContents(dst Canvas, x, y int) {
+	viewport := dst.Bounds()
+	for i := range b.slots {
+		box := b.boxAt(i)
+		childBounds := box.Bounds()
+		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
+			// This child, and every one after it, starts below the
+			// viewport: nothing further down can be visible.
+			break
+		}
+		DrawBlockLayout(box, dst, x, y)
+		y += childBounds.Max.Y
+	}
+}
+
+// DrawFrom draws starting at c, so that c's position lands at (x, y) on
+// dst - unlike DrawBlockLayout, it never calls Bounds() on the whole tree first,
+// and never resolves or draws slots before c.index. Intended for View to
+// call at the scroll cursor.
+func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int) {
+	if c.index < 0 || c.index >= len(b.slots) {
+		return
+	}
+	viewport := dst.Bounds()
+	y -= int(c.offset)
+	for i := c.index; i < len(b.slots); i++ {
+		box := b.boxAt(i)
+		childBounds := box.Bounds()
+		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
+			break
+		}
+		DrawBlockLayout(box, dst, x, y)
+		y += childBounds.Max.Y
+	}
+}
+
 type EmptyBox struct {
 	bounds image.Rectangle
 }
@@ -494,6 +406,9 @@ func (b *EmptyBox) Source() Source {
 // between blocks or lines), never content.
 func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
 	return nil, image.Point{}
+}
+
+func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
 }
 
 type ContainerBox struct {
@@ -535,6 +450,10 @@ func (b *ContainerBox) HitTest(p image.Point) (Hit, image.Point) {
 		return nil, image.Point{}
 	}
 	return hit, offset.Add(b.innerPos)
+}
+
+func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
+	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
 }
 
 // BlockquoteBox draws a vertical bar down the left edge and positions its

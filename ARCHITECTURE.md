@@ -33,11 +33,11 @@ flowchart TD
         B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
         B --> G["ASTNode tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ASTNode into it)"]
     end
-    subgraph L2["Layer 2 — Layout tree (layout.go, box.go, stylesheet.go)"]
+    subgraph L2["Layer 2 — Layout tree (block.go, inline.go, block_layout.go,\ninline_layout.go, rendering_context.go, stylesheet.go)"]
         C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
         G -. "ctx.StyleSheet resolves\nMargins / TextStyle / Color / ..." .-> D
     end
-    subgraph L3["Layer 3 — Canvas boundary (render.go, canvas.go)"]
+    subgraph L3["Layer 3 — Canvas boundary (canvas.go)"]
         D -- "DrawBlockLayout(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
     end
     subgraph L4["ebitenrenderer — a Canvas implementation"]
@@ -98,10 +98,12 @@ rebuilt — `Block`s are immutable for the life of the program.
 
 ### Layer 2 — Layout tree (`BlockLayout` / `InlineLayout`)
 
-`Block.GetBlockLayout(ctx, width)` / `Inline.GetInlineLayout(ctx)`
-([layout.go](layout.go)) take a concrete pixel `width` and a
-`RenderingContext` (DPI scale, font face cache, and `StyleSheet`) and
-produce a `BlockLayout` / `InlineLayout` tree ([box.go](box.go)): `TextBox`,
+`Block.GetBlockLayout(ctx, width)` ([block.go](block.go)) / `Inline.GetInlineLayout(ctx)`
+([inline.go](inline.go)) take a concrete pixel `width` and a
+`RenderingContext` ([rendering_context.go](rendering_context.go); DPI scale,
+font face cache, and `StyleSheet`) and produce a `BlockLayout` /
+`InlineLayout` tree ([block_layout.go](block_layout.go),
+[inline_layout.go](inline_layout.go)): `TextBox`,
 `ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
 margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 (margin spacer). This is where appearance actually gets resolved -
@@ -122,10 +124,10 @@ mutated, which is what makes the memoization described next safe.
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 `DrawImage`. `DrawImage` takes a source path rather than pixel data —
 layout only ever probes an image's *dimensions* (`InlineImage.GetInlineLayout`
-in [layout.go](layout.go)), never its pixels, so loading, decoding, and
+in [inline.go](inline.go)), never its pixels, so loading, decoding, and
 caching are entirely a `Canvas` implementation's concern.
 
-`DrawBlockLayout(box, dst, x, y)` ([render.go](render.go)) is the *only* way a
+`DrawBlockLayout(box, dst, x, y)` ([block_layout.go](block_layout.go)) is the *only* way a
 `BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
 skips `drawContents` (the type-specific drawing logic) entirely if they
 don't overlap. Every `BlockLayout` implementation gets that off-screen skip for
@@ -149,7 +151,7 @@ instead of duplicating them.
 - the `Block` tree (built once, in `NewView`)
 - the current `BlockLayout` tree, **cached** and only rebuilt in `Layout` when
   `width` or `scale` actually change — not on every `Draw` call
-- the scroll position, as a `stackCursor{index, offset}` ([box.go](box.go)):
+- the scroll position, as a `stackCursor{index, offset}` ([block_layout.go](block_layout.go)):
   which top-level entry is at the top of the viewport, and how far
   (in pixels) into it — and viewport culling via `DrawFrom` in `Draw`
 - **resize anchoring**: when `Layout` rebuilds the tree at a new width,
@@ -196,7 +198,7 @@ up.
 position" in the same coordinate space `Draw`'s own `(x, y)` places
 content's origin into - the query counterpart to `Draw`, resolving a
 point instead of painting one. Like `Draw`, it's cursor-relative
-([box.go](box.go)'s `normalizeCursor`), so a query far from the current
+([block_layout.go](block_layout.go)'s `normalizeCursor`), so a query far from the current
 scroll position doesn't force-build every slot in between.
 
 It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
@@ -206,7 +208,7 @@ It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
   back to its origin in the semantic tree (Layer 1). Every `Block`/
   `Inline` implements it, including `StackBlock`, which reports `nil`
   since it aggregates unrelated children with no identity of its own.
-- `Hit` ([box.go](box.go)) is `Bounds() image.Rectangle` + `Source()
+- `Hit` ([block_layout.go](block_layout.go)) is `Bounds() image.Rectangle` + `Source()
   Source` - what `HitTest` returns. Every `BlockLayout`/`InlineLayout`
   satisfies it directly (no separate wrapper type), so a caller gets the
   actual matched box back - useful for type-asserting to its concrete
@@ -257,7 +259,7 @@ These are real, understood, and not yet fixed:
   taking down the whole program instead of degrading gracefully.
 - **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
   repeat the same "turn `Inline`s into `InlineLayout`s, then `splitBoxes`-loop
-  or one-box-per-line" shape in [layout.go](layout.go). A shared
+  or one-box-per-line" shape in [block.go](block.go). A shared
   `linesFromInline(ctx, parts, width) []BlockLayout` helper would remove the
   copy-paste.
 
