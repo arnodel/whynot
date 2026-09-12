@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,7 +97,11 @@ func absFileURL(path string) (*url.URL, error) {
 
 // loadDocument fetches the bytes at location - a local read for a
 // file: URL, an HTTP GET for http(s). Any other scheme (e.g. a
-// mailto: autolink) is rejected rather than misread as a file path.
+// mailto: autolink) is rejected rather than misread as a file path -
+// and so is an http(s) response whose Content-Type is clearly not
+// Markdown/plain text (e.g. a real webpage, not a .md file): whynot has
+// no way to tell HTML apart from Markdown itself, so without this
+// check it would just get fed straight into the Markdown parser.
 func loadDocument(location *url.URL) ([]byte, error) {
 	switch location.Scheme {
 	case "http", "https":
@@ -108,6 +113,15 @@ func loadDocument(location *url.URL) ([]byte, error) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("%s: %s", location, resp.Status)
+		}
+		// A missing or unparseable Content-Type is let through - a
+		// heuristic, not a guarantee, since some servers omit or
+		// misreport it for a perfectly good Markdown file.
+		if ct := resp.Header.Get("Content-Type"); ct != "" {
+			if mediaType, _, err := mime.ParseMediaType(ct); err == nil &&
+				mediaType != "text/plain" && mediaType != "text/markdown" {
+				return nil, fmt.Errorf("%s: not Markdown (Content-Type: %s)", location, mediaType)
+			}
 		}
 		return io.ReadAll(resp.Body)
 	case "file", "":

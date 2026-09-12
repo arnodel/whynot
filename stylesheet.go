@@ -134,6 +134,12 @@ type DefaultStyleSheet struct {
 	CodeBlockTextStyle PartialTextStyle
 	CodeColor          color.Color
 
+	// UnsupportedColor is the text color for a Markdown construct
+	// whynot doesn't understand - rendered as a code block (see
+	// CodeBlockMargins/CodeBlockTextStyle, shared with TagCodeBlock) but
+	// in this distinct color so it reads as an error, not as normal code.
+	UnsupportedColor color.Color
+
 	// CodeSpanTextStyle, EmphasisTextStyle, StrongTextStyle: inline spans
 	// have no margins of their own to bundle alongside, unlike the
 	// block-level tags above.
@@ -230,6 +236,11 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		CodeBlockTextStyle: PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
 		CodeColor:          color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 
+		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
+		// below, a strong red reads as an error against either a light
+		// or dark background, so NewLightStyleSheet leaves it as-is.
+		UnsupportedColor: color.RGBA{0xFF, 0x33, 0x33, 0xFF},
+
 		CodeSpanTextStyle: PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily},
 		EmphasisTextStyle: PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle},
 		StrongTextStyle:   PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight},
@@ -300,7 +311,7 @@ func (s *DefaultStyleSheet) Margins(node *ASTNode) Margins {
 		return s.ListMargins
 	case TagListItem:
 		return s.ListItemMargins
-	case TagCodeBlock:
+	case TagCodeBlock, TagUnsupported:
 		return s.CodeBlockMargins
 	case TagThematicBreak:
 		return s.ThematicBreakMargins
@@ -330,7 +341,7 @@ func (s *DefaultStyleSheet) TextStyle(node *ASTNode) PartialTextStyle {
 		return s.HeadingTextStyles[node.Tag-TagHeading1]
 	case TagListItem:
 		return s.ListItemTextStyle
-	case TagCodeBlock:
+	case TagCodeBlock, TagUnsupported:
 		return s.CodeBlockTextStyle
 	case TagTableCell:
 		return s.TableCellTextStyle
@@ -348,9 +359,9 @@ func (s *DefaultStyleSheet) TextStyle(node *ASTNode) PartialTextStyle {
 // Color returns node's own contribution to the cascading text color - nil
 // for any tag with no opinion, so ResolvedColor's ancestry walk passes
 // through it to an outer contributor (or the TextColor default at the
-// root). Only Link and the two code tags have an opinion; block-level
-// decoration colors live on BorderColor instead, since e.g. a blockquote's
-// bar color must never leak into its inner text color.
+// root). Only Link, the two code tags, and Unsupported have an opinion;
+// block-level decoration colors live on BorderColor instead, since e.g.
+// a blockquote's bar color must never leak into its inner text color.
 func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 	if node == nil {
 		return s.TextColor
@@ -358,6 +369,8 @@ func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 	switch node.Tag {
 	case TagCodeBlock, TagCodeSpan:
 		return s.CodeColor
+	case TagUnsupported:
+		return s.UnsupportedColor
 	case TagLink:
 		return s.LinkColor
 	default:

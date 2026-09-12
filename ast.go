@@ -27,6 +27,7 @@ const (
 	TagEmphasis
 	TagStrong
 	TagStrikethrough
+	TagUnsupported
 )
 
 // ASTPath is a tag ancestry, root-to-leaf.

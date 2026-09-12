@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -190,4 +191,107 @@ func TestASTStrikethroughPath(t *testing.T) {
 	para := wrapper.Block.(*TextBlock)
 	text := para.parts[0].(*InlineText)
 	wantPath(t, text.node.Path(), ASTPath{TagParagraph, TagStrikethrough})
+}
+
+// TestASTLinkReferenceDefinitionIsInvisible checks that a reference-style
+// link ([text][ref] plus a [ref]: url "title" definition line) resolves
+// normally, and that the definition line itself - once an unhandled
+// node kind that crashed compilation entirely - produces no block of
+// its own.
+func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
+	doc := Parse([]byte("[a link][ref]\n\n[ref]: https://example.com \"title\"\n"))
+	stack := doc.(*StackBlock)
+	if len(stack.blocks) != 1 {
+		t.Fatalf("len(blocks) = %d, want 1 (the reference definition should produce no block)", len(stack.blocks))
+	}
+
+	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
+	link := para.parts[0].(*InlineText).node
+	if link.Tag != TagLink {
+		t.Fatalf("node.Tag = %v, want TagLink", link.Tag)
+	}
+	if want := "https://example.com"; link.Destination != want {
+		t.Errorf("Destination = %q, want %q", link.Destination, want)
+	}
+}
+
+// TestASTHTMLCommentBlockIsInvisible checks that a block-level <!--
+// comment --> - unlike other raw HTML, never visible in any Markdown
+// renderer - produces no block of its own, rather than showing as
+// TagUnsupported.
+func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
+	doc := Parse([]byte("Before.\n\n<!-- ignore -->\n\nAfter.\n"))
+	stack := doc.(*StackBlock)
+	if len(stack.blocks) != 2 {
+		t.Fatalf("len(blocks) = %d, want 2 (the comment should produce no block)", len(stack.blocks))
+	}
+	for i, want := range []string{"Before.", "After."} {
+		para := stack.blocks[i].(*MarginBlock).Block.(*TextBlock)
+		if got := para.parts[0].(*InlineText).text; got != want {
+			t.Errorf("blocks[%d] text = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestASTHTMLCommentInlineIsInvisible is
+// TestASTHTMLCommentBlockIsInvisible's inline counterpart: a <!--
+// comment --> mid-paragraph is dropped rather than shown as
+// TagUnsupported text.
+func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
+	doc := Parse([]byte("before <!-- ignore --> after\n"))
+	stack := doc.(*StackBlock)
+	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
+
+	for _, part := range para.parts {
+		if it, ok := part.(*InlineText); ok && it.node.Tag == TagUnsupported {
+			t.Errorf("found a TagUnsupported part (%q); the comment should be invisible", it.text)
+		}
+	}
+}
+
+// TestASTUnsupportedHTMLBlockShowsSource checks that a raw HTML block -
+// a real Markdown construct compile.go has no case for - renders as a
+// TagUnsupported code block showing its own source, rather than
+// panicking and taking down the whole document.
+func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
+	doc := Parse([]byte("<div>\n  <p>raw</p>\n</div>\n"))
+	stack := doc.(*StackBlock)
+	if len(stack.blocks) != 1 {
+		t.Fatalf("len(blocks) = %d, want 1", len(stack.blocks))
+	}
+
+	cb := stack.blocks[0].(*MarginBlock).Block.(*CodeBlock)
+	if cb.node.Tag != TagUnsupported {
+		t.Errorf("Tag = %v, want TagUnsupported", cb.node.Tag)
+	}
+	if len(cb.lines) == 0 {
+		t.Fatal("no lines rendered for the unsupported HTML block")
+	}
+	if first := cb.lines[0].(*InlineText).text; !strings.Contains(first, "<div>") {
+		t.Errorf("first line = %q, want it to contain the raw source", first)
+	}
+}
+
+// TestASTUnsupportedInlineHTMLShowsSource is
+// TestASTUnsupportedHTMLBlockShowsSource's inline counterpart: raw
+// inline HTML mid-paragraph renders as TagUnsupported text carrying its
+// own source, spliced into the surrounding paragraph rather than
+// panicking.
+func TestASTUnsupportedInlineHTMLShowsSource(t *testing.T) {
+	// <span> and </span> are each their own RawHTML node - CommonMark
+	// doesn't pair inline HTML tags - so two separate TagUnsupported
+	// runs are expected, one per tag.
+	doc := Parse([]byte("before <span>x</span> after\n"))
+	stack := doc.(*StackBlock)
+	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
+
+	var unsupported []string
+	for _, part := range para.parts {
+		if it, ok := part.(*InlineText); ok && it.node.Tag == TagUnsupported {
+			unsupported = append(unsupported, it.text)
+		}
+	}
+	if !slices.Contains(unsupported, "<span>") {
+		t.Errorf("unsupported inline runs = %q, want one of them to be the raw %q", unsupported, "<span>")
+	}
 }

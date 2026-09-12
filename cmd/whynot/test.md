@@ -42,6 +42,12 @@ Local links work too, and can be followed the same way: here's
 Anchor links jump within the document itself, using a heading's
 auto-generated id: jump to [Tables](#tables) or to [Cute!](#cute).
 
+Remote markdown files work too, fetched over http(s): here's
+[the table of contents](https://raw.githubusercontent.com/rust-lang/book/main/src/SUMMARY.md)
+of *The Rust Programming Language* book, itself full of relative links
+to the book's individual chapters - also plain Markdown files, fetched
+the same way.
+
 ## Examples
 
 Six levels of headers are supported
@@ -197,3 +203,24 @@ A table with a header but no data rows:
 ## Cute!
 
 ![cat.jpg](cat.jpeg "lovely cat")
+
+## Unsupported content
+
+Markdown constructs whynot doesn't understand don't crash the whole
+document - they're shown in red instead, and a warning is logged.
+
+Reference-style links work fine and stay invisible, like everywhere
+else: here's [one][ref] to the project's GitHub repo.
+
+Raw inline HTML falls back to showing its source: before <span
+class="x">middle</span> after.
+
+Raw HTML blocks do too:
+
+<div>
+  <p>This is raw HTML that whynot doesn't render specially.</p>
+</div>
+
+And back to normal text after it.
+
+[ref]: https://github.com/arnodel/whynot

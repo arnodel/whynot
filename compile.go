@@ -42,7 +42,9 @@ func (c *MarkdownCompiler) CompileDocument(node gmast.Node) Block {
 	var blocks []Block
 	child := node.FirstChild()
 	for child != nil {
-		blocks = append(blocks, c.CompileNode(child, nil))
+		if block := c.CompileNode(child, nil); block != nil {
+			blocks = append(blocks, block)
+		}
 		child = child.NextSibling()
 	}
 	return &StackBlock{blocks: blocks}
@@ -115,7 +117,9 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		var items []Block
 		child := node.FirstChild()
 		for child != nil {
-			items = append(items, c.CompileNode(child, astNode))
+			if block := c.CompileNode(child, astNode); block != nil {
+				items = append(items, block)
+			}
 			child = child.NextSibling()
 		}
 		return &MarginBlock{
@@ -124,8 +128,41 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		}
 	case extast.KindTable:
 		return c.CompileTable(node, parent)
+	case gmast.KindLinkReferenceDefinition:
+		// A `[foo]: /url "title"` line - already consumed by goldmark to
+		// resolve reference-style links elsewhere in the document (see
+		// KindLink), and, like in any other Markdown renderer, invisible
+		// in its own right.
+		return nil
+	case gmast.KindHTMLBlock:
+		if node.(*gmast.HTMLBlock).HTMLBlockKind == gmast.HTMLBlockKind2 {
+			// A <!-- comment -->, invisible in any Markdown renderer -
+			// not "unsupported", never meant to be shown at all.
+			return nil
+		}
 	}
-	panic("Unsupported block")
+	return c.compileUnsupportedBlock(node, parent)
+}
+
+// compileUnsupportedBlock handles any block-level Markdown construct
+// whynot doesn't have a case for above. Rather than taking down the
+// whole document, it logs a warning and renders the construct as a
+// code block in StyleSheet.UnsupportedColor, showing its raw source
+// where possible so the gap is visible rather than silently dropped.
+func (c *MarkdownCompiler) compileUnsupportedBlock(node gmast.Node, parent *ASTNode) Block {
+	astNode := parent.AddChild(TagUnsupported)
+	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
+
+	var items []Inline
+	if html, ok := node.(*gmast.HTMLBlock); ok {
+		for _, seg := range html.Value.Segments() {
+			items = append(items, &InlineText{text: string(seg.Bytes(c.source)), node: astNode})
+		}
+	}
+	if len(items) == 0 {
+		items = []Inline{&InlineText{text: fmt.Sprintf("(unsupported: %s)", node.Kind()), node: astNode}}
+	}
+	return &MarginBlock{Block: &CodeBlock{lines: items, node: astNode}, node: astNode}
 }
 
 // headingTag maps a heading level (1-6) to its ASTTag - safe because
@@ -199,7 +236,9 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 
 	var trailingBlocks []Block
 	for ; next != nil; next = next.NextSibling() {
-		trailingBlocks = append(trailingBlocks, c.CompileNode(next, itemNode))
+		if block := c.CompileNode(next, itemNode); block != nil {
+			trailingBlocks = append(trailingBlocks, block)
+		}
 	}
 	if len(trailingBlocks) > 0 {
 		blocks = append(blocks, wrapBlocks(trailingBlocks))
@@ -318,9 +357,30 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 		}
 		return items
 	default:
-		log.Panicf("Unsupported node kind %s", node.Kind())
+		return c.appendUnsupportedInline(items, node, astNode)
 	}
-	return nil
+}
+
+// appendUnsupportedInline is AppendInlineNode's fallback for any inline
+// Markdown construct whynot doesn't have a case for - the inline
+// counterpart to compileUnsupportedBlock. Inline content can't hold a
+// block-level box, so the raw source (where available) is spliced into
+// the surrounding paragraph as ordinary words, styled in
+// StyleSheet.UnsupportedColor via TagUnsupported.
+func (c *MarkdownCompiler) appendUnsupportedInline(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
+	text := fmt.Sprintf("(unsupported: %s)", node.Kind())
+	if raw, ok := node.(*gmast.RawHTML); ok {
+		text = raw.Value.Value(c.source)
+		if strings.HasPrefix(text, "<!--") {
+			// A <!-- comment -->, invisible in any Markdown renderer -
+			// not "unsupported", never meant to be shown at all. Unlike
+			// HTMLBlockKind2, goldmark gives inline RawHTML no kind of
+			// its own to check instead.
+			return items
+		}
+	}
+	log.Printf("whynot: unsupported %s inline content, showing its source instead", node.Kind())
+	return appendString(items, text, astNode.AddChild(TagUnsupported))
 }
 
 // tableCellAlignment translates goldmark's own alignment enum to
