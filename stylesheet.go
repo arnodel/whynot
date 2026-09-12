@@ -82,6 +82,11 @@ type StyleSheet interface {
 	// resolution happens - a node parameter would have nothing real to
 	// mean.
 	BackgroundColor() color.Color
+	// ViewMargins returns the space between the document's viewport edge
+	// and its content, on all four sides - the same shape as a tag's own
+	// Margins, but for the whole view rather than one node, the same way
+	// BackgroundColor is a whole-view counterpart to Color.
+	ViewMargins() Margins
 
 	// StrikeThickness returns the thickness for a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
@@ -156,6 +161,13 @@ type DefaultStyleSheet struct {
 	// meaning unambiguous).
 	Background color.Color
 
+	// ViewMargin is the whole viewport's own inset - see ViewMargins. Named
+	// in the singular only to avoid colliding with the plural ViewMargins
+	// method (Margins is a struct - like the field, not a color.Color -
+	// so unlike Background/BackgroundColor there's no type-derived word
+	// to hang the distinction on instead).
+	ViewMargin Margins
+
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
 	// colors/margins/fonts, rarely a table's own column-gap width) - a
@@ -226,6 +238,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		BaseTextStyle: TextStyle{Size: 16},
 
 		Background: color.Black,
+		ViewMargin: Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
 
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
@@ -353,6 +366,10 @@ func (s *DefaultStyleSheet) BorderColor(node *ASTNode) color.Color {
 
 func (s *DefaultStyleSheet) BackgroundColor() color.Color {
 	return s.Background
+}
+
+func (s *DefaultStyleSheet) ViewMargins() Margins {
+	return s.ViewMargin
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged

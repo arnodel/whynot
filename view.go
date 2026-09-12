@@ -74,14 +74,16 @@ func (v *View) Scroll(dy float64) {
 //
 // Draw fills dst's whole bounds with the StyleSheet's background color
 // first - a caller doesn't need its own clear/fill step (or to know the
-// StyleSheet's background color itself) before calling Draw.
+// StyleSheet's background color itself) before calling Draw. The
+// ViewMargins' top/bottom is already baked into the scroll position (see
+// rebuild); only Left needs applying here.
 func (v *View) Draw(dst Canvas, x, y int) {
 	bounds := dst.Bounds()
 	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.StyleSheet.BackgroundColor())
 	if v.box == nil {
 		return
 	}
-	v.box.DrawFrom(dst, v.cursor, x, y)
+	v.box.DrawFrom(dst, v.cursor, x+int(v.ctx.ScaledViewMargins().Left), y)
 }
 
 // HitTest identifies what's at document position (x, y) - the same
@@ -104,12 +106,13 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 	if v.box == nil {
 		return nil, image.Point{}
 	}
+	left := int(v.ctx.ScaledViewMargins().Left)
 	c := v.box.normalizeCursor(stackCursor{index: v.cursor.index, offset: v.cursor.offset + float64(y)})
 	if c.index < 0 || c.index >= len(v.box.slots) {
 		return nil, image.Point{}
 	}
 	box := v.box.boxAt(c.index)
-	local := image.Pt(x, int(c.offset))
+	local := image.Pt(x-left, int(c.offset))
 	if !local.In(box.Bounds()) {
 		return nil, image.Point{}
 	}
@@ -118,9 +121,9 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 		return nil, image.Point{}
 	}
 	// Shift back from box's own local frame into the same frame (x, y)
-	// arrived in - undoing the cursor-relative adjustment made to y
-	// above (x never needed one).
-	return hit, offset.Add(image.Pt(0, y-int(c.offset)))
+	// arrived in - undoing both the left-margin shift and the
+	// cursor-relative adjustment made to y above.
+	return hit, offset.Add(image.Pt(left, y-int(c.offset)))
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
@@ -163,6 +166,17 @@ func (v *View) SetStyleSheet(s StyleSheet) {
 // StyleSheet swap) doesn't change what's visible - and since the cursor
 // is already (index, offset), this only needs one old and one new height,
 // not a scan of the tree.
+//
+// The document is wrapped with a leading and trailing EmptyBox sized to
+// the StyleSheet's ViewMargins, so the view's outer margin is real (if
+// empty) space in the tree - the same way StackBlock.GetBlockLayout
+// already represents inter-block gaps - rather than a separate draw-time
+// overlay: scrolling clamps past the last block into the bottom margin
+// exactly like clamping at the true end of the document, and a click
+// inside either margin misses, since EmptyBox.HitTest always declines.
+// Left/Right instead narrow the width passed to GetBlockLayout, since
+// slots have no per-slot horizontal position the way they have a
+// height - Draw/HitTest shift by Left to compensate.
 func (v *View) rebuild() {
 	ratio := 0.0
 	if v.box != nil && v.cursor.index < len(v.box.slots) {
@@ -171,11 +185,20 @@ func (v *View) rebuild() {
 		}
 	}
 
-	v.box = asStackBox(v.block.GetBlockLayout(v.ctx, v.boxWidth))
-
-	if len(v.box.slots) == 0 {
-		return
+	margin := v.ctx.ScaledViewMargins()
+	contentWidth := v.boxWidth - int(margin.Left) - int(margin.Right)
+	if contentWidth < 0 {
+		contentWidth = 0
 	}
+
+	v.box = asStackBox(v.block.GetBlockLayout(v.ctx, contentWidth))
+	if top := int(margin.Top); top > 0 {
+		v.box.slots = append([]stackSlot{{box: NewEmptyBox(contentWidth, top)}}, v.box.slots...)
+	}
+	if bottom := int(margin.Bottom); bottom > 0 {
+		v.box.slots = append(v.box.slots, stackSlot{box: NewEmptyBox(contentWidth, bottom)})
+	}
+
 	if v.cursor.index >= len(v.box.slots) {
 		v.cursor.index = len(v.box.slots) - 1
 	}

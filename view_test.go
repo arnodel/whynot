@@ -48,10 +48,21 @@ func (b *scaledHeightBlock) Node() *ASTNode {
 	return nil
 }
 
+// noMarginStyleSheet returns NewDarkStyleSheet with its ViewMargins zeroed,
+// for tests that check exact slot indices/heights - the default nonzero
+// margin would shift every index by the leading margin slot and need
+// accounting for in every expected value, none of which is what these
+// tests are about.
+func noMarginStyleSheet() *DefaultStyleSheet {
+	s := NewDarkStyleSheet()
+	s.ViewMargin = Margins{}
+	return s
+}
+
 func newTestView(blocks ...Block) *View {
 	return &View{
 		block: &StackBlock{blocks: blocks},
-		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()},
+		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()},
 	}
 }
 
@@ -176,8 +187,10 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	block := Parse([]byte("first\n\nsecond"))
 	small := NewDarkStyleSheet()
 	small.ParagraphTextStyle.Size = 10
+	small.ViewMargin = Margins{}
 	big := NewDarkStyleSheet()
 	big.ParagraphTextStyle.Size = 40
+	big.ViewMargin = Margins{}
 
 	v := &View{block: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
 	v.Layout(200, 1)
@@ -202,6 +215,105 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	}
 	if gotRatio := v.cursor.offset / float64(newHeight); math.Abs(gotRatio-0.5) > 0.02 {
 		t.Errorf("cursor ratio through slot 2 after SetStyleSheet = %.3f, want ~0.5 (preserved through the rebuild)", gotRatio)
+	}
+}
+
+// TestViewRebuildInsertsMarginSlots checks that a nonzero ViewMargins adds
+// real leading/trailing EmptyBox slots (not just a draw-time offset), and
+// that a zero margin (the common case in other tests) adds none.
+func TestViewRebuildInsertsMarginSlots(t *testing.T) {
+	style := NewDarkStyleSheet()
+	style.ViewMargin = Margins{Top: 10, Bottom: 15}
+	v := &View{
+		block: &StackBlock{blocks: []Block{&fixedHeightBlock{height: 30}}},
+		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: style},
+	}
+	v.Layout(100, 1)
+
+	if len(v.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (top margin, content, bottom margin): %#v", len(v.box.slots), v.box.slots)
+	}
+	if got := v.box.Bounds().Dy(); got != 10+30+15 {
+		t.Errorf("total height = %d, want 55 (10 top + 30 content + 15 bottom)", got)
+	}
+
+	noMargin := newTestView(&fixedHeightBlock{height: 30})
+	noMargin.Layout(100, 1)
+	if len(noMargin.box.slots) != 1 {
+		t.Errorf("got %d slots with a zero margin, want 1 (no phantom margin slots)", len(noMargin.box.slots))
+	}
+}
+
+// TestViewScrollClampsIntoBottomMargin checks that scrolling past the end
+// of the document clamps inside the bottom margin slot, not at the end of
+// the last real content block - the margin is real (if empty) space in
+// the tree, so it's reachable by scrolling exactly like any other slot.
+func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
+	style := NewDarkStyleSheet()
+	style.ViewMargin = Margins{Top: 10, Bottom: 15}
+	v := &View{
+		block: &StackBlock{blocks: []Block{&fixedHeightBlock{height: 30}}},
+		ctx:   RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: style},
+	}
+	v.Layout(100, 1)
+
+	v.Scroll(-1000)
+	wantIndex := len(v.box.slots) - 1
+	if v.cursor != (stackCursor{wantIndex, 15}) {
+		t.Errorf("after scrolling past the end = %+v, want {%d, 15} (clamped inside the bottom margin)", v.cursor, wantIndex)
+	}
+}
+
+// TestViewHitTestAppliesMargin checks that a point inside the left margin
+// gutter misses even at a y within real content's range, and that a
+// point on real content resolves with bounds correctly shifted back into
+// the same coordinate space the query arrived in.
+func TestViewHitTestAppliesMargin(t *testing.T) {
+	style := NewDarkStyleSheet()
+	style.ViewMargin = Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
+	v := NewView([]byte("hello"), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v.Layout(300, 1)
+
+	if len(v.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (top margin, paragraph, bottom margin): %#v", len(v.box.slots), v.box.slots)
+	}
+	content := v.box.boxAt(1).Bounds()
+
+	// The content's own top-left corner, shifted into the View's
+	// coordinate space by the margin, should land on real content.
+	p := image.Pt(20+content.Min.X, 10+content.Min.Y)
+	hit, offset := v.HitTest(p.X, p.Y)
+	if hit == nil {
+		t.Fatalf("hit at the content's own top-left %v = nil, want a match", p)
+	}
+	if !p.In(hit.Bounds().Add(offset)) {
+		t.Errorf("bounds %v (offset %v) don't contain %v", hit.Bounds(), offset, p)
+	}
+
+	// Same y, but inside the left margin gutter (x well short of 20).
+	if hit, _ := v.HitTest(5, p.Y); hit != nil {
+		t.Errorf("hit inside the left margin = %v, want a miss", hit)
+	}
+}
+
+// TestViewDrawAppliesLeftMargin checks that Draw shifts content by the
+// StyleSheet's left margin - top/bottom are exercised via the box tree
+// itself (see TestViewRebuildInsertsMarginSlots), but left has no slot to
+// carry it, so Draw has to apply it directly.
+func TestViewDrawAppliesLeftMargin(t *testing.T) {
+	style := NewDarkStyleSheet()
+	style.ViewMargin = Margins{Left: 20}
+	v := NewView([]byte("---"), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v.Layout(300, 1)
+
+	dst := &recordingCanvas{bounds: image.Rect(0, 0, 300, 100)}
+	v.Draw(dst, 0, 0)
+
+	if len(dst.rects) < 2 {
+		t.Fatalf("got %d DrawRect calls, want at least 2 (background fill + the rule)", len(dst.rects))
+	}
+	if rule := dst.rects[1]; rule.x != 20 {
+		t.Errorf("rule x = %d, want 20 (the left margin)", rule.x)
 	}
 }
 

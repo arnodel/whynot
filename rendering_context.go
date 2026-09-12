@@ -26,6 +26,15 @@ func (c RenderingContext) ScaledMargins(m Marginer) Margins {
 	return margins
 }
 
+func (c RenderingContext) ScaledViewMargins() Margins {
+	margins := c.StyleSheet.ViewMargins()
+	margins.Left *= c.Scale
+	margins.Right *= c.Scale
+	margins.Top *= c.Scale
+	margins.Bottom *= c.Scale
+	return margins
+}
+
 func (c RenderingContext) ScaledStrikeThickness(node *ASTNode) float64 {
 	return c.StyleSheet.StrikeThickness(node) * c.Scale
 }
