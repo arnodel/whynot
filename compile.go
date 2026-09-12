@@ -289,8 +289,10 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 			node:  astNode,
 		})
 	case gmast.KindLink:
+		link := node.(*gmast.Link)
 		child := node.FirstChild()
 		childNode := astNode.AddChild(TagLink)
+		childNode.Destination = link.Destination.Value(c.source)
 		for child != nil {
 			items = c.AppendInlineNode(items, child, childNode)
 			child = child.NextSibling()
@@ -299,6 +301,7 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 	case gmast.KindAutoLink:
 		al := node.(*gmast.AutoLink)
 		childNode := astNode.AddChild(TagLink)
+		childNode.Destination = al.Destination.Value(c.source)
 		return appendString(items, al.Label.Value(c.source), childNode)
 	case extast.KindStrikethrough:
 		child := node.FirstChild()

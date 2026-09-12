@@ -155,6 +155,13 @@ func TestASTInlineNestingPath(t *testing.T) {
 	wantPath(t, byWord["a"].node.Path(), ASTPath{TagParagraph, TagLink})
 	wantPath(t, byWord["link"].node.Path(), ASTPath{TagParagraph, TagLink})
 	wantPath(t, byWord["code"].node.Path(), ASTPath{TagParagraph, TagCodeSpan})
+
+	if got := byWord["a"].node.Destination; got != "https://example.com" {
+		t.Errorf("link Destination = %q, want %q", got, "https://example.com")
+	}
+	if byWord["a"].node != byWord["link"].node {
+		t.Error("both words of the link should share the same ASTNode")
+	}
 }
 
 func TestASTStrikethroughPath(t *testing.T) {

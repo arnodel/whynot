@@ -41,6 +41,10 @@ type ASTNode struct {
 	Tag    ASTTag
 	Parent *ASTNode
 
+	// Destination is the URL a TagLink node points to. Empty for every
+	// other tag.
+	Destination string
+
 	path ASTPath // memoized on first Path() call
 }
 

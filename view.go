@@ -126,6 +126,18 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 	return hit, offset.Add(image.Pt(left, y-int(c.offset)))
 }
 
+// linkNodeAt returns the ASTNode of the link at document position (x, y)
+// - the same coordinate space HitTest/Draw use - or nil if (x, y) doesn't
+// land on a link. Shared by Hover and LinkAt so neither duplicates the
+// HitTest-then-walk-to-the-enclosing-link logic.
+func (v *View) linkNodeAt(x, y int) *ASTNode {
+	hit, _ := v.HitTest(x, y)
+	if hit == nil {
+		return nil
+	}
+	return hit.Source().Node().AncestorTag(TagLink)
+}
+
 // Hover updates the currently-highlighted link, given the mouse position
 // in the same coordinate space HitTest/Draw use - call every frame from
 // the embedding game's own input handling. Finding the link under (x, y)
@@ -133,20 +145,38 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 // the whole document, currently the simplest way to get the hovered
 // link's Source restyled through the exact same StyleSheet-resolution
 // path as everything else (see RenderingContext.HighlightNode/
-// ResolvedColor) - so this is a no-op unless the link actually changes
+// ResolvedColor) - so this only rebuilds when the link actually changes
 // from the previous call.
-func (v *View) Hover(x, y int) {
-	var node *ASTNode
-	if hit, _ := v.HitTest(x, y); hit != nil {
-		node = hit.Source().Node().AncestorTag(TagLink)
+//
+// Hover also reports the link under (x, y), same as LinkAt, so a caller
+// handling a click at the same position doesn't need a second HitTest -
+// e.g. cmd/whynot calls Hover once per frame with the cursor position
+// and can reuse its result if that frame also saw a click.
+func (v *View) Hover(x, y int) (destination string, ok bool) {
+	node := v.linkNodeAt(x, y)
+	if node != v.ctx.HighlightNode {
+		v.ctx.HighlightNode = node
+		if v.box != nil {
+			v.rebuild()
+		}
 	}
-	if node == v.ctx.HighlightNode {
-		return
+	if node == nil {
+		return "", false
 	}
-	v.ctx.HighlightNode = node
-	if v.box != nil {
-		v.rebuild()
+	return node.Destination, true
+}
+
+// LinkAt reports the destination URL of the link at document position
+// (x, y) - the same coordinate space HitTest/Hover use. ok is false if
+// (x, y) doesn't land on a link. Unlike Hover, this never changes the
+// highlight - use it to query a position other than the current hover
+// (e.g. from a test, or a separate input source).
+func (v *View) LinkAt(x, y int) (destination string, ok bool) {
+	node := v.linkNodeAt(x, y)
+	if node == nil {
+		return "", false
 	}
+	return node.Destination, true
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale

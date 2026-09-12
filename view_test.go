@@ -485,12 +485,15 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 	}
 
 	beforeBox := v.box
-	v.Hover(x, y)
+	dest, ok := v.Hover(x, y)
 	if v.box == beforeBox {
 		t.Error("Hover onto a link didn't rebuild (v.box unchanged)")
 	}
 	if v.ctx.HighlightNode == nil {
 		t.Fatal("HighlightNode = nil after hovering a link, want non-nil")
+	}
+	if !ok || dest != "url" {
+		t.Errorf("Hover(x, y) = %q, %v, want %q, true", dest, ok, "url")
 	}
 
 	hit, _ := v.HitTest(x, y)
@@ -503,6 +506,29 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 	}
 	if want := style.HighlightColor(); text.Color != want {
 		t.Errorf("hovered link's Color = %v, want %v (HighlightColor)", text.Color, want)
+	}
+}
+
+// TestViewLinkAt checks that LinkAt resolves a link's own destination,
+// and reports ok=false off a link.
+func TestViewLinkAt(t *testing.T) {
+	v := NewView([]byte("click [this](https://example.com/target) now"), NewGoFontFaceSelector(72))
+	v.Layout(300, 1)
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+	dest, ok := v.LinkAt(x, y)
+	if !ok {
+		t.Fatal("LinkAt on a link position returned ok=false")
+	}
+	if want := "https://example.com/target"; dest != want {
+		t.Errorf("LinkAt destination = %q, want %q", dest, want)
+	}
+
+	if _, ok := v.LinkAt(0, 0); ok {
+		t.Error("LinkAt off any link returned ok=true, want false")
 	}
 }
 
