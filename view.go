@@ -1,6 +1,9 @@
 package whynot
 
-import "image"
+import (
+	"image"
+	"strings"
+)
 
 // View renders a parsed Markdown document onto a Canvas. It owns the
 // layout cache (rebuilt only when width or scale change, not every frame),
@@ -52,6 +55,52 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 		opt(v)
 	}
 	return v
+}
+
+// Title returns the document's own title - the text of its first
+// heading, at any level - or ok=false if it has none. A caller (e.g.
+// for a window/tab title) decides its own fallback; a document with no
+// heading at all is a normal, unremarkable case, not an error.
+//
+// Only a top-level heading is found, the same limitation
+// ScrollToAnchor has and for the same reason: one nested inside a
+// blockquote or list isn't reachable this way.
+func (v *View) Title() (string, bool) {
+	stack, ok := v.block.(*StackBlock)
+	if !ok {
+		return "", false
+	}
+	for _, block := range stack.blocks {
+		node := block.Node()
+		if node == nil || node.Tag < TagHeading1 || node.Tag > TagHeading6 {
+			continue
+		}
+		mb, ok := block.(*MarginBlock)
+		if !ok {
+			continue
+		}
+		tb, ok := mb.Block.(*TextBlock)
+		if !ok {
+			continue
+		}
+		return plainTextOf(tb), true
+	}
+	return "", false
+}
+
+// plainTextOf reconstructs a TextBlock's plain text - its parts are
+// mostly *InlineText, one per word (see appendString), rejoined with
+// single spaces; anything else (e.g. an *InlineImage, if a heading
+// contained one) contributes nothing rather than failing the whole
+// result.
+func plainTextOf(tb *TextBlock) string {
+	var words []string
+	for _, part := range tb.parts {
+		if it, ok := part.(*InlineText); ok {
+			words = append(words, it.text)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // Scroll adjusts the vertical scroll position by dy pixels: negative dy

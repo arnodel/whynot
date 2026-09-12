@@ -72,7 +72,6 @@ func main() {
 	}
 
 	ebiten.SetWindowSize(1024, 768)
-	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	styleSheet := whynot.StyleSheet(whynot.NewDarkStyleSheet())
@@ -92,6 +91,7 @@ func main() {
 		renderer:     ebitenrenderer.New(),
 		debugHit:     *debugHit,
 	}
+	game.updateWindowTitle()
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
@@ -276,6 +276,18 @@ func (g *game) setStyleSheet(s whynot.StyleSheet) {
 	g.current.view.SetStyleSheet(s)
 }
 
+// updateWindowTitle sets the OS window title to the current document's
+// own title (View.Title: its first heading, any level), or a generic
+// fallback if it has none - call whenever g.current.view is replaced
+// with a different document's.
+func (g *game) updateWindowTitle() {
+	title, ok := g.current.view.Title()
+	if !ok {
+		title = "Untitled document"
+	}
+	ebiten.SetWindowTitle(title)
+}
+
 // resolveLink parses dest and resolves it against the current
 // document's own location - what a relative or fragment-only link is
 // relative to. Used both to show where a hovered link actually points
@@ -329,6 +341,7 @@ func (g *game) follow(dest string) {
 	}
 	g.pushHistory()
 	g.current = document{location: resolved, view: view}
+	g.updateWindowTitle()
 }
 
 // pushHistory saves the current document and scroll position onto
@@ -393,6 +406,7 @@ func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 	entry.view.SetStyleSheet(g.styleSheet)
 	entry.view.Layout(g.width, g.scale)
 	g.current = entry.document
+	g.updateWindowTitle()
 }
 
 // reload re-fetches the current document's own location and replaces
@@ -410,6 +424,7 @@ func (g *game) reload() {
 	view.Layout(g.width, g.scale)
 	view.RestoreScrollPosition(scroll)
 	g.current.view = view
+	g.updateWindowTitle()
 }
 
 func (g *game) Draw(screen *ebiten.Image) {

@@ -588,6 +588,28 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 	}
 }
 
+// TestViewTitle checks that Title finds the document's first heading,
+// at any level, skipping non-heading blocks before it, and joins a
+// multi-word heading's words back into a single string.
+func TestViewTitle(t *testing.T) {
+	source := []byte("Some intro text, before any heading.\n\n## A Heading\n\nMore text.\n")
+	v := NewView(source, NewGoFontFaceSelector(72))
+	title, ok := v.Title()
+	if !ok || title != "A Heading" {
+		t.Errorf("Title() = %q, %v, want %q, true", title, ok, "A Heading")
+	}
+}
+
+// TestViewTitleNoHeading checks that Title reports ok=false for a
+// document with no heading at all, rather than an empty string being
+// mistaken for a real (if blank) title.
+func TestViewTitleNoHeading(t *testing.T) {
+	v := NewView([]byte("Just a paragraph, no heading anywhere.\n"), NewGoFontFaceSelector(72))
+	if title, ok := v.Title(); ok {
+		t.Errorf("Title() = %q, true, want ok=false", title)
+	}
+}
+
 // TestViewHoverNoOpWhenUnchanged checks that Hover only rebuilds on an
 // actual transition - calling it again at the same position must not
 // pay for another rebuild.
