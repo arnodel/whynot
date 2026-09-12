@@ -36,6 +36,9 @@ var (
 	ticks       = flag.Int("ticks", 5, "settle ticks to run after scrolling, immediately before capturing the frame")
 	cursorX     = flag.Float64("cursor-x", -1, "cursor x in device-independent pixels (same space as -w/-h) to move to before capturing; negative skips moving the cursor")
 	cursorY     = flag.Float64("cursor-y", -1, "cursor y in device-independent pixels (same space as -w/-h) to move to before capturing; negative skips moving the cursor")
+	click       = flag.Bool("click", false, "press and release the left mouse button (at -cursor-x/-cursor-y) after scrolling, before the settle ticks - e.g. to follow a link under the cursor")
+	pressKey    = flag.String("key", "", "name of an ebiten.Key (e.g. \"Backspace\") to press and release after scrolling, before the settle ticks - e.g. to trigger a back action")
+	debugHit    = flag.Bool("debug-hit", false, "pass -debug-hit through to the guest, so the captured frame shows the red HitTest outline at the cursor")
 )
 
 // driver is the host: an ebiten.Game that drives one guest and composites its final frame into its
@@ -76,6 +79,28 @@ func (d *driver) Update() error {
 		d.guest.ScrollWheel(0, *wheelDy)
 		d.guest.AdvanceTicks(1)
 	}
+
+	// Press and release each span at least one tick apart - inpututil's
+	// IsMouseButtonJustPressed/IsKeyJustPressed (what cmd/whynot's own
+	// input handling uses) only fire on the tick a press is first seen,
+	// so a same-tick press+release could be missed entirely.
+	if *click {
+		d.guest.PressMouseButton(ebiten.MouseButtonLeft)
+		d.guest.AdvanceTicks(1)
+		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
+		d.guest.AdvanceTicks(1)
+	}
+	if *pressKey != "" {
+		var key ebiten.Key
+		if err := key.UnmarshalText([]byte(*pressKey)); err != nil {
+			return fmt.Errorf("-key %q: %w", *pressKey, err)
+		}
+		d.guest.PressKey(key)
+		d.guest.AdvanceTicks(1)
+		d.guest.ReleaseKey(key)
+		d.guest.AdvanceTicks(1)
+	}
+
 	d.guest.AdvanceTicks(*ticks)
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is
@@ -170,6 +195,12 @@ func xmain() error {
 	}
 
 	var guestArgs []string
+	if *debugHit {
+		// Flags must precede the positional source path - cmd/whynot's
+		// own flag.Parse() stops parsing flags at the first non-flag
+		// argument.
+		guestArgs = append(guestArgs, "-debug-hit")
+	}
 	if *source != "" {
 		abs, err := filepath.Abs(*source)
 		if err != nil {

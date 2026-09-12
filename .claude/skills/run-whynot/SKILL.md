@@ -46,6 +46,9 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-scroll-ticks` | `0` | how many ticks to hold `-wheel-dy` before releasing it; `0` skips scrolling entirely |
 | `-ticks` | `5` | settle ticks run after scrolling, immediately before the frame is captured |
 | `-cursor-x`, `-cursor-y` | `-1`, `-1` | cursor position (device-independent pixels, same space as `-w`/`-h`) to move to before the settle ticks; negative (either one) skips moving the cursor |
+| `-click` | `false` | press and release the left mouse button (at `-cursor-x`/`-cursor-y`) after scrolling, before the settle ticks - e.g. to follow a link under the cursor |
+| `-key` | `""` | name of an `ebiten.Key` (e.g. `Backspace`) to press and release after scrolling, before the settle ticks - e.g. to trigger cmd/whynot's back action |
+| `-debug-hit` | `false` | pass `-debug-hit` through to the guest, so the captured frame shows the red `HitTest` outline at the cursor - useful for confirming exact click coordinates before using `-click` |
 
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
 result - there's no direct "scroll to heading" API, only wheel-notch simulation, so getting to a
