@@ -35,6 +35,10 @@ Here are some features that are not yet implemented
 See it in action: [the project's GitHub repo](https://github.com/arnodel/whynot),
 or just visit <https://example.com>.
 
+Local links work too, and can be followed the same way: here's
+[a much larger test document](../../testdata/test-large.md), and here's
+[the project's README](../../README.md).
+
 ## Examples
 
 Six levels of headers are supported

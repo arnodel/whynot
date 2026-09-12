@@ -2,10 +2,16 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -22,7 +28,12 @@ func main() {
 	if flag.NArg() != 0 {
 		f = flag.Arg(0)
 	}
-	source, err := os.ReadFile(f)
+
+	location, err := absFileURL(f)
+	if err != nil {
+		panic(err)
+	}
+	source, err := loadDocument(location)
 	if err != nil {
 		panic(err)
 	}
@@ -31,46 +42,146 @@ func main() {
 	ebiten.SetWindowTitle("Why Not?")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
-	var opts []whynot.ViewOption
+	styleSheet := whynot.StyleSheet(whynot.NewDarkStyleSheet())
 	if *light {
-		opts = append(opts, whynot.WithStyleSheet(whynot.NewLightStyleSheet()))
+		styleSheet = whynot.NewLightStyleSheet()
 	}
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
+	faceSelector := whynot.NewGoFontFaceSelector(72 * scale)
 	game := &game{
-		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale), opts...),
-		renderer: ebitenrenderer.New(),
-		debugHit: *debugHit,
+		current: document{
+			location: location,
+			view:     whynot.NewView(source, faceSelector, whynot.WithStyleSheet(styleSheet)),
+		},
+		faceSelector: faceSelector,
+		styleSheet:   styleSheet,
+		renderer:     ebitenrenderer.New(),
+		debugHit:     *debugHit,
 	}
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// document pairs a View with the location it was loaded from, so a
+// relative link found inside it can be resolved to an absolute one
+// before being followed.
+type document struct {
+	location *url.URL
+	view     *whynot.View
+}
+
+// absFileURL turns a command-line path into a file: URL with an
+// absolute path, so it can be used as the base for resolving a
+// relative link the same way an http(s) URL would be.
+func absFileURL(path string) (*url.URL, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	return &url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}, nil
+}
+
+// loadDocument fetches the bytes at location - a local read for a
+// file: URL, an HTTP GET for http(s). Any other scheme (e.g. a
+// mailto: autolink) is rejected rather than misread as a file path.
+func loadDocument(location *url.URL) ([]byte, error) {
+	switch location.Scheme {
+	case "http", "https":
+		client := http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(location.String())
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("%s: %s", location, resp.Status)
+		}
+		return io.ReadAll(resp.Body)
+	case "file", "":
+		return os.ReadFile(location.Path)
+	default:
+		return nil, fmt.Errorf("unsupported link scheme %q", location.Scheme)
+	}
+}
+
 // game adapts a whynot.View to ebiten's Game interface: it owns window/input
 // plumbing only, all rendering behavior lives in the library.
 type game struct {
-	view     *whynot.View
-	renderer *ebitenrenderer.Renderer
-	debugHit bool
+	current document
+	// history is the stack of documents navigated away from, most
+	// recent last - each entry keeps its own *whynot.View, so going
+	// back restores its exact scroll position for free, with no
+	// bookkeeping beyond not discarding the View.
+	history []document
+
+	faceSelector whynot.FaceSelector
+	styleSheet   whynot.StyleSheet
+	renderer     *ebitenrenderer.Renderer
+	debugHit     bool
 
 	hoverX, hoverY int
 }
 
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
-	g.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
+	g.current.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 
 	g.hoverX, g.hoverY = ebiten.CursorPosition()
-	g.view.Hover(g.hoverX, g.hoverY)
+	dest, hasLink := g.current.view.Hover(g.hoverX, g.hoverY)
+
+	if hasLink && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		g.follow(dest)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		g.back()
+	}
 
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyL):
-		g.view.SetStyleSheet(whynot.NewLightStyleSheet())
+		g.setStyleSheet(whynot.NewLightStyleSheet())
 	case inpututil.IsKeyJustPressed(ebiten.KeyD):
-		g.view.SetStyleSheet(whynot.NewDarkStyleSheet())
+		g.setStyleSheet(whynot.NewDarkStyleSheet())
 	}
 	return nil
+}
+
+func (g *game) setStyleSheet(s whynot.StyleSheet) {
+	g.styleSheet = s
+	g.current.view.SetStyleSheet(s)
+}
+
+// follow resolves dest against the current document's own location -
+// so a relative link works whether the current document came from
+// disk or from an http(s) fetch - loads it, and pushes the current
+// document onto history so back can return to it.
+func (g *game) follow(dest string) {
+	target, err := url.Parse(dest)
+	if err != nil {
+		log.Printf("link destination %q: %v", dest, err)
+		return
+	}
+	resolved := g.current.location.ResolveReference(target)
+	source, err := loadDocument(resolved)
+	if err != nil {
+		log.Printf("loading %s: %v", resolved, err)
+		return
+	}
+	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	g.history = append(g.history, g.current)
+	g.current = document{location: resolved, view: view}
+}
+
+// back pops the most recently visited document, if any - a no-op at
+// the start of history. Its View was never discarded, so this
+// restores its exact scroll position along with its content.
+func (g *game) back() {
+	if len(g.history) == 0 {
+		return
+	}
+	g.current = g.history[len(g.history)-1]
+	g.history = g.history[:len(g.history)-1]
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -78,10 +189,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 	// View.Draw fills the background itself, from the View's StyleSheet -
 	// no separate clear step needed here.
-	g.view.Draw(canvas, 0, 0)
+	g.current.view.Draw(canvas, 0, 0)
 
 	if g.debugHit {
-		if hit, offset := g.view.HitTest(g.hoverX, g.hoverY); hit != nil {
+		if hit, offset := g.current.view.HitTest(g.hoverX, g.hoverY); hit != nil {
 			drawOutline(canvas, hit.Bounds().Add(offset), color.RGBA{255, 0, 0, 255})
 		}
 	}
@@ -101,6 +212,6 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	width := int(float64(outsideWidth) * s)
 	height := int(float64(outsideHeight) * s)
-	g.view.Layout(width, s)
+	g.current.view.Layout(width, s)
 	return width, height
 }
