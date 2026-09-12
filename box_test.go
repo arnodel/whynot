@@ -20,9 +20,9 @@ func TestRuleBoxHitTest(t *testing.T) {
 	src := &sourceBlock{node: &ASTNode{Tag: TagThematicBreak}}
 	b := &RuleBox{width: 100, thickness: 2, source: src}
 
-	source, bounds, ok := b.hitTest(image.Pt(50, 1))
-	if !ok {
-		t.Fatal("hitTest = not ok, want a match")
+	source, bounds := b.hitTest(image.Pt(50, 1))
+	if source == nil {
+		t.Fatal("hitTest = nil source, want a match")
 	}
 	if source.Node().Tag != TagThematicBreak {
 		t.Errorf("Tag = %v, want TagThematicBreak", source.Node().Tag)
@@ -34,8 +34,8 @@ func TestRuleBoxHitTest(t *testing.T) {
 
 func TestEmptyBoxHitTest(t *testing.T) {
 	b := NewEmptyBox(100, 10)
-	if _, _, ok := b.hitTest(image.Pt(50, 5)); ok {
-		t.Error("hitTest on EmptyBox = ok, want always a miss (pure spacing)")
+	if source, _ := b.hitTest(image.Pt(50, 5)); source != nil {
+		t.Error("hitTest on EmptyBox = a match, want always a miss (pure spacing)")
 	}
 }
 
@@ -45,17 +45,17 @@ func TestContainerBoxHitTest(t *testing.T) {
 	b := NewContainerBox(inner, 100, 10, 20, 3) // inner offset by (20, 3)
 
 	// Inside inner's shifted footprint.
-	source, bounds, ok := b.hitTest(image.Pt(30, 4))
-	if !ok || source.Node().Tag != TagThematicBreak {
-		t.Fatalf("hit inside inner = (%v, %v), want (ThematicBreak, true)", source, ok)
+	source, bounds := b.hitTest(image.Pt(30, 4))
+	if source == nil || source.Node().Tag != TagThematicBreak {
+		t.Fatalf("hit inside inner = (%v, _), want (ThematicBreak, _)", source)
 	}
 	if want := inner.Bounds().Add(image.Pt(20, 3)); bounds != want {
 		t.Errorf("bounds = %v, want %v (inner's bounds shifted by innerPos)", bounds, want)
 	}
 	// Outside inner's footprint but within the container - pure padding,
 	// no source of its own.
-	if _, _, ok := b.hitTest(image.Pt(5, 4)); ok {
-		t.Error("hit in the padding around inner = ok, want a miss")
+	if source, _ := b.hitTest(image.Pt(5, 4)); source != nil {
+		t.Error("hit in the padding around inner = a match, want a miss")
 	}
 }
 
@@ -65,13 +65,13 @@ func TestBlockquoteBoxHitTest(t *testing.T) {
 	content := &RuleBox{width: 80, thickness: 10, source: contentSrc}
 	b := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: content, source: quoteSrc}
 
-	if source, bounds, ok := b.hitTest(image.Pt(1, 1)); !ok || source.Node().Tag != TagBlockquote {
-		t.Errorf("bar hit = (%v, %v, %v), want (Blockquote, _, true)", source, bounds, ok)
+	if source, bounds := b.hitTest(image.Pt(1, 1)); source == nil || source.Node().Tag != TagBlockquote {
+		t.Errorf("bar hit = (%v, %v), want (Blockquote, _)", source, bounds)
 	} else if want := b.Bounds(); bounds != want {
 		t.Errorf("bar hit bounds = %v, want %v (the whole quote)", bounds, want)
 	}
-	if source, bounds, ok := b.hitTest(image.Pt(50, 1)); !ok || source.Node().Tag != TagParagraph {
-		t.Errorf("content hit = (%v, %v, %v), want (Paragraph, _, true)", source, bounds, ok)
+	if source, bounds := b.hitTest(image.Pt(50, 1)); source == nil || source.Node().Tag != TagParagraph {
+		t.Errorf("content hit = (%v, %v), want (Paragraph, _)", source, bounds)
 	} else if want := content.Bounds().Add(image.Pt(16, 0)); bounds != want {
 		t.Errorf("content hit bounds = %v, want %v (content's bounds shifted by indent)", bounds, want)
 	}
@@ -79,8 +79,8 @@ func TestBlockquoteBoxHitTest(t *testing.T) {
 	// A gap inside the content area (EmptyBox always declines) falls
 	// back to the blockquote itself rather than reporting no match.
 	empty := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: NewEmptyBox(80, 10), source: quoteSrc}
-	if source, _, ok := empty.hitTest(image.Pt(50, 1)); !ok || source.Node().Tag != TagBlockquote {
-		t.Errorf("gap-in-content hit = (%v, %v), want fallback (Blockquote, true)", source, ok)
+	if source, _ := empty.hitTest(image.Pt(50, 1)); source == nil || source.Node().Tag != TagBlockquote {
+		t.Errorf("gap-in-content hit = %v, want fallback Blockquote", source)
 	}
 }
 
@@ -99,13 +99,13 @@ func TestTableBoxHitTest(t *testing.T) {
 		source:        tableSrc,
 	}
 
-	if source, bounds, ok := b.hitTest(image.Pt(20, 10)); !ok || source.Node().Tag != TagTableCell {
-		t.Errorf("cell hit = (%v, %v, %v), want (TableCell, _, true)", source, bounds, ok)
+	if source, bounds := b.hitTest(image.Pt(20, 10)); source == nil || source.Node().Tag != TagTableCell {
+		t.Errorf("cell hit = (%v, %v), want (TableCell, _)", source, bounds)
 	} else if want := cell.Bounds().Add(image.Pt(5, 5)); bounds != want {
 		t.Errorf("cell hit bounds = %v, want %v (cell's bounds shifted by its offset)", bounds, want)
 	}
-	if source, bounds, ok := b.hitTest(image.Pt(2, 10)); !ok || source.Node().Tag != TagTable {
-		t.Errorf("frame hit (before first column) = (%v, %v, %v), want fallback (Table, _, true)", source, bounds, ok)
+	if source, bounds := b.hitTest(image.Pt(2, 10)); source == nil || source.Node().Tag != TagTable {
+		t.Errorf("frame hit (before first column) = (%v, %v), want fallback (Table, _)", source, bounds)
 	} else if want := b.Bounds(); bounds != want {
 		t.Errorf("frame hit bounds = %v, want %v (the whole table)", bounds, want)
 	}
@@ -117,8 +117,8 @@ func TestTableBoxHitTest(t *testing.T) {
 		cells:         [][]Box{{NewEmptyBox(40, 20)}},
 		source:        tableSrc,
 	}
-	if source, _, ok := bEmpty.hitTest(image.Pt(20, 10)); !ok || source.Node().Tag != TagTable {
-		t.Errorf("declining-cell hit = (%v, %v), want fallback (Table, true)", source, ok)
+	if source, _ := bEmpty.hitTest(image.Pt(20, 10)); source == nil || source.Node().Tag != TagTable {
+		t.Errorf("declining-cell hit = %v, want fallback Table", source)
 	}
 }
 
@@ -132,9 +132,9 @@ func TestTextBoxHitTest(t *testing.T) {
 	b := &TextBox{Text: "hi", Face: face, source: src}
 
 	bounds, advance := b.BoundsAndAdvance()
-	source, gotBounds, ok, next := b.hitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
-	if !ok {
-		t.Fatal("hitTest inside glyph bounds = not ok, want a match")
+	source, gotBounds, next := b.hitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
+	if source == nil {
+		t.Fatal("hitTest inside glyph bounds = nil source, want a match")
 	}
 	if source.Node().Tag != TagParagraph {
 		t.Errorf("Tag = %v, want TagParagraph", source.Node().Tag)
@@ -146,8 +146,8 @@ func TestTextBoxHitTest(t *testing.T) {
 		t.Errorf("next = %d, want %d (the advance)", next, advance)
 	}
 
-	if _, _, ok, _ := b.hitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); ok {
-		t.Error("hitTest far below the glyph = ok, want a miss")
+	if source, _, _ := b.hitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); source != nil {
+		t.Error("hitTest far below the glyph = a match, want a miss")
 	}
 }
 
@@ -171,9 +171,9 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	markerX := x - advance - space
 
 	p := image.Pt(markerX+markerBounds.Min.X, y+markerBounds.Min.Y)
-	source, bounds, ok, next := marker.hitTest(p, x, y)
-	if !ok {
-		t.Fatal("hitTest at the marker's actual drawn position = not ok, want a match")
+	source, bounds, next := marker.hitTest(p, x, y)
+	if source == nil {
+		t.Fatal("hitTest at the marker's actual drawn position = nil source, want a match")
 	}
 	if source.Node().Tag != TagListItem {
 		t.Errorf("Tag = %v, want TagListItem", source.Node().Tag)
@@ -185,8 +185,8 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 		t.Errorf("next = %d, want %d (x - space, matching DrawInline's own return)", next, x-space)
 	}
 
-	if _, _, ok, _ := marker.hitTest(image.Pt(x, y), x, y); ok {
-		t.Error("hitTest at x itself (not the marker's real, offset position) = ok, want a miss")
+	if source, _, _ := marker.hitTest(image.Pt(x, y), x, y); source != nil {
+		t.Error("hitTest at x itself (not the marker's real, offset position) = a match, want a miss")
 	}
 }
 
@@ -210,88 +210,69 @@ func TestLineBoxHitTest(t *testing.T) {
 	midY := (bounds.Min.Y + bounds.Max.Y) / 2
 
 	p1 := image.Pt(bounds.Min.X, midY)
-	source, hitBounds, ok := line.hitTest(p1)
-	if !ok || source.Node().Tag != TagEmphasis {
-		t.Errorf("hit at left edge = (%v, %v), want (Emphasis, true) - the first word", source, ok)
+	source, hitBounds := line.hitTest(p1)
+	if source == nil || source.Node().Tag != TagEmphasis {
+		t.Errorf("hit at left edge = %v, want Emphasis - the first word", source)
 	}
-	if ok && !p1.In(hitBounds) {
+	if source != nil && !p1.In(hitBounds) {
 		t.Errorf("bounds %v for hit at %v don't contain the point", hitBounds, p1)
 	}
 
 	p2 := image.Pt(bounds.Max.X-1, midY)
-	source, hitBounds, ok = line.hitTest(p2)
-	if !ok || source.Node().Tag != TagStrong {
-		t.Errorf("hit at right edge = (%v, %v), want (Strong, true) - the second word", source, ok)
+	source, hitBounds = line.hitTest(p2)
+	if source == nil || source.Node().Tag != TagStrong {
+		t.Errorf("hit at right edge = %v, want Strong - the second word", source)
 	}
-	if ok && !p2.In(hitBounds) {
+	if source != nil && !p2.In(hitBounds) {
 		t.Errorf("bounds %v for hit at %v don't contain the point", hitBounds, p2)
 	}
 
-	if _, _, ok := line.hitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100)); ok {
-		t.Error("hit far below the line = ok, want a miss")
+	if source, _ := line.hitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100)); source != nil {
+		t.Error("hit far below the line = a match, want a miss")
 	}
 }
 
 // TestLineBoxBoundsIndentedText checks that Bounds() doesn't crop away a
-// line's leading indentation - a code line's leading spaces have real
-// advance but no ink, so BoundsAndAdvance's own bounds.Min.X lands well
-// to the right of 0 (unlike ordinary text, where it's ~0 or slightly
-// negative). Bounds() must not treat that gap as excess to trim: doing
-// so under-reports the line's width, which broke hit-testing through a
-// parent StackBox (its containment pre-check rejected real hits on the
-// right-hand side of indented code lines - see TestStackBoxHitTestIndentedLine).
+// line's leading indentation - see the comment on LineBox.Bounds.
 func TestLineBoxBoundsIndentedText(t *testing.T) {
 	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
 	face, err := ctx.SelectFace(TextStyle{Size: 16})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A long indent, so the gap this is checking for (~40 space-widths)
-	// can't be mistaken for font-metric rounding noise.
+	// Long enough that the gap can't be mistaken for rounding noise.
 	text := "                                        return 42"
 	line := &LineBox{parts: []InlineBox{&TextBox{Text: text, Face: face}}}
 
 	raw, _ := line.BoundsAndAdvance()
-	// want is bounds.Max.X itself (not bounds.Dx()): since the leading
-	// indentation has real advance but no ink, bounds.Min.X lands well
-	// past 0, and this line's real x=0 is its own left edge (matching
-	// hitTest/drawContents), not the first inked pixel - Max.X already
-	// measures from that real origin.
 	if got, want := line.Bounds().Dx(), raw.Max.X; got != want {
-		t.Errorf("Bounds().Dx() = %d, want %d (bounds.Max.X, the rightmost ink pixel measured from this line's own real left edge - not bounds.Dx(), which only spans the ink and ignores the leading indentation gap)", got, want)
+		t.Errorf("Bounds().Dx() = %d, want %d (raw.Max.X, not the ink-only span)", got, want)
 	}
 }
 
-// TestStackBoxHitTestIndentedLine is a regression test for a real bug:
-// StackBox.hitTest's containment pre-check (hitTestChild, via
-// child.Bounds()) rejected hits on the right-hand side of an indented
-// code line, because Bounds() used to crop away the line's leading
-// indentation gap - under-reporting its width and making a real hit on
-// visible text look like it fell outside the line's bounds entirely.
+// TestStackBoxHitTestIndentedLine is a regression test: StackBox.hitTest's
+// containment check used to reject hits on the right-hand side of an
+// indented code line, because Bounds() under-reported its width - see
+// the comment on LineBox.Bounds.
 func TestStackBoxHitTestIndentedLine(t *testing.T) {
 	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
 	face, err := ctx.SelectFace(TextStyle{Size: 16})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A long indent: with only a few spaces, the point this test probes
-	// can land inside the ink-only span Bounds() used to wrongly report,
-	// passing even with the bug present - it has to fall in the part of
-	// the line only the leading-indentation gap accounts for.
 	text := "                                        return 42"
 	src := &InlineText{text: text, node: &ASTNode{Tag: TagCodeBlock}}
 	line := &LineBox{parts: []InlineBox{&TextBox{Text: text, Face: face, source: src}}}
 	stack := stackOf(line)
 
-	// The point to probe is derived from the raw (unnormalized) bounds,
-	// not from line.Bounds() itself - a test point derived from the
-	// value under test can't tell a wrong answer from a right one.
+	// Derived from the raw bounds, not line.Bounds() itself - a point
+	// derived from the value under test can't catch a wrong answer.
 	raw, _ := line.BoundsAndAdvance()
 	midY := line.Bounds().Dy() / 2
 	p := image.Pt(raw.Max.X-1, midY)
-	source, _, ok := stack.hitTest(p)
-	if !ok || source.Node().Tag != TagCodeBlock {
-		t.Errorf("hit near the right edge of an indented line, via the parent StackBox, = (%v, %v), want (CodeBlock, true)", source, ok)
+	source, _ := stack.hitTest(p)
+	if source == nil || source.Node().Tag != TagCodeBlock {
+		t.Errorf("hit near the right edge of an indented line = %v, want CodeBlock", source)
 	}
 }
 
@@ -304,20 +285,20 @@ func TestStackBoxHitTest(t *testing.T) {
 	)
 
 	// In the leading gap.
-	if _, _, ok := stack.hitTest(image.Pt(50, 5)); ok {
-		t.Error("hit in leading gap = ok, want a miss")
+	if source, _ := stack.hitTest(image.Pt(50, 5)); source != nil {
+		t.Error("hit in leading gap = a match, want a miss")
 	}
 	// In the RuleBox slot - y in [10, 30).
-	source, bounds, ok := stack.hitTest(image.Pt(50, 15))
-	if !ok || source.Node().Tag != TagThematicBreak {
-		t.Errorf("hit in middle slot = (%v, %v), want (ThematicBreak, true)", source, ok)
+	source, bounds := stack.hitTest(image.Pt(50, 15))
+	if source == nil || source.Node().Tag != TagThematicBreak {
+		t.Errorf("hit in middle slot = %v, want ThematicBreak", source)
 	}
 	if want := image.Rect(0, 0, 100, 20).Add(image.Pt(0, 10)); bounds != want {
 		t.Errorf("bounds = %v, want %v (RuleBox's own bounds, shifted by the slot's y offset)", bounds, want)
 	}
 	// Past the end.
-	if _, _, ok := stack.hitTest(image.Pt(50, 1000)); ok {
-		t.Error("hit past the end = ok, want a miss")
+	if source, _ := stack.hitTest(image.Pt(50, 1000)); source != nil {
+		t.Error("hit past the end = a match, want a miss")
 	}
 }
 

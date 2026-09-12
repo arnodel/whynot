@@ -315,8 +315,8 @@ code line
 	found := map[ASTTag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
-			source, _, ok := v.BoxAt(x, y)
-			if !ok {
+			source, _ := v.BoxAt(x, y)
+			if source == nil {
 				continue
 			}
 			found[source.Node().Tag] = true

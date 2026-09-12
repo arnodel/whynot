@@ -8,13 +8,11 @@ type Margins struct {
 	Top, Bottom, Left, Right float64
 }
 
-// Source is the common ground between Block and Inline: something with a
-// semantic identity in the compiled ASTNode tree. Box/InlineBox leaves
-// that were built from a single Block or Inline expose it (see Source()
-// on RuleBox, TextBox, ...), so a hit-test result can be traced back to
-// its origin - and, since Block/Inline are the concrete underlying type,
-// a caller can type-assert further (e.g. to Block) for anything beyond
-// the node itself.
+// Source is the common ground between Block and Inline: something with
+// a semantic identity in the compiled ASTNode tree. Leaf boxes expose
+// it so a hit-test result traces back to its origin - and since the
+// concrete value is the real Block/Inline, a caller can type-assert
+// further for anything beyond the node itself.
 type Source interface {
 	Node() *ASTNode
 }
@@ -66,12 +64,11 @@ func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 	}
 }
 
-// Node delegates to the wrapped Block rather than returning b.node: the
-// two aren't always the same ASTNode (a loose list item's head wraps a
-// ListItemHeadBlock in a MarginBlock keyed to a synthetic TagParagraph
-// node, purely so its margins resolve like a paragraph's - the wrapped
-// content's own identity, TagListItem, is the more correct answer for
-// hit-testing).
+// Node delegates to the wrapped Block rather than returning b.node: a
+// loose list item's head wraps a ListItemHeadBlock in a MarginBlock
+// keyed to a synthetic TagParagraph node (purely so its margins resolve
+// like a paragraph's) - the wrapped content's TagListItem is the more
+// correct identity for hit-testing.
 func (b *MarginBlock) Node() *ASTNode {
 	return b.Block.Node()
 }
