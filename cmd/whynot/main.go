@@ -14,7 +14,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -163,6 +166,34 @@ func loadDocument(location *url.URL) ([]byte, error) {
 	}
 }
 
+// readClipboard returns the clipboard's current text content, via each
+// OS's own command-line paste utility rather than a third-party
+// clipboard package - ebiten has no clipboard API of its own, and this
+// is a small enough need (cmd/whynot's own convenience, not the
+// library's) that it isn't worth a module dependency for.
+func readClipboard() (string, error) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbpaste")
+	case "windows":
+		cmd = exec.Command("powershell", "-NoProfile", "-Command", "Get-Clipboard")
+	default:
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-o")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--output")
+		} else {
+			return "", fmt.Errorf("no clipboard utility found (tried xclip, xsel)")
+		}
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // game adapts a whynot.View to ebiten's Game interface: it owns window/input
 // plumbing only, all rendering behavior lives in the library.
 type game struct {
@@ -281,6 +312,9 @@ func (g *game) Update() error {
 		g.setStyleSheet(whynot.NewLightStyleSheet())
 	case inpututil.IsKeyJustPressed(ebiten.KeyD):
 		g.setStyleSheet(whynot.NewDarkStyleSheet())
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
+		g.paste()
 	}
 	return nil
 }
@@ -438,6 +472,44 @@ func (g *game) reload() {
 	view.Layout(g.width, g.scale)
 	view.RestoreScrollPosition(scroll)
 	g.current.view = view
+	g.updateWindowTitle()
+}
+
+// paste navigates to the clipboard's current text content, if it's an
+// http(s) URL or an existing local file path - unlike follow, this is
+// always treated as an absolute destination, never resolved relative
+// to the current document, since pasting is a user-initiated "go
+// here," not a link inside whatever's currently on screen.
+func (g *game) paste() {
+	text, err := readClipboard()
+	if err != nil {
+		log.Printf("reading clipboard: %v", err)
+		return
+	}
+	text = strings.TrimSpace(text)
+
+	var resolved *url.URL
+	if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+		resolved = u
+	} else if _, err := os.Stat(text); err == nil {
+		if abs, err := absFileURL(text); err == nil {
+			resolved = abs
+		}
+	}
+	if resolved == nil {
+		log.Printf("clipboard content %q isn't a URL or an existing file path", text)
+		return
+	}
+
+	source, err := loadDocument(resolved)
+	if err != nil {
+		log.Printf("loading %s: %v", resolved, err)
+		return
+	}
+	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	view.Layout(g.width, g.scale)
+	g.pushHistory()
+	g.current = document{location: resolved, view: view}
 	g.updateWindowTitle()
 }
 

@@ -40,6 +40,7 @@ var (
 	cursorY     = flag.Float64("cursor-y", -1, "cursor y in device-independent pixels (same space as -w/-h) to move to before capturing; negative skips moving the cursor")
 	click       = flag.Bool("click", false, "press and release the left mouse button (at -cursor-x/-cursor-y) after scrolling, before the settle ticks - e.g. to follow a link under the cursor")
 	pressKey    = flag.String("key", "", "name of an ebiten.Key (e.g. \"Backspace\") to press and release after scrolling, before the settle ticks - e.g. to trigger a back action")
+	modifierKey = flag.String("modifier", "", "name of an ebiten.Key (e.g. \"Meta\") to hold down for the duration of -key's press+release - e.g. \"Meta\" plus -key V for Cmd+V")
 	debugHit    = flag.Bool("debug-hit", false, "pass -debug-hit through to the guest, so the captured frame shows the red HitTest outline at the cursor")
 )
 
@@ -97,10 +98,23 @@ func (d *driver) Update() error {
 		if err := key.UnmarshalText([]byte(*pressKey)); err != nil {
 			return fmt.Errorf("-key %q: %w", *pressKey, err)
 		}
+		var modifier ebiten.Key
+		hasModifier := *modifierKey != ""
+		if hasModifier {
+			if err := modifier.UnmarshalText([]byte(*modifierKey)); err != nil {
+				return fmt.Errorf("-modifier %q: %w", *modifierKey, err)
+			}
+			d.guest.PressKey(modifier)
+			d.guest.AdvanceTicks(1)
+		}
 		d.guest.PressKey(key)
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseKey(key)
 		d.guest.AdvanceTicks(1)
+		if hasModifier {
+			d.guest.ReleaseKey(modifier)
+			d.guest.AdvanceTicks(1)
+		}
 	}
 
 	d.guest.AdvanceTicks(*ticks)

@@ -48,6 +48,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-cursor-x`, `-cursor-y` | `-1`, `-1` | cursor position (device-independent pixels, same space as `-w`/`-h`) to move to before the settle ticks; negative (either one) skips moving the cursor |
 | `-click` | `false` | press and release the left mouse button (at `-cursor-x`/`-cursor-y`) after scrolling, before the settle ticks - e.g. to follow a link under the cursor |
 | `-key` | `""` | name of an `ebiten.Key` (e.g. `Backspace`) to press and release after scrolling, before the settle ticks - e.g. to trigger cmd/whynot's back action |
+| `-modifier` | `""` | name of an `ebiten.Key` (e.g. `Meta`) to hold down for the duration of `-key`'s press+release - e.g. `-modifier Meta -key V` for Cmd+V |
 | `-debug-hit` | `false` | pass `-debug-hit` through to the guest, so the captured frame shows the red `HitTest` outline at the cursor - useful for confirming exact click coordinates before using `-click` |
 
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
