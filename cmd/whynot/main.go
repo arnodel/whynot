@@ -191,11 +191,13 @@ type game struct {
 	// bar shows instead of the current location while hovering.
 	hoverDest string
 
-	// width, scale are Layout's most recent physical width and display
-	// scale - follow and back both need them to lay out a View that
-	// isn't the one ebiten just called Layout on.
-	width int
-	scale float64
+	// width, height, scale are Layout's most recent physical dimensions
+	// and display scale - width/scale are what follow and back need to
+	// lay out a View that isn't the one ebiten just called Layout on;
+	// height (minus toolbarHeight) is the page size Space/Shift+Space
+	// scroll by.
+	width, height int
+	scale         float64
 
 	// toolbarHeight and the button rectangles are recomputed by
 	// layoutToolbar whenever Layout runs - the document itself is drawn
@@ -259,6 +261,14 @@ func (g *game) Update() error {
 			g.forward()
 		} else {
 			g.back()
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		page := float64(g.height - g.toolbarHeight)
+		if ebiten.IsKeyPressed(ebiten.KeyShift) {
+			g.current.view.Scroll(page)
+		} else {
+			g.current.view.Scroll(-page)
 		}
 	}
 
@@ -567,7 +577,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	width := int(float64(outsideWidth) * s)
 	height := int(float64(outsideHeight) * s)
-	g.width, g.scale = width, s
+	g.width, g.height, g.scale = width, height, s
 	g.layoutToolbar()
 	g.current.view.Layout(width, s)
 	return width, height
