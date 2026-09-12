@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"embed"
 	"flag"
 	"fmt"
 	"image"
 	"image/color"
+	"image/png"
 	"io"
 	"log"
 	"mime"
@@ -20,6 +23,32 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+)
+
+//go:embed arrow_back.png refresh.png
+var iconFS embed.FS
+
+// icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
+// once at startup (see backIcon/reloadIcon below), not per frame.
+func icon(name string) *ebiten.Image {
+	data, err := iconFS.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		panic(err)
+	}
+	return ebiten.NewImageFromImage(img)
+}
+
+// backIcon/reloadIcon are the toolbar buttons' icons - light, mostly-white
+// silhouettes on a transparent background, so drawIcon can tint them to
+// match a button's current state the same way drawButton already tints
+// its border/fill.
+var (
+	backIcon   = icon("arrow_back.png")
+	reloadIcon = icon("refresh.png")
 )
 
 func main() {
@@ -349,7 +378,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	// no separate clear step needed here. It's drawn below the toolbar,
 	// which is painted over it afterward.
 	g.current.view.Draw(canvas, 0, g.toolbarHeight)
-	g.drawToolbar(canvas)
+	g.drawToolbar(screen, canvas)
 
 	if g.debugHit {
 		docY := g.hoverY - g.toolbarHeight
@@ -362,18 +391,20 @@ func (g *game) Draw(screen *ebiten.Image) {
 // drawToolbar paints the address bar (the current document's location,
 // or - while hovering a link - that link's destination instead, in
 // StyleSheet.HighlightColor to match the hovered link's own color in
-// the document) and the back/reload buttons.
-func (g *game) drawToolbar(canvas whynot.Canvas) {
+// the document) and the back/reload buttons. Icon drawing needs dst
+// directly - whynot.Canvas has no primitive for a scaled, tinted image -
+// so this is the one part of cmd/whynot's own UI that goes around the
+// library's rendering abstraction rather than through it.
+func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
+
+	drawButton(dst, canvas, backIcon, g.backButton, len(g.history) > 0, g.backState)
+	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
 
 	face, err := g.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
 	if err != nil {
 		return
 	}
-
-	drawButton(canvas, face, g.backButton, "< Back", len(g.history) > 0, g.backState)
-	drawButton(canvas, face, g.reloadButton, "Reload", true, g.reloadState)
-
 	text, textColor := g.current.location.String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
 	if g.hoverDest != "" {
 		text, textColor = g.hoverDest, g.styleSheet.HighlightColor()
@@ -382,34 +413,54 @@ func (g *game) drawToolbar(canvas whynot.Canvas) {
 	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
 }
 
-// drawButton draws a bordered, labeled button - reusing drawOutline for
-// the border rather than a bespoke box-drawing routine. enabled only
-// affects appearance; back is still harmless to click with no history,
-// so nothing needs disabling functionally (see buttonColors).
-func drawButton(canvas whynot.Canvas, face font.Face, r image.Rectangle, label string, enabled bool, st buttonState) {
-	fillColor, borderColor, textColor := buttonColors(enabled, st)
+// drawButton draws an icon button, filling the whole of r - no border,
+// no margin around the icon, just a background fill (for hover/pressed
+// feedback) showing through wherever the icon's own transparency lets
+// it. enabled only affects appearance; back is still harmless to click
+// with no history, so nothing needs disabling functionally (see
+// buttonColors).
+func drawButton(dst *ebiten.Image, canvas whynot.Canvas, iconImg *ebiten.Image, r image.Rectangle, enabled bool, st buttonState) {
+	fillColor, tint := buttonColors(enabled, st)
 	if fillColor != nil {
 		canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), fillColor)
 	}
-	drawOutline(canvas, r, borderColor)
-	pad := r.Dy() / 4
-	canvas.DrawText(label, face, r.Min.X+pad, baselineIn(face, r), textColor)
+	drawIcon(dst, iconImg, r, tint)
 }
 
-// buttonColors picks a button's fill/border/text colors for its current
+// drawIcon draws icon scaled to fill r exactly (preserving aspect
+// ratio, icons are square anyway), tinted to clr - icon is expected to
+// be a light, mostly-white silhouette on transparency, the same
+// assumption ebiten's multiplicative ColorScale tinting relies on
+// elsewhere (e.g compositing a hovered link's glyphs).
+func drawIcon(dst, iconImg *ebiten.Image, r image.Rectangle, clr color.Color) {
+	b := iconImg.Bounds()
+	scale := float64(r.Dy()) / float64(b.Dy())
+	if s := float64(r.Dx()) / float64(b.Dx()); s < scale {
+		scale = s
+	}
+	w, h := float64(b.Dx())*scale, float64(b.Dy())*scale
+
+	opts := &ebiten.DrawImageOptions{}
+	opts.GeoM.Scale(scale, scale)
+	opts.GeoM.Translate(float64(r.Min.X)+(float64(r.Dx())-w)/2, float64(r.Min.Y)+(float64(r.Dy())-h)/2)
+	opts.ColorScale.ScaleWithColor(clr)
+	dst.DrawImage(iconImg, opts)
+}
+
+// buttonColors picks a button's fill/icon-tint colors for its current
 // state - a disabled button ignores hover/pressed entirely, reading as
 // inert regardless of where the cursor is. fillColor is nil for "no
 // fill", i.e. the toolbar's own background shows through.
-func buttonColors(enabled bool, st buttonState) (fillColor, borderColor, textColor color.Color) {
+func buttonColors(enabled bool, st buttonState) (fillColor, iconTint color.Color) {
 	switch {
 	case !enabled:
-		return nil, color.RGBA{0x40, 0x40, 0x40, 0xFF}, color.RGBA{0x60, 0x60, 0x60, 0xFF}
+		return nil, color.RGBA{0x60, 0x60, 0x60, 0xFF}
 	case st.pressed:
-		return color.RGBA{0x50, 0x50, 0x50, 0xFF}, color.RGBA{0xC0, 0xC0, 0xC0, 0xFF}, color.White
+		return color.RGBA{0x50, 0x50, 0x50, 0xFF}, color.White
 	case st.hover:
-		return color.RGBA{0x30, 0x30, 0x30, 0xFF}, color.RGBA{0xA0, 0xA0, 0xA0, 0xFF}, color.RGBA{0xF0, 0xF0, 0xF0, 0xFF}
+		return color.RGBA{0x30, 0x30, 0x30, 0xFF}, color.RGBA{0xF0, 0xF0, 0xF0, 0xFF}
 	default:
-		return nil, color.RGBA{0x80, 0x80, 0x80, 0xFF}, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF}
+		return nil, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF}
 	}
 }
 
@@ -442,10 +493,9 @@ func (g *game) layoutToolbar() {
 	s := g.scale
 	g.toolbarHeight = int(toolbarLogicalHeight * s)
 	pad := int(8 * s)
-	btnH := g.toolbarHeight - 2*pad
-	backW, reloadW := int(64*s), int(72*s)
-	g.backButton = image.Rect(pad, pad, pad+backW, pad+btnH)
-	g.reloadButton = image.Rect(g.backButton.Max.X+pad, pad, g.backButton.Max.X+pad+reloadW, pad+btnH)
+	btn := g.toolbarHeight - 2*pad // square icon buttons
+	g.backButton = image.Rect(pad, pad, pad+btn, pad+btn)
+	g.reloadButton = image.Rect(g.backButton.Max.X+pad, pad, g.backButton.Max.X+pad+btn, pad+btn)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
