@@ -16,6 +16,7 @@ import (
 
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
+	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
 	flag.Parse()
 	f := "test.md"
 	if flag.NArg() != 0 {
@@ -39,6 +40,7 @@ func main() {
 	game := &game{
 		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72*scale), opts...),
 		renderer: ebitenrenderer.New(),
+		debugHit: *debugHit,
 	}
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
@@ -50,6 +52,7 @@ func main() {
 type game struct {
 	view     *whynot.View
 	renderer *ebitenrenderer.Renderer
+	debugHit bool
 
 	hoverX, hoverY int
 }
@@ -77,8 +80,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 	// no separate clear step needed here.
 	g.view.Draw(canvas, 0, 0)
 
-	if hit, offset := g.view.HitTest(g.hoverX, g.hoverY); hit != nil {
-		drawOutline(canvas, hit.Bounds().Add(offset), color.RGBA{255, 0, 0, 255})
+	if g.debugHit {
+		if hit, offset := g.view.HitTest(g.hoverX, g.hoverY); hit != nil {
+			drawOutline(canvas, hit.Bounds().Add(offset), color.RGBA{255, 0, 0, 255})
+		}
 	}
 }
 
