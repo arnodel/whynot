@@ -451,6 +451,131 @@ code line
 	}
 }
 
+// findTag scans a coarse grid of points for one that resolves to tag,
+// returning the first match - for tests that need a real point on
+// specific content without hardcoding pixel positions (exact positions
+// depend on font metrics/wrapping, which this sidesteps).
+func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
+	height := v.box.Bounds().Dy()
+	for y := 0; y < height; y += 2 {
+		for x := 0; x < v.boxWidth; x += 2 {
+			if hit, _ := v.HitTest(x, y); hit != nil {
+				if n := hit.Source().Node(); n != nil && n.Tag == tag {
+					return x, y, true
+				}
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// TestViewHoverHighlightsLink checks that hovering a link rebuilds the
+// tree with the link's text recolored to the StyleSheet's HighlightColor
+// - the "just restyle and rebuild" approach, deliberately the simplest
+// possible one (see the memory on the more targeted spine-rebuild
+// alternative that was considered and set aside for now).
+func TestViewHoverHighlightsLink(t *testing.T) {
+	style := NewDarkStyleSheet()
+	v := NewView([]byte("click [this](url) now"), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v.Layout(300, 1)
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+
+	beforeBox := v.box
+	v.Hover(x, y)
+	if v.box == beforeBox {
+		t.Error("Hover onto a link didn't rebuild (v.box unchanged)")
+	}
+	if v.ctx.HighlightNode == nil {
+		t.Fatal("HighlightNode = nil after hovering a link, want non-nil")
+	}
+
+	hit, _ := v.HitTest(x, y)
+	if hit == nil {
+		t.Fatal("hit at the link's own position = nil after the hover rebuild")
+	}
+	text, ok := hit.(*TextBox)
+	if !ok {
+		t.Fatalf("hit = %T, want *TextBox", hit)
+	}
+	if want := style.HighlightColor(); text.Color != want {
+		t.Errorf("hovered link's Color = %v, want %v (HighlightColor)", text.Color, want)
+	}
+}
+
+// TestViewHoverNoOpWhenUnchanged checks that Hover only rebuilds on an
+// actual transition - calling it again at the same position must not
+// pay for another rebuild.
+func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
+	v := NewView([]byte("click [this](url) now"), NewGoFontFaceSelector(72))
+	v.Layout(300, 1)
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+
+	v.Hover(x, y)
+	box := v.box
+	v.Hover(x, y)
+	if v.box != box {
+		t.Error("Hover at an unchanged position rebuilt again, want a no-op")
+	}
+}
+
+// TestViewHoverClearsWhenMovingAway checks that moving off a link clears
+// HighlightNode (and rebuilds to un-highlight it), rather than leaving
+// the last-hovered link highlighted indefinitely.
+func TestViewHoverClearsWhenMovingAway(t *testing.T) {
+	v := NewView([]byte("click [this](url) now"), NewGoFontFaceSelector(72))
+	v.Layout(300, 1)
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+	v.Hover(x, y)
+	if v.ctx.HighlightNode == nil {
+		t.Fatal("HighlightNode = nil after hovering the link, want non-nil")
+	}
+
+	v.Hover(0, 0) // the top-left corner: inside the view margin, never the link
+	if v.ctx.HighlightNode != nil {
+		t.Error("HighlightNode still set after hovering away from the link")
+	}
+}
+
+// BenchmarkViewHover measures the cost of a hover-triggered rebuild - a
+// full View.rebuild() on every transition, the simplest possible way to
+// get a hovered link restyled through the normal StyleSheet-resolution
+// path. Alternates between the link and a point off it so every call is
+// an actual transition, never short-circuited as a no-op.
+func BenchmarkViewHover(b *testing.B) {
+	source, err := os.ReadFile("testdata/test.md")
+	if err != nil {
+		b.Fatal(err)
+	}
+	v := NewView(source, NewGoFontFaceSelector(72))
+	v.Layout(1024, 1)
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		b.Fatal("no point in the document resolved to TagLink")
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i%2 == 0 {
+			v.Hover(x, y)
+		} else {
+			v.Hover(0, 0)
+		}
+	}
+}
+
 // BenchmarkViewLayoutResizeDeep measures a resize while already anchored
 // at the very last slot of a large document - the scenario that motivated
 // making StackBlock.GetBlockLayout lazy in the first place. It positions the

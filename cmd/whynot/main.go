@@ -59,6 +59,7 @@ func (g *game) Update() error {
 	g.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 
 	g.hoverX, g.hoverY = ebiten.CursorPosition()
+	g.view.Hover(g.hoverX, g.hoverY)
 
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyL):

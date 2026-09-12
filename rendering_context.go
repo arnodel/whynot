@@ -8,6 +8,11 @@ type RenderingContext struct {
 	Scale float64
 	FaceSelector
 	StyleSheet StyleSheet
+
+	// HighlightNode is the ASTNode currently under the mouse (e.g. a
+	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
+	// rebuilds the layout tree when it changes.
+	HighlightNode *ASTNode
 }
 
 // The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -
@@ -98,6 +103,9 @@ func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
 // non-nil Color contribution - mirrors CSS's `color`, which inherits down
 // from the nearest ancestor that sets it.
 func (c RenderingContext) ResolvedColor(node *ASTNode) color.Color {
+	if node.HasAncestor(c.HighlightNode) {
+		return c.StyleSheet.HighlightColor()
+	}
 	for n := node; ; n = n.Parent {
 		if col := c.StyleSheet.Color(n); col != nil {
 			return col

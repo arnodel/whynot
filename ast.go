@@ -79,3 +79,35 @@ func (n *ASTNode) HasAncestorTag(tag ASTTag) bool {
 	}
 	return false
 }
+
+// AncestorTag returns n itself, or the nearest ancestor, tagged with
+// tag - or nil if neither n nor any ancestor is. The pointer-returning
+// counterpart to HasAncestorTag, for callers that need the node itself
+// (e.g. to compare identity against), not just whether one exists.
+func (n *ASTNode) AncestorTag(tag ASTTag) *ASTNode {
+	for ; n != nil; n = n.Parent {
+		if n.Tag == tag {
+			return n
+		}
+	}
+	return nil
+}
+
+// HasAncestor reports whether n itself, or any of its ancestors, is
+// target - matching a specific node's identity (e.g. "is this part of
+// the currently hovered link") rather than a tag. A multi-word link's
+// words don't all share one ASTNode when styled sub-spans are involved
+// (e.g. a bold word inside a link gets its own child node), so matching
+// by identity alone isn't enough - this walk is what makes matching the
+// link's own node still catch every word inside it.
+func (n *ASTNode) HasAncestor(target *ASTNode) bool {
+	if target == nil {
+		return false
+	}
+	for ; n != nil; n = n.Parent {
+		if n == target {
+			return true
+		}
+	}
+	return false
+}

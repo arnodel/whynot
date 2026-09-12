@@ -87,6 +87,13 @@ type StyleSheet interface {
 	// Margins, but for the whole view rather than one node, the same way
 	// BackgroundColor is a whole-view counterpart to Color.
 	ViewMargins() Margins
+	// HighlightColor returns the text color for whatever's under
+	// RenderingContext.HighlightNode (e.g. a hovered link) - takes no
+	// node for the same reason BackgroundColor doesn't: it isn't a
+	// property of any one tag, it's a transient interaction state
+	// RenderingContext.ResolvedColor substitutes in ahead of the normal
+	// per-node cascade.
+	HighlightColor() color.Color
 
 	// StrikeThickness returns the thickness for a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
@@ -168,6 +175,11 @@ type DefaultStyleSheet struct {
 	// to hang the distinction on instead).
 	ViewMargin Margins
 
+	// Highlight is the text color for whatever's under
+	// RenderingContext.HighlightNode - see HighlightColor. Named without
+	// the "Color" suffix for the same reason Background is.
+	Highlight color.Color
+
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
 	// colors/margins/fonts, rarely a table's own column-gap width) - a
@@ -226,6 +238,11 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
 		LinkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
+
+		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
+		// below, an orange reads fine against either a light or dark
+		// background, so NewLightStyleSheet leaves it as-is.
+		Highlight: color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
 
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
@@ -370,6 +387,10 @@ func (s *DefaultStyleSheet) BackgroundColor() color.Color {
 
 func (s *DefaultStyleSheet) ViewMargins() Margins {
 	return s.ViewMargin
+}
+
+func (s *DefaultStyleSheet) HighlightColor() color.Color {
+	return s.Highlight
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged

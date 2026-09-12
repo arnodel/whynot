@@ -126,6 +126,29 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 	return hit, offset.Add(image.Pt(left, y-int(c.offset)))
 }
 
+// Hover updates the currently-highlighted link, given the mouse position
+// in the same coordinate space HitTest/Draw use - call every frame from
+// the embedding game's own input handling. Finding the link under (x, y)
+// is cheap (HitTest), but applying a change isn't: rebuild re-lays-out
+// the whole document, currently the simplest way to get the hovered
+// link's Source restyled through the exact same StyleSheet-resolution
+// path as everything else (see RenderingContext.HighlightNode/
+// ResolvedColor) - so this is a no-op unless the link actually changes
+// from the previous call.
+func (v *View) Hover(x, y int) {
+	var node *ASTNode
+	if hit, _ := v.HitTest(x, y); hit != nil {
+		node = hit.Source().Node().AncestorTag(TagLink)
+	}
+	if node == v.ctx.HighlightNode {
+		return
+	}
+	v.ctx.HighlightNode = node
+	if v.box != nil {
+		v.rebuild()
+	}
+}
+
 // Layout sets the pixel width and display scale to render at (DPI = scale
 // * 72, matching main.go's convention). Cheap to call every frame: the
 // layout tree only rebuilds when width or scale actually change.
