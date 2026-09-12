@@ -280,13 +280,13 @@ func TestViewLayoutReanchor(t *testing.T) {
 	}
 }
 
-// TestViewBoxAtEndToEnd checks that BoxAt reaches every kind of content in
-// a real document, resolving to the right ASTTag. Exact pixel positions
-// aren't predictable across margins/gaps/nesting, so this scans a coarse
-// grid over the whole rendered document and just checks that *some* point
-// resolves to each expected tag - a topological check, not a geometric
-// one.
-func TestViewBoxAtEndToEnd(t *testing.T) {
+// TestViewHitTestEndToEnd checks that HitTest reaches every kind of
+// content in a real document, resolving to the right ASTTag. Exact pixel
+// positions aren't predictable across margins/gaps/nesting, so this
+// scans a coarse grid over the whole rendered document and just checks
+// that *some* point resolves to each expected tag - a topological
+// check, not a geometric one.
+func TestViewHitTestEndToEnd(t *testing.T) {
 	source := []byte(`# Heading
 
 A paragraph with some text.
@@ -315,11 +315,11 @@ code line
 	found := map[ASTTag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
-			source, _ := v.BoxAt(x, y)
-			if source == nil {
+			hit, _ := v.HitTest(x, y)
+			if hit == nil {
 				continue
 			}
-			found[source.Node().Tag] = true
+			found[hit.Source().Node().Tag] = true
 		}
 	}
 

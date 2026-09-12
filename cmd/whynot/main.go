@@ -76,8 +76,8 @@ func (g *game) Draw(screen *ebiten.Image) {
 	// no separate clear step needed here.
 	g.view.Draw(canvas, 0, 0)
 
-	if source, bounds := g.view.BoxAt(g.hoverX, g.hoverY); source != nil {
-		drawOutline(canvas, bounds, color.RGBA{255, 0, 0, 255})
+	if hit, offset := g.view.HitTest(g.hoverX, g.hoverY); hit != nil {
+		drawOutline(canvas, hit.Bounds().Add(offset), color.RGBA{255, 0, 0, 255})
 	}
 }
 

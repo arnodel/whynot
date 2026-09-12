@@ -84,11 +84,12 @@ func (v *View) Draw(dst Canvas, x, y int) {
 	v.box.DrawFrom(dst, v.cursor, x, y)
 }
 
-// BoxAt identifies what's at document position (x, y) - the same
-// coordinate space Draw's (x, y) places content's origin into. bounds
-// is the matched leaf's own bounds in that space, e.g. for drawing an
-// outline around it. source is nil if (x, y) doesn't land on any
-// content - past the end of the document, or in a margin/gap.
+// HitTest identifies what's at document position (x, y) - the same
+// coordinate space Draw's (x, y) places content's origin into. hit is
+// nil if (x, y) doesn't land on any content - past the end of the
+// document, or in a margin/gap. Otherwise offset is where hit.Bounds()
+// should be placed to get its absolute position in that same space,
+// e.g. for drawing an outline around it.
 //
 // y is resolved via normalizeCursor, the same cursor-relative walk
 // Scroll/Layout use, so a click far from the current scroll position
@@ -99,27 +100,27 @@ func (v *View) Draw(dst Canvas, x, y int) {
 // clicking well above the rendered content resolves as if it landed on
 // the first slot rather than missing. Not worth fixing since callers
 // only ever pass points within their own rendered viewport.
-func (v *View) BoxAt(x, y int) (source Source, bounds image.Rectangle) {
+func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 	if v.box == nil {
-		return nil, image.Rectangle{}
+		return nil, image.Point{}
 	}
 	c := v.box.normalizeCursor(stackCursor{index: v.cursor.index, offset: v.cursor.offset + float64(y)})
 	if c.index < 0 || c.index >= len(v.box.slots) {
-		return nil, image.Rectangle{}
+		return nil, image.Point{}
 	}
 	box := v.box.boxAt(c.index)
 	local := image.Pt(x, int(c.offset))
 	if !local.In(box.Bounds()) {
-		return nil, image.Rectangle{}
+		return nil, image.Point{}
 	}
-	source, bounds = box.hitTest(local)
-	if source == nil {
-		return nil, image.Rectangle{}
+	hit, offset = box.HitTest(local)
+	if hit == nil {
+		return nil, image.Point{}
 	}
 	// Shift back from box's own local frame into the same frame (x, y)
 	// arrived in - undoing the cursor-relative adjustment made to y
 	// above (x never needed one).
-	return source, bounds.Add(image.Pt(0, y-int(c.offset)))
+	return hit, offset.Add(image.Pt(0, y-int(c.offset)))
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale

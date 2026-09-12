@@ -164,7 +164,7 @@ func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
 	for i, line := range b.lines {
 		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}}
 	}
-	return &StackBox{slots: preResolvedSlots(lineBoxes)}
+	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
 }
 
 func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
@@ -178,7 +178,7 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 		lines = append(lines, &LineBox{parts: boxes[:i]})
 		boxes = boxes[i:]
 	}
-	return &StackBox{slots: preResolvedSlots(lines)}
+	return &StackBox{slots: preResolvedSlots(lines), source: b}
 }
 
 func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
@@ -196,7 +196,7 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 		lines = append(lines, &LineBox{parts: boxes[:i]})
 		boxes = boxes[i:]
 	}
-	return &StackBox{slots: preResolvedSlots(lines)}
+	return &StackBox{slots: preResolvedSlots(lines), source: b}
 }
 
 // naturalWidthMeasure is an effectively-unbounded width passed to a

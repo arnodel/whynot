@@ -7,34 +7,46 @@ import (
 	"golang.org/x/image/font"
 )
 
+// Hit is what HitTest returns for an actual match: something that can
+// report its own Bounds() and Source() - every Box and InlineBox
+// qualifies, so HitTest can return either kind of leaf uniformly. A
+// composite's Source() is nil when it aggregates children with no
+// single identity of their own (see StackBox.Source), the same way
+// StackBlock.Node does for the semantic tree.
+type Hit interface {
+	Bounds() image.Rectangle
+	Source() Source
+}
+
 // Box is drawn via the package-level DrawBox, not by calling drawContents
 // directly, so that every Box gets the same off-screen skip for free
 // regardless of where it sits in the tree. drawContents holds only the
 // type-specific drawing logic.
 //
-// hitTest identifies what's at p, a point in this Box's own Bounds()
+// HitTest identifies what's at p, a point in this Box's own Bounds()
 // frame - callers must check p is in Bounds() first, since an
-// implementation never re-checks. A nil source means no match (dead
-// space, e.g. a margin or padding); bounds is the matched leaf's own
-// bounds, in the same frame p arrived in. A composite Box recursing
-// into a child must shift the returned bounds by the child's offset.
+// implementation never re-checks. A nil hit means no match (dead space,
+// e.g. a margin or padding); offset is where hit.Bounds() should be
+// placed to land in the same frame p arrived in - a composite Box
+// recursing into a child must add its own offset to the child's.
 type Box interface {
 	Bounds() image.Rectangle
+	Source() Source
 	drawContents(dst Canvas, x, y int)
-	hitTest(p image.Point) (source Source, bounds image.Rectangle)
+	HitTest(p image.Point) (hit Hit, offset image.Point)
 }
 
-// InlineBox's hitTest mirrors DrawInline's own calling convention exactly
-// - same (x, y), same "next x" return - so LineBox.hitTest can drive the
-// identical accumulation loop drawContents does, just calling hitTest
-// instead of DrawInline at each step. p, and the returned bounds, are in
-// the same frame BoundsAndAdvance/DrawInline already use - see
-// LineBox.hitTest.
+// InlineBox's HitTest mirrors DrawInline's own calling convention exactly
+// - same (x, y), same "next x" return - so LineBox.HitTest can drive the
+// identical accumulation loop drawContents does, just calling HitTest
+// instead of DrawInline at each step.
 type InlineBox interface {
 	BoundsAndAdvance() (image.Rectangle, int)
+	Bounds() image.Rectangle
+	Source() Source
 	SpaceWidth() int
 	DrawInline(dst Canvas, x, y int) int
-	hitTest(p image.Point, x, y int) (source Source, bounds image.Rectangle, nextX int)
+	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
 }
 
 type TextBox struct {
@@ -63,13 +75,17 @@ func (b *TextBox) Source() Source {
 	return b.source
 }
 
-func (b *TextBox) hitTest(p image.Point, x, y int) (Source, image.Rectangle, int) {
+func (b *TextBox) Bounds() image.Rectangle {
+	bounds, _ := b.BoundsAndAdvance()
+	return bounds
+}
+
+func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
 	bounds, advance := b.BoundsAndAdvance()
-	shifted := bounds.Add(image.Pt(x, y))
-	if p.In(shifted) {
-		return b.source, shifted, x + advance
+	if p.In(bounds.Add(image.Pt(x, y))) {
+		return b, image.Pt(x, y), x + advance
 	}
-	return nil, image.Rectangle{}, x + advance
+	return nil, image.Point{}, x + advance
 }
 
 // Text/Face never change after construction, and a TextBox is always
@@ -112,21 +128,30 @@ func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
 	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), 0
 }
 
+func (b *ListItemMarkerBox) Bounds() image.Rectangle {
+	bounds, _ := b.BoundsAndAdvance()
+	return bounds
+}
+
+func (b *ListItemMarkerBox) Source() Source {
+	return b.Marker.Source()
+}
+
 func (b *ListItemMarkerBox) SpaceWidth() int {
 	return b.Marker.SpaceWidth()
 }
 
-// hitTest mirrors DrawInline exactly: the marker is drawn hanging off to
+// HitTest mirrors DrawInline exactly: the marker is drawn hanging off to
 // the left of x (DrawInline's x-advance-space), not at x itself, so a
 // naive check against BoundsAndAdvance's own (zero-width) bounds would
 // never match a click on the visible marker glyph.
-func (b *ListItemMarkerBox) hitTest(p image.Point, x, y int) (Source, image.Rectangle, int) {
+func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
 	_, advance := b.Marker.BoundsAndAdvance()
 	space := b.Marker.SpaceWidth()
-	if source, bounds, _ := b.Marker.hitTest(p, x-advance-space, y); source != nil {
-		return source, bounds, x - space
+	if hit, offset, _ := b.Marker.HitTest(p, x-advance-space, y); hit != nil {
+		return hit, offset, x - space
 	}
-	return nil, image.Rectangle{}, x - space
+	return nil, image.Point{}, x - space
 }
 
 type ImageBox struct {
@@ -147,16 +172,19 @@ func (b *ImageBox) BoundsAndAdvance() (image.Rectangle, int) {
 	return b.bounds, b.bounds.Dx()
 }
 
+func (b *ImageBox) Bounds() image.Rectangle {
+	return b.bounds
+}
+
 func (b *ImageBox) SpaceWidth() int {
 	return 0
 }
 
-func (b *ImageBox) hitTest(p image.Point, x, y int) (Source, image.Rectangle, int) {
-	shifted := b.bounds.Add(image.Pt(x, y))
-	if p.In(shifted) {
-		return b.source, shifted, x + b.bounds.Dx()
+func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
+	if p.In(b.bounds.Add(image.Pt(x, y))) {
+		return b, image.Pt(x, y), x + b.bounds.Dx()
 	}
-	return nil, image.Rectangle{}, x + b.bounds.Dx()
+	return nil, image.Point{}, x + b.bounds.Dx()
 }
 
 type LineBox struct {
@@ -168,6 +196,14 @@ type LineBox struct {
 }
 
 var _ Box = (*LineBox)(nil)
+
+// Source is always nil: a line can mix parts with different identities
+// (e.g. plain text next to emphasized text), so there's no single node
+// to report at the line level - HitTest already returns the specific
+// part that matched instead.
+func (b *LineBox) Source() Source {
+	return nil
+}
 
 // Same reasoning as TextBox: parts are fixed at construction and a
 // LineBox is never reused across a re-layout, so this is safe to compute
@@ -215,12 +251,12 @@ func (b *LineBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, bounds.Max.X-left, bounds.Dy())
 }
 
-// hitTest mirrors drawContents' own accumulation loop, calling each
-// part's hitTest instead of DrawInline at each step, so the two can't
+// HitTest mirrors drawContents' own accumulation loop, calling each
+// part's HitTest instead of DrawInline at each step, so the two can't
 // drift apart. p needs no shift: y is the same internal y drawContents
 // computes for external y=0, which already lands a part's footprint in
 // Bounds()'s frame - the same frame p arrives in.
-func (b *LineBox) hitTest(p image.Point) (Source, image.Rectangle) {
+func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 	lineBounds, _ := b.BoundsAndAdvance()
 	y := -lineBounds.Min.Y
 
@@ -231,21 +267,21 @@ func (b *LineBox) hitTest(p image.Point) (Source, image.Rectangle) {
 	}
 	prevSpace := b.parts[0].SpaceWidth()
 
-	source, partBounds, next := b.parts[0].hitTest(p, x, y)
-	if source != nil {
-		return source, partBounds
+	hit, offset, next := b.parts[0].HitTest(p, x, y)
+	if hit != nil {
+		return hit, offset
 	}
 	x = next
 	for _, part := range b.parts[1:] {
 		space := part.SpaceWidth()
-		source, partBounds, next := part.hitTest(p, x+maxInt(prevSpace, space), y)
-		if source != nil {
-			return source, partBounds
+		hit, offset, next := part.HitTest(p, x+maxInt(prevSpace, space), y)
+		if hit != nil {
+			return hit, offset
 		}
 		x = next
 		prevSpace = space
 	}
-	return nil, image.Rectangle{}
+	return nil, image.Point{}
 }
 
 // stackSlot is a StackBox child that's either already resolved (box set -
@@ -265,6 +301,12 @@ type StackBox struct {
 	slots []stackSlot
 	ctx   RenderingContext
 	width int
+
+	// source is the single Block this StackBox's slots were all built
+	// from - e.g. a paragraph's wrapped lines - or nil when the slots
+	// are an aggregate of otherwise-unrelated blocks (StackBlock.GetBox's
+	// own StackBox, including the top-level document). See Source.
+	source Block
 
 	boundsComputed bool
 	bounds         image.Rectangle
@@ -307,6 +349,10 @@ func (b *StackBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
+func (b *StackBox) Source() Source {
+	return b.source
+}
+
 // boxAt returns the child at index i, building it from its Block and
 // memoizing the result on first access if it isn't already resolved. A
 // caller that only ever asks for slots near a scroll cursor only ever
@@ -324,33 +370,41 @@ func (b *StackBox) boxAt(i int) Box {
 	return slot.box
 }
 
-// hitTest walks slots from the start looking for the one p.Y falls in -
+// HitTest walks slots from the start looking for the one p.Y falls in -
 // a plain linear scan, unlike normalizeCursor's cursor-relative walk,
 // since resolving this way would force-build every slot up to the match
 // regardless. That's fine for a StackBox reached via nested structure
 // (a list's items, a blockquote's paragraphs - typically small), but
 // would defeat the point for the top-level, potentially huge document
-// StackBox - View.BoxAt handles that one specially, starting from the
+// StackBox - View.HitTest handles that one specially, starting from the
 // current scroll cursor instead of slot 0.
-func (b *StackBox) hitTest(p image.Point) (Source, image.Rectangle) {
+//
+// A miss on the matched slot (outside its bounds, or its own HitTest
+// declines - e.g. clicking past the end of a paragraph's short last
+// line) falls back to this StackBox itself when it has a Source - the
+// same fallback-to-self BlockquoteBox/TableBox already do. When it
+// doesn't (an aggregate of unrelated blocks - see Source), it's a
+// genuine miss instead, same as before Source existed.
+func (b *StackBox) HitTest(p image.Point) (Hit, image.Point) {
 	y := 0
 	for i := range b.slots {
 		box := b.boxAt(i)
 		h := box.Bounds().Dy()
 		if p.Y < y+h {
 			local := image.Pt(p.X, p.Y-y)
-			if !local.In(box.Bounds()) {
-				return nil, image.Rectangle{}
+			if local.In(box.Bounds()) {
+				if hit, offset := box.HitTest(local); hit != nil {
+					return hit, offset.Add(image.Pt(0, y))
+				}
 			}
-			source, bounds := box.hitTest(local)
-			if source == nil {
-				return nil, image.Rectangle{}
+			if b.source != nil {
+				return b, image.Point{}
 			}
-			return source, bounds.Add(image.Pt(0, y))
+			return nil, image.Point{}
 		}
 		y += h
 	}
-	return nil, image.Rectangle{}
+	return nil, image.Point{}
 }
 
 // stackCursor is a position within a StackBox: which slot, and how far
@@ -432,10 +486,14 @@ func (b *EmptyBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
-// hitTest always misses: an EmptyBox is pure spacing (a margin/gap
+func (b *EmptyBox) Source() Source {
+	return nil
+}
+
+// HitTest always misses: an EmptyBox is pure spacing (a margin/gap
 // between blocks or lines), never content.
-func (b *EmptyBox) hitTest(p image.Point) (Source, image.Rectangle) {
-	return nil, image.Rectangle{}
+func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
+	return nil, image.Point{}
 }
 
 type ContainerBox struct {
@@ -456,20 +514,27 @@ func (b *ContainerBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
-// hitTest has no source of its own - a pure positioning wrapper (for
+// Source delegates to inner: a pure positioning wrapper (for
+// indentation, or cell alignment in a table) has no identity of its
+// own, but always wraps exactly one thing, unlike StackBox.
+func (b *ContainerBox) Source() Source {
+	return b.inner.Source()
+}
+
+// HitTest has no source of its own - a pure positioning wrapper (for
 // indentation, or cell alignment in a table) - so a miss on inner (e.g.
 // content narrower than the space it was given) reports no match rather
 // than falling back to anything.
-func (b *ContainerBox) hitTest(p image.Point) (Source, image.Rectangle) {
+func (b *ContainerBox) HitTest(p image.Point) (Hit, image.Point) {
 	local := p.Sub(b.innerPos)
 	if !local.In(b.inner.Bounds()) {
-		return nil, image.Rectangle{}
+		return nil, image.Point{}
 	}
-	source, bounds := b.inner.hitTest(local)
-	if source == nil {
-		return nil, image.Rectangle{}
+	hit, offset := b.inner.HitTest(local)
+	if hit == nil {
+		return nil, image.Point{}
 	}
-	return source, bounds.Add(b.innerPos)
+	return hit, offset.Add(b.innerPos)
 }
 
 // BlockquoteBox draws a vertical bar down the left edge and positions its
@@ -501,19 +566,19 @@ func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
 	DrawBox(b.inner, dst, x+b.indent, y)
 }
 
-// hitTest treats the whole indent strip (bar plus any padding before
+// HitTest treats the whole indent strip (bar plus any padding before
 // inner starts) as the blockquote's own, and falls back to it too
 // whenever inner declines to match (content narrower than the indented
-// width, or a gap between quoted paragraphs) - every hitTest
+// width, or a gap between quoted paragraphs) - every HitTest
 // implementation degrades gracefully on an out-of-bounds point, so
 // there's no need to bounds-check before delegating.
-func (b *BlockquoteBox) hitTest(p image.Point) (Source, image.Rectangle) {
+func (b *BlockquoteBox) HitTest(p image.Point) (Hit, image.Point) {
 	if p.X >= b.indent {
-		if source, bounds := b.inner.hitTest(image.Pt(p.X-b.indent, p.Y)); source != nil {
-			return source, bounds.Add(image.Pt(b.indent, 0))
+		if hit, offset := b.inner.HitTest(image.Pt(p.X-b.indent, p.Y)); hit != nil {
+			return hit, offset.Add(image.Pt(b.indent, 0))
 		}
 	}
-	return b.source, b.Bounds()
+	return b, image.Point{}
 }
 
 // TableBox draws a GFM table: a frame around the whole thing, a rule
@@ -583,12 +648,12 @@ func (b *TableBox) drawContents(dst Canvas, x, y int) {
 	}
 }
 
-// hitTest finds which cell (row, col) p falls in via columnOffsets/
+// HitTest finds which cell (row, col) p falls in via columnOffsets/
 // rowOffsets, and falls back to the table's own source whenever there
 // isn't one to recurse into (the frame, a gap between cells/rows) or the
 // cell itself declines (its content is narrower/shorter than the cell's
 // allotted space).
-func (b *TableBox) hitTest(p image.Point) (Source, image.Rectangle) {
+func (b *TableBox) HitTest(p image.Point) (Hit, image.Point) {
 	row := -1
 	for r := 0; r < len(b.rowOffsets)-1; r++ {
 		if p.Y >= b.rowOffsets[r] && p.Y < b.rowOffsets[r+1] {
@@ -605,11 +670,11 @@ func (b *TableBox) hitTest(p image.Point) (Source, image.Rectangle) {
 	}
 	if row >= 0 && col >= 0 {
 		local := image.Pt(p.X-b.columnOffsets[col], p.Y-b.rowOffsets[row])
-		if source, bounds := b.cells[row][col].hitTest(local); source != nil {
-			return source, bounds.Add(image.Pt(b.columnOffsets[col], b.rowOffsets[row]))
+		if hit, offset := b.cells[row][col].HitTest(local); hit != nil {
+			return hit, offset.Add(image.Pt(b.columnOffsets[col], b.rowOffsets[row]))
 		}
 	}
-	return b.source, b.Bounds()
+	return b, image.Point{}
 }
 
 // RuleBox is a single filled horizontal bar - the box for a thematic break
@@ -640,8 +705,8 @@ func (b *RuleBox) drawContents(dst Canvas, x, y int) {
 	dst.DrawRect(x, y, b.width, b.thickness, b.color)
 }
 
-func (b *RuleBox) hitTest(p image.Point) (Source, image.Rectangle) {
-	return b.source, b.Bounds()
+func (b *RuleBox) HitTest(p image.Point) (Hit, image.Point) {
+	return b, image.Point{}
 }
 
 func maxInt(a, b int) int {
