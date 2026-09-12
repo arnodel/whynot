@@ -196,7 +196,9 @@ func (g *game) Update() error {
 	}
 	g.hoverDest = ""
 	if hasLink {
-		g.hoverDest = dest
+		if resolved, err := g.resolveLink(dest); err == nil {
+			g.hoverDest = resolved.String()
+		}
 	}
 
 	cursor := image.Pt(g.hoverX, g.hoverY)
@@ -231,6 +233,19 @@ func (g *game) setStyleSheet(s whynot.StyleSheet) {
 	g.current.view.SetStyleSheet(s)
 }
 
+// resolveLink parses dest and resolves it against the current
+// document's own location - what a relative or fragment-only link is
+// relative to. Used both to show where a hovered link actually points
+// (in the address bar, since dest alone is just the literal Markdown
+// destination text) and to navigate there on click.
+func (g *game) resolveLink(dest string) (*url.URL, error) {
+	target, err := url.Parse(dest)
+	if err != nil {
+		return nil, err
+	}
+	return g.current.location.ResolveReference(target), nil
+}
+
 // follow resolves dest against the current document's own location -
 // so a relative link works whether the current document came from
 // disk or from an http(s) fetch. A fragment-only link to the current
@@ -240,12 +255,11 @@ func (g *game) setStyleSheet(s whynot.StyleSheet) {
 // and replaces it. Either way, wherever the jump started from is
 // pushed onto history first, so back can return to it.
 func (g *game) follow(dest string) {
-	target, err := url.Parse(dest)
+	resolved, err := g.resolveLink(dest)
 	if err != nil {
 		log.Printf("link destination %q: %v", dest, err)
 		return
 	}
-	resolved := g.current.location.ResolveReference(target)
 
 	if samePage(g.current.location, resolved) {
 		if resolved.Fragment == "" {
@@ -253,6 +267,10 @@ func (g *game) follow(dest string) {
 		}
 		g.pushHistory()
 		g.current.view.ScrollToAnchor(resolved.Fragment)
+		// resolved (unlike g.current.location) carries the fragment, so
+		// the address bar reflects the jump even though the document
+		// itself didn't change.
+		g.current.location = resolved
 		return
 	}
 
