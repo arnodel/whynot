@@ -202,7 +202,7 @@ func TestListItemTrailingGap(t *testing.T) {
 	}
 
 	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
-	box := item.GetBox(ctx, 200).(*StackBox)
+	box := item.GetBlockLayout(ctx, 200).(*StackBox)
 	if len(box.slots) != 3 {
 		t.Fatalf("got %d slots, want 3 (head, gap, trailing): %#v", len(box.slots), box.slots)
 	}
@@ -234,7 +234,7 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 		t.Helper()
 		doc := Parse([]byte(source))
 		para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
-		return para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
+		return para.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx()
 	}
 
 	widthA := widthOf("A")
@@ -260,8 +260,8 @@ func TestSplitBoxesNaturalWidthFits(t *testing.T) {
 	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
 	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
 
-	natWidth := para.GetBox(ctx, naturalWidthMeasure).Bounds().Dx()
-	box := para.GetBox(ctx, natWidth).(*StackBox)
+	natWidth := para.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx()
+	box := para.GetBlockLayout(ctx, natWidth).(*StackBox)
 	if len(box.slots) != 1 {
 		t.Errorf("built at its own natural width (%d), got %d lines, want 1", natWidth, len(box.slots))
 	}
@@ -483,10 +483,10 @@ func TestParseThematicBreak(t *testing.T) {
 	if got := wrapper.Margins(ctx); got != (Margins{Top: 20, Bottom: 20}) {
 		t.Errorf("Margins(ctx) = %+v, want {Top: 20, Bottom: 20}", got)
 	}
-	box := rule.GetBox(ctx, 100)
+	box := rule.GetBlockLayout(ctx, 100)
 	ruleBox, ok := box.(*RuleBox)
 	if !ok {
-		t.Fatalf("GetBox = %T, want *RuleBox", box)
+		t.Fatalf("GetBlockLayout = %T, want *RuleBox", box)
 	}
 	want := image.Rect(0, 0, 100, int(styleSheet.ThematicBreakThickness(nil)))
 	if got := ruleBox.Bounds(); got != want {
@@ -556,10 +556,10 @@ func TestBlockquoteBoxIndent(t *testing.T) {
 	}
 	styleSheet := NewDarkStyleSheet()
 	ctx := RenderingContext{Scale: 1, StyleSheet: styleSheet}
-	box := bq.GetBox(ctx, 100)
+	box := bq.GetBlockLayout(ctx, 100)
 	bqBox, ok := box.(*BlockquoteBox)
 	if !ok {
-		t.Fatalf("GetBox = %T, want *BlockquoteBox", box)
+		t.Fatalf("GetBlockLayout = %T, want *BlockquoteBox", box)
 	}
 	blockquoteIndent := int(styleSheet.BlockquoteGeometry(nil).Indent)
 	if bqBox.indent != blockquoteIndent {
@@ -718,13 +718,13 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: styleSheet}
 
 	plainNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagEmphasis)
-	plain := (&InlineText{text: "x", node: plainNode}).GetInlineBox(ctx).(*TextBox)
+	plain := (&InlineText{text: "x", node: plainNode}).GetInlineLayout(ctx).(*TextBox)
 	if plain.StrikeThickness != 0 {
 		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
 	}
 
 	struckNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagStrikethrough)
-	struck := (&InlineText{text: "x", node: struckNode}).GetInlineBox(ctx).(*TextBox)
+	struck := (&InlineText{text: "x", node: struckNode}).GetInlineLayout(ctx).(*TextBox)
 	want := int(styleSheet.StrikeThickness(struckNode) * ctx.Scale)
 	if struck.StrikeThickness != want {
 		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)

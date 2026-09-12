@@ -17,7 +17,7 @@ type fixedHeightBlock struct {
 	height int
 }
 
-func (b *fixedHeightBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *fixedHeightBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	return NewEmptyBox(width, b.height)
 }
 
@@ -36,7 +36,7 @@ type scaledHeightBlock struct {
 	scale float64
 }
 
-func (b *scaledHeightBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *scaledHeightBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	return NewEmptyBox(width, int(float64(width)*b.scale))
 }
 
@@ -125,7 +125,7 @@ func TestNewViewWithStyleSheet(t *testing.T) {
 
 // TestViewSetStyleSheetRebuildsImmediately checks that a StyleSheet swap
 // is visible right away, without waiting for another Layout call -
-// GetBox/GetInlineBox bake in resolved style values (colors, margins
+// GetBlockLayout/GetInlineLayout bake in resolved style values (colors, margins
 // collapsed to gaps, font sizes, ...) when the layout tree is built, so
 // without an explicit rebuild inside SetStyleSheet nothing would change
 // until something else happened to trigger a resize.
@@ -182,7 +182,7 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	v := &View{block: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
 	v.Layout(200, 1)
 
-	// Slot 1 is the margin gap StackBlock.GetBox inserts between the two
+	// Slot 1 is the margin gap StackBlock.GetBlockLayout inserts between the two
 	// paragraphs, not content - the second paragraph is slot 2. Anchor
 	// halfway through it.
 	if len(v.box.slots) != 3 {
@@ -341,7 +341,7 @@ code line
 
 // BenchmarkViewLayoutResizeDeep measures a resize while already anchored
 // at the very last slot of a large document - the scenario that motivated
-// making StackBlock.GetBox lazy in the first place. It positions the
+// making StackBlock.GetBlockLayout lazy in the first place. It positions the
 // anchor directly rather than via Scroll, since walking there via Scroll
 // would itself resolve everything in between - not the cost this
 // benchmark is isolating.

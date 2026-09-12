@@ -13,7 +13,7 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
-func benchmarkGetBox(b *testing.B, path string) {
+func benchmarkGetBlockLayout(b *testing.B, path string) {
 	source, err := os.ReadFile(path)
 	if err != nil {
 		b.Fatal(err)
@@ -27,21 +27,21 @@ func benchmarkGetBox(b *testing.B, path string) {
 	const width = 1024
 
 	// Warm the font-face cache once, same as a real run after the first frame,
-	// so the benchmark measures steady-state GetBox cost, not font parsing.
-	block.GetBox(ctx, width)
+	// so the benchmark measures steady-state GetBlockLayout cost, not font parsing.
+	block.GetBlockLayout(ctx, width)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		block.GetBox(ctx, width)
+		block.GetBlockLayout(ctx, width)
 	}
 }
 
-func BenchmarkGetBox(b *testing.B) {
-	benchmarkGetBox(b, "testdata/test.md")
+func BenchmarkGetBlockLayout(b *testing.B) {
+	benchmarkGetBlockLayout(b, "testdata/test.md")
 }
 
-func BenchmarkGetBoxLarge(b *testing.B) {
-	benchmarkGetBox(b, "testdata/test-large.md")
+func BenchmarkGetBlockLayoutLarge(b *testing.B) {
+	benchmarkGetBlockLayout(b, "testdata/test-large.md")
 }
 
 // benchmarkBoxBoundsWarm measures repeated Bounds() calls on an already-built
@@ -59,7 +59,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
 	}
-	box := block.GetBox(ctx, 1024)
+	box := block.GetBlockLayout(ctx, 1024)
 
 	box.Bounds() // warm the cache
 
@@ -77,7 +77,7 @@ func BenchmarkBoxBoundsWarmLarge(b *testing.B) {
 	benchmarkBoxBoundsWarm(b, "testdata/test-large.md")
 }
 
-// benchmarkStackBoxDraw measures DrawBox cost with the viewport scrolled to
+// benchmarkStackBoxDraw measures DrawBlockLayout cost with the viewport scrolled to
 // a given fraction of the document's height, i.e. what a real frame costs:
 // only the visible content gets drawn, regardless of total document size.
 func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
@@ -94,17 +94,17 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	const width = 1024
 	const viewportHeight = 768
 
-	box := block.GetBox(ctx, width)
+	box := block.GetBlockLayout(ctx, width)
 	totalHeight := box.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBox(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, offsetY) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY)
 	}
 }
 
@@ -135,17 +135,17 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	const width = 1024
 	const viewportHeight = 768
 
-	box := block.GetBox(ctx, width)
+	box := block.GetBlockLayout(ctx, width)
 	totalHeight := box.Bounds().Dy()
 	offsetY := -(totalHeight + 100000)
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBox(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, offsetY) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY)
 	}
 }
 
@@ -175,15 +175,15 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	}
 	const width = 1024
 
-	box := block.GetBox(ctx, width)
+	box := block.GetBlockLayout(ctx, width)
 	totalHeight := box.Bounds().Dy()
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, totalHeight))
 
-	whynot.DrawBox(box, dst, 0, 0) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBox(box, dst, 0, 0)
+		whynot.DrawBlockLayout(box, dst, 0, 0)
 	}
 }
 
@@ -197,7 +197,7 @@ func BenchmarkStackBoxDrawUnculledLarge(b *testing.B) {
 
 // benchmarkStackBoxDrawCold measures a single Draw() call on a freshly built
 // (cold) tree: TextBlock/ListItemHeadBlock content is pre-warmed by
-// splitBoxes during GetBox(), but CodeBlock content isn't (no line-splitting
+// splitBoxes during GetBlockLayout(), but CodeBlock content isn't (no line-splitting
 // needed), so it stays genuinely cold until something calls Bounds()/Draw()
 // on it.
 // The culling scan calls Bounds() on every preceding sibling to check
@@ -221,7 +221,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	// Learn the total height once, from a throwaway tree, so offsetY can be
 	// fixed before the timed loop without warming the trees we're about to
 	// measure.
-	probeBox := rawBlock.GetBox(ctx, width)
+	probeBox := rawBlock.GetBlockLayout(ctx, width)
 	totalHeight := probeBox.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
@@ -230,10 +230,10 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		box := rawBlock.GetBox(ctx, width) // fresh tree: cold CodeBlock caches
+		box := rawBlock.GetBlockLayout(ctx, width) // fresh tree: cold CodeBlock caches
 		b.StartTimer()
 
-		whynot.DrawBox(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY)
 	}
 }
 

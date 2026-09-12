@@ -19,7 +19,7 @@ type Source interface {
 
 type Block interface {
 	Source
-	GetBox(ctx RenderingContext, width int) Box
+	GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 	Margins(ctx RenderingContext) Margins
 }
 
@@ -46,7 +46,7 @@ func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 // Top/Bottom from its children.
 //
 // Its own margins are resolved from ctx.StyleSheet via node - unscaled,
-// matching Block.Margins' convention (StackBlock.GetBox, the one real
+// matching Block.Margins' convention (StackBlock.GetBlockLayout, the one real
 // caller, scales the result via ctx.ScaledMargins).
 type MarginBlock struct {
 	Block
@@ -75,7 +75,7 @@ func (b *MarginBlock) Node() *ASTNode {
 
 type Inline interface {
 	Source
-	GetInlineBox(RenderingContext) InlineBox
+	GetInlineLayout(RenderingContext) InlineLayout
 }
 
 type InlineText struct {
@@ -122,7 +122,7 @@ func (b *ThematicBreakBlock) Node() *ASTNode {
 // level's bar drawn independently) just work without the parent needing
 // to know anything about it. inner is the quoted content as a single
 // Block - already a StackBlock if there was more than one, resolved once
-// at compile time rather than rebuilt on every GetBox call.
+// at compile time rather than rebuilt on every GetBlockLayout call.
 type BlockquoteBlock struct {
 	WithoutMargins
 	inner Block
@@ -160,7 +160,7 @@ func (b *TextBlock) Node() *ASTNode {
 }
 
 // ListItemHeadBlock is a list item's own paragraph text, flowed with the
-// marker hanging off the first line - see GetBox. It always reports zero
+// marker hanging off the first line - see GetBlockLayout. It always reports zero
 // margins: a list item's indentation and item-to-item spacing belong to
 // the StackBlock CompileListItem wraps it in (along with any trailing
 // content, e.g. a nested list), not to the head on its own - it has no
@@ -222,7 +222,7 @@ func (b *StackBlock) Node() *ASTNode {
 }
 
 // Margins reports Top/Bottom as its first/last child's own margin - the
-// same collapsing GetBox applies between siblings, extended to its own
+// same collapsing GetBlockLayout applies between siblings, extended to its own
 // edges. Left/Right are zero: as a stack of blocks arranged vertically,
 // StackBlock has no notion of a horizontal edge to derive from a child -
 // only whatever wraps it (see MarginBlock) has a real Left/Right.

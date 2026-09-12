@@ -12,7 +12,7 @@ import (
 )
 
 // Parse compiles Markdown source into a Block tree ready for layout via
-// Block.GetBox. All appearance (fonts, colors, margins, ...) is resolved
+// Block.GetBlockLayout. All appearance (fonts, colors, margins, ...) is resolved
 // later, from RenderingContext.StyleSheet against each Block/Inline's own
 // ASTNode - Parse itself only builds structure.
 func Parse(source []byte) Block {
@@ -154,12 +154,12 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	}
 
 	// A leading Paragraph is the item's own text, flowed with the marker
-	// hanging off its first line (see ListItemHeadBlock.GetBox). Anything
+	// hanging off its first line (see ListItemHeadBlock.GetBlockLayout). Anything
 	// after it - a nested List, or (in a loose list) further paragraphs -
 	// stacks below as trailing block content, each already compiled with
 	// its own real margins by CompileNode. An item with no leading
 	// paragraph leaves items empty, so the marker ends up on a line of
-	// its own - GetBox already handles that with no special-casing.
+	// its own - GetBlockLayout already handles that with no special-casing.
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
 		child := next.FirstChild()

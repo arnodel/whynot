@@ -7,7 +7,7 @@ import (
 )
 
 // BlockquoteGeometry is the dimensional constants a blockquote's own bar
-// and indent need - grouped since a blockquote's GetBox always reads both
+// and indent need - grouped since a blockquote's GetBlockLayout always reads both
 // together.
 type BlockquoteGeometry struct {
 	Indent   float64
@@ -15,7 +15,7 @@ type BlockquoteGeometry struct {
 }
 
 // TableGeometry is the dimensional constants a table's layout needs -
-// grouped since TableBlock.GetBox always reads all five together.
+// grouped since TableBlock.GetBlockLayout always reads all five together.
 type TableGeometry struct {
 	FrameThickness      float64
 	ColumnGap           float64

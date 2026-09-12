@@ -103,7 +103,7 @@ func (c RenderingContext) ResolvedColor(node *ASTNode) color.Color {
 	}
 }
 
-func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
+func (t *InlineText) GetInlineLayout(ctx RenderingContext) InlineLayout {
 	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(t.node))
 	if err != nil {
 		panic(err)
@@ -117,12 +117,12 @@ func (t *InlineText) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
-// GetInlineBox probes src's dimensions via a cheap header-only read (no
+// GetInlineLayout probes src's dimensions via a cheap header-only read (no
 // full decode, no rendering backend involved - reading an image's size
 // isn't a backend-specific operation the way loading its pixels for
 // drawing is). A missing or unreadable file yields a zero-size box rather
 // than failing layout outright.
-func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
+func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
 	var bounds image.Rectangle
 	if f, err := os.Open(i.src); err == nil {
 		defer f.Close()
@@ -137,7 +137,7 @@ func (i *InlineImage) GetInlineBox(ctx RenderingContext) InlineBox {
 	}
 }
 
-func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	return &RuleBox{
 		width:     width,
 		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
@@ -146,7 +146,7 @@ func (b *ThematicBreakBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 }
 
-func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *BlockquoteBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	geom := ctx.ScaledBlockquoteGeometry(b.node)
 	indent := int(geom.Indent)
 	return &BlockquoteBox{
@@ -154,24 +154,24 @@ func (b *BlockquoteBlock) GetBox(ctx RenderingContext, width int) Box {
 		indent:   indent,
 		barWidth: int(geom.BarWidth),
 		barColor: ctx.StyleSheet.BorderColor(b.node),
-		inner:    b.inner.GetBox(ctx, width-indent),
+		inner:    b.inner.GetBlockLayout(ctx, width-indent),
 		source:   b,
 	}
 }
 
-func (b *CodeBlock) GetBox(ctx RenderingContext, width int) Box {
-	lineBoxes := make([]Box, len(b.lines))
+func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+	lineBoxes := make([]BlockLayout, len(b.lines))
 	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{parts: []InlineBox{line.GetInlineBox(ctx)}}
+		lineBoxes[i] = &LineBox{parts: []InlineLayout{line.GetInlineLayout(ctx)}}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
 }
 
-func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
-	lines := []Box{}
-	boxes := make([]InlineBox, len(b.parts))
+func (b *TextBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+	lines := []BlockLayout{}
+	boxes := make([]InlineLayout, len(b.parts))
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineBox(ctx)
+		boxes[i] = part.GetInlineLayout(ctx)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
@@ -181,15 +181,15 @@ func (b *TextBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{slots: preResolvedSlots(lines), source: b}
 }
 
-func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
-	lines := []Box{}
-	boxes := make([]InlineBox, len(b.parts)+1)
+func (b *ListItemHeadBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+	lines := []BlockLayout{}
+	boxes := make([]InlineLayout, len(b.parts)+1)
 
 	boxes[0] = &ListItemMarkerBox{
-		Marker: b.marker.GetInlineBox(ctx),
+		Marker: b.marker.GetInlineLayout(ctx),
 	}
 	for i, part := range b.parts {
-		boxes[i+1] = part.GetInlineBox(ctx)
+		boxes[i+1] = part.GetInlineLayout(ctx)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
@@ -200,8 +200,8 @@ func (b *ListItemHeadBlock) GetBox(ctx RenderingContext, width int) Box {
 }
 
 // naturalWidthMeasure is an effectively-unbounded width passed to a
-// cell's GetBox purely to measure its natural (unwrapped) width via the
-// resulting Box's Bounds() - large enough that no realistic cell content
+// cell's GetBlockLayout purely to measure its natural (unwrapped) width via the
+// resulting BlockLayout's Bounds() - large enough that no realistic cell content
 // would ever wrap against it.
 const naturalWidthMeasure = 1 << 20
 
@@ -263,7 +263,7 @@ func resolveColumnWidths(natural []int, available int) []int {
 	return result
 }
 
-func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	geom := ctx.ScaledTableGeometry(b.node)
 	frameThickness := int(geom.FrameThickness)
 	columnGap := int(geom.ColumnGap)
@@ -277,7 +277,7 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 	natural := make([]int, numCols)
 	for _, row := range rows {
 		for c, cell := range row {
-			if w := cell.content.GetBox(ctx, naturalWidthMeasure).Bounds().Dx(); w > natural[c] {
+			if w := cell.content.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx(); w > natural[c] {
 				natural[c] = w
 			}
 		}
@@ -302,14 +302,14 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 	// actually rendered - and use that for offsets/alignment instead of
 	// the looser allocated width, so a wide-but-wrapped column doesn't
 	// leave a bigger gap before the next one than it needs to.
-	rawCells := make([][]Box, len(rows))
+	rawCells := make([][]BlockLayout, len(rows))
 	rowHeights := make([]int, len(rows))
 	effectiveWidths := make([]int, numCols)
 	for r, row := range rows {
-		rowBoxes := make([]Box, numCols)
+		rowBoxes := make([]BlockLayout, numCols)
 		rowHeight := 0
 		for c, cell := range row {
-			contentBox := cell.content.GetBox(ctx, columnWidths[c])
+			contentBox := cell.content.GetBlockLayout(ctx, columnWidths[c])
 			rowBoxes[c] = contentBox
 			if h := contentBox.Bounds().Dy(); h > rowHeight {
 				rowHeight = h
@@ -335,9 +335,9 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 		}
 	}
 
-	cells := make([][]Box, len(rows))
+	cells := make([][]BlockLayout, len(rows))
 	for r, row := range rows {
-		rowCells := make([]Box, numCols)
+		rowCells := make([]BlockLayout, numCols)
 		for c, cell := range row {
 			contentBox := rawCells[r][c]
 			contentWidth := contentBox.Bounds().Dx()
@@ -382,13 +382,13 @@ func (b *TableBlock) GetBox(ctx RenderingContext, width int) Box {
 	}
 }
 
-// GetBox builds the slot skeleton only - gap sizes from Margins(), which is
-// cheap (no text measurement) - deferring each block's own GetBox call to
+// GetBlockLayout builds the slot skeleton only - gap sizes from Margins(), which is
+// cheap (no text measurement) - deferring each block's own GetBlockLayout call to
 // StackBox.boxAt, on first access to that slot. A resize only needs to
 // re-derive gap sizes and widths up front; the expensive part (actually
 // laying out each block's content) only happens for slots something later
 // asks for, e.g. those near a scroll anchor.
-func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
+func (b *StackBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	slots := make([]stackSlot, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
@@ -412,7 +412,7 @@ func (b *StackBlock) GetBox(ctx RenderingContext, width int) Box {
 	return &StackBox{slots: slots, ctx: ctx, width: width}
 }
 
-func splitBoxes(boxes []InlineBox, width int) (int, image.Rectangle) {
+func splitBoxes(boxes []InlineLayout, width int) (int, image.Rectangle) {
 	if len(boxes) == 0 {
 		return 0, image.Rectangle{}
 	}

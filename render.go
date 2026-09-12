@@ -31,10 +31,10 @@ func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
 	return x + b.bounds.Dx()
 }
 
-// DrawBox is the sole entry point for drawing a Box: it skips drawContents
-// entirely when box's bounds don't overlap dst, so every Box gets that for
+// DrawBlockLayout is the sole entry point for drawing a BlockLayout: it skips drawContents
+// entirely when box's bounds don't overlap dst, so every BlockLayout gets that for
 // free regardless of who's calling it or where it sits in the tree.
-func DrawBox(box Box, dst Canvas, x, y int) {
+func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int) {
 	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
 		return
 	}
@@ -70,7 +70,7 @@ func (b *StackBox) drawContents(dst Canvas, x, y int) {
 			// viewport: nothing further down can be visible.
 			break
 		}
-		DrawBox(box, dst, x, y)
+		DrawBlockLayout(box, dst, x, y)
 		y += childBounds.Max.Y
 	}
 }
@@ -79,7 +79,7 @@ func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
 }
 
 // DrawFrom draws starting at c, so that c's position lands at (x, y) on
-// dst - unlike DrawBox, it never calls Bounds() on the whole tree first,
+// dst - unlike DrawBlockLayout, it never calls Bounds() on the whole tree first,
 // and never resolves or draws slots before c.index. Intended for View to
 // call at the scroll cursor.
 func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int) {
@@ -94,11 +94,11 @@ func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int) {
 		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
 			break
 		}
-		DrawBox(box, dst, x, y)
+		DrawBlockLayout(box, dst, x, y)
 		y += childBounds.Max.Y
 	}
 }
 
 func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
-	DrawBox(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
+	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
 }

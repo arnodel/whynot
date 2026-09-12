@@ -139,7 +139,7 @@ func (v *View) Layout(width int, scale float64) {
 }
 
 // SetStyleSheet swaps the View's StyleSheet and takes effect immediately -
-// GetBox/GetInlineBox resolve and bake in concrete style values (colors,
+// GetBlockLayout/GetInlineLayout resolve and bake in concrete style values (colors,
 // margins collapsed to gaps, ...) when the layout tree is built, so
 // without an explicit rebuild here the change wouldn't be visible until
 // whatever next happened to resize the view. Rebuilding also re-anchors
@@ -171,7 +171,7 @@ func (v *View) rebuild() {
 		}
 	}
 
-	v.box = asStackBox(v.block.GetBox(v.ctx, v.boxWidth))
+	v.box = asStackBox(v.block.GetBlockLayout(v.ctx, v.boxWidth))
 
 	if len(v.box.slots) == 0 {
 		return

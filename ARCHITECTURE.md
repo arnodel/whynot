@@ -34,11 +34,11 @@ flowchart TD
         B --> G["ASTNode tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ASTNode into it)"]
     end
     subgraph L2["Layer 2 — Layout tree (layout.go, box.go, stylesheet.go)"]
-        C -- "GetBox(ctx, width)" --> D["Box / InlineBox tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
+        C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
         G -. "ctx.StyleSheet resolves\nMargins / TextStyle / Color / ..." .-> D
     end
     subgraph L3["Layer 3 — Canvas boundary (render.go, canvas.go)"]
-        D -- "DrawBox(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
+        D -- "DrawBlockLayout(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
     end
     subgraph L4["ebitenrenderer — a Canvas implementation"]
         E --> F["pixels on ebiten.Image"]
@@ -53,7 +53,7 @@ against a `StyleSheet` ([stylesheet.go](stylesheet.go)) - `Margins`,
 `TextStyle` (via `RenderingContext.ResolvedTextStyle`, merging
 contributions across ancestry so e.g. `Strong` nested inside `Emphasis`
 picks up both), `Color`/`BorderColor`, `StrikeThickness`, table/blockquote
-geometry - during `GetBox`/`GetInlineBox`, so the same parsed document can
+geometry - during `GetBlockLayout`/`GetInlineLayout`, so the same parsed document can
 render under a different `StyleSheet` without re-parsing. `TextStyle`
 (the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
 resolves *to* and what `FaceSelector` resolves *from* - the vocabulary
@@ -86,22 +86,22 @@ field for `StyleSheet` to resolve later, in Layer 2.
 Margins aren't a field every `Block` carries: most embed `WithoutMargins`
 (a zero-value `Margins()`) and get real ones only where the compiler wraps
 them in a `MarginBlock{Block, node}` - resolved from `StyleSheet.Margins`
-against that node during `GetBox`, not baked in here at construction time.
+against that node during `GetBlockLayout`, not baked in here at construction time.
 `StackBlock` is the one exception with real, non-trivial margins of its
 own - its Top/Bottom is whatever its first/last child reports, the same
-adjacent-margin collapsing `GetBox` applies between siblings, extended to
+adjacent-margin collapsing `GetBlockLayout` applies between siblings, extended to
 its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
 correctly with the outermost child instead of stacking on top of it.
 
 Built once per document, by `Parse` ([compile.go](compile.go)), and never
 rebuilt — `Block`s are immutable for the life of the program.
 
-### Layer 2 — Layout tree (`Box` / `InlineBox`)
+### Layer 2 — Layout tree (`BlockLayout` / `InlineLayout`)
 
-`Block.GetBox(ctx, width)` / `Inline.GetInlineBox(ctx)`
+`Block.GetBlockLayout(ctx, width)` / `Inline.GetInlineLayout(ctx)`
 ([layout.go](layout.go)) take a concrete pixel `width` and a
 `RenderingContext` (DPI scale, font face cache, and `StyleSheet`) and
-produce a `Box` / `InlineBox` tree ([box.go](box.go)): `TextBox`,
+produce a `BlockLayout` / `InlineLayout` tree ([box.go](box.go)): `TextBox`,
 `ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
 margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 (margin spacer). This is where appearance actually gets resolved -
@@ -113,7 +113,7 @@ dimensional constants, scaled by DPI in one step) - all read against each
 resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
 Rebuilt only when `width` or DPI scale change (see `View.Layout` below) —
-unlike `Block`, a `Box` tree is fully replaced on every rebuild rather than
+unlike `Block`, a `BlockLayout` tree is fully replaced on every rebuild rather than
 mutated, which is what makes the memoization described next safe.
 
 ### Layer 3 — the `Canvas` boundary
@@ -121,14 +121,14 @@ mutated, which is what makes the memoization described next safe.
 `Canvas` ([canvas.go](canvas.go)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 `DrawImage`. `DrawImage` takes a source path rather than pixel data —
-layout only ever probes an image's *dimensions* (`InlineImage.GetInlineBox`
+layout only ever probes an image's *dimensions* (`InlineImage.GetInlineLayout`
 in [layout.go](layout.go)), never its pixels, so loading, decoding, and
 caching are entirely a `Canvas` implementation's concern.
 
-`DrawBox(box, dst, x, y)` ([render.go](render.go)) is the *only* way a
-`Box` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
+`DrawBlockLayout(box, dst, x, y)` ([render.go](render.go)) is the *only* way a
+`BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
 skips `drawContents` (the type-specific drawing logic) entirely if they
-don't overlap. Every `Box` implementation gets that off-screen skip for
+don't overlap. Every `BlockLayout` implementation gets that off-screen skip for
 free this way, including `ContainerBox` delegating to its inner box,
 rather than each type having to remember to check. `StackBox.drawContents`
 also breaks out of its child loop once a child starts past the viewport's
@@ -147,7 +147,7 @@ instead of duplicating them.
 [view.go](view.go)'s `View` is what a caller actually uses. It owns:
 
 - the `Block` tree (built once, in `NewView`)
-- the current `Box` tree, **cached** and only rebuilt in `Layout` when
+- the current `BlockLayout` tree, **cached** and only rebuilt in `Layout` when
   `width` or `scale` actually change — not on every `Draw` call
 - the scroll position, as a `stackCursor{index, offset}` ([box.go](box.go)):
   which top-level entry is at the top of the viewport, and how far
@@ -159,12 +159,12 @@ instead of duplicating them.
   same ratio through that slot's new height, so the same content stays at
   the top across a resize.
 
-Both the `Box` tree and drawing are **lazy**, anchored at the scroll
+Both the `BlockLayout` tree and drawing are **lazy**, anchored at the scroll
 cursor rather than the top of the document:
 
-- `StackBlock.GetBox` builds only a skeleton of `stackSlot`s (margins
+- `StackBlock.GetBlockLayout` builds only a skeleton of `stackSlot`s (margins
   resolved to gap sizes — proportional to block *count*, not content).
-  Each slot's own `Block.GetBox` — the expensive part, including text
+  Each slot's own `Block.GetBlockLayout` — the expensive part, including text
   measurement — only runs when `StackBox.boxAt(i)` is asked for that slot,
   and the result is memoized.
 - `StackBox.normalizeCursor(cursor)` adjusts a cursor so its offset falls within
@@ -175,7 +175,7 @@ cursor rather than the top of the document:
   `Scroll` does); a resize re-anchor calls `normalizeCursor` directly, since it
   recomputes a cursor from a ratio rather than shifting one.
 - `StackBox.DrawFrom(dst, cursor, x, y)` draws starting at the cursor: it
-  never calls `Bounds()` on the whole tree the way `DrawBox` does, and
+  never calls `Bounds()` on the whole tree the way `DrawBlockLayout` does, and
   never touches slots before the cursor.
 
 Together, a resize or a frame of drawing only ever pays for slots at or
@@ -199,9 +199,9 @@ These are real, understood, and not yet fixed:
   `AppendInlineNode` ([compile.go](compile.go)) — e.g. raw HTML today —
   taking down the whole program instead of degrading gracefully.
 - **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
-  repeat the same "turn `Inline`s into `InlineBox`es, then `splitBoxes`-loop
+  repeat the same "turn `Inline`s into `InlineLayout`s, then `splitBoxes`-loop
   or one-box-per-line" shape in [layout.go](layout.go). A shared
-  `linesFromInline(ctx, parts, width) []Box` helper would remove the
+  `linesFromInline(ctx, parts, width) []BlockLayout` helper would remove the
   copy-paste.
 
 ## What's next
@@ -210,5 +210,5 @@ These are real, understood, and not yet fixed:
   top-level `View`-driven `StackBox` is anchored and drawn lazily via
   `boxAt`/`normalizeCursor`/`DrawFrom`. A single huge nested structure — e.g. one
   very long list — still builds and draws its children eagerly once its
-  parent slot is resolved, since only `StackBlock.GetBox`'s top-level
+  parent slot is resolved, since only `StackBlock.GetBlockLayout`'s top-level
   skeleton is lazy. The same anchoring approach could apply recursively.

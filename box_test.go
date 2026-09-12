@@ -6,15 +6,17 @@ import (
 )
 
 // sourceBlock is a minimal Block for HitTest tests that just need a
-// known Node() to trace back to - GetBox/Margins are never called by
+// known Node() to trace back to - GetBlockLayout/Margins are never called by
 // these tests.
 type sourceBlock struct {
 	node *ASTNode
 }
 
-func (b *sourceBlock) GetBox(ctx RenderingContext, width int) Box { panic("not implemented") }
-func (b *sourceBlock) Margins(ctx RenderingContext) Margins       { panic("not implemented") }
-func (b *sourceBlock) Node() *ASTNode                             { return b.node }
+func (b *sourceBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+	panic("not implemented")
+}
+func (b *sourceBlock) Margins(ctx RenderingContext) Margins { panic("not implemented") }
+func (b *sourceBlock) Node() *ASTNode                       { return b.node }
 
 func TestRuleBoxHitTest(t *testing.T) {
 	src := &sourceBlock{node: &ASTNode{Tag: TagThematicBreak}}
@@ -95,7 +97,7 @@ func TestTableBoxHitTest(t *testing.T) {
 	b := &TableBox{
 		columnOffsets: []int{5, 45},
 		rowOffsets:    []int{5, 25},
-		cells:         [][]Box{{cell}},
+		cells:         [][]BlockLayout{{cell}},
 		source:        tableSrc,
 	}
 
@@ -114,7 +116,7 @@ func TestTableBoxHitTest(t *testing.T) {
 	bEmpty := &TableBox{
 		columnOffsets: []int{5, 45},
 		rowOffsets:    []int{5, 25},
-		cells:         [][]Box{{NewEmptyBox(40, 20)}},
+		cells:         [][]BlockLayout{{NewEmptyBox(40, 20)}},
 		source:        tableSrc,
 	}
 	if hit, _ := bEmpty.HitTest(image.Pt(20, 10)); hit == nil || hit.Source().Node().Tag != TagTable {
@@ -204,7 +206,7 @@ func TestLineBoxHitTest(t *testing.T) {
 	src2 := &InlineText{text: "bb", node: &ASTNode{Tag: TagStrong}}
 	b1 := &TextBox{Text: "aa", Face: face, source: src1}
 	b2 := &TextBox{Text: "bb", Face: face, source: src2}
-	line := &LineBox{parts: []InlineBox{b1, b2}}
+	line := &LineBox{parts: []InlineLayout{b1, b2}}
 
 	bounds := line.Bounds()
 	midY := (bounds.Min.Y + bounds.Max.Y) / 2
@@ -242,7 +244,7 @@ func TestLineBoxBoundsIndentedText(t *testing.T) {
 	}
 	// Long enough that the gap can't be mistaken for rounding noise.
 	text := "                                        return 42"
-	line := &LineBox{parts: []InlineBox{&TextBox{Text: text, Face: face}}}
+	line := &LineBox{parts: []InlineLayout{&TextBox{Text: text, Face: face}}}
 
 	raw, _ := line.BoundsAndAdvance()
 	if got, want := line.Bounds().Dx(), raw.Max.X; got != want {
@@ -262,7 +264,7 @@ func TestStackBoxHitTestIndentedLine(t *testing.T) {
 	}
 	text := "                                        return 42"
 	src := &InlineText{text: text, node: &ASTNode{Tag: TagCodeBlock}}
-	line := &LineBox{parts: []InlineBox{&TextBox{Text: text, Face: face, source: src}}}
+	line := &LineBox{parts: []InlineLayout{&TextBox{Text: text, Face: face, source: src}}}
 	stack := stackOf(line)
 
 	// Derived from the raw bounds, not line.Bounds() itself - a point
@@ -312,7 +314,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 	src := &sourceBlock{node: &ASTNode{Tag: TagParagraph}}
 
 	outOfBounds := &StackBox{
-		slots:  preResolvedSlots([]Box{&RuleBox{width: 50, thickness: 10}}),
+		slots:  preResolvedSlots([]BlockLayout{&RuleBox{width: 50, thickness: 10}}),
 		source: src,
 	}
 	if hit, offset := outOfBounds.HitTest(image.Pt(80, 5)); hit == nil || hit.Source().Node().Tag != TagParagraph {
@@ -322,7 +324,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 	}
 
 	declining := &StackBox{
-		slots:  preResolvedSlots([]Box{NewEmptyBox(50, 10)}),
+		slots:  preResolvedSlots([]BlockLayout{NewEmptyBox(50, 10)}),
 		source: src,
 	}
 	if hit, offset := declining.HitTest(image.Pt(10, 5)); hit == nil || hit.Source().Node().Tag != TagParagraph {
@@ -335,7 +337,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 // stackOf builds a StackBox from already-built boxes, as pre-resolved
 // slots - for tests that just want a StackBox with known children and
 // don't need to exercise lazy building via Block.
-func stackOf(boxes ...Box) *StackBox {
+func stackOf(boxes ...BlockLayout) *StackBox {
 	return &StackBox{slots: preResolvedSlots(boxes)}
 }
 

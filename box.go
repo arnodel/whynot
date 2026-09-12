@@ -8,7 +8,7 @@ import (
 )
 
 // Hit is what HitTest returns for an actual match: something that can
-// report its own Bounds() and Source() - every Box and InlineBox
+// report its own Bounds() and Source() - every BlockLayout and InlineLayout
 // qualifies, so HitTest can return either kind of leaf uniformly. A
 // composite's Source() is nil when it aggregates children with no
 // single identity of their own (see StackBox.Source), the same way
@@ -18,29 +18,29 @@ type Hit interface {
 	Source() Source
 }
 
-// Box is drawn via the package-level DrawBox, not by calling drawContents
-// directly, so that every Box gets the same off-screen skip for free
+// BlockLayout is drawn via the package-level DrawBlockLayout, not by calling drawContents
+// directly, so that every BlockLayout gets the same off-screen skip for free
 // regardless of where it sits in the tree. drawContents holds only the
 // type-specific drawing logic.
 //
-// HitTest identifies what's at p, a point in this Box's own Bounds()
+// HitTest identifies what's at p, a point in this BlockLayout's own Bounds()
 // frame - callers must check p is in Bounds() first, since an
 // implementation never re-checks. A nil hit means no match (dead space,
 // e.g. a margin or padding); offset is where hit.Bounds() should be
-// placed to land in the same frame p arrived in - a composite Box
+// placed to land in the same frame p arrived in - a composite BlockLayout
 // recursing into a child must add its own offset to the child's.
-type Box interface {
+type BlockLayout interface {
 	Bounds() image.Rectangle
 	Source() Source
 	drawContents(dst Canvas, x, y int)
 	HitTest(p image.Point) (hit Hit, offset image.Point)
 }
 
-// InlineBox's HitTest mirrors DrawInline's own calling convention exactly
+// InlineLayout's HitTest mirrors DrawInline's own calling convention exactly
 // - same (x, y), same "next x" return - so LineBox.HitTest can drive the
 // identical accumulation loop drawContents does, just calling HitTest
 // instead of DrawInline at each step.
-type InlineBox interface {
+type InlineLayout interface {
 	BoundsAndAdvance() (image.Rectangle, int)
 	Bounds() image.Rectangle
 	Source() Source
@@ -69,7 +69,7 @@ type TextBox struct {
 	spaceWidth    int
 }
 
-var _ InlineBox = (*TextBox)(nil)
+var _ InlineLayout = (*TextBox)(nil)
 
 func (b *TextBox) Source() Source {
 	return b.source
@@ -118,10 +118,10 @@ func (b *TextBox) SpaceWidth() int {
 }
 
 type ListItemMarkerBox struct {
-	Marker InlineBox
+	Marker InlineLayout
 }
 
-var _ InlineBox = (*ListItemMarkerBox)(nil)
+var _ InlineLayout = (*ListItemMarkerBox)(nil)
 
 func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
 	bounds, _ := b.Marker.BoundsAndAdvance()
@@ -162,7 +162,7 @@ type ImageBox struct {
 	source Inline
 }
 
-var _ InlineBox = (*ImageBox)(nil)
+var _ InlineLayout = (*ImageBox)(nil)
 
 func (b *ImageBox) Source() Source {
 	return b.source
@@ -188,14 +188,14 @@ func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
 }
 
 type LineBox struct {
-	parts []InlineBox
+	parts []InlineLayout
 
 	boundsComputed bool
 	bounds         image.Rectangle
 	advance        int
 }
 
-var _ Box = (*LineBox)(nil)
+var _ BlockLayout = (*LineBox)(nil)
 
 // Source is always nil: a line can mix parts with different identities
 // (e.g. plain text next to emphasized text), so there's no single node
@@ -289,7 +289,7 @@ func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 // building from a Block on first access (block set). A content slot's
 // width is already margin-reduced if wrap is set.
 type stackSlot struct {
-	box   Box
+	box   BlockLayout
 	block Block
 
 	width      int
@@ -304,7 +304,7 @@ type StackBox struct {
 
 	// source is the single Block this StackBox's slots were all built
 	// from - e.g. a paragraph's wrapped lines - or nil when the slots
-	// are an aggregate of otherwise-unrelated blocks (StackBlock.GetBox's
+	// are an aggregate of otherwise-unrelated blocks (StackBlock.GetBlockLayout's
 	// own StackBox, including the top-level document). See Source.
 	source Block
 
@@ -316,8 +316,8 @@ type StackBox struct {
 // StackBoxes whose children are cheap to build up front (e.g. a
 // paragraph's lines: line-breaking is inherently a whole-paragraph
 // computation, so there's nothing to defer per-line the way there is per
-// top-level block in StackBlock.GetBox).
-func preResolvedSlots(boxes []Box) []stackSlot {
+// top-level block in StackBlock.GetBlockLayout).
+func preResolvedSlots(boxes []BlockLayout) []stackSlot {
 	slots := make([]stackSlot, len(boxes))
 	for i, box := range boxes {
 		slots[i] = stackSlot{box: box}
@@ -329,11 +329,11 @@ func preResolvedSlots(boxes []Box) []stackSlot {
 // one otherwise, so callers that need cursor-based scrolling (View) always
 // have a StackBox to work with regardless of what a document's top-level
 // Block produces.
-func asStackBox(box Box) *StackBox {
+func asStackBox(box BlockLayout) *StackBox {
 	if stack, ok := box.(*StackBox); ok {
 		return stack
 	}
-	return &StackBox{slots: preResolvedSlots([]Box{box})}
+	return &StackBox{slots: preResolvedSlots([]BlockLayout{box})}
 }
 
 func (b *StackBox) Bounds() image.Rectangle {
@@ -357,10 +357,10 @@ func (b *StackBox) Source() Source {
 // memoizing the result on first access if it isn't already resolved. A
 // caller that only ever asks for slots near a scroll cursor only ever
 // pays to build those.
-func (b *StackBox) boxAt(i int) Box {
+func (b *StackBox) boxAt(i int) BlockLayout {
 	slot := &b.slots[i]
 	if slot.box == nil {
-		inner := slot.block.GetBox(b.ctx, slot.width)
+		inner := slot.block.GetBlockLayout(b.ctx, slot.width)
 		if slot.wrap {
 			slot.box = NewContainerBox(inner, b.width, inner.Bounds().Dy(), slot.leftMargin, 0)
 		} else {
@@ -499,10 +499,10 @@ func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
 type ContainerBox struct {
 	bounds   image.Rectangle
 	innerPos image.Point
-	inner    Box
+	inner    BlockLayout
 }
 
-func NewContainerBox(inner Box, w, h, x, y int) *ContainerBox {
+func NewContainerBox(inner BlockLayout, w, h, x, y int) *ContainerBox {
 	return &ContainerBox{
 		bounds:   image.Rect(0, 0, w, h),
 		innerPos: image.Pt(x, y),
@@ -545,13 +545,13 @@ type BlockquoteBox struct {
 	indent   int
 	barWidth int
 	barColor color.Color
-	inner    Box
+	inner    BlockLayout
 
 	// source is the BlockquoteBlock this box was built from - see Source.
 	source Block
 }
 
-var _ Box = (*BlockquoteBox)(nil)
+var _ BlockLayout = (*BlockquoteBox)(nil)
 
 func (b *BlockquoteBox) Source() Source {
 	return b.source
@@ -563,7 +563,7 @@ func (b *BlockquoteBox) Bounds() image.Rectangle {
 
 func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
 	dst.DrawRect(x, y, b.barWidth, b.inner.Bounds().Dy(), b.barColor)
-	DrawBox(b.inner, dst, x+b.indent, y)
+	DrawBlockLayout(b.inner, dst, x+b.indent, y)
 }
 
 // HitTest treats the whole indent strip (bar plus any padding before
@@ -587,7 +587,7 @@ func (b *BlockquoteBox) HitTest(p image.Point) (Hit, image.Point) {
 // rowOffsets have one more entry than there are columns/rows - the last
 // entry is the table's own right/bottom edge, so Bounds() doesn't need
 // separate width/height fields, and the header rule's position is just
-// rowOffsets[1] (see TableBlock.GetBox for why that boundary is exactly
+// rowOffsets[1] (see TableBlock.GetBlockLayout for why that boundary is exactly
 // where the rule belongs). Each column rule is centered in the columnGap
 // between adjacent columns' content, at columnOffsets[c] - columnGap/2.
 type TableBox struct {
@@ -597,13 +597,13 @@ type TableBox struct {
 	columnGap           int
 	columnRuleThickness int
 	frameColor          color.Color
-	cells               [][]Box
+	cells               [][]BlockLayout
 
 	// source is the TableBlock this box was built from - see Source.
 	source Block
 }
 
-var _ Box = (*TableBox)(nil)
+var _ BlockLayout = (*TableBox)(nil)
 
 func (b *TableBox) Source() Source {
 	return b.source
@@ -643,7 +643,7 @@ func (b *TableBox) drawContents(dst Canvas, x, y int) {
 
 	for row := range b.cells {
 		for col := range b.cells[row] {
-			DrawBox(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row])
+			DrawBlockLayout(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row])
 		}
 	}
 }
@@ -691,7 +691,7 @@ type RuleBox struct {
 	source Block
 }
 
-var _ Box = (*RuleBox)(nil)
+var _ BlockLayout = (*RuleBox)(nil)
 
 func (b *RuleBox) Source() Source {
 	return b.source
