@@ -245,18 +245,52 @@ that block actually extends; a single short line (e.g. a heading with no
 longer sibling line) has nothing to widen it. Not worth resolving given
 callers only query points already within their own rendered viewport.
 
-`cmd/whynot` uses `HitTest` to outline whatever's under the mouse each
-frame, as a diagnostic - see `game.Draw` in
-[cmd/whynot/main.go](cmd/whynot/main.go).
+`cmd/whynot` can outline whatever's under the mouse each frame, via
+`HitTest`, gated behind the `-debug-hit` flag (off by default) - see
+`game.Draw` in [cmd/whynot/main.go](cmd/whynot/main.go).
+
+## Graceful degradation for unsupported Markdown
+
+`CompileBlock`/`AppendInlineNode` ([compile.go](compile.go)) don't
+`panic` on a goldmark node kind they have no case for - see
+`compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
+warning and render the construct as text/a code block tagged
+`TagUnsupported`, styled via `StyleSheet.UnsupportedColor` (a "scary"
+red, reusing `CodeBlockMargins`/`CodeBlockTextStyle` rather than a new
+layout primitive) - showing the construct's own raw source where
+goldmark exposes it (`*ast.HTMLBlock`/`*ast.RawHTML`), a placeholder
+naming the node kind otherwise.
+
+Two constructs are recognized as *invisible* rather than unsupported,
+compiling to no `Block`/`Inline` at all - not a fallback, but the
+actually-correct behavior, since no Markdown renderer ever shows them:
+
+- `gmast.KindLinkReferenceDefinition` - the `[ref]: url "title"` line
+  itself. The link(s) it defines already resolved correctly before
+  compilation ever sees them (goldmark's own reference-resolution
+  pass), so this node is pure leftover bookkeeping.
+- An HTML comment (`<!-- ... -->`) - `ast.HTMLBlockKind2` for the
+  block form; inline `*ast.RawHTML` carries no such kind of its own, so
+  the inline case is detected via its raw text's `<!--` prefix instead.
+
+Since a compiled child can now legitimately be `nil` (the two cases
+above), every call site that builds a `[]Block` from a sequence of
+children (`CompileDocument`, a blockquote's children,
+`CompileListItem`'s trailing blocks) filters `nil` out rather than
+assuming every child produces a real `Block`.
+
+`cmd/whynot` additionally rejects an `http(s)` fetch whose
+`Content-Type` isn't Markdown/plain-text-ish before handing it to
+`Parse` - otherwise following a link to a real webpage would feed its
+HTML straight into the Markdown parser, which has no way to tell HTML
+apart from Markdown itself (everything on the page would become
+`TagUnsupported` text). A heuristic, not a guarantee: some servers omit
+or misreport `Content-Type` for a perfectly good Markdown file.
 
 ## Known issues
 
 These are real, understood, and not yet fixed:
 
-- **Unhandled edge cases (will panic).** Any unrecognized goldmark node
-  kind hits `panic(...)`/`log.Panicf(...)` in `CompileBlock` and
-  `AppendInlineNode` ([compile.go](compile.go)) — e.g. raw HTML today —
-  taking down the whole program instead of degrading gracefully.
 - **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
   repeat the same "turn `Inline`s into `InlineLayout`s, then `splitBoxes`-loop
   or one-box-per-line" shape in [block.go](block.go). A shared

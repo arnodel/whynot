@@ -84,6 +84,41 @@ func main() {
 `cmd/whynot/main.go` is the fuller version of this, handling display scale
 too.
 
+## `cmd/whynot`: a standalone viewer
+
+```
+go run ./cmd/whynot path/to/some.md
+```
+
+Beyond scrolling and resizing, it demonstrates what a caller can build on
+top of the library:
+
+- **`-light`** switches to the light theme at startup; **L**/**D** toggle
+  between light and dark while running.
+- **Hovering a link** highlights it (`View.Hover`).
+- **Clicking a link follows it** - a relative path loads another local
+  file, an `http(s)` URL fetches it (rejecting a response whose
+  `Content-Type` isn't Markdown/plain-text-ish, e.g. a real webpage), and
+  a URL fragment (`#some-heading`) scrolls to that heading
+  (`View.ScrollToAnchor`), even on a document just navigated to. Either
+  way it's resolved against the current document's own location
+  (`net/url.URL.ResolveReference`), so a relative link works the same
+  whether that document came from disk or from a fetch.
+- **Backspace goes back** to wherever a link was followed from, exact
+  scroll position included - whether that was a different document or
+  just an in-page anchor jump.
+- **`-debug-hit`** outlines whatever `View.HitTest` resolves under the
+  cursor, for debugging.
+- A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
+  a distinct color with a warning logged, instead of crashing the whole
+  document - see [What's implemented](#whats-implemented).
+
+None of the link-following/history logic lives in the library itself -
+`whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
+`ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
+files, fetching URLs, and keeping a history stack are all `cmd/whynot`'s
+own, in [cmd/whynot/main.go](cmd/whynot/main.go).
+
 ## What's implemented
 
 - Headings (all 6 levels), paragraphs
@@ -92,13 +127,24 @@ too.
 - Ordered and unordered lists, tight or loose, including task lists (`- [ ]`)
 - Images, including a title attribute
 - Thematic breaks (`---`)
-- Links and autolinks (rendered in a distinct color; not clickable yet)
+- Links and autolinks, including reference-style (`[text][ref]`) -
+  highlighted on hover (`View.Hover`), destination resolvable at a point
+  (`View.LinkAt`); following one is up to the caller, see `cmd/whynot`
+  below
+- Heading anchors: goldmark's auto-generated heading ids, scrollable to
+  via `View.ScrollToAnchor` - what a link's `#fragment` targets
 - Blockquotes, including nested ones
 - Strikethrough (`~~x~~`)
 - Nested lists, to any depth
 - Tables (GFM), including column alignment and negotiated column widths
 - Scrolling, window resizing with reflow and scroll-position anchoring,
   and viewport culling - all handled by `whynot.View`
+- Graceful degradation: a Markdown construct whynot doesn't recognize
+  (e.g. raw HTML) logs a warning and renders as flagged, distinctly
+  colored text/code showing its source, rather than crashing - a
+  reference-style link's own `[ref]: url` definition line and an HTML
+  comment are recognized as intentionally invisible rather than
+  unsupported, since no Markdown renderer ever shows them either
 - Large documents: layout and drawing are lazy, built outward from the
   current scroll position rather than the whole document, so cost tracks
   what's on screen, not the document's total size - a resize deep into a
@@ -125,8 +171,9 @@ rather than being an incremental addition.
 - [x] Task lists (`- [ ]`)
 
 **One new concept each:**
-- [x] Links and autolinks (rendered distinctly; click-through needs input
-      plumbing this library doesn't have yet)
+- [x] Links and autolinks (highlighted on hover; following one - loading
+      a new document, keeping history - is `cmd/whynot`'s job, not the
+      library's, see above)
 - [x] Blockquotes
 - [x] Strikethrough
 - [x] Nested lists
@@ -137,10 +184,14 @@ rather than being an incremental addition.
       not an extension of the existing 1D `StackBox`/`ContainerBox`
 
 **Lower priority:**
-- [ ] Footnotes, definition lists, raw inline/block HTML
+- [ ] Footnotes, definition lists - goldmark extensions for both exist
+      but aren't enabled, so the syntax (`[^1]`, term/`: definition`)
+      isn't recognized at all yet, rendering as plain literal text
+- [ ] Raw inline/block HTML rendered as HTML - currently shown as
+      flagged unsupported text instead (see
+      [What's implemented](#whats-implemented)), not a crash, but not
+      styled/laid out as real HTML would be either
 
 ## Known issues
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues) - notably, any
-unsupported Markdown construct currently `panic`s rather than degrading
-gracefully.
+See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues).
