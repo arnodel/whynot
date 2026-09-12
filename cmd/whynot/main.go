@@ -264,7 +264,11 @@ func (g *game) Update() error {
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		page := float64(g.height - g.toolbarHeight)
+		// A little overlap with the previous page - not the full
+		// viewport height - so the last line you were reading is still
+		// there as a landmark, same idea as a pager's own page-down.
+		const pageOverlapFrac = 0.1
+		page := float64(g.height-g.toolbarHeight) * (1 - pageOverlapFrac)
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
 			g.current.view.Scroll(page)
 		} else {
