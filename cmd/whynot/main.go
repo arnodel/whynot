@@ -16,6 +16,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
@@ -150,12 +151,30 @@ type game struct {
 	debugHit     bool
 
 	hoverX, hoverY int
+	// hoverDest is the link under the cursor, if any - what the address
+	// bar shows instead of the current location while hovering.
+	hoverDest string
 
 	// width, scale are Layout's most recent physical width and display
 	// scale - follow and back both need them to lay out a View that
 	// isn't the one ebiten just called Layout on.
 	width int
 	scale float64
+
+	// toolbarHeight, backButton, reloadButton are recomputed by
+	// layoutToolbar whenever Layout runs - the document itself is drawn
+	// below toolbarHeight, so this is also the y-offset HitTest/Hover
+	// need subtracted from the raw cursor position.
+	toolbarHeight            int
+	backButton, reloadButton image.Rectangle
+	backState, reloadState   buttonState
+}
+
+// buttonState is a toolbar button's per-frame input state, driving its
+// drawn appearance - the same "check each frame, draw differently"
+// pattern View.Hover already uses for a hovered link.
+type buttonState struct {
+	hover, pressed bool
 }
 
 func (g *game) Update() error {
@@ -163,10 +182,36 @@ func (g *game) Update() error {
 	g.current.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 
 	g.hoverX, g.hoverY = ebiten.CursorPosition()
-	dest, hasLink := g.current.view.Hover(g.hoverX, g.hoverY)
+	docY := g.hoverY - g.toolbarHeight
 
-	if hasLink && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+	var dest string
+	var hasLink bool
+	if docY >= 0 {
+		dest, hasLink = g.current.view.Hover(g.hoverX, docY)
+	} else {
+		// Over the toolbar, not the document - (-1, -1) can't land on
+		// anything, so this only ever clears a highlight left over from
+		// just having moved off a link.
+		g.current.view.Hover(-1, -1)
+	}
+	g.hoverDest = ""
+	if hasLink {
+		g.hoverDest = dest
+	}
+
+	cursor := image.Pt(g.hoverX, g.hoverY)
+	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
+	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: mouseDown && cursor.In(g.backButton)}
+	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: mouseDown && cursor.In(g.reloadButton)}
+
+	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+	switch {
+	case hasLink && clicked:
 		g.follow(dest)
+	case clicked && g.backState.hover:
+		g.back()
+	case clicked && g.reloadState.hover:
+		g.reload()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 		g.back()
@@ -262,18 +307,99 @@ func (g *game) back() {
 	g.current = entry.document
 }
 
+// reload re-fetches the current document's own location and replaces
+// its View in place - not pushed onto history, since it's still the
+// same place, just re-read. Scroll position is carried over to the new
+// View the same way it already is across a resize or theme change.
+func (g *game) reload() {
+	source, err := loadDocument(g.current.location)
+	if err != nil {
+		log.Printf("reloading %s: %v", g.current.location, err)
+		return
+	}
+	scroll := g.current.view.ScrollPosition()
+	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	view.Layout(g.width, g.scale)
+	view.RestoreScrollPosition(scroll)
+	g.current.view = view
+}
+
 func (g *game) Draw(screen *ebiten.Image) {
 	canvas := g.renderer.NewCanvas(screen)
 
 	// View.Draw fills the background itself, from the View's StyleSheet -
-	// no separate clear step needed here.
-	g.current.view.Draw(canvas, 0, 0)
+	// no separate clear step needed here. It's drawn below the toolbar,
+	// which is painted over it afterward.
+	g.current.view.Draw(canvas, 0, g.toolbarHeight)
+	g.drawToolbar(canvas)
 
 	if g.debugHit {
-		if hit, offset := g.current.view.HitTest(g.hoverX, g.hoverY); hit != nil {
-			drawOutline(canvas, hit.Bounds().Add(offset), color.RGBA{255, 0, 0, 255})
+		docY := g.hoverY - g.toolbarHeight
+		if hit, offset := g.current.view.HitTest(g.hoverX, docY); hit != nil {
+			drawOutline(canvas, hit.Bounds().Add(offset).Add(image.Pt(0, g.toolbarHeight)), color.RGBA{255, 0, 0, 255})
 		}
 	}
+}
+
+// drawToolbar paints the address bar (the current document's location,
+// or - while hovering a link - that link's destination instead, in
+// StyleSheet.HighlightColor to match the hovered link's own color in
+// the document) and the back/reload buttons.
+func (g *game) drawToolbar(canvas whynot.Canvas) {
+	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
+
+	face, err := g.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	if err != nil {
+		return
+	}
+
+	drawButton(canvas, face, g.backButton, "< Back", len(g.history) > 0, g.backState)
+	drawButton(canvas, face, g.reloadButton, "Reload", true, g.reloadState)
+
+	text, textColor := g.current.location.String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
+	if g.hoverDest != "" {
+		text, textColor = g.hoverDest, g.styleSheet.HighlightColor()
+	}
+	x := g.reloadButton.Max.X + int(16*g.scale)
+	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
+}
+
+// drawButton draws a bordered, labeled button - reusing drawOutline for
+// the border rather than a bespoke box-drawing routine. enabled only
+// affects appearance; back is still harmless to click with no history,
+// so nothing needs disabling functionally (see buttonColors).
+func drawButton(canvas whynot.Canvas, face font.Face, r image.Rectangle, label string, enabled bool, st buttonState) {
+	fillColor, borderColor, textColor := buttonColors(enabled, st)
+	if fillColor != nil {
+		canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), fillColor)
+	}
+	drawOutline(canvas, r, borderColor)
+	pad := r.Dy() / 4
+	canvas.DrawText(label, face, r.Min.X+pad, baselineIn(face, r), textColor)
+}
+
+// buttonColors picks a button's fill/border/text colors for its current
+// state - a disabled button ignores hover/pressed entirely, reading as
+// inert regardless of where the cursor is. fillColor is nil for "no
+// fill", i.e. the toolbar's own background shows through.
+func buttonColors(enabled bool, st buttonState) (fillColor, borderColor, textColor color.Color) {
+	switch {
+	case !enabled:
+		return nil, color.RGBA{0x40, 0x40, 0x40, 0xFF}, color.RGBA{0x60, 0x60, 0x60, 0xFF}
+	case st.pressed:
+		return color.RGBA{0x50, 0x50, 0x50, 0xFF}, color.RGBA{0xC0, 0xC0, 0xC0, 0xFF}, color.White
+	case st.hover:
+		return color.RGBA{0x30, 0x30, 0x30, 0xFF}, color.RGBA{0xA0, 0xA0, 0xA0, 0xFF}, color.RGBA{0xF0, 0xF0, 0xF0, 0xFF}
+	default:
+		return nil, color.RGBA{0x80, 0x80, 0x80, 0xFF}, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF}
+	}
+}
+
+// baselineIn returns the y coordinate DrawText needs to vertically
+// center one line of face-set text within r.
+func baselineIn(face font.Face, r image.Rectangle) int {
+	m := face.Metrics()
+	return r.Min.Y + (r.Dy()+m.Ascent.Ceil()-m.Descent.Ceil())/2
 }
 
 // drawOutline draws a thin border around r - Canvas has no dedicated
@@ -286,11 +412,30 @@ func drawOutline(dst whynot.Canvas, r image.Rectangle, clr color.Color) {
 	dst.DrawRect(r.Max.X-thickness, r.Min.Y, thickness, r.Dy(), clr)
 }
 
+// toolbarLogicalHeight is the address bar / button row's height, in the
+// same DPI-relative logical units as StyleSheet text sizes (i.e. not
+// pre-multiplied by scale here - layoutToolbar does that).
+const toolbarLogicalHeight = 36
+
+// layoutToolbar recomputes the toolbar's height and button positions
+// for the current scale - called from Layout alongside the View's own,
+// since both depend on it.
+func (g *game) layoutToolbar() {
+	s := g.scale
+	g.toolbarHeight = int(toolbarLogicalHeight * s)
+	pad := int(8 * s)
+	btnH := g.toolbarHeight - 2*pad
+	backW, reloadW := int(64*s), int(72*s)
+	g.backButton = image.Rect(pad, pad, pad+backW, pad+btnH)
+	g.reloadButton = image.Rect(g.backButton.Max.X+pad, pad, g.backButton.Max.X+pad+reloadW, pad+btnH)
+}
+
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()
 	width := int(float64(outsideWidth) * s)
 	height := int(float64(outsideHeight) * s)
 	g.width, g.scale = width, s
+	g.layoutToolbar()
 	g.current.view.Layout(width, s)
 	return width, height
 }
