@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font"
@@ -529,6 +530,61 @@ func TestViewLinkAt(t *testing.T) {
 
 	if _, ok := v.LinkAt(0, 0); ok {
 		t.Error("LinkAt off any link returned ok=true, want false")
+	}
+}
+
+// TestViewScrollToAnchor checks that ScrollToAnchor moves the scroll
+// position so the named heading ends up right at the top of the
+// viewport, and reports false for an id that doesn't exist. The list
+// between the two headings isn't incidental: a top-level list's own
+// Node() is nil (see StackBlock.Node), which once crashed
+// ScrollToAnchor's scan on any document where a list preceded the
+// target heading.
+func TestViewScrollToAnchor(t *testing.T) {
+	source := []byte("# First\n\n- one\n- two\n\n# Second\n\nMore text.\n")
+	v := NewView(source, NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v.Layout(300, 1)
+
+	if ok := v.ScrollToAnchor("does-not-exist"); ok {
+		t.Error("ScrollToAnchor for an unknown id returned true, want false")
+	}
+
+	if ok := v.ScrollToAnchor("second"); !ok {
+		t.Fatal(`ScrollToAnchor("second") = false, want true`)
+	}
+
+	hit, _ := v.HitTest(0, 0)
+	if hit == nil {
+		t.Fatal("hit at the top of the viewport after ScrollToAnchor = nil")
+	}
+	heading := hit.Source().Node().AncestorTag(TagHeading1)
+	if heading == nil || heading.ID != "second" {
+		t.Errorf("top of viewport after ScrollToAnchor(\"second\") isn't the Second heading (heading = %v)", heading)
+	}
+}
+
+// TestViewScrollPositionRoundTrip checks that a ScrollPosition captured
+// via ScrollPosition and later given to RestoreScrollPosition puts the
+// cursor back exactly where it was, even after further scrolling in
+// between - the mechanism cmd/whynot's Back relies on to undo an
+// in-page anchor jump without keeping a second View around.
+func TestViewScrollPositionRoundTrip(t *testing.T) {
+	source := []byte(strings.Repeat("# Heading\n\nSome text.\n\n", 20))
+	v := NewView(source, NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v.Layout(300, 1)
+
+	v.Scroll(-500)
+	want := v.cursor
+	pos := v.ScrollPosition()
+
+	v.Scroll(-1000)
+	if v.cursor == want {
+		t.Fatal("test setup: further scrolling didn't change the cursor")
+	}
+
+	v.RestoreScrollPosition(pos)
+	if v.cursor != want {
+		t.Errorf("cursor after RestoreScrollPosition = %+v, want %+v", v.cursor, want)
 	}
 }
 

@@ -66,6 +66,50 @@ func (v *View) Scroll(dy float64) {
 	v.cursor = v.box.moveCursor(v.cursor, -dy)
 }
 
+// ScrollPosition is an opaque snapshot of a View's scroll position,
+// captured by ScrollPosition and restored by RestoreScrollPosition.
+type ScrollPosition struct {
+	cursor stackCursor
+}
+
+// ScrollPosition captures the View's current scroll position.
+func (v *View) ScrollPosition() ScrollPosition {
+	return ScrollPosition{cursor: v.cursor}
+}
+
+// RestoreScrollPosition restores a position captured earlier by
+// ScrollPosition - only meaningful on the same View it was taken from.
+func (v *View) RestoreScrollPosition(p ScrollPosition) {
+	v.cursor = p.cursor
+}
+
+// ScrollToAnchor scrolls to put the heading with the given anchor id
+// (see ASTNode.ID) at the top of the viewport, e.g. after following a
+// link with a URL fragment. ok is false, and the scroll position
+// unchanged, if no heading has that id or nothing has been laid out
+// yet (see Layout).
+//
+// Only top-level headings are found - a heading nested inside a
+// blockquote or list won't be. Cheap regardless of document size: a
+// slot's own Node() is known without resolving its content into a box
+// (see StackBox.boxAt), so this never lays out anything beyond what's
+// already built.
+func (v *View) ScrollToAnchor(id string) bool {
+	if v.box == nil {
+		return false
+	}
+	for i, slot := range v.box.slots {
+		if slot.block == nil {
+			continue
+		}
+		if n := slot.block.Node(); n != nil && n.ID == id {
+			v.cursor = v.box.normalizeCursor(stackCursor{index: i})
+			return true
+		}
+	}
+	return false
+}
+
 // Draw renders the document onto dst with its top-left corner at (x, y),
 // at the current scroll position. Content above the current cursor, and
 // content outside dst's bounds, is never resolved or drawn - Draw's cost

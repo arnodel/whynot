@@ -16,7 +16,10 @@ import (
 // later, from RenderingContext.StyleSheet against each Block/Inline's own
 // ASTNode - Parse itself only builds structure.
 func Parse(source []byte) Block {
-	p := parser.New(parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser))
+	p := parser.New(
+		parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser),
+		parser.WithAutoHeadingID(),
+	)
 	node := p.Parse(source)
 	compiler := MarkdownCompiler{source: source}
 	return compiler.CompileDocument(node)
@@ -63,6 +66,9 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 	case gmast.KindHeading:
 		level := node.(*gmast.Heading).Level
 		astNode := parent.AddChild(headingTag(level))
+		if attr, ok := node.Attribute("id"); ok {
+			astNode.ID = attr.Value(c.source)
+		}
 		var items []Inline
 		child := node.FirstChild()
 		for child != nil {

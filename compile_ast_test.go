@@ -23,6 +23,25 @@ func TestASTParagraphPath(t *testing.T) {
 	wantPath(t, wrapper.node.Path(), ASTPath{TagParagraph})
 }
 
+// TestASTHeadingID checks that a heading's ASTNode.ID gets goldmark's
+// auto-generated slug - what a link's URL fragment targets - and that
+// distinct headings (including ones needing de-duplication) get
+// distinct ids.
+func TestASTHeadingID(t *testing.T) {
+	doc := Parse([]byte("# Hello World\n\n## Hello World\n"))
+	stack := doc.(*StackBlock)
+
+	first := stack.blocks[0].(*MarginBlock).node
+	second := stack.blocks[1].(*MarginBlock).node
+
+	if want := "hello-world"; first.ID != want {
+		t.Errorf("first heading ID = %q, want %q", first.ID, want)
+	}
+	if first.ID == second.ID {
+		t.Errorf("two headings with the same text got the same ID %q, want distinct ids", first.ID)
+	}
+}
+
 func TestASTHeadingPath(t *testing.T) {
 	cases := []struct {
 		level int

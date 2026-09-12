@@ -39,6 +39,9 @@ Local links work too, and can be followed the same way: here's
 [a much larger test document](../../testdata/test-large.md), and here's
 [the project's README](../../README.md).
 
+Anchor links jump within the document itself, using a heading's
+auto-generated id: jump to [Tables](#tables) or to [Cute!](#cute).
+
 ## Examples
 
 Six levels of headers are supported

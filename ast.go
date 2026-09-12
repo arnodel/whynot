@@ -45,6 +45,11 @@ type ASTNode struct {
 	// other tag.
 	Destination string
 
+	// ID is a heading's anchor id (goldmark's auto-generated slug, e.g.
+	// "my-heading" for "## My Heading") - what a link's URL fragment
+	// (the part after '#') targets. Empty for every non-heading tag.
+	ID string
+
 	path ASTPath // memoized on first Path() call
 }
 
