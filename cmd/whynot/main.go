@@ -25,11 +25,12 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
-//go:embed arrow_back.png refresh.png
+//go:embed arrow_back.png arrow_forward.png refresh.png
 var iconFS embed.FS
 
 // icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
-// once at startup (see backIcon/reloadIcon below), not per frame.
+// once at startup (see backIcon/forwardIcon/reloadIcon below), not per
+// frame.
 func icon(name string) *ebiten.Image {
 	data, err := iconFS.ReadFile(name)
 	if err != nil {
@@ -42,13 +43,14 @@ func icon(name string) *ebiten.Image {
 	return ebiten.NewImageFromImage(img)
 }
 
-// backIcon/reloadIcon are the toolbar buttons' icons - light, mostly-white
-// silhouettes on a transparent background, so drawIcon can tint them to
-// match a button's current state the same way drawButton already tints
-// its border/fill.
+// backIcon/forwardIcon/reloadIcon are the toolbar buttons' icons -
+// light, mostly-white silhouettes on a transparent background, so
+// drawIcon can tint them to match a button's current state the same
+// way drawButton already tints its border/fill.
 var (
-	backIcon   = icon("arrow_back.png")
-	reloadIcon = icon("refresh.png")
+	backIcon    = icon("arrow_back.png")
+	forwardIcon = icon("arrow_forward.png")
+	reloadIcon  = icon("refresh.png")
 )
 
 func main() {
@@ -173,6 +175,11 @@ type game struct {
 	// its pre-jump ScrollPosition needs remembering, so following many
 	// anchors in the same document doesn't allocate a View each time.
 	history []historyEntry
+	// future is the same idea, the other direction: places back has
+	// left that forward can return to. Any new navigation (follow, via
+	// pushHistory) clears it, same as a browser discarding forward
+	// history once you branch off somewhere new.
+	future []historyEntry
 
 	faceSelector whynot.FaceSelector
 	styleSheet   whynot.StyleSheet
@@ -190,13 +197,13 @@ type game struct {
 	width int
 	scale float64
 
-	// toolbarHeight, backButton, reloadButton are recomputed by
+	// toolbarHeight and the button rectangles are recomputed by
 	// layoutToolbar whenever Layout runs - the document itself is drawn
 	// below toolbarHeight, so this is also the y-offset HitTest/Hover
 	// need subtracted from the raw cursor position.
-	toolbarHeight            int
-	backButton, reloadButton image.Rectangle
-	backState, reloadState   buttonState
+	toolbarHeight                           int
+	backButton, forwardButton, reloadButton image.Rectangle
+	backState, forwardState, reloadState    buttonState
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its
@@ -233,6 +240,7 @@ func (g *game) Update() error {
 	cursor := image.Pt(g.hoverX, g.hoverY)
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: mouseDown && cursor.In(g.backButton)}
+	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: mouseDown && cursor.In(g.forwardButton)}
 	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: mouseDown && cursor.In(g.reloadButton)}
 
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
@@ -241,11 +249,17 @@ func (g *game) Update() error {
 		g.follow(dest)
 	case clicked && g.backState.hover:
 		g.back()
+	case clicked && g.forwardState.hover:
+		g.forward()
 	case clicked && g.reloadState.hover:
 		g.reload()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
-		g.back()
+		if ebiten.IsKeyPressed(ebiten.KeyShift) {
+			g.forward()
+		} else {
+			g.back()
+		}
 	}
 
 	switch {
@@ -318,12 +332,15 @@ func (g *game) follow(dest string) {
 }
 
 // pushHistory saves the current document and scroll position onto
-// history, so back can return to it.
+// history, so back can return to it - and clears future, the same way
+// a browser discards forward history once you navigate anywhere new
+// rather than pressing its forward button.
 func (g *game) pushHistory() {
 	g.history = append(g.history, historyEntry{
 		document: g.current,
 		scroll:   g.current.view.ScrollPosition(),
 	})
+	g.future = nil
 }
 
 // samePage reports whether a and b name the same document, ignoring
@@ -337,17 +354,41 @@ func samePage(a, b *url.URL) bool {
 }
 
 // back pops the most recently visited place, if any - a no-op at the
-// start of history. A cross-document entry's View may be stale if the
-// window was resized or the theme toggled while it wasn't current, so
-// its scroll position is restored first, then its StyleSheet and
-// layout are refreshed - in that order, so each rebuild's
-// ratio-preserving cursor logic works from the right position.
+// start of history.
 func (g *game) back() {
 	if len(g.history) == 0 {
 		return
 	}
 	entry := g.history[len(g.history)-1]
 	g.history = g.history[:len(g.history)-1]
+	g.travelTo(entry, &g.future)
+}
+
+// forward undoes the last back, if any - a no-op with nothing to redo,
+// and cleared by any new navigation (see pushHistory), same as a
+// browser's own forward button.
+func (g *game) forward() {
+	if len(g.future) == 0 {
+		return
+	}
+	entry := g.future[len(g.future)-1]
+	g.future = g.future[:len(g.future)-1]
+	g.travelTo(entry, &g.history)
+}
+
+// travelTo makes entry the current document, first pushing the one
+// being left behind onto undoStack (g.future when going back, g.history
+// when going forward) so the trip itself can be undone. entry's View
+// may be stale if the window was resized or the theme toggled while it
+// wasn't current, so its scroll position is restored first, then its
+// StyleSheet and layout are refreshed - in that order, so each
+// rebuild's ratio-preserving cursor logic works from the right
+// position.
+func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
+	*undoStack = append(*undoStack, historyEntry{
+		document: g.current,
+		scroll:   g.current.view.ScrollPosition(),
+	})
 	entry.view.RestoreScrollPosition(entry.scroll)
 	entry.view.SetStyleSheet(g.styleSheet)
 	entry.view.Layout(g.width, g.scale)
@@ -391,14 +432,16 @@ func (g *game) Draw(screen *ebiten.Image) {
 // drawToolbar paints the address bar (the current document's location,
 // or - while hovering a link - that link's destination instead, in
 // StyleSheet.HighlightColor to match the hovered link's own color in
-// the document) and the back/reload buttons. Icon drawing needs dst
-// directly - whynot.Canvas has no primitive for a scaled, tinted image -
-// so this is the one part of cmd/whynot's own UI that goes around the
-// library's rendering abstraction rather than through it.
+// the document) and the back/forward/reload buttons. Icon drawing
+// needs dst directly - whynot.Canvas has no primitive for a scaled,
+// tinted image - so this is the one part of cmd/whynot's own UI that
+// goes around the library's rendering abstraction rather than through
+// it.
 func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
 
 	drawButton(dst, canvas, backIcon, g.backButton, len(g.history) > 0, g.backState)
+	drawButton(dst, canvas, forwardIcon, g.forwardButton, len(g.future) > 0, g.forwardState)
 	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
 
 	face, err := g.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
@@ -494,8 +537,15 @@ func (g *game) layoutToolbar() {
 	g.toolbarHeight = int(toolbarLogicalHeight * s)
 	pad := int(8 * s)
 	btn := g.toolbarHeight - 2*pad // square icon buttons
-	g.backButton = image.Rect(pad, pad, pad+btn, pad+btn)
-	g.reloadButton = image.Rect(g.backButton.Max.X+pad, pad, g.backButton.Max.X+pad+btn, pad+btn)
+	next := pad
+	nextButton := func() image.Rectangle {
+		r := image.Rect(next, pad, next+btn, pad+btn)
+		next = r.Max.X + pad
+		return r
+	}
+	g.backButton = nextButton()
+	g.forwardButton = nextButton()
+	g.reloadButton = nextButton()
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
