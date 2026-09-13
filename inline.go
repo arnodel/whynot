@@ -2,7 +2,9 @@ package whynot
 
 import (
 	"image"
+	_ "image/gif"  // registers the GIF format with image.DecodeConfig
 	_ "image/jpeg" // registers the JPEG format with image.DecodeConfig
+	_ "image/png"  // registers the PNG format with image.DecodeConfig
 	"os"
 )
 
