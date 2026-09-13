@@ -328,10 +328,19 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 		return appendString(items, cs.Value.Value(c.source), childNode)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
+		imageNode := astNode.AddChild(TagImage)
 		return append(items, &InlineImage{
 			src:   imgNode.Destination.Value(c.source),
+			alt:   altText(imgNode, c.source),
 			title: imgNode.Title.Value(c.source),
-			node:  astNode,
+			node:  imageNode,
+			// fallbackNode is precomputed once, here, rather than
+			// on demand inside GetInlineLayout - a layout-time
+			// "does the image load" check can run many times
+			// (every resize/zoom/reload), and ASTNode.AddChild
+			// isn't idempotent, so mutating the tree there would
+			// grow a new child every time instead of reusing one.
+			fallbackNode: imageNode.AddChild(TagUnsupported),
 		})
 	case gmast.KindLink:
 		link := node.(*gmast.Link)
@@ -407,6 +416,24 @@ func wrapBlocks(blocks []Block) Block {
 		return blocks[0]
 	}
 	return &StackBlock{blocks: blocks}
+}
+
+// altText flattens an image's child nodes - CommonMark allows arbitrary
+// inline content in an image's alt-text description (`![a *b*](x.png)`
+// is valid) - into a plain string, the same way HTML rendering flattens
+// it into an <img alt="..."> attribute. whynot has nowhere to show
+// formatted alt text either, so this recurses into any node kind
+// generically rather than special-casing Emphasis/Strong/etc.
+func altText(node gmast.Node, source []byte) string {
+	var b strings.Builder
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Kind() == gmast.KindText {
+			b.WriteString(child.(*gmast.Text).Value.Value(source))
+		} else {
+			b.WriteString(altText(child, source))
+		}
+	}
+	return b.String()
 }
 
 func appendString(items []Inline, s string, node *ASTNode) []Inline {

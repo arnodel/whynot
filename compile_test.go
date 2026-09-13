@@ -745,8 +745,34 @@ func TestParseImageWithTitle(t *testing.T) {
 	if img.src != "cat.jpeg" {
 		t.Errorf("src = %q, want %q", img.src, "cat.jpeg")
 	}
+	if img.alt != "alt" {
+		t.Errorf("alt = %q, want %q", img.alt, "alt")
+	}
 	if img.title != "a lovely cat" {
 		t.Errorf("title = %q, want %q", img.title, "a lovely cat")
+	}
+	if img.node.Tag != TagImage {
+		t.Errorf("node.Tag = %v, want TagImage", img.node.Tag)
+	}
+	if img.fallbackNode == nil || img.fallbackNode.Tag != TagUnsupported {
+		t.Errorf("fallbackNode = %#v, want a TagUnsupported node", img.fallbackNode)
+	}
+	if img.fallbackNode.Parent != img.node {
+		t.Errorf("fallbackNode.Parent = %#v, want img.node", img.fallbackNode.Parent)
+	}
+}
+
+// TestParseImageAltTextFlattensMarkup checks alt text is captured even
+// when it contains nested inline markup - CommonMark allows arbitrary
+// inline content in an image's description, flattened to plain text
+// the same way HTML rendering flattens it into an alt attribute.
+func TestParseImageAltTextFlattensMarkup(t *testing.T) {
+	doc := Parse([]byte("![a *b* c](x.png)"))
+	stack := doc.(*StackBlock)
+	para := unwrap(stack.blocks[0]).(*TextBlock)
+	img := para.parts[0].(*InlineImage)
+	if img.alt != "a b c" {
+		t.Errorf("alt = %q, want %q", img.alt, "a b c")
 	}
 }
 

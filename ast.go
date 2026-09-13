@@ -27,6 +27,7 @@ const (
 	TagEmphasis
 	TagStrong
 	TagStrikethrough
+	TagImage
 	TagUnsupported
 )
 
