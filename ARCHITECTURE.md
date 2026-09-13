@@ -38,7 +38,7 @@ flowchart TD
         G -. "ctx.StyleSheet resolves\nMargins / TextStyle / Color / ..." .-> D
     end
     subgraph L3["Layer 3 — Canvas boundary (canvas.go)"]
-        D -- "DrawBlockLayout(box, dst, x, y)" --> E["Canvas calls\n(DrawText, DrawImage)"]
+        D -- "DrawBlockLayout(box, dst, x, y, now)" --> E["Canvas calls\n(DrawText, DrawImage)"]
     end
     subgraph L4["ebitenrenderer — a Canvas implementation"]
         E --> F["pixels on ebiten.Image"]
@@ -122,12 +122,15 @@ mutated, which is what makes the memoization described next safe.
 
 `Canvas` ([canvas.go](canvas.go)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
-`DrawImage`. `DrawImage` takes a source path rather than pixel data —
-layout only ever probes an image's *dimensions* (`InlineImage.GetInlineLayout`
-in [inline.go](inline.go)), never its pixels, so loading, decoding, and
-caching are entirely a `Canvas` implementation's concern.
+`DrawImage`. `DrawImage` takes an already-decoded `image.Image`, not a
+source path — resolving, fetching, and decoding an image is entirely
+the library's own concern (`ImageCache`, see "Image loading" below), so
+a `Canvas` implementation never fetches or decodes anything itself; its
+job is purely backend-specific conversion (e.g. uploading a texture),
+which it's free to cache keyed by the `image.Image`'s own identity,
+since the same resolved image comes back from `ImageCache` every time.
 
-`DrawBlockLayout(box, dst, x, y)` ([block_layout.go](block_layout.go)) is the *only* way a
+`DrawBlockLayout(box, dst, x, y, now)` ([block_layout.go](block_layout.go)) is the *only* way a
 `BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
 skips `drawContents` (the type-specific drawing logic) entirely if they
 don't overlap. Every `BlockLayout` implementation gets that off-screen skip for
@@ -138,11 +141,12 @@ bottom edge — safe because children are laid out top-to-bottom with no
 overlap, so nothing further down can be visible either.
 
 `ebitenrenderer.Renderer`/`Canvas` is the one implementation today. A
-`Renderer` owns caches (loaded `ebiten.Image`s, and per-`font.Face` glyph
-caches from `text/v2`) that should persist across frames; `NewCanvas(dst)`
-returns a cheap per-frame `Canvas` sharing those caches, so multiple
-`View`s drawn through one `Renderer` share GPU uploads and glyph caches
-instead of duplicating them.
+`Renderer` owns caches (each decoded `image.Image`'s uploaded
+`ebiten.Image`, keyed by the `image.Image`'s own identity; per-`font.Face`
+glyph caches from `text/v2`) that should persist across frames;
+`NewCanvas(dst)` returns a cheap per-frame `Canvas` sharing those caches,
+so multiple `View`s drawn through one `Renderer` share GPU uploads and
+glyph caches instead of duplicating them.
 
 ## `View`: tying the layers together with the right lifecycle
 
@@ -187,10 +191,71 @@ document is.
 A caller doesn't read input itself through `View` — `Scroll(dy)` takes a
 delta from whatever input source the embedding game uses (negative `dy`
 moves forward through the document, matching `ebiten.Wheel()` passed
-straight through), and `Layout` should be called whenever available width
-or display scale change (typically from the embedding `ebiten.Game`'s own
-`Layout`). `cmd/whynot`'s `main.go` is the minimal example of wiring this
-up.
+straight through), and `Layout(width, scale, now)` should be called
+every frame regardless of whether width/scale actually changed (`now`,
+elapsed time since the embedder started rendering, needs to keep
+advancing for animated images even when nothing else did — see "Image
+loading" below; the layout tree itself still only rebuilds when width
+or scale change). `cmd/whynot`'s `main.go` is the minimal example of
+wiring this up.
+
+## Image loading
+
+An image's `src` never blocks layout or drawing. `ImageCache`
+([image_loader.go](image_loader.go)) wraps an embedder-supplied
+`ImageSource` (resolve + fetch bytes; `FileImageSource` by default,
+`cmd/whynot`'s `docImageSource` resolves relative to the document's own
+location and fetches over `http(s)` too) and does the actual resolving,
+fetching, and decoding on a background goroutine — `Load` always
+returns immediately with whatever's currently known (`ImagePending`,
+`ImageReady`, or `ImageFailed`), never waiting on I/O itself. A cache
+entry's dimensions are often known before the rest of the fetch/decode
+completes (`fetchAndDecode` peeks the header via `image.DecodeConfig`
+through a `TeeReader`), so `InlineImage.GetInlineLayout` ([inline.go](inline.go))
+can lay out an `ImageBox` at its final, correctly-scaled size even
+while still `ImagePending` — `ImageBox.DrawInline` draws a placeholder
+rect instead of pixels until the real image lands, so nothing reflows
+once it does. Pending with no known bounds yet, or `ImageFailed`, falls
+back to text instead (alt text, then title, then a generic message),
+reusing `InlineText`'s own `GetInlineLayout`.
+
+Since the `BlockLayout`/`InlineLayout` tree is otherwise immutable once
+built (see Layer 2 above), a `TextBox`/`ImageBox` standing in for a
+still-unsettled image records which resolved `src` it's waiting on
+(`PendingImages() []string`, aggregated bottom-up by every composite
+type). `View.Layout` ([view.go](view.go)) calls
+`ImageCache.ChangedSince` each time it's invoked, and
+`invalidateChangedImages` uses `PendingImages()` to discard only the
+memoized boxes actually waiting on something that changed — a resolved
+slot unrelated to the change, or a slot nobody has scrolled near yet,
+is left untouched. The one exception is a change that reveals an
+image's bounds for the first time: since that's the one transition
+that can change a slot's height unpredictably (every other transition
+happens at an already-known, already-laid-out size), it goes through a
+full `rebuild()` instead, with the usual ratio-based scroll
+re-anchoring.
+
+No prefetching happens today — an image only starts loading once its
+containing slot is actually resolved (`StackBox.boxAt`), which in
+practice means scrolling near it, not when the document is first
+opened. `Load`'s own dedup (a genuine miss, or a failed entry past its
+retry delay, is the only case that starts a new fetch) would make
+speculative prefetching straightforward to add later without changing
+this design.
+
+An animated GIF decodes to an `AnimatedImage` ([animated_image.go](animated_image.go))
+instead of a plain `image.Image` — `ImageResult`/`ImageBox` carry
+exactly one of the two. `decodeAnimatedGIF` composites every frame to a
+full-canvas `image.Image` up front, honoring each frame's disposal
+method (many real-world GIFs only encode each frame's changed region).
+Picking the current frame never affects bounds (every frame shares one
+size), so it's handled entirely on the *draw* side: `RenderingContext.Time`
+(elapsed time since the embedder started rendering, set every
+`View.Layout` call) is threaded as a `now time.Duration` parameter
+through `drawContents`/`DrawInline`, and `AnimatedImage.CurrentFrame(now)`
+is a pure function of it — no direct `time.Now()` call in library code,
+and no per-animation "start" to track, since `now % total` alone
+determines the loop position.
 
 ## Hit-testing: `View.HitTest`
 
