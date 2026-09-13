@@ -15,7 +15,9 @@ Copy a file path or an `http(s)` URL to your clipboard, then paste it with **{{P
 - **Space** / **Shift+Space** page down / up.
 - **+** / **-**, or the toolbar buttons, zoom in / out.
 - **L** / **D**, or the toolbar button, switch to the light / dark theme.
-- Click a link to follow it (a link to a real webpage opens in your browser instead).
+- Click a link to follow it: a link to a webpage opens in your browser, while one to a Markdown
+  document opens right here - like
+  [whynot's own README](https://raw.githubusercontent.com/arnodel/whynot/main/README.md).
   **Backspace** (or the back button) goes back, **Shift+Backspace** (or the forward button)
   goes forward.
 - The reload button re-fetches the current document.
