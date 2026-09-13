@@ -19,8 +19,8 @@ UI toolkit. Why Not renders straight onto an `ebiten.Image`, using
 
 ## Status
 
-Early and incomplete - see [What's implemented](#whats-implemented) and the
-[TODO](#todo) below. The API may still change. Architecture, internal
+Early and incomplete - see [Features](#features) below for what's done and what
+isn't. The API may still change. Architecture, internal
 layout model, and the reasoning behind some of the trickier bits (lazy
 layout, scroll anchoring) are documented in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -126,7 +126,7 @@ demonstrates what a caller can build on top of the library:
   cursor, for debugging.
 - A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
   a distinct color with a warning logged, instead of crashing the whole
-  document - see [What's implemented](#whats-implemented).
+  document - see [Features](#features).
 
 None of the link-following/history logic lives in the library itself -
 `whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
@@ -141,88 +141,82 @@ for it); `cmd/whynot` supplies the file-or-`http(s)`,
 resolved-against-the-document's-location `ImageSource`, via
 `WithImageSource`.
 
-## What's implemented
+## Features
 
-- Headings (all 6 levels), paragraphs
-- Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
-- Inline code, and fenced and indented code blocks
-- Ordered and unordered lists, tight or loose, including task lists (`- [ ]`)
-- Images - PNG/JPEG/GIF (including animated GIFs, disposal-correct and
-  always looping), resolved and loaded via a pluggable `ImageSource`,
-  fetched and decoded at most once per image regardless of how many
-  times it's asked for (relative-to-document and `http(s)` paths both
-  work, see `cmd/whynot` below), scaled with zoom/DPI like everything
-  else; loading never blocks rendering, so a still-pending image shows
-  a placeholder at its final size (or, until its size is even known, a
-  "loading" fallback); a missing or undecodable image falls back to
-  its alt text, then its title, then a generic message, instead of a
-  silent gap - alt text itself is captured from arbitrary inline
-  content, per CommonMark
-- Thematic breaks (`---`)
-- Links and autolinks, including reference-style (`[text][ref]`) -
-  highlighted on hover (`View.Hover`), destination resolvable at a point
-  (`View.LinkAt`); following one is up to the caller, see `cmd/whynot`
-  below
-- Heading anchors: goldmark's auto-generated heading ids, scrollable to
-  via `View.ScrollToAnchor` - what a link's `#fragment` targets
-- Blockquotes, including nested ones
-- Strikethrough (`~~x~~`)
-- Nested lists, to any depth
-- Tables (GFM), including column alignment and negotiated column widths
-- Scrolling, window resizing with reflow and scroll-position anchoring,
-  and viewport culling - all handled by `whynot.View`
-- Graceful degradation: a Markdown construct whynot doesn't recognize
-  (e.g. raw HTML) logs a warning and renders as flagged, distinctly
-  colored text/code showing its source, rather than crashing - a
-  reference-style link's own `[ref]: url` definition line and an HTML
-  comment are recognized as intentionally invisible rather than
-  unsupported, since no Markdown renderer ever shows them either
-- Large documents: layout and drawing are lazy, built outward from the
-  current scroll position rather than the whole document, so cost tracks
-  what's on screen, not the document's total size - a resize deep into a
-  ~1000-line document costs microseconds, not tens of milliseconds. See
-  [ARCHITECTURE.md](ARCHITECTURE.md#view-tying-the-layers-together-with-the-right-lifecycle)
-  for how.
+Checked items are implemented; unchecked ones aren't yet. Grouped by theme rather than
+by implementation order now that most of the list is done.
 
-## TODO
+**Text and inline formatting**
+- [x] Headings (all 6 levels), paragraphs
+- [x] Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
+- [x] Strikethrough (`~~x~~`)
+- [x] Inline code
+- [ ] Typographer (smart quotes/dashes) - blocked on a real gap in the inline model:
+      goldmark emits the substitution as a separate Text node with no whitespace from
+      its neighbor (e.g. `Alice's` -> `"Alice"`, `"'"`, `"s "` as three siblings), but
+      `appendString` word-splits each sibling independently, so adjacent no-space
+      siblings would render as separately-spaced words - needs word-adjacency tracking
+      across sibling Inlines first
 
-Roughly in the order I'd tackle them - cheaper and more self-contained
-first, with tables called out separately since it needs real design work
-rather than being an incremental addition.
-
-**Quick wins, no new layout concepts:**
-- [x] Indented code blocks (fenced already works; this reuses the same path)
+**Block structures**
+- [x] Fenced and indented code blocks
+- [x] Blockquotes, including nested ones
 - [x] Thematic breaks (`---`)
-- [ ] Typographer (smart quotes/dashes) - blocked on a real gap in the
-      inline model: goldmark emits the substitution as a separate Text
-      node with no whitespace from its neighbor (e.g. `Alice's` ->
-      `"Alice"`, `"'"`, `"s "` as three siblings), but `appendString` word-
-      splits each sibling independently, so adjacent no-space siblings
-      would render as separately-spaced words. Needs word-adjacency
-      tracking across sibling Inlines first, not scoped to this feature
-- [x] Task lists (`- [ ]`)
-
-**One new concept each:**
-- [x] Links and autolinks (highlighted on hover; following one - loading
-      a new document, keeping history - is `cmd/whynot`'s job, not the
-      library's, see above)
-- [x] Blockquotes
-- [x] Strikethrough
-- [x] Nested lists
-
-**Needs its own design pass:**
-- [x] Tables - needed a genuine 2D layout primitive (`TableBox`, with
-      negotiated column widths and row height = max of that row's cells),
+- [x] Ordered and unordered lists, tight or loose, nested to any depth, including task
+      lists (`- [ ]`)
+- [x] Tables (GFM), including column alignment and negotiated column widths - needed a
+      genuine 2D layout primitive (`TableBox`, row height = max of that row's cells),
       not an extension of the existing 1D `StackBox`/`ContainerBox`
+- [ ] Footnotes, definition lists - goldmark extensions for both exist but aren't
+      enabled, so the syntax (`[^1]`, term/`: definition`) isn't recognized at all yet,
+      rendering as plain literal text
 
-**Lower priority:**
-- [ ] Footnotes, definition lists - goldmark extensions for both exist
-      but aren't enabled, so the syntax (`[^1]`, term/`: definition`)
-      isn't recognized at all yet, rendering as plain literal text
-- [ ] Raw inline/block HTML rendered as HTML - currently shown as
-      flagged unsupported text instead (see
-      [What's implemented](#whats-implemented)), not a crash, but not
-      styled/laid out as real HTML would be either
+**Images**
+- [x] PNG/JPEG/GIF, including animated GIFs (disposal-correct compositing, always
+      looping) - resolved and loaded via a pluggable `ImageSource`, fetched and decoded
+      at most once per image regardless of how many times it's asked for; alt text is
+      captured from arbitrary inline content, per CommonMark
+- [x] Loading never blocks rendering - a still-pending image shows a placeholder at its
+      final size once known (or a "loading" fallback before that); a missing or
+      undecodable image falls back to alt text, then title, then a generic message
+- [ ] Prefetch images ahead of the scroll position - today an image only starts loading
+      once its containing slot is actually resolved (in practice, scrolled near), not
+      when the document is first opened
+
+**Links and navigation**
+- [x] Links and autolinks, including reference-style (`[text][ref]`) - highlighted on
+      hover (`View.Hover`), destination resolvable at a point (`View.LinkAt`)
+- [x] Heading anchors: goldmark's auto-generated heading ids, scrollable to via
+      `View.ScrollToAnchor` - what a link's `#fragment` targets
+- [ ] Raw inline/block HTML rendered as HTML - currently shown as flagged unsupported
+      text instead, not a crash, but not styled/laid out as real HTML would be either
+
+**Rendering and performance**
+- [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
+      viewport culling - all handled by `whynot.View`
+- [x] Large documents: layout and drawing are lazy, built outward from the current
+      scroll position rather than the whole document, so cost tracks what's on screen,
+      not the document's total size - a resize deep into a ~1000-line document costs
+      microseconds, not tens of milliseconds. See
+      [ARCHITECTURE.md](ARCHITECTURE.md#view-tying-the-layers-together-with-the-right-lifecycle)
+      for how
+- [x] Graceful degradation: a Markdown construct whynot doesn't recognize (e.g. raw
+      HTML) logs a warning and renders as flagged, distinctly colored text/code showing
+      its source, rather than crashing - a reference-style link's own `[ref]: url`
+      definition line and an HTML comment are recognized as intentionally invisible
+      rather than unsupported, since no Markdown renderer ever shows them either
+
+**`cmd/whynot`, the standalone viewer**
+- [x] Built-in welcome page, shown by default, explaining how to use the app
+- [x] Paste a file path or `http(s)` URL to open it; paste "welcome" to return here
+- [x] A link to a webpage opens in the system browser instead of failing; a link to
+      Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
+- [x] Back/forward history, light/dark theme, zoom
+- [ ] Scrollbar - a first pass exists (branch `scrollbar`) but is parked: its size
+      estimate depends on per-slot data that an unrelated, pre-existing behavior
+      (a full rebuild on every hover change) wipes out while scrolling
+- [ ] A real app icon instead of the generic terminal one when launched as a bundled
+      macOS/Windows/Linux app
 
 ## Known issues
 
