@@ -13,10 +13,13 @@ import (
 // than loaded pixel data: layout only ever probes an image's dimensions
 // (see InlineImage.GetInlineLayout), never its pixels, so loading is entirely
 // a Canvas implementation's concern - including whether and how to cache
-// what it loads.
+// what it loads. width/height are the size to draw it at - already
+// scaled by RenderingContext.Scale, and not generally the image's own
+// native pixel size - so an implementation must scale what it loads to
+// fit, not blit it 1:1.
 type Canvas interface {
 	Bounds() image.Rectangle
 	DrawText(s string, face font.Face, x, y int, clr color.Color)
-	DrawImage(src string, x, y int)
+	DrawImage(src string, x, y, width, height int)
 	DrawRect(x, y, w, h int, clr color.Color)
 }

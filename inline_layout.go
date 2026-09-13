@@ -174,7 +174,7 @@ func (b *ImageBox) SpaceWidth() int {
 }
 
 func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
-	dst.DrawImage(b.src, x, y)
+	dst.DrawImage(b.src, x, y, b.bounds.Dx(), b.bounds.Dy())
 	return x + b.bounds.Dx()
 }
 

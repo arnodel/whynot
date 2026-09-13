@@ -1,11 +1,11 @@
 package whynot
 
 import (
+	"fmt"
 	"image"
 	_ "image/gif"  // registers the GIF format with image.DecodeConfig
 	_ "image/jpeg" // registers the JPEG format with image.DecodeConfig
 	_ "image/png"  // registers the PNG format with image.DecodeConfig
-	"os"
 )
 
 type Inline interface {
@@ -40,8 +40,13 @@ func (t *InlineText) GetInlineLayout(ctx RenderingContext) InlineLayout {
 
 type InlineImage struct {
 	src   string
+	alt   string
 	title string
 	node  *ASTNode
+	// fallbackNode is a TagUnsupported child of node - see the compile.go
+	// KindImage case for why it's precomputed once, at parse time,
+	// rather than created on demand here.
+	fallbackNode *ASTNode
 }
 
 var _ Inline = (*InlineImage)(nil)
@@ -50,22 +55,55 @@ func (i *InlineImage) Node() *ASTNode {
 	return i.node
 }
 
-// GetInlineLayout probes src's dimensions via a cheap header-only read (no
-// full decode, no rendering backend involved - reading an image's size
-// isn't a backend-specific operation the way loading its pixels for
-// drawing is). A missing or unreadable file yields a zero-size box rather
-// than failing layout outright.
+// GetInlineLayout resolves and opens src via ctx.ImageLoader (letting
+// the embedder decide how - relative to a document's location, over
+// http(s), from an archive, whatever it needs; falls back to
+// FileImageLoader if ctx was built as a bare RenderingContext{} with no
+// ImageLoader set, the same default NewView itself uses - so direct
+// RenderingContext callers that never touch an image, like most of this
+// package's own tests, don't need to know ImageLoader exists), then
+// probes its dimensions via a cheap header-only read (no full decode -
+// reading an image's size isn't a backend-specific operation the way
+// loading its pixels for drawing is), scaled by ctx.Scale like every
+// other sized quantity in the layout system
+// (RenderingContext.ScaledMargins and friends) so images grow and
+// shrink along with zoom/DPI instead of staying pixel-locked.
+//
+// A missing, unreadable, or undecodable image falls back to fallback's
+// text instead of a silent zero-size gap - reusing InlineText's own
+// GetInlineLayout, so it renders exactly like any other construct
+// whynot can't handle (see appendUnsupportedInline): flagged in
+// StyleSheet.UnsupportedColor, not silently missing.
 func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
-	var bounds image.Rectangle
-	if f, err := os.Open(i.src); err == nil {
-		defer f.Close()
-		if cfg, _, err := image.DecodeConfig(f); err == nil {
-			bounds = image.Rectangle{Max: image.Pt(cfg.Width, cfg.Height)}
+	loader := ctx.ImageLoader
+	if loader == nil {
+		loader = FileImageLoader{}
+	}
+	resolved, rc, err := loader.Open(i.src)
+	if err == nil {
+		defer rc.Close()
+		if cfg, _, decErr := image.DecodeConfig(rc); decErr == nil {
+			bounds := image.Rectangle{Max: image.Pt(
+				int(float64(cfg.Width)*ctx.Scale),
+				int(float64(cfg.Height)*ctx.Scale),
+			)}
+			return &ImageBox{src: resolved, bounds: bounds, source: i}
 		}
 	}
-	return &ImageBox{
-		src:    i.src,
-		bounds: bounds,
-		source: i,
+	return i.fallback(resolved).GetInlineLayout(ctx)
+}
+
+// fallback is what's shown in place of an image GetInlineLayout
+// couldn't open or decode - alt text if the Markdown gave any, else
+// title, else a generic message naming resolved (the image's own
+// destination if src couldn't even be resolved).
+func (i *InlineImage) fallback(resolved string) *InlineText {
+	text := i.alt
+	if text == "" {
+		text = i.title
 	}
+	if text == "" {
+		text = fmt.Sprintf("(image not found: %s)", resolved)
+	}
+	return &InlineText{text: text, node: i.fallbackNode}
 }

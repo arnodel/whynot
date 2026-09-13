@@ -13,6 +13,11 @@ type RenderingContext struct {
 	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
 	// rebuilds the layout tree when it changes.
 	HighlightNode *ASTNode
+
+	// ImageLoader resolves and opens an InlineImage's src - see
+	// ImageLoader's own doc comment. Defaults to FileImageLoader
+	// (NewView), overridable via WithImageLoader.
+	ImageLoader ImageLoader
 }
 
 // The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -

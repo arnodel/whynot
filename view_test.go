@@ -85,7 +85,7 @@ var _ Canvas = (*recordingCanvas)(nil)
 
 func (c *recordingCanvas) Bounds() image.Rectangle                                      { return c.bounds }
 func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {}
-func (c *recordingCanvas) DrawImage(src string, x, y int)                               {}
+func (c *recordingCanvas) DrawImage(src string, x, y, width, height int)                {}
 func (c *recordingCanvas) DrawRect(x, y, w, h int, clr color.Color) {
 	c.rects = append(c.rects, drawnRect{x, y, w, h, clr})
 }

@@ -44,12 +44,26 @@ func WithStyleSheet(s StyleSheet) ViewOption {
 	}
 }
 
+// WithImageLoader overrides the ImageLoader NewView otherwise defaults
+// to (FileImageLoader) - e.g. for an embedder that wants images
+// resolved relative to a document's own location, or fetched over
+// http(s), the way cmd/whynot does.
+func WithImageLoader(l ImageLoader) ViewOption {
+	return func(v *View) {
+		v.ctx.ImageLoader = l
+	}
+}
+
 // NewView parses source and returns a View ready to render it once Layout
 // has been called at least once to establish a width.
 func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View {
 	v := &View{
 		block: Parse(source),
-		ctx:   RenderingContext{FaceSelector: faceSelector, StyleSheet: NewDarkStyleSheet()},
+		ctx: RenderingContext{
+			FaceSelector: faceSelector,
+			StyleSheet:   NewDarkStyleSheet(),
+			ImageLoader:  FileImageLoader{},
+		},
 	}
 	for _, opt := range opts {
 		opt(v)

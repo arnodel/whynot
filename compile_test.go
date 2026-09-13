@@ -776,6 +776,85 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 	}
 }
 
+// TestImageGetInlineLayoutDefaultsImageLoaderWhenNil checks a bare
+// RenderingContext{} with no ImageLoader set - the pattern most of this
+// package's own tests use, none of which care about images - falls
+// back to FileImageLoader instead of a nil-pointer panic (caught via a
+// benchmark that does this: layout_bench_test.go builds RenderingContext
+// literals directly, with no reason to know ImageLoader exists).
+func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
+	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
+	ctx := RenderingContext{Scale: 1}
+	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	if !ok {
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+	}
+	want := image.Rect(0, 0, 400, 600)
+	if box.bounds != want {
+		t.Errorf("bounds = %v, want %v", box.bounds, want)
+	}
+}
+
+// TestImageGetInlineLayoutScalesBounds checks an image's layout bounds
+// are its native pixel size times ctx.Scale, like every other sized
+// quantity in the layout system (RenderingContext.ScaledMargins and
+// friends) - not the file's raw pixel size unconditionally, which would
+// leave images pixel-locked against zoom/DPI scale.
+func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
+	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
+	ctx := RenderingContext{Scale: 2, ImageLoader: FileImageLoader{}}
+	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	if !ok {
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+	}
+	want := image.Rect(0, 0, 800, 1200)
+	if box.bounds != want {
+		t.Errorf("bounds = %v, want %v", box.bounds, want)
+	}
+	if box.src != "testdata/cat.jpeg" {
+		t.Errorf("src = %q, want the resolved path unchanged for FileImageLoader", box.src)
+	}
+}
+
+// TestImageGetInlineLayoutFallsBackWhenMissing checks a missing/unreadable
+// image renders as flagged fallback text (see appendUnsupportedInline)
+// instead of a silent zero-size gap, preferring alt text over title over
+// a generic message naming the resolved (here: unresolved-any-further,
+// since FileImageLoader doesn't resolve) source.
+func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
+	styleSheet := NewDarkStyleSheet()
+	ctx := RenderingContext{
+		Scale:        1,
+		FaceSelector: NewGoFontFaceSelector(72),
+		StyleSheet:   styleSheet,
+		ImageLoader:  FileImageLoader{},
+	}
+	fallbackNode := (*ASTNode)(nil).AddChild(TagImage).AddChild(TagUnsupported)
+
+	for _, tc := range []struct {
+		name string
+		img  *InlineImage
+		want string
+	}{
+		{"alt wins", &InlineImage{src: "nope.png", alt: "a lovely cat", title: "title", fallbackNode: fallbackNode}, "a lovely cat"},
+		{"title when no alt", &InlineImage{src: "nope.png", title: "a lovely cat", fallbackNode: fallbackNode}, "a lovely cat"},
+		{"generic message when neither", &InlineImage{src: "nope.png", fallbackNode: fallbackNode}, "(image not found: nope.png)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			box, ok := tc.img.GetInlineLayout(ctx).(*TextBox)
+			if !ok {
+				t.Fatalf("GetInlineLayout returned %T, want *TextBox", tc.img.GetInlineLayout(ctx))
+			}
+			if box.Text != tc.want {
+				t.Errorf("Text = %q, want %q", box.Text, tc.want)
+			}
+			if box.Color != styleSheet.UnsupportedColor {
+				t.Errorf("Color = %v, want UnsupportedColor %v", box.Color, styleSheet.UnsupportedColor)
+			}
+		})
+	}
+}
+
 // TestParseResolvesEntitiesAndEscapes checks the v2 migration's behavior
 // change noted in the migration plan: text values are resolved (entity
 // references and backslash escapes decoded), unlike v1's raw Text().
