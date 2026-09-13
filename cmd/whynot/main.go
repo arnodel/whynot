@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -89,10 +90,12 @@ func main() {
 			location: location,
 			view:     whynot.NewView(source, faceSelector, whynot.WithStyleSheet(styleSheet)),
 		},
-		faceSelector: faceSelector,
-		styleSheet:   styleSheet,
-		renderer:     ebitenrenderer.New(),
-		debugHit:     *debugHit,
+		faceSelector:        faceSelector,
+		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
+		styleSheet:          styleSheet,
+		renderer:            ebitenrenderer.New(),
+		debugHit:            *debugHit,
+		zoom:                1,
 	}
 	game.updateWindowTitle()
 	if err := ebiten.RunGame(game); err != nil {
@@ -213,20 +216,53 @@ type game struct {
 	future []historyEntry
 
 	faceSelector whynot.FaceSelector
-	styleSheet   whynot.StyleSheet
-	renderer     *ebitenrenderer.Renderer
-	debugHit     bool
+	// toolbarFaceSelector is independent of faceSelector, deliberately:
+	// View.Layout unconditionally resets faceSelector's DPI every
+	// frame (see relayout) to deviceScale*zoom, so the toolbar's own
+	// text needs its own selector pinned to deviceScale alone - sharing
+	// one would either zoom the toolbar's text against its fixed-size
+	// buttons, or worse, thrash both selectors' font caches every frame
+	// as Layout and drawToolbar fought over one shared DPI.
+	toolbarFaceSelector whynot.FaceSelector
+	styleSheet          whynot.StyleSheet
+	renderer            *ebitenrenderer.Renderer
+	debugHit            bool
 
 	hoverX, hoverY int
 	// hoverDest is the link under the cursor, if any - what the address
 	// bar shows instead of the current location while hovering.
 	hoverDest string
 
-	// width, height, scale are Layout's most recent physical dimensions
-	// and display scale - width/scale are what follow and back need to
-	// lay out a View that isn't the one ebiten just called Layout on;
-	// height (minus toolbarHeight) is the page size Space/Shift+Space
-	// scroll by.
+	// outsideWidth, outsideHeight are the logical (device-independent)
+	// window dimensions ebiten's own Layout callback last reported -
+	// relayout recomputes deviceScale/width/height/scale from these
+	// whenever either changes, whether that's ebiten reporting a resize
+	// or setZoom itself.
+	outsideWidth, outsideHeight int
+
+	// zoom is a user-controlled multiplier on top of the display's own
+	// scale (1.0 = 100%, see setZoom) - +/- keys adjust it.
+	zoom float64
+
+	// deviceScale is the display's own scale, with no zoom applied -
+	// what the toolbar's own size/font stays pinned to, and what
+	// width/height (below) are computed from, so the buffer Layout
+	// hands back to ebiten always matches the real window 1:1
+	// regardless of zoom (ebiten stretches that buffer to fit the
+	// actual window otherwise, which would silently cancel zoom back
+	// out - a real, previously-shipped bug this comment is here to
+	// stop from coming back).
+	deviceScale float64
+
+	// width, height are relayout's most recent physical dimensions,
+	// computed from deviceScale alone (not zoom - see deviceScale).
+	// scale is deviceScale*zoom, passed to View.Layout as the document's
+	// own font/DPI scale - decoupled from width, which View.Layout
+	// takes as a separate argument, so zoom changes glyph size without
+	// changing the wrap width or the returned buffer size. follow and
+	// back need width/scale too, to lay out a View that isn't the one
+	// relayout just ran on; height (minus toolbarHeight) is the page
+	// size Space/Shift+Space scroll by.
 	width, height int
 	scale         float64
 
@@ -315,6 +351,16 @@ func (g *game) Update() error {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
 		g.paste()
+	}
+	// A fixed step of the original (100%) size, not of the current
+	// zoom - so it's 100%, 110%, 120%, ... rather than steps shrinking
+	// as you zoom out or growing as you zoom in.
+	const zoomStep = 0.1
+	switch {
+	case inpututil.IsKeyJustPressed(ebiten.KeyEqual):
+		g.setZoom(g.zoom + zoomStep)
+	case inpututil.IsKeyJustPressed(ebiten.KeyMinus):
+		g.setZoom(g.zoom - zoomStep)
 	}
 	return nil
 }
@@ -545,7 +591,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	drawButton(dst, canvas, forwardIcon, g.forwardButton, len(g.future) > 0, g.forwardState)
 	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
 
-	face, err := g.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
 	if err != nil {
 		return
 	}
@@ -553,7 +599,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	if g.hoverDest != "" {
 		text, textColor = g.hoverDest, g.styleSheet.HighlightColor()
 	}
-	x := g.reloadButton.Max.X + int(16*g.scale)
+	x := g.reloadButton.Max.X + int(16*g.deviceScale)
 	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
 }
 
@@ -631,10 +677,11 @@ func drawOutline(dst whynot.Canvas, r image.Rectangle, clr color.Color) {
 const toolbarLogicalHeight = 36
 
 // layoutToolbar recomputes the toolbar's height and button positions
-// for the current scale - called from Layout alongside the View's own,
-// since both depend on it.
+// for the current device scale - deliberately deviceScale, not scale,
+// so the toolbar's own size stays fixed regardless of zoom (see
+// deviceScale's own doc comment on the game struct).
 func (g *game) layoutToolbar() {
-	s := g.scale
+	s := g.deviceScale
 	g.toolbarHeight = int(toolbarLogicalHeight * s)
 	pad := int(8 * s)
 	btn := g.toolbarHeight - 2*pad // square icon buttons
@@ -650,11 +697,34 @@ func (g *game) layoutToolbar() {
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	s := ebiten.Monitor().DeviceScaleFactor()
-	width := int(float64(outsideWidth) * s)
-	height := int(float64(outsideHeight) * s)
-	g.width, g.height, g.scale = width, height, s
+	g.outsideWidth, g.outsideHeight = outsideWidth, outsideHeight
+	g.relayout()
+	return g.width, g.height
+}
+
+// relayout recomputes physical width/height (from deviceScale alone)
+// and scale (deviceScale*zoom) from the last known logical window size
+// (outsideWidth/outsideHeight), and applies them to the toolbar and
+// the current View - shared by the ebiten-driven Layout callback and
+// setZoom, which needs the same recomputation to happen immediately
+// rather than waiting for ebiten's next own Layout call (same reason
+// follow/back/reload/paste each lay out their View immediately instead
+// of leaving it for next frame).
+func (g *game) relayout() {
+	g.deviceScale = ebiten.Monitor().DeviceScaleFactor()
+	g.scale = g.deviceScale * g.zoom
+	g.width = int(float64(g.outsideWidth) * g.deviceScale)
+	g.height = int(float64(g.outsideHeight) * g.deviceScale)
+	g.toolbarFaceSelector.SetDPI(g.deviceScale * 72)
 	g.layoutToolbar()
-	g.current.view.Layout(width, s)
-	return width, height
+	g.current.view.Layout(g.width, g.scale)
+}
+
+// setZoom changes the zoom level (1.0 = 100%), clamped to a sane
+// range, and re-lays-out immediately at the new scale - the same idea
+// as a window resize, just user-triggered instead.
+func (g *game) setZoom(zoom float64) {
+	const minZoom, maxZoom = 0.5, 3.0
+	g.zoom = math.Max(minZoom, math.Min(maxZoom, zoom))
+	g.relayout()
 }
