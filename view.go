@@ -44,13 +44,17 @@ func WithStyleSheet(s StyleSheet) ViewOption {
 	}
 }
 
-// WithImageLoader overrides the ImageLoader NewView otherwise defaults
-// to (FileImageLoader) - e.g. for an embedder that wants images
+// WithImageSource overrides the ImageSource NewView otherwise defaults
+// to (FileImageSource) - e.g. for an embedder that wants images
 // resolved relative to a document's own location, or fetched over
-// http(s), the way cmd/whynot does.
-func WithImageLoader(l ImageLoader) ViewOption {
+// http(s), the way cmd/whynot does. Wrapped in a cache automatically
+// (see ImageCache), so resolving/fetching a given image only happens
+// once for the life of the resulting View, however many times it's
+// asked for (every layout rebuild - resize, zoom, theme change, even
+// hovering a different link - asks again).
+func WithImageSource(s ImageSource) ViewOption {
 	return func(v *View) {
-		v.ctx.ImageLoader = l
+		v.ctx.ImageCache = NewImageCache(s)
 	}
 }
 
@@ -62,7 +66,7 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
 			StyleSheet:   NewDarkStyleSheet(),
-			ImageLoader:  FileImageLoader{},
+			ImageCache:   NewImageCache(FileImageSource{}),
 		},
 	}
 	for _, opt := range opts {

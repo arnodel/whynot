@@ -148,7 +148,11 @@ func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point, 
 }
 
 type ImageBox struct {
-	src    string
+	// img is the already-decoded image ImageCache.Load returned -
+	// carried forward from InlineImage.GetInlineLayout so DrawInline
+	// can pass it straight to Canvas.DrawImage, which never fetches or
+	// decodes anything itself.
+	img    image.Image
 	bounds image.Rectangle
 
 	// source is the InlineImage this ImageBox was built from - see Source.
@@ -174,7 +178,7 @@ func (b *ImageBox) SpaceWidth() int {
 }
 
 func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
-	dst.DrawImage(b.src, x, y, b.bounds.Dx(), b.bounds.Dy())
+	dst.DrawImage(b.img, x, y, b.bounds.Dx(), b.bounds.Dy())
 	return x + b.bounds.Dx()
 }
 

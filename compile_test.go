@@ -777,11 +777,12 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 }
 
 // TestImageGetInlineLayoutDefaultsImageLoaderWhenNil checks a bare
-// RenderingContext{} with no ImageLoader set - the pattern most of this
+// RenderingContext{} with no ImageCache set - the pattern most of this
 // package's own tests use, none of which care about images - falls
-// back to FileImageLoader instead of a nil-pointer panic (caught via a
-// benchmark that does this: layout_bench_test.go builds RenderingContext
-// literals directly, with no reason to know ImageLoader exists).
+// back to a fresh FileImageSource-backed cache instead of a nil-pointer
+// panic (caught via a benchmark that does this: layout_bench_test.go
+// builds RenderingContext literals directly, with no reason to know
+// ImageCache exists).
 func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
 	ctx := RenderingContext{Scale: 1}
@@ -802,7 +803,7 @@ func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 // leave images pixel-locked against zoom/DPI scale.
 func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
-	ctx := RenderingContext{Scale: 2, ImageLoader: FileImageLoader{}}
+	ctx := RenderingContext{Scale: 2, ImageCache: NewImageCache(FileImageSource{})}
 	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
 	if !ok {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
@@ -811,8 +812,8 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	if box.bounds != want {
 		t.Errorf("bounds = %v, want %v", box.bounds, want)
 	}
-	if box.src != "testdata/cat.jpeg" {
-		t.Errorf("src = %q, want the resolved path unchanged for FileImageLoader", box.src)
+	if box.img == nil {
+		t.Error("img = nil, want the decoded image")
 	}
 }
 
@@ -827,7 +828,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		Scale:        1,
 		FaceSelector: NewGoFontFaceSelector(72),
 		StyleSheet:   styleSheet,
-		ImageLoader:  FileImageLoader{},
+		ImageCache:   NewImageCache(FileImageSource{}),
 	}
 	fallbackNode := (*ASTNode)(nil).AddChild(TagImage).AddChild(TagUnsupported)
 

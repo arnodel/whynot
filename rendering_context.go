@@ -14,10 +14,11 @@ type RenderingContext struct {
 	// rebuilds the layout tree when it changes.
 	HighlightNode *ASTNode
 
-	// ImageLoader resolves and opens an InlineImage's src - see
-	// ImageLoader's own doc comment. Defaults to FileImageLoader
-	// (NewView), overridable via WithImageLoader.
-	ImageLoader ImageLoader
+	// ImageCache resolves, fetches, and decodes an InlineImage's src,
+	// caching the result - see ImageCache's own doc comment. Defaults
+	// to NewImageCache(FileImageSource{}) (NewView), overridable via
+	// WithImageSource.
+	ImageCache *ImageCache
 }
 
 // The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -

@@ -3,9 +3,6 @@ package whynot
 import (
 	"fmt"
 	"image"
-	_ "image/gif"  // registers the GIF format with image.DecodeConfig
-	_ "image/jpeg" // registers the JPEG format with image.DecodeConfig
-	_ "image/png"  // registers the PNG format with image.DecodeConfig
 )
 
 type Inline interface {
@@ -55,19 +52,17 @@ func (i *InlineImage) Node() *ASTNode {
 	return i.node
 }
 
-// GetInlineLayout resolves and opens src via ctx.ImageLoader (letting
-// the embedder decide how - relative to a document's location, over
-// http(s), from an archive, whatever it needs; falls back to
-// FileImageLoader if ctx was built as a bare RenderingContext{} with no
-// ImageLoader set, the same default NewView itself uses - so direct
-// RenderingContext callers that never touch an image, like most of this
-// package's own tests, don't need to know ImageLoader exists), then
-// probes its dimensions via a cheap header-only read (no full decode -
-// reading an image's size isn't a backend-specific operation the way
-// loading its pixels for drawing is), scaled by ctx.Scale like every
-// other sized quantity in the layout system
-// (RenderingContext.ScaledMargins and friends) so images grow and
-// shrink along with zoom/DPI instead of staying pixel-locked.
+// GetInlineLayout resolves, fetches, and decodes src via ctx.ImageCache
+// (letting the embedder decide the resolution/fetch policy - relative
+// to a document's location, over http(s), from an archive, whatever it
+// needs; falls back to a fresh NewImageCache(FileImageSource{}) if ctx
+// was built as a bare RenderingContext{} with no ImageCache set, the
+// same default NewView itself uses - so direct RenderingContext
+// callers that never touch an image, like most of this package's own
+// tests, don't need to know ImageCache exists), then scales its
+// decoded bounds by ctx.Scale like every other sized quantity in the
+// layout system (RenderingContext.ScaledMargins and friends) so images
+// grow and shrink along with zoom/DPI instead of staying pixel-locked.
 //
 // A missing, unreadable, or undecodable image falls back to fallback's
 // text instead of a silent zero-size gap - reusing InlineText's own
@@ -75,20 +70,17 @@ func (i *InlineImage) Node() *ASTNode {
 // whynot can't handle (see appendUnsupportedInline): flagged in
 // StyleSheet.UnsupportedColor, not silently missing.
 func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
-	loader := ctx.ImageLoader
-	if loader == nil {
-		loader = FileImageLoader{}
+	cache := ctx.ImageCache
+	if cache == nil {
+		cache = NewImageCache(FileImageSource{})
 	}
-	resolved, rc, err := loader.Open(i.src)
+	resolved, img, err := cache.Load(i.src)
 	if err == nil {
-		defer rc.Close()
-		if cfg, _, decErr := image.DecodeConfig(rc); decErr == nil {
-			bounds := image.Rectangle{Max: image.Pt(
-				int(float64(cfg.Width)*ctx.Scale),
-				int(float64(cfg.Height)*ctx.Scale),
-			)}
-			return &ImageBox{src: resolved, bounds: bounds, source: i}
-		}
+		bounds := image.Rectangle{Max: image.Pt(
+			int(float64(img.Bounds().Dx())*ctx.Scale),
+			int(float64(img.Bounds().Dy())*ctx.Scale),
+		)}
+		return &ImageBox{img: img, bounds: bounds, source: i}
 	}
 	return i.fallback(resolved).GetInlineLayout(ctx)
 }

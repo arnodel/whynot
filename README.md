@@ -107,6 +107,11 @@ top of the library:
 - **Backspace goes back** to wherever a link was followed from, exact
   scroll position included - whether that was a different document or
   just an in-page anchor jump.
+- **Images resolve and load the same way** - a relative `src` is
+  resolved against the document's own location, an `http(s)` one is
+  fetched, regardless of whether the document itself came from disk or
+  a fetch; a missing or undecodable image falls back to its alt text
+  (or title, or a generic message) instead of a silent gap.
 - **`-debug-hit`** outlines whatever `View.HitTest` resolves under the
   cursor, for debugging.
 - A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
@@ -117,7 +122,14 @@ None of the link-following/history logic lives in the library itself -
 `whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
 files, fetching URLs, and keeping a history stack are all `cmd/whynot`'s
-own, in [cmd/whynot/main.go](cmd/whynot/main.go).
+own, in [cmd/whynot/main.go](cmd/whynot/main.go). Image loading follows
+the same split, one layer further in: the library defines `ImageSource`
+(defaulting to a plain local file open) and owns caching the result
+(`ImageCache` - an image is resolved, fetched, and decoded at most once,
+however many times it's asked for, however many rendering backends ask
+for it); `cmd/whynot` supplies the file-or-`http(s)`,
+resolved-against-the-document's-location `ImageSource`, via
+`WithImageSource`.
 
 ## What's implemented
 
@@ -125,7 +137,14 @@ own, in [cmd/whynot/main.go](cmd/whynot/main.go).
 - Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
 - Inline code, and fenced and indented code blocks
 - Ordered and unordered lists, tight or loose, including task lists (`- [ ]`)
-- Images, including a title attribute
+- Images - PNG/JPEG/GIF, resolved and loaded via a pluggable
+  `ImageSource`, fetched and decoded at most once per image regardless
+  of how many times it's asked for (relative-to-document and `http(s)`
+  paths both work, see `cmd/whynot` below), scaled with zoom/DPI like
+  everything else; a missing or undecodable image falls back to its alt
+  text, then its title, then a generic message, instead of a silent gap
+  - alt text
+  itself is captured from arbitrary inline content, per CommonMark
 - Thematic breaks (`---`)
 - Links and autolinks, including reference-style (`[text][ref]`) -
   highlighted on hover (`View.Hover`), destination resolvable at a point

@@ -103,7 +103,7 @@ func main() {
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
 		styleSheet:          styleSheet,
 		darkTheme:           !*light,
-		renderer:            ebitenrenderer.New(ebitenrenderer.WithImageOpener(openImageBytes)),
+		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
 		zoom:                1,
 	}
@@ -205,18 +205,6 @@ func openImageLocation(location *url.URL) (io.ReadCloser, error) {
 	}
 }
 
-// openImageBytes adapts openImageLocation for ebitenrenderer's
-// WithImageOpener: by the time Canvas.DrawImage runs, src is already
-// the resolved absolute path/URL docImageLoader produced, so this only
-// needs to fetch, not resolve.
-func openImageBytes(src string) (io.ReadCloser, error) {
-	location, err := url.Parse(src)
-	if err != nil {
-		return nil, err
-	}
-	return openImageLocation(location)
-}
-
 // resolveAgainst resolves ref against base, the way a relative link or
 // image src in a document is meant to be interpreted - relative to
 // wherever the document itself came from, whether that's a local file
@@ -229,22 +217,33 @@ func resolveAgainst(base *url.URL, ref string) (*url.URL, error) {
 	return base.ResolveReference(target), nil
 }
 
-// docImageLoader implements whynot.ImageLoader by resolving an image's
+// docImageSource implements whynot.ImageSource by resolving an image's
 // src against base (a document's own location) exactly the way
 // (*game).resolveLink resolves a link's href, then fetching it the same
 // way loadDocument does - so a relative or http(s) image works
-// regardless of where its document came from.
-type docImageLoader struct {
+// regardless of where its document came from. Resolving is kept
+// separate from fetching (rather than one Open doing both, as an
+// earlier version of this type did) so whynot.ImageCache can cache by
+// the resolved identifier without re-resolving-and-fetching on every
+// call - only a genuine cache miss ever reaches Open.
+type docImageSource struct {
 	base *url.URL
 }
 
-func (l docImageLoader) Open(src string) (string, io.ReadCloser, error) {
-	resolved, err := resolveAgainst(l.base, src)
+func (s docImageSource) Resolve(src string) (string, error) {
+	resolved, err := resolveAgainst(s.base, src)
 	if err != nil {
-		return src, nil, err
+		return src, err
 	}
-	rc, err := openImageLocation(resolved)
-	return resolved.String(), rc, err
+	return resolved.String(), nil
+}
+
+func (s docImageSource) Open(resolved string) (io.ReadCloser, error) {
+	location, err := url.Parse(resolved)
+	if err != nil {
+		return nil, err
+	}
+	return openImageLocation(location)
 }
 
 // readClipboard returns the clipboard's current text content, via each
@@ -535,7 +534,7 @@ func (g *game) resolveLink(dest string) (*url.URL, error) {
 func (g *game) newView(source []byte, location *url.URL) *whynot.View {
 	return whynot.NewView(source, g.faceSelector,
 		whynot.WithStyleSheet(g.styleSheet),
-		whynot.WithImageLoader(docImageLoader{base: location}),
+		whynot.WithImageSource(docImageSource{base: location}),
 	)
 }
 

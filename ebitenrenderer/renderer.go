@@ -7,8 +7,6 @@ package ebitenrenderer
 import (
 	"image"
 	"image/color"
-	"io"
-	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -18,81 +16,47 @@ import (
 	"github.com/arnodel/whynot"
 )
 
-// ImageOpener opens the bytes for an already-resolved image src (a
-// Canvas.DrawImage argument - by the time it reaches here, whatever
-// whynot.ImageLoader the caller configured has already resolved it, so
-// this only needs to fetch, not resolve). Pluggable via WithImageOpener
-// so cmd/whynot can supply the same http(s)-or-file fetch its
-// whynot.ImageLoader uses; the default matches this package's own
-// previous behavior (a local file only).
-type ImageOpener func(src string) (io.ReadCloser, error)
-
-func defaultImageOpener(src string) (io.ReadCloser, error) {
-	return os.Open(src)
-}
-
 // Renderer owns resources - loaded images and, per font.Face, the glyph
 // cache text/v2 keeps inside a GoXFace - that should persist across frames
 // and across however many Canvases get created from it. Construct one and
 // keep it for the life of the program; NewCanvas is cheap enough to call
 // every frame.
 type Renderer struct {
-	imageCache  map[string]*ebiten.Image
-	faceCache   map[font.Face]*text.GoXFace
-	imageOpener ImageOpener
+	// imageCache holds each image.Image's ebiten-specific conversion,
+	// keyed by the image.Image's own identity - whynot.ImageCache
+	// already guarantees the same resolved src yields the same decoded
+	// image.Image every time GetInlineLayout asks for it, so this
+	// package never fetches or decodes anything itself; it only
+	// uploads a texture at most once per distinct decoded image.
+	imageCache map[image.Image]*ebiten.Image
+	faceCache  map[font.Face]*text.GoXFace
 }
 
-// Option customizes a Renderer at construction, via New's opts parameter.
-type Option func(*Renderer)
-
-// WithImageOpener overrides the ImageOpener New otherwise defaults to
-// (a local file open) - e.g. for http(s)-or-file fetching matching a
-// whynot.ImageLoader configured on the View being drawn.
-func WithImageOpener(open ImageOpener) Option {
-	return func(r *Renderer) {
-		r.imageOpener = open
+func New() *Renderer {
+	return &Renderer{
+		imageCache: map[image.Image]*ebiten.Image{},
+		faceCache:  map[font.Face]*text.GoXFace{},
 	}
-}
-
-func New(opts ...Option) *Renderer {
-	r := &Renderer{
-		imageCache:  map[string]*ebiten.Image{},
-		faceCache:   map[font.Face]*text.GoXFace{},
-		imageOpener: defaultImageOpener,
-	}
-	for _, opt := range opts {
-		opt(r)
-	}
-	return r
 }
 
 // NewCanvas returns a Canvas that draws onto dst, sharing this Renderer's
-// caches with every other Canvas it creates - so the same source image, or
-// the same font.Face, referenced by multiple Views only ever gets decoded
-// or glyph-cached once.
+// caches with every other Canvas it creates - so the same decoded image, or
+// the same font.Face, referenced by multiple Views only ever gets uploaded
+// as a texture or glyph-cached once.
 func (r *Renderer) NewCanvas(dst *ebiten.Image) *Canvas {
 	return &Canvas{dst: dst, renderer: r}
 }
 
-// loadImage decodes src via r.imageOpener (a local file by default,
-// overridable via WithImageOpener) - PNG/JPEG/GIF decoders are already
-// registered process-wide by the core whynot package's own blank
-// imports, since ebitenrenderer always imports it. A src that fails to
-// open or decode caches a nil result (like this always has) - the
-// caller (Canvas.DrawImage) treats a nil image as "draw nothing".
-func (r *Renderer) loadImage(src string) *ebiten.Image {
-	if img, ok := r.imageCache[src]; ok {
-		return img
+// ebitenImage converts img to an *ebiten.Image, memoized by img's own
+// identity so the same decoded image is only ever uploaded as a
+// texture once.
+func (r *Renderer) ebitenImage(img image.Image) *ebiten.Image {
+	if ei, ok := r.imageCache[img]; ok {
+		return ei
 	}
-	var img *ebiten.Image
-	if rc, err := r.imageOpener(src); err == nil {
-		defer rc.Close()
-		if decoded, _, err := image.Decode(rc); err == nil {
-			img = ebiten.NewImageFromImage(decoded)
-		}
-	}
-	r.imageCache[src] = img
-	return img
+	ei := ebiten.NewImageFromImage(img)
+	r.imageCache[img] = ei
+	return ei
 }
 
 // goXFace returns text/v2's wrapper for face, memoized: GoXFace carries its
@@ -143,12 +107,9 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 // doc comment) with linear filtering, so a zoomed-in image is smoothly
 // scaled rather than drawn blocky (ebiten's default nearest-neighbor
 // filter) or, worse, at the wrong size entirely.
-func (c *Canvas) DrawImage(src string, x, y, width, height int) {
-	img := c.renderer.loadImage(src)
-	if img == nil {
-		return
-	}
-	b := img.Bounds()
+func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
+	ei := c.renderer.ebitenImage(img)
+	b := ei.Bounds()
 	sx, sy := 1.0, 1.0
 	if bw := b.Dx(); bw > 0 {
 		sx = float64(width) / float64(bw)
@@ -159,5 +120,5 @@ func (c *Canvas) DrawImage(src string, x, y, width, height int) {
 	opts := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
 	opts.GeoM.Scale(sx, sy)
 	opts.GeoM.Translate(float64(x), float64(y))
-	c.dst.DrawImage(img, opts)
+	c.dst.DrawImage(ei, opts)
 }
