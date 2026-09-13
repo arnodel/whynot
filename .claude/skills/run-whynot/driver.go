@@ -41,6 +41,7 @@ var (
 	click       = flag.Bool("click", false, "press and release the left mouse button (at -cursor-x/-cursor-y) after scrolling, before the settle ticks - e.g. to follow a link under the cursor")
 	pressKey    = flag.String("key", "", "name of an ebiten.Key (e.g. \"Backspace\") to press and release after scrolling, before the settle ticks - e.g. to trigger a back action")
 	modifierKey = flag.String("modifier", "", "name of an ebiten.Key (e.g. \"Meta\") to hold down for the duration of -key's press+release - e.g. \"Meta\" plus -key V for Cmd+V")
+	holdTicks   = flag.Int("hold-ticks", 1, "number of ticks to hold -key down before releasing it - >1 to test key-repeat behavior (inpututil.KeyPressDuration)")
 	debugHit    = flag.Bool("debug-hit", false, "pass -debug-hit through to the guest, so the captured frame shows the red HitTest outline at the cursor")
 )
 
@@ -108,7 +109,7 @@ func (d *driver) Update() error {
 			d.guest.AdvanceTicks(1)
 		}
 		d.guest.PressKey(key)
-		d.guest.AdvanceTicks(1)
+		d.guest.AdvanceTicks(*holdTicks)
 		d.guest.ReleaseKey(key)
 		d.guest.AdvanceTicks(1)
 		if hasModifier {

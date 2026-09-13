@@ -362,12 +362,34 @@ func (g *game) Update() error {
 	// as you zoom out or growing as you zoom in.
 	const zoomStep = 0.1
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyEqual):
+	case keyRepeat(ebiten.KeyEqual):
 		g.setZoom(g.zoom + zoomStep)
-	case inpututil.IsKeyJustPressed(ebiten.KeyMinus):
+	case keyRepeat(ebiten.KeyMinus):
 		g.setZoom(g.zoom - zoomStep)
 	}
 	return nil
+}
+
+// keyRepeat reports whether a held key should fire again this tick -
+// once immediately on press, then after an initial delay, repeatedly
+// at a steady interval for as long as it's held (the same shape as OS
+// keyboard repeat) - so +/- can be held down to zoom continuously
+// instead of needing repeated individual presses.
+func keyRepeat(key ebiten.Key) bool {
+	tps := ebiten.TPS()
+	const initialDelay = 2 * time.Second / 5 // ~0.4s
+	const interval = time.Second / 10        // ~0.1s
+	initialDelayTicks := int(initialDelay.Seconds() * float64(tps))
+	intervalTicks := max(int(interval.Seconds()*float64(tps)), 1)
+
+	d := inpututil.KeyPressDuration(key)
+	if d == 1 {
+		return true
+	}
+	if d <= initialDelayTicks {
+		return false
+	}
+	return (d-initialDelayTicks)%intervalTicks == 0
 }
 
 func (g *game) setStyleSheet(s whynot.StyleSheet) {
