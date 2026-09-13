@@ -46,10 +46,12 @@ var welcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
 
 // welcomeShortcut is the platform's own paste shortcut, written the way
 // a person would actually type it - the embedded page can't know at
-// build time which OS it'll run on.
+// build time which OS it'll run on. Spelled out as "Cmd+V" rather than
+// the ⌘ glyph: whynot only ships golang.org/x/image/font/gofont, which
+// doesn't cover that symbol - it would silently render as a tofu box.
 func welcomeShortcut() string {
 	if runtime.GOOS == "darwin" {
-		return "⌘V" // Cmd+V
+		return "Cmd+V"
 	}
 	return "Ctrl+V"
 }
