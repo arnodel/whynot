@@ -38,6 +38,7 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -48,6 +49,7 @@ import (
 type game struct {
 	view     *whynot.View
 	renderer *ebitenrenderer.Renderer
+	start    time.Time
 }
 
 func (g *game) Update() error {
@@ -62,7 +64,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	g.view.Layout(outsideWidth, 1)
+	// The third argument is elapsed time since rendering started - only
+	// animated images actually need it (see whynot.RenderingContext.Time).
+	g.view.Layout(outsideWidth, 1, time.Since(g.start))
 	return outsideWidth, outsideHeight
 }
 
@@ -74,6 +78,7 @@ func main() {
 	g := &game{
 		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72)),
 		renderer: ebitenrenderer.New(),
+		start:    time.Now(),
 	}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
