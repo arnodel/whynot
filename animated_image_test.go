@@ -131,13 +131,10 @@ func TestDecodeAnimatedGIFSingleFrame(t *testing.T) {
 	}
 }
 
-// TestDecodeAnimatedGIFZeroDelayUsesMinimum is a regression test: a
-// real-world GIF was observed cycling frantically fast, traced to
-// every one of its frames specifying delay 0 (not uncommon - some
-// encoders leave this to "whatever the viewer defaults to") combined
-// with too low a floor for that case (20ms - a 10-frame loop then
-// finishes in 200ms). minGIFFrameDelay must be high enough that this
-// doesn't flicker, matching the convention most browsers/viewers use.
+// TestDecodeAnimatedGIFZeroDelayUsesMinimum checks that a GIF
+// specifying delay 0 for every frame (not uncommon - some encoders
+// leave this to "whatever the viewer defaults to") still gets a
+// sensible frame rate rather than cycling frantically fast.
 func TestDecodeAnimatedGIFZeroDelayUsesMinimum(t *testing.T) {
 	palette := color.Palette{color.Black, color.White}
 	frame := func(c uint8) *image.Paletted {

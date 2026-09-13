@@ -110,8 +110,9 @@ top of the library:
 - **Images resolve and load the same way** - a relative `src` is
   resolved against the document's own location, an `http(s)` one is
   fetched, regardless of whether the document itself came from disk or
-  a fetch; a missing or undecodable image falls back to its alt text
-  (or title, or a generic message) instead of a silent gap.
+  a fetch. Fetching and decoding happen in the background, never
+  blocking rendering; a missing or undecodable image falls back to its
+  alt text (or title, or a generic message) instead of a silent gap.
 - **`-debug-hit`** outlines whatever `View.HitTest` resolves under the
   cursor, for debugging.
 - A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
@@ -137,14 +138,17 @@ resolved-against-the-document's-location `ImageSource`, via
 - Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
 - Inline code, and fenced and indented code blocks
 - Ordered and unordered lists, tight or loose, including task lists (`- [ ]`)
-- Images - PNG/JPEG/GIF, resolved and loaded via a pluggable
-  `ImageSource`, fetched and decoded at most once per image regardless
-  of how many times it's asked for (relative-to-document and `http(s)`
-  paths both work, see `cmd/whynot` below), scaled with zoom/DPI like
-  everything else; a missing or undecodable image falls back to its alt
-  text, then its title, then a generic message, instead of a silent gap
-  - alt text
-  itself is captured from arbitrary inline content, per CommonMark
+- Images - PNG/JPEG/GIF (including animated GIFs, disposal-correct and
+  always looping), resolved and loaded via a pluggable `ImageSource`,
+  fetched and decoded at most once per image regardless of how many
+  times it's asked for (relative-to-document and `http(s)` paths both
+  work, see `cmd/whynot` below), scaled with zoom/DPI like everything
+  else; loading never blocks rendering, so a still-pending image shows
+  a placeholder at its final size (or, until its size is even known, a
+  "loading" fallback); a missing or undecodable image falls back to
+  its alt text, then its title, then a generic message, instead of a
+  silent gap - alt text itself is captured from arbitrary inline
+  content, per CommonMark
 - Thematic breaks (`---`)
 - Links and autolinks, including reference-style (`[text][ref]`) -
   highlighted on hover (`View.Hover`), destination resolvable at a point

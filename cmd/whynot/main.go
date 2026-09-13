@@ -223,10 +223,9 @@ func resolveAgainst(base *url.URL, ref string) (*url.URL, error) {
 // (*game).resolveLink resolves a link's href, then fetching it the same
 // way loadDocument does - so a relative or http(s) image works
 // regardless of where its document came from. Resolving is kept
-// separate from fetching (rather than one Open doing both, as an
-// earlier version of this type did) so whynot.ImageCache can cache by
-// the resolved identifier without re-resolving-and-fetching on every
-// call - only a genuine cache miss ever reaches Open.
+// separate from fetching so whynot.ImageCache can cache by the
+// resolved identifier without re-resolving-and-fetching on every call
+// - only a genuine cache miss ever reaches Open.
 type docImageSource struct {
 	base *url.URL
 }
@@ -540,7 +539,7 @@ func (g *game) resolveLink(dest string) (*url.URL, error) {
 
 // newView builds a View for source, loaded from location - bundling
 // the options every call site needs together: the current StyleSheet,
-// and an ImageLoader that resolves an image's src against location the
+// and an ImageSource that resolves an image's src against location the
 // same way resolveLink resolves a link's href, so a relative or
 // http(s) image works regardless of where its document came from.
 func (g *game) newView(source []byte, location *url.URL) *whynot.View {

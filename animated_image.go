@@ -54,12 +54,11 @@ func (a *AnimatedImage) CurrentFrame(now time.Duration) image.Image {
 }
 
 // minGIFFrameDelay is what a per-frame delay under 2 hundredths of a
-// second (0 or 1 - confirmed against a real-world GIF that specifies 0
-// for every single frame) is treated as instead - the long-standing
-// convention most browsers/viewers use, rather than actually cycling
-// at that raw rate (10 frames at, say, 20ms each is a 200ms loop -
-// frantic flicker, not the leisurely animation the encoder presumably
-// intended when it left this to "whatever the viewer defaults to").
+// second is treated as instead, matching the convention most
+// browsers/viewers use. Some GIFs specify 0 for every frame, leaving
+// the rate to "whatever the viewer defaults to" - cycling at that raw
+// rate instead (10 frames at, say, 20ms each is a 200ms loop) produces
+// frantic flicker rather than a leisurely animation.
 const minGIFFrameDelay = 100 * time.Millisecond
 
 // decodeAnimatedGIF decodes r as a GIF and composites every frame into
