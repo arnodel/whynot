@@ -32,6 +32,33 @@ import (
 //go:embed arrow_back.png arrow_forward.png refresh.png add.png remove.png dark_mode.png light_mode.png
 var iconFS embed.FS
 
+//go:embed welcome.md
+var welcomeMD []byte
+
+// welcomeURL identifies the embedded welcome page - an opaque, non-file,
+// non-http(s) URL so it can't collide with a real document location, but
+// still a *url.URL like every other location this program handles (so it
+// flows through history, the address bar, and reload unremarkably). Typed
+// as literally "welcome" (see paste and its own text) rather than
+// something like a query parameter, since it's meant to be memorable
+// enough to paste from memory, not just discovered by clicking a link.
+var welcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
+
+// welcomeShortcut is the platform's own paste shortcut, written the way
+// a person would actually type it - the embedded page can't know at
+// build time which OS it'll run on.
+func welcomeShortcut() string {
+	if runtime.GOOS == "darwin" {
+		return "⌘V" // Cmd+V
+	}
+	return "Ctrl+V"
+}
+
+// renderWelcome fills in welcomeMD's one platform-specific placeholder.
+func renderWelcome() []byte {
+	return bytes.ReplaceAll(welcomeMD, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+}
+
 // icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
 // once at startup (see backIcon/forwardIcon/reloadIcon below), not per
 // frame.
@@ -74,14 +101,17 @@ func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
 	flag.Parse()
-	f := "test.md"
-	if flag.NArg() != 0 {
-		f = flag.Arg(0)
-	}
 
-	location, err := absFileURL(f)
-	if err != nil {
-		panic(err)
+	// No file/URL given: land on the welcome page rather than a
+	// hardcoded local file, matching what a person launching whynot
+	// with no arguments should actually see.
+	location := welcomeURL
+	if flag.NArg() != 0 {
+		var err error
+		location, err = absFileURL(flag.Arg(0))
+		if err != nil {
+			panic(err)
+		}
 	}
 	source, err := loadDocument(location)
 	if err != nil {
@@ -146,14 +176,17 @@ func absFileURL(path string) (*url.URL, error) {
 }
 
 // loadDocument fetches the bytes at location - a local read for a
-// file: URL, an HTTP GET for http(s). Any other scheme (e.g. a
-// mailto: autolink) is rejected rather than misread as a file path -
-// and so is an http(s) response whose Content-Type is clearly not
-// Markdown/plain text (e.g. a real webpage, not a .md file): whynot has
-// no way to tell HTML apart from Markdown itself, so without this
-// check it would just get fed straight into the Markdown parser.
+// file: URL, an HTTP GET for http(s), the embedded page for welcomeURL.
+// Any other scheme (e.g. a mailto: autolink) is rejected rather than
+// misread as a file path - and so is an http(s) response whose
+// Content-Type is clearly not Markdown/plain text (e.g. a real webpage,
+// not a .md file): whynot has no way to tell HTML apart from Markdown
+// itself, so without this check it would just get fed straight into
+// the Markdown parser.
 func loadDocument(location *url.URL) ([]byte, error) {
 	switch location.Scheme {
+	case "whynot":
+		return renderWelcome(), nil
 	case "http", "https":
 		client := http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Get(location.String())
@@ -675,11 +708,12 @@ func (g *game) reload() {
 	g.updateWindowTitle()
 }
 
-// paste navigates to the clipboard's current text content, if it's an
-// http(s) URL or an existing local file path - unlike follow, this is
-// always treated as an absolute destination, never resolved relative
-// to the current document, since pasting is a user-initiated "go
-// here," not a link inside whatever's currently on screen.
+// paste navigates to the clipboard's current text content, if it's the
+// word "welcome" (see welcomeURL), an http(s) URL, or an existing local
+// file path - unlike follow, this is always treated as an absolute
+// destination, never resolved relative to the current document, since
+// pasting is a user-initiated "go here," not a link inside whatever's
+// currently on screen.
 func (g *game) paste() {
 	text, err := readClipboard()
 	if err != nil {
@@ -689,7 +723,9 @@ func (g *game) paste() {
 	text = strings.TrimSpace(text)
 
 	var resolved *url.URL
-	if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+	if strings.EqualFold(text, "welcome") {
+		resolved = welcomeURL
+	} else if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
 		resolved = u
 	} else if _, err := os.Stat(text); err == nil {
 		if abs, err := absFileURL(text); err == nil {
@@ -697,7 +733,7 @@ func (g *game) paste() {
 		}
 	}
 	if resolved == nil {
-		log.Printf("clipboard content %q isn't a URL or an existing file path", text)
+		log.Printf("clipboard content %q isn't \"welcome\", a URL, or an existing file path", text)
 		return
 	}
 
