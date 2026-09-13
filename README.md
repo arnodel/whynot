@@ -89,6 +89,21 @@ func main() {
 `cmd/whynot/main.go` is the fuller version of this, handling display scale
 too.
 
+## Styling
+
+Appearance - colors, margins, text sizes/weights, and a handful of dimensional
+constants (table/blockquote geometry, rule and strikethrough thickness) - is entirely
+driven by the `StyleSheet` interface ([stylesheet.go](stylesheet.go)), resolved per node
+when the layout tree is built rather than hardcoded anywhere. `DefaultStyleSheet` is the
+configurable built-in implementation; `NewDarkStyleSheet()`/`NewLightStyleSheet()` (what
+`cmd/whynot`'s theme toggle switches between) are both just different field values on the
+same struct - tweak one (`s := whynot.NewDarkStyleSheet(); s.LinkColor = myColor`) and
+pass it via `whynot.WithStyleSheet(s)`, or embed `DefaultStyleSheet` in your own type and
+override individual methods for full control over one aspect (e.g. per-node margins)
+without reimplementing the rest. Swapping a `View`'s `StyleSheet` at runtime
+(`View.SetStyleSheet`) re-lays-out the document immediately, which is all `cmd/whynot`'s
+L/D keys do.
+
 ## `cmd/whynot`: a standalone viewer
 
 ```
@@ -205,6 +220,13 @@ by implementation order now that most of the list is done.
       its source, rather than crashing - a reference-style link's own `[ref]: url`
       definition line and an HTML comment are recognized as intentionally invisible
       rather than unsupported, since no Markdown renderer ever shows them either
+
+**Styling**
+- [x] Fully customizable via the `StyleSheet` interface (see [above](#styling)) -
+      colors, margins, text styles/sizes, and dimensional constants all resolve through
+      it; override one field on `DefaultStyleSheet`, or embed it in a custom
+      `StyleSheet` for full control. Swappable at runtime (`View.SetStyleSheet`) -
+      `cmd/whynot`'s light/dark toggle is just two `DefaultStyleSheet` instances
 
 **`cmd/whynot`, the standalone viewer**
 - [x] Built-in welcome page, shown by default, explaining how to use the app
