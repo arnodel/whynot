@@ -204,6 +204,16 @@ A table with a header but no data rows:
 
 ![cat.jpg](cat.jpeg "lovely cat")
 
+A broken image link - falls back to its alt text, flagged like any other
+unsupported content, instead of a silent gap:
+
+![a cat that sadly doesn't exist](no-such-cat.jpeg)
+
+An image fetched over http(s), resolved and loaded the same way a
+relative one is:
+
+![a test image fetched over https](https://httpbin.org/image/jpeg)
+
 ## Unsupported content
 
 Markdown constructs whynot doesn't understand don't crash the whole
