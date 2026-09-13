@@ -29,7 +29,7 @@ import (
 
 var (
 	pkg         = flag.String("pkg", "./cmd/whynot", "package path of the guest app (repo-root-relative)")
-	source      = flag.String("source", "cmd/whynot/test.md", "markdown file to render, passed to the guest as its file argument")
+	source      = flag.String("source", "testdata/demo.md", "markdown file to render, passed to the guest as its file argument")
 	out         = flag.String("out", "frame.png", "PNG output path for the final frame")
 	logicalW    = flag.Int("w", 1024, "logical screen width in device-independent pixels")
 	logicalH    = flag.Int("h", 768, "logical screen height in device-independent pixels")

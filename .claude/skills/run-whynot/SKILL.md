@@ -32,14 +32,14 @@ go build ./... && go vet ./...
 go run ./.claude/skills/run-whynot -out /tmp/frame.png
 ```
 
-That renders `cmd/whynot/test.md` at the top of the document into `/tmp/frame.png`, 1024x768
+That renders `testdata/demo.md` at the top of the document into `/tmp/frame.png`, 1024x768
 logical pixels (physical size is that times your display's `DeviceScaleFactor`, e.g. 2048x1536 on a
 2x/Retina display). Flags:
 
 | flag | default | what it does |
 |---|---|---|
 | `-pkg` | `./cmd/whynot` | guest package to build and run |
-| `-source` | `cmd/whynot/test.md` | markdown file rendered; resolved to an absolute path and passed to the guest as its file argument, so it works regardless of the guest's cwd |
+| `-source` | `testdata/demo.md` | markdown file rendered; resolved to an absolute path and passed to the guest as its file argument, so it works regardless of the guest's cwd |
 | `-out` | `frame.png` | PNG output path |
 | `-w`, `-h` | `1024`, `768` | logical window size |
 | `-wheel-dy` | `-50` | wheel dy re-injected every tick of the scroll phase; negative scrolls **down** the document |
@@ -55,7 +55,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
 result - there's no direct "scroll to heading" API, only wheel-notch simulation, so getting to a
-specific spot is trial and error. As a data point verified in this repo: against `cmd/whynot/test.md`
+specific spot is trial and error. As a data point verified in this repo: against `testdata/demo.md`
 at `-h 900`, `-wheel-dy -50 -scroll-ticks 24` lands with the "## Tables" section's first few tables
 in frame; `-scroll-ticks 30` overshoots past the first two tables.
 
@@ -65,7 +65,7 @@ go run ./.claude/skills/run-whynot -h 900 -wheel-dy -50 -scroll-ticks 24 -out /t
 ```
 
 To screenshot a different markdown file (e.g. one you're editing to test a rendering change),
-point `-source` at it - no need to overwrite `cmd/whynot/test.md`:
+point `-source` at it - no need to overwrite `testdata/demo.md`:
 
 ```bash
 go run ./.claude/skills/run-whynot -source /tmp/my-test.md -out /tmp/frame.png
@@ -79,9 +79,10 @@ Then view `/tmp/frame.png` with your image-viewing tool.
 cd cmd/whynot && go run .
 ```
 
-Opens a real, visible window titled "Why Not?" showing `test.md`; scroll with the mouse wheel,
-resize to see it reflow, Cmd/Alt-F4 or close the window to quit. Useless in a headless environment -
-use the driver instead.
+Opens a real, visible window titled "Why Not?" showing the built-in welcome page (pass a path or
+URL as an argument to open something else instead); scroll with the mouse wheel, resize to see it
+reflow, Cmd/Alt-F4 or close the window to quit. Useless in a headless environment - use the driver
+instead.
 
 ## Test
 
@@ -100,7 +101,7 @@ go test ./...
   correctly darkened antialiased glyph edges. Skipping this step produces a PNG that different
   viewers render inconsistently (some flatten transparent-black to white, some to black), instead
   of consistently matching what the real windowed app shows. Hit while testing a short scratch
-  document that left most of the frame untouched - a long document like `test.md` can visually hide
+  document that left most of the frame untouched - a long document like `demo.md` can visually hide
   this because it happens to fill most of the viewport with drawn content anyway.
 - **Wheel input is a one-tick event, not a held state.** Unlike `PressKey`/`ReleaseKey`, a single
   `GuestSession.ScrollWheel` call only affects the very next tick that reads it - the guest resets
