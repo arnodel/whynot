@@ -243,6 +243,11 @@ type game struct {
 	// zoom is a user-controlled multiplier on top of the display's own
 	// scale (1.0 = 100%, see setZoom) - +/- keys adjust it.
 	zoom float64
+	// zoomIndicatorUntil is when the "N%" popup (drawZoomIndicator)
+	// should stop showing - reset to now plus a fixed duration on every
+	// setZoom call, the zero Time otherwise (always in the past, so it
+	// never shows before the first zoom change).
+	zoomIndicatorUntil time.Time
 
 	// deviceScale is the display's own scale, with no zoom applied -
 	// what the toolbar's own size/font stays pinned to, and what
@@ -567,6 +572,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	// which is painted over it afterward.
 	g.current.view.Draw(canvas, 0, g.toolbarHeight)
 	g.drawToolbar(screen, canvas)
+	g.drawZoomIndicator(canvas)
 
 	if g.debugHit {
 		docY := g.hoverY - g.toolbarHeight
@@ -601,6 +607,41 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	}
 	x := g.reloadButton.Max.X + int(16*g.deviceScale)
 	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
+}
+
+// zoomIndicatorDuration is how long the "N%" popup stays up after a
+// zoom change - long enough to read, short enough to get out of the
+// way on its own.
+const zoomIndicatorDuration = 1500 * time.Millisecond
+
+// drawZoomIndicator shows the current zoom level for a little while
+// after it changes (see setZoom), in the content area's top-right
+// corner - not the toolbar's, which will get its own zoom control
+// later and is a fixed size regardless of zoom (see deviceScale);
+// this is explicitly "on top of the document" instead, since zoom is a
+// document-only setting. Uses toolbarFaceSelector, for the same reason
+// drawToolbar does - a size fixed at the display's own scale, not
+// zoomed.
+func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
+	if !time.Now().Before(g.zoomIndicatorUntil) {
+		return
+	}
+	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	if err != nil {
+		return
+	}
+	label := fmt.Sprintf("%.0f%%", g.zoom*100)
+	padX, padY := int(10*g.deviceScale), int(6*g.deviceScale)
+	margin := int(12 * g.deviceScale)
+	textW := font.MeasureString(face, label).Ceil()
+	textH := (face.Metrics().Ascent + face.Metrics().Descent).Ceil()
+	w, h := textW+2*padX, textH+2*padY
+
+	x := g.width - margin - w
+	y := g.toolbarHeight + margin
+	r := image.Rect(x, y, x+w, y+h)
+	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
+	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,
@@ -727,4 +768,5 @@ func (g *game) setZoom(zoom float64) {
 	const minZoom, maxZoom = 0.5, 3.0
 	g.zoom = math.Max(minZoom, math.Min(maxZoom, zoom))
 	g.relayout()
+	g.zoomIndicatorUntil = time.Now().Add(zoomIndicatorDuration)
 }
