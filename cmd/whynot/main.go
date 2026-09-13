@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -177,14 +178,27 @@ func absFileURL(path string) (*url.URL, error) {
 	return &url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}, nil
 }
 
+// htmlContentError means loadDocument found an http(s) response whose
+// Content-Type is HTML, not a fetch failure or a genuinely unreadable
+// one - callers can offer to open url in the system's own browser
+// instead of just reporting an error, since it's presumably a real
+// webpage rather than a broken link.
+type htmlContentError struct {
+	url string
+}
+
+func (e *htmlContentError) Error() string {
+	return fmt.Sprintf("%s looks like a web page, not Markdown", e.url)
+}
+
 // loadDocument fetches the bytes at location - a local read for a
 // file: URL, an HTTP GET for http(s), the embedded page for welcomeURL.
 // Any other scheme (e.g. a mailto: autolink) is rejected rather than
-// misread as a file path - and so is an http(s) response whose
-// Content-Type is clearly not Markdown/plain text (e.g. a real webpage,
-// not a .md file): whynot has no way to tell HTML apart from Markdown
-// itself, so without this check it would just get fed straight into
-// the Markdown parser.
+// misread as a file path. An http(s) response whose Content-Type is
+// HTML fails with *htmlContentError rather than being fed straight into
+// the Markdown parser (whynot has no way to tell HTML apart from
+// Markdown itself); any other clearly-non-Markdown Content-Type is
+// just rejected outright, since it's not a web page either.
 func loadDocument(location *url.URL) ([]byte, error) {
 	switch location.Scheme {
 	case "whynot":
@@ -203,9 +217,15 @@ func loadDocument(location *url.URL) ([]byte, error) {
 		// heuristic, not a guarantee, since some servers omit or
 		// misreport it for a perfectly good Markdown file.
 		if ct := resp.Header.Get("Content-Type"); ct != "" {
-			if mediaType, _, err := mime.ParseMediaType(ct); err == nil &&
-				mediaType != "text/plain" && mediaType != "text/markdown" {
-				return nil, fmt.Errorf("%s: not Markdown (Content-Type: %s)", location, mediaType)
+			if mediaType, _, err := mime.ParseMediaType(ct); err == nil {
+				switch mediaType {
+				case "text/plain", "text/markdown":
+					// Proceed - read the body below.
+				case "text/html", "application/xhtml+xml":
+					return nil, &htmlContentError{url: location.String()}
+				default:
+					return nil, fmt.Errorf("%s: not Markdown (Content-Type: %s)", location, mediaType)
+				}
 			}
 		}
 		return io.ReadAll(resp.Body)
@@ -307,6 +327,32 @@ func readClipboard() (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+// openInBrowser hands rawURL to the OS's own default handler - a real
+// web browser, unlike whynot itself - the same per-OS dispatch
+// readClipboard uses, so no extra dependency is needed for this either.
+// Runs in the background: the launcher command (open/xdg-open/start)
+// exits as soon as it's handed the URL off, not when the browser itself
+// closes, but spawning it is still enough to briefly block the caller
+// on some platforms, so this doesn't wait for it from the game loop.
+func openInBrowser(rawURL string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", rawURL)
+	case "windows":
+		// The empty argument is the window title `start` itself expects
+		// - without it, start misreads a quoted URL as the title.
+		cmd = exec.Command("cmd", "/c", "start", "", rawURL)
+	default:
+		cmd = exec.Command("xdg-open", rawURL)
+	}
+	go func() {
+		if err := cmd.Run(); err != nil {
+			log.Printf("opening %s in the browser: %v", rawURL, err)
+		}
+	}()
 }
 
 // game adapts a whynot.View to ebiten's Game interface: it owns window/input
@@ -614,6 +660,11 @@ func (g *game) follow(dest string) {
 
 	source, err := loadDocument(resolved)
 	if err != nil {
+		var htmlErr *htmlContentError
+		if errors.As(err, &htmlErr) {
+			openInBrowser(resolved.String())
+			return
+		}
 		log.Printf("loading %s: %v", resolved, err)
 		return
 	}
@@ -699,6 +750,11 @@ func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 func (g *game) reload() {
 	source, err := loadDocument(g.current.location)
 	if err != nil {
+		var htmlErr *htmlContentError
+		if errors.As(err, &htmlErr) {
+			openInBrowser(g.current.location.String())
+			return
+		}
 		log.Printf("reloading %s: %v", g.current.location, err)
 		return
 	}
@@ -741,6 +797,11 @@ func (g *game) paste() {
 
 	source, err := loadDocument(resolved)
 	if err != nil {
+		var htmlErr *htmlContentError
+		if errors.As(err, &htmlErr) {
+			openInBrowser(resolved.String())
+			return
+		}
 		log.Printf("loading %s: %v", resolved, err)
 		return
 	}

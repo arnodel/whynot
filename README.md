@@ -100,9 +100,10 @@ demonstrates what a caller can build on top of the library:
   between light and dark while running.
 - **Hovering a link** highlights it (`View.Hover`).
 - **Clicking a link follows it** - a relative path loads another local
-  file, an `http(s)` URL fetches it (rejecting a response whose
-  `Content-Type` isn't Markdown/plain-text-ish, e.g. a real webpage), and
-  a URL fragment (`#some-heading`) scrolls to that heading
+  file, an `http(s)` URL fetches it (opening it in the system's default
+  browser instead if its `Content-Type` turns out to be HTML rather than
+  Markdown/plain text - a real webpage, not a `.md` file), and a URL
+  fragment (`#some-heading`) scrolls to that heading
   (`View.ScrollToAnchor`), even on a document just navigated to. Either
   way it's resolved against the current document's own location
   (`net/url.URL.ResolveReference`), so a relative link works the same
