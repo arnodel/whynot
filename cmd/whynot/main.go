@@ -29,7 +29,7 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
-//go:embed arrow_back.png arrow_forward.png refresh.png add.png remove.png
+//go:embed arrow_back.png arrow_forward.png refresh.png add.png remove.png dark_mode.png light_mode.png
 var iconFS embed.FS
 
 // icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
@@ -47,21 +47,27 @@ func icon(name string) *ebiten.Image {
 	return ebiten.NewImageFromImage(img)
 }
 
-// backIcon/forwardIcon/reloadIcon/zoomInIcon/zoomOutIcon are the
-// toolbar buttons' icons - light, mostly-white silhouettes on a
-// transparent background, so drawIcon can tint them to match a
-// button's current state the same way drawButton already tints its
-// border/fill. Zoom uses plain +/- (add.png/remove.png), not the
-// magnifying-glass-with-+/- alternative also on hand: two of those
+// backIcon/forwardIcon/reloadIcon/zoomInIcon/zoomOutIcon/darkModeIcon/
+// lightModeIcon are the toolbar buttons' icons - light, mostly-white
+// silhouettes on a transparent background, so drawIcon can tint them
+// to match a button's current state the same way drawButton already
+// tints its border/fill. Zoom uses plain +/- (add.png/remove.png), not
+// the magnifying-glass-with-+/- alternative also on hand: two of those
 // side by side read as busier than two plain marks, for no extra
 // clarity - a plain +/- pair is already the established convention
-// for zoom controls elsewhere (e.g. Google Maps).
+// for zoom controls elsewhere (e.g. Google Maps). The theme button
+// shows only one icon at a time - the current theme's, not the one
+// switching would produce - since darkModeIcon/lightModeIcon read as
+// a day/night state indicator (like a physical light switch) rather
+// than an action to perform, unlike e.g. a play/pause button.
 var (
-	backIcon    = icon("arrow_back.png")
-	forwardIcon = icon("arrow_forward.png")
-	reloadIcon  = icon("refresh.png")
-	zoomInIcon  = icon("add.png")
-	zoomOutIcon = icon("remove.png")
+	backIcon      = icon("arrow_back.png")
+	forwardIcon   = icon("arrow_forward.png")
+	reloadIcon    = icon("refresh.png")
+	zoomInIcon    = icon("add.png")
+	zoomOutIcon   = icon("remove.png")
+	darkModeIcon  = icon("dark_mode.png")
+	lightModeIcon = icon("light_mode.png")
 )
 
 func main() {
@@ -100,6 +106,7 @@ func main() {
 		faceSelector:        faceSelector,
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
 		styleSheet:          styleSheet,
+		darkTheme:           !*light,
 		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
 		zoom:                1,
@@ -232,8 +239,15 @@ type game struct {
 	// as Layout and drawToolbar fought over one shared DPI.
 	toolbarFaceSelector whynot.FaceSelector
 	styleSheet          whynot.StyleSheet
-	renderer            *ebitenrenderer.Renderer
-	debugHit            bool
+	// darkTheme tracks which of styleSheet's two possible values is
+	// current - NewDarkStyleSheet/NewLightStyleSheet both return the
+	// same concrete type, so there's no way to recover this from
+	// styleSheet itself; it drives which of darkModeIcon/lightModeIcon
+	// the theme button shows (the current theme's icon - clicking
+	// switches to the other one).
+	darkTheme bool
+	renderer  *ebitenrenderer.Renderer
+	debugHit  bool
 
 	hoverX, hoverY int
 	// hoverDest is the link under the cursor, if any - what the address
@@ -289,6 +303,8 @@ type game struct {
 	backState, forwardState, reloadState    buttonState
 	zoomInButton, zoomOutButton             image.Rectangle
 	zoomInState, zoomOutState               buttonState
+	themeButton                             image.Rectangle
+	themeState                              buttonState
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its
@@ -329,6 +345,7 @@ func (g *game) Update() error {
 	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: mouseDown && cursor.In(g.reloadButton)}
 	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: mouseDown && cursor.In(g.zoomInButton)}
 	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: mouseDown && cursor.In(g.zoomOutButton)}
+	g.themeState = buttonState{hover: cursor.In(g.themeButton), pressed: mouseDown && cursor.In(g.themeButton)}
 
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	switch {
@@ -344,6 +361,8 @@ func (g *game) Update() error {
 		g.setZoom(g.zoom + zoomStep)
 	case clicked && g.zoomOutState.hover:
 		g.setZoom(g.zoom - zoomStep)
+	case clicked && g.themeState.hover:
+		g.setTheme(!g.darkTheme)
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
@@ -367,9 +386,9 @@ func (g *game) Update() error {
 
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyL):
-		g.setStyleSheet(whynot.NewLightStyleSheet())
+		g.setTheme(false)
 	case inpututil.IsKeyJustPressed(ebiten.KeyD):
-		g.setStyleSheet(whynot.NewDarkStyleSheet())
+		g.setTheme(true)
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
 		g.paste()
@@ -403,6 +422,19 @@ func keyRepeat(key ebiten.Key) bool {
 		return false
 	}
 	return (d-initialDelayTicks)%intervalTicks == 0
+}
+
+// setTheme switches between whynot's built-in dark and light
+// StyleSheets - the L/D keyboard shortcuts and the toolbar's theme
+// button both go through this, so darkTheme (what the theme button's
+// icon is chosen from) never drifts out of sync with styleSheet.
+func (g *game) setTheme(dark bool) {
+	if dark {
+		g.setStyleSheet(whynot.NewDarkStyleSheet())
+	} else {
+		g.setStyleSheet(whynot.NewLightStyleSheet())
+	}
+	g.darkTheme = dark
 }
 
 func (g *game) setStyleSheet(s whynot.StyleSheet) {
@@ -620,11 +652,11 @@ func (g *game) Draw(screen *ebiten.Image) {
 // drawToolbar paints the address bar (the current document's location,
 // or - while hovering a link - that link's destination instead, in
 // StyleSheet.HighlightColor to match the hovered link's own color in
-// the document) and the back/forward/reload buttons. Icon drawing
-// needs dst directly - whynot.Canvas has no primitive for a scaled,
-// tinted image - so this is the one part of cmd/whynot's own UI that
-// goes around the library's rendering abstraction rather than through
-// it.
+// the document) and the back/forward/reload/zoom/theme buttons. Icon
+// drawing needs dst directly - whynot.Canvas has no primitive for a
+// scaled, tinted image - so this is the one part of cmd/whynot's own
+// UI that goes around the library's rendering abstraction rather than
+// through it.
 func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
 
@@ -633,6 +665,11 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
 	drawButton(dst, canvas, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
 	drawButton(dst, canvas, zoomInIcon, g.zoomInButton, true, g.zoomInState)
+	themeIcon := lightModeIcon
+	if g.darkTheme {
+		themeIcon = darkModeIcon
+	}
+	drawButton(dst, canvas, themeIcon, g.themeButton, true, g.themeState)
 
 	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
 	if err != nil {
@@ -808,18 +845,21 @@ func (g *game) layoutToolbar() {
 	g.forwardButton = nextButton()
 	g.reloadButton = nextButton()
 
-	// zoomOut/zoomIn sit on the toolbar's right edge instead, grouped
-	// apart from back/forward/reload since they're not navigation.
-	// nextButtonFromRight fills from the right edge inward, so calling
-	// it for zoomIn first puts + at the very corner and - just to its
-	// left, reading left-to-right as "- +" (matching e.g. Chrome's own
-	// "- 100% +" zoom control).
+	// zoomOut/zoomIn/theme sit on the toolbar's right edge instead,
+	// grouped apart from back/forward/reload since they're not
+	// navigation. nextButtonFromRight fills from the right edge inward,
+	// so calling it for theme first puts the theme toggle at the very
+	// corner, then + then - just to its left, reading left-to-right as
+	// "- + [theme]" (the zoom pair matching e.g. Chrome's own
+	// "- 100% +" zoom control, with the theme toggle as the outermost,
+	// app-level setting next to it).
 	right := g.width - pad
 	nextButtonFromRight := func() image.Rectangle {
 		r := image.Rect(right-btn, pad, right, pad+btn)
 		right = r.Min.X - pad
 		return r
 	}
+	g.themeButton = nextButtonFromRight()
 	g.zoomInButton = nextButtonFromRight()
 	g.zoomOutButton = nextButtonFromRight()
 }
