@@ -785,7 +785,16 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 // ImageCache exists).
 func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
-	ctx := RenderingContext{Scale: 1}
+	// FaceSelector/StyleSheet are needed here even though this test is
+	// only about ImageCache defaulting: the fetch is asynchronous, so
+	// the very first call sees it still pending and falls back to
+	// ordinary text ("(loading image…)") until it settles - the same
+	// path a real document's very first layout pass would exercise.
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+
+	img.GetInlineLayout(ctx)
+	waitForSettled(t, img.ownCache, img.src)
+
 	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
 	if !ok {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
@@ -803,7 +812,15 @@ func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 // leave images pixel-locked against zoom/DPI scale.
 func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
-	ctx := RenderingContext{Scale: 2, ImageCache: NewImageCache(FileImageSource{})}
+	// FaceSelector/StyleSheet: see TestImageGetInlineLayoutDefaultsImageLoaderWhenNil.
+	ctx := RenderingContext{
+		Scale:        2,
+		ImageCache:   NewImageCache(FileImageSource{}),
+		FaceSelector: NewGoFontFaceSelector(72),
+		StyleSheet:   NewDarkStyleSheet(),
+	}
+	img.GetInlineLayout(ctx)
+	waitForSettled(t, ctx.ImageCache, img.src)
 	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
 	if !ok {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
@@ -831,6 +848,13 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		ImageCache:   NewImageCache(FileImageSource{}),
 	}
 	fallbackNode := (*ASTNode)(nil).AddChild(TagImage).AddChild(TagUnsupported)
+
+	// All three cases below share the src "nope.png" (only alt/title
+	// differ), so waiting once here - before any of them look at the
+	// result - is enough: the rest hit the already-settled cache entry
+	// directly.
+	ctx.ImageCache.Load("nope.png")
+	waitForSettled(t, ctx.ImageCache, "nope.png")
 
 	for _, tc := range []struct {
 		name string

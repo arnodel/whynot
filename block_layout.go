@@ -32,6 +32,17 @@ type BlockLayout interface {
 	Source() Source
 	drawContents(dst Canvas, x, y int)
 	HitTest(p image.Point) (hit Hit, offset image.Point)
+	// PendingImages returns the resolved image srcs this box - or
+	// anything nested inside it - is still waiting to settle (still
+	// fetching, or failed but eligible for retry). Empty once nothing
+	// nested is still unsettled - such a box never needs revisiting due
+	// to image state, only a genuine structural change (width, scale,
+	// StyleSheet), same as any other content. Not memoized: only called
+	// from View.invalidateChangedImages, itself only reached when
+	// ImageCache reports something actually changed - not a per-frame
+	// cost - and a resolved top-level slot's subtree never mutates in
+	// place (see StackBox.boxAt), so there's nothing to go stale.
+	PendingImages() []string
 }
 
 // DrawBlockLayout is the sole entry point for drawing a BlockLayout: it skips drawContents
@@ -141,6 +152,14 @@ func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 	return nil, image.Point{}
 }
 
+func (b *LineBox) PendingImages() []string {
+	var pending []string
+	for _, part := range b.parts {
+		pending = append(pending, part.PendingImages()...)
+	}
+	return pending
+}
+
 func (b *LineBox) drawContents(dst Canvas, x, y int) {
 	lineBounds, _ := b.BoundsAndAdvance()
 	y -= lineBounds.Min.Y
@@ -227,6 +246,26 @@ func (b *StackBox) Bounds() image.Rectangle {
 
 func (b *StackBox) Source() Source {
 	return b.source
+}
+
+// PendingImages aggregates only over already-resolved slots (slot.box
+// != nil) - an unresolved slot hasn't been looked at yet, so there's
+// nothing pending to report about it until something actually asks for
+// it (see boxAt). Not memoized (see the BlockLayout interface's own
+// doc comment) - in particular, the top-level document StackBox's own
+// slots keep resolving lazily over time, so caching this would go
+// stale; View.invalidateChangedImages only ever calls this on
+// individual already-resolved slots' boxes, never on that top-level
+// aggregate itself.
+func (b *StackBox) PendingImages() []string {
+	var pending []string
+	for i := range b.slots {
+		if b.slots[i].box == nil {
+			continue
+		}
+		pending = append(pending, b.slots[i].box.PendingImages()...)
+	}
+	return pending
 }
 
 // boxAt returns the child at index i, building it from its Block and
@@ -411,6 +450,10 @@ func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
 func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
 }
 
+func (b *EmptyBox) PendingImages() []string {
+	return nil
+}
+
 type ContainerBox struct {
 	bounds   image.Rectangle
 	innerPos image.Point
@@ -456,6 +499,10 @@ func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
 	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
 }
 
+func (b *ContainerBox) PendingImages() []string {
+	return b.inner.PendingImages()
+}
+
 // BlockquoteBox draws a vertical bar down the left edge and positions its
 // inner content (the quote's own blocks, already laid out at the reduced
 // width) to the right of it - the visual marker for a `>` blockquote.
@@ -483,6 +530,10 @@ func (b *BlockquoteBox) Bounds() image.Rectangle {
 func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
 	dst.DrawRect(x, y, b.barWidth, b.inner.Bounds().Dy(), b.barColor)
 	DrawBlockLayout(b.inner, dst, x+b.indent, y)
+}
+
+func (b *BlockquoteBox) PendingImages() []string {
+	return b.inner.PendingImages()
 }
 
 // HitTest treats the whole indent strip (bar plus any padding before
@@ -596,6 +647,16 @@ func (b *TableBox) HitTest(p image.Point) (Hit, image.Point) {
 	return b, image.Point{}
 }
 
+func (b *TableBox) PendingImages() []string {
+	var pending []string
+	for _, row := range b.cells {
+		for _, cell := range row {
+			pending = append(pending, cell.PendingImages()...)
+		}
+	}
+	return pending
+}
+
 // RuleBox is a single filled horizontal bar - the box for a thematic break
 // (`---`). Its own height is just the bar's thickness; the visual spacing
 // above and below comes from ThematicBreakBlock's Margins, same as any
@@ -626,6 +687,10 @@ func (b *RuleBox) drawContents(dst Canvas, x, y int) {
 
 func (b *RuleBox) HitTest(p image.Point) (Hit, image.Point) {
 	return b, image.Point{}
+}
+
+func (b *RuleBox) PendingImages() []string {
+	return nil
 }
 
 func maxInt(a, b int) int {

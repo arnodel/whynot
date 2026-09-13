@@ -29,6 +29,11 @@ type View struct {
 	box      *StackBox
 	boxWidth int
 	boxScale float64
+
+	// imageCacheMark is the ImageCache.ChangedSince mark from the last
+	// time Layout checked for image state changes - see
+	// invalidateChangedImages.
+	imageCacheMark uint64
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -298,11 +303,73 @@ func (v *View) Layout(width int, scale float64) {
 	v.ctx.Scale = scale
 
 	if width == v.boxWidth && scale == v.boxScale {
+		v.invalidateChangedImages()
 		return
 	}
 	v.boxWidth = width
 	v.boxScale = scale
 	v.rebuild()
+}
+
+// invalidateChangedImages is Layout's response to an unchanged width/
+// scale: images load asynchronously and in the background (see
+// ImageCache), so even when nothing about the View's own configuration
+// changed, an image it's showing a placeholder or fallback for may
+// have settled since the last call and need picking up.
+//
+// A slot that was never resolved (most of a long document - see
+// StackBox.boxAt) is left alone: nothing pending was ever reported for
+// it, since nobody's asked for it yet. Of the slots that were
+// resolved, one whose PendingImages() doesn't intersect what changed -
+// fully settled, or waiting on a different, still-unrelated image - is
+// also left exactly as it is. Only a slot actually waiting on
+// something that changed gets its memoized box discarded, so the very
+// next boxAt (imminent, since this is by definition already near the
+// viewport) rebuilds just that one.
+//
+// The one exception is a change with BoundsRevealed: a slot showing
+// "(loading image…)" text has no predictable size, so learning the
+// image's real size for the first time can change that slot's height -
+// unlike every other transition, which happens at an already-known,
+// already-laid-out size. That can shift what's currently visible, so
+// it goes through the full rebuild (with its existing ratio-based
+// scroll re-anchoring) instead of the surgical path.
+func (v *View) invalidateChangedImages() {
+	if v.box == nil || v.ctx.ImageCache == nil {
+		return
+	}
+	changes, newMark := v.ctx.ImageCache.ChangedSince(v.imageCacheMark)
+	v.imageCacheMark = newMark
+	if len(changes) == 0 {
+		return
+	}
+
+	changedSrcs := make(map[string]bool, len(changes))
+	for _, c := range changes {
+		changedSrcs[c.Src] = true
+		if c.BoundsRevealed {
+			v.rebuild()
+			return
+		}
+	}
+
+	invalidatedAny := false
+	for i := range v.box.slots {
+		slot := &v.box.slots[i]
+		if slot.box == nil {
+			continue
+		}
+		for _, src := range slot.box.PendingImages() {
+			if changedSrcs[src] {
+				slot.box = nil
+				invalidatedAny = true
+				break
+			}
+		}
+	}
+	if invalidatedAny {
+		v.box.boundsComputed = false
+	}
 }
 
 // SetStyleSheet swaps the View's StyleSheet and takes effect immediately -

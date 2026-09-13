@@ -51,6 +51,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-modifier` | `""` | name of an `ebiten.Key` (e.g. `Meta`) to hold down for the duration of `-key`'s press+release - e.g. `-modifier Meta -key V` for Cmd+V |
 | `-hold-ticks` | `1` | number of ticks to hold `-key` down before releasing it - `>1` to test key-repeat behavior (`inpututil.KeyPressDuration`), e.g. cmd/whynot's zoom +/- |
 | `-debug-hit` | `false` | pass `-debug-hit` through to the guest, so the captured frame shows the red `HitTest` outline at the cursor - useful for confirming exact click coordinates before using `-click` |
+| `-settle-delay` | `0` | real wall-clock `time.Sleep` before the settle ticks - see the Gotchas entry on background goroutines below before reaching for this |
 
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
 result - there's no direct "scroll to heading" API, only wheel-notch simulation, so getting to a
@@ -124,6 +125,19 @@ go test ./...
   an absolute path *before* passing it to the guest as an argument, specifically so the guest's
   actual working directory (some arbitrary temp dir, since the driver execs a freshly-built binary)
   never matters.
+- **`-settle-delay` (a real `time.Sleep` before the settle ticks, added to check whynot's
+  async image-loading fix) did not reliably let a guest-side background goroutine settle**, even at
+  2+ real seconds with visibly continuous rendering activity throughout (confirmed via the
+  `CAMetalLayer` spam below, at its normal ~16ms cadence for the whole sleep) - including a *local*
+  file case that should fail via an instant `os.Open` syscall with no network dependency at all.
+  `AdvanceTicks` itself doesn't pace to real time either (confirmed separately: 300 ticks executed in
+  well under a second). Root cause not confirmed - plausibly something about how `exp/vmhost`'s guest
+  process schedules independently-spawned goroutines between host-driven ticks, but that's a guess,
+  not a diagnosis. Net effect: don't trust this driver to verify that an async background operation
+  (a goroutine started independently of the guest's Update/Draw calls) eventually completes and
+  repaints - it may never appear to, regardless of real elapsed time or tick count. Verify that kind
+  of behavior with normal Go tests (real goroutines, no vmhost) instead, and treat this driver as
+  good for input-driven, synchronous-per-tick behavior only.
 
 ## Troubleshooting
 

@@ -1,12 +1,15 @@
 package whynot
 
 import (
+	"bytes"
 	"image"
 	"image/color"
+	"io"
 	"math"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/image/font"
 )
@@ -706,5 +709,124 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.StartTimer()
 
 		v.Layout(width+1, 1)
+	}
+}
+
+// TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot checks that
+// once an image's bounds are already known (the placeholder-rect
+// path), its later becoming ready invalidates only the one slot
+// waiting on it - unrelated already-resolved slots are left with the
+// exact same memoized box, not rebuilt.
+func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
+	full := onePixelPNG(t)
+	release := make(chan struct{})
+	source := &countingImageSource{
+		resolved: "b.png",
+		open: func() (io.ReadCloser, error) {
+			// Split after the IHDR chunk (33 bytes: 8-byte signature +
+			// 4+4+13+4 for the chunk itself) so DecodeConfig can reveal
+			// bounds without needing the blocked remainder - same
+			// technique as TestImageCacheHeaderPeekRevealsBoundsEarly.
+			head, rest := full[:33], full[33:]
+			r := io.MultiReader(bytes.NewReader(head), blockingReader{release: release, rest: bytes.NewReader(rest)})
+			return io.NopCloser(r), nil
+		},
+	}
+	cache := NewImageCache(source)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, result := cache.Load("b.png")
+		if result.Status == ImagePending && result.Bounds != (image.Rectangle{}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bounds never revealed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	settledA := NewEmptyBox(100, 10)
+	pendingImg := &ImageBox{bounds: image.Rect(0, 0, 20, 20), pending: []string{"b.png"}}
+	pendingSlot := &LineBox{parts: []InlineLayout{pendingImg}}
+	settledC := NewEmptyBox(100, 10)
+
+	view := &View{
+		ctx:      RenderingContext{ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72)},
+		boxWidth: 100,
+		boxScale: 1,
+		box: &StackBox{slots: []stackSlot{
+			{box: settledA},
+			{box: pendingSlot},
+			{box: settledC},
+		}},
+	}
+	// The bounds-reveal above already happened - mark it seen without
+	// going through Layout/rebuild (this hand-built View has no real
+	// block to rebuild from). This test is about what happens on the
+	// *next* change, once bounds are already known.
+	_, view.imageCacheMark = cache.ChangedSince(0)
+
+	close(release)
+	waitForSettled(t, cache, "b.png")
+
+	view.Layout(100, 1) // same width/scale -> invalidateChangedImages
+	if view.box.slots[0].box != settledA {
+		t.Error("unrelated settled slot 0 was touched")
+	}
+	if view.box.slots[1].box != nil {
+		t.Error("slot 1 (pending on b.png) was not invalidated")
+	}
+	if view.box.slots[2].box != settledC {
+		t.Error("unrelated settled slot 2 was touched")
+	}
+}
+
+// TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed checks
+// that an image with no known size until its fetch fully completes -
+// unlike the placeholder-rect case above - triggers a full rebuild
+// (every slot, not just the image's own) once its bounds are revealed,
+// since a "(loading image…)" text placeholder's height is arbitrary
+// and the real image's may differ, unlike a correctly-pre-sized
+// placeholder rect.
+func TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed(t *testing.T) {
+	full := onePixelPNG(t)
+	release := make(chan struct{})
+	source := &countingImageSource{
+		resolved: "img.png",
+		open: func() (io.ReadCloser, error) {
+			<-release
+			return io.NopCloser(bytes.NewReader(full)), nil
+		},
+	}
+
+	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
+	view := NewView([]byte(doc), NewGoFontFaceSelector(72), WithImageSource(source))
+	view.Layout(300, 1)
+	view.box.Bounds() // force every slot to resolve once, including the image's
+
+	firstSlotBefore := view.box.slots[0].box
+	cursorBefore := view.cursor
+
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if changes, _ := view.ctx.ImageCache.ChangedSince(0); len(changes) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("image never settled")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	view.Layout(300, 1) // same width/scale -> invalidateChangedImages
+	view.box.Bounds()
+
+	if view.box.slots[0].box == firstSlotBefore {
+		t.Error("unrelated slot 0 was not rebuilt - want a full rebuild once bounds were revealed")
+	}
+	if view.cursor != cursorBefore {
+		t.Errorf("cursor = %+v, want unchanged %+v (an unscrolled view's ratio-based reanchor should land back at the same position)", view.cursor, cursorBefore)
 	}
 }

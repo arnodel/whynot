@@ -159,6 +159,11 @@ type DefaultStyleSheet struct {
 	TableMargins       Margins
 	TableFrameColor    color.Color
 
+	// ImagePlaceholderColor is the rect InlineImage.GetInlineLayout draws
+	// in place of an image that's still pending but already knows its
+	// final size.
+	ImagePlaceholderColor color.Color
+
 	// TextColor is the root-level fallback color for tags with no color
 	// of their own. BaseTextStyle is TextStyle's equivalent - unlike the
 	// per-tag PartialTextStyle fields above, it's a plain TextStyle,
@@ -262,6 +267,8 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		TableMargins:       Margins{Top: 10, Bottom: 10},
 		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
+		ImagePlaceholderColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
+
 		TextColor:     color.White,
 		BaseTextStyle: TextStyle{Size: 16},
 
@@ -285,10 +292,11 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 // a light background. Everything but color is identical to
 // NewDarkStyleSheet (margins, sizes, weights, dimensional constants), so
 // it's built from it rather than repeating them: ThematicBreakColor,
-// BlockquoteBarColor, and TableFrameColor are also left as
-// NewDarkStyleSheet's mid-grey, which reads fine against either a light
-// or dark background, unlike TextColor/Background/LinkColor/CodeColor,
-// which need real light-appropriate values.
+// BlockquoteBarColor, TableFrameColor, and ImagePlaceholderColor are
+// also left as NewDarkStyleSheet's mid-grey, which reads fine against
+// either a light or dark background, unlike
+// TextColor/Background/LinkColor/CodeColor, which need real
+// light-appropriate values.
 func NewLightStyleSheet() *DefaultStyleSheet {
 	s := NewDarkStyleSheet()
 	s.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
@@ -389,6 +397,8 @@ func (s *DefaultStyleSheet) BorderColor(node *ASTNode) color.Color {
 		return s.BlockquoteBarColor
 	case TagTable:
 		return s.TableFrameColor
+	case TagImage:
+		return s.ImagePlaceholderColor
 	default:
 		return nil
 	}

@@ -18,6 +18,8 @@ type InlineLayout interface {
 	SpaceWidth() int
 	DrawInline(dst Canvas, x, y int) int
 	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
+	// PendingImages - see BlockLayout's identical method.
+	PendingImages() []string
 }
 
 type TextBox struct {
@@ -28,6 +30,11 @@ type TextBox struct {
 	// StrikeThickness is the strikethrough line's thickness in pixels; 0
 	// means no strikethrough.
 	StrikeThickness int
+
+	// pending is set only when this TextBox is standing in for an image
+	// that hasn't settled yet (InlineImage.GetInlineLayout's "loading"
+	// or fallback text) - nil for every ordinary text box.
+	pending []string
 
 	// source is the InlineText this TextBox was built from - see Source.
 	source Inline
@@ -103,6 +110,10 @@ func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
 	return nil, image.Point{}, x + advance
 }
 
+func (b *TextBox) PendingImages() []string {
+	return b.pending
+}
+
 type ListItemMarkerBox struct {
 	Marker InlineLayout
 }
@@ -147,13 +158,25 @@ func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point, 
 	return nil, image.Point{}, x - space
 }
 
+func (b *ListItemMarkerBox) PendingImages() []string {
+	return b.Marker.PendingImages()
+}
+
 type ImageBox struct {
 	// img is the already-decoded image ImageCache.Load returned -
 	// carried forward from InlineImage.GetInlineLayout so DrawInline
 	// can pass it straight to Canvas.DrawImage, which never fetches or
-	// decodes anything itself.
-	img    image.Image
-	bounds image.Rectangle
+	// decodes anything itself. nil while the image is still pending but
+	// its dimensions are already known - bounds is still the correct,
+	// final (scaled) size, so DrawInline draws a placeholder rect
+	// instead, and nothing needs to reflow once img is filled in later.
+	img              image.Image
+	bounds           image.Rectangle
+	placeholderColor color.Color
+
+	// pending is the one resolved src this box is still waiting on,
+	// while img == nil - see PendingImages.
+	pending []string
 
 	// source is the InlineImage this ImageBox was built from - see Source.
 	source Inline
@@ -178,7 +201,11 @@ func (b *ImageBox) SpaceWidth() int {
 }
 
 func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
-	dst.DrawImage(b.img, x, y, b.bounds.Dx(), b.bounds.Dy())
+	if b.img == nil {
+		dst.DrawRect(x, y, b.bounds.Dx(), b.bounds.Dy(), b.placeholderColor)
+	} else {
+		dst.DrawImage(b.img, x, y, b.bounds.Dx(), b.bounds.Dy())
+	}
 	return x + b.bounds.Dx()
 }
 
@@ -187,6 +214,10 @@ func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
 		return b, image.Pt(x, y), x + b.bounds.Dx()
 	}
 	return nil, image.Point{}, x + b.bounds.Dx()
+}
+
+func (b *ImageBox) PendingImages() []string {
+	return b.pending
 }
 
 func splitBoxes(boxes []InlineLayout, width int) (int, image.Rectangle) {

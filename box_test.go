@@ -430,3 +430,51 @@ func TestStackBoxMoveCursor(t *testing.T) {
 		}
 	}
 }
+
+func TestImageBoxPendingImages(t *testing.T) {
+	ready := &ImageBox{img: image.NewRGBA(image.Rect(0, 0, 1, 1)), bounds: image.Rect(0, 0, 1, 1)}
+	if got := ready.PendingImages(); got != nil {
+		t.Errorf("ready ImageBox.PendingImages() = %v, want nil", got)
+	}
+
+	pending := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
+	if got := pending.PendingImages(); len(got) != 1 || got[0] != "x.png" {
+		t.Errorf("pending ImageBox.PendingImages() = %v, want [x.png]", got)
+	}
+}
+
+// TestLineBoxPendingImagesAggregates checks a composite reports only
+// what's actually still unsettled among its parts, not a blanket
+// "something in here is pending" - a settled TextBox contributes
+// nothing.
+func TestLineBoxPendingImagesAggregates(t *testing.T) {
+	settled := &TextBox{}
+	pending := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
+	line := &LineBox{parts: []InlineLayout{settled, pending}}
+
+	got := line.PendingImages()
+	if len(got) != 1 || got[0] != "x.png" {
+		t.Errorf("PendingImages() = %v, want [x.png]", got)
+	}
+}
+
+// TestStackBoxPendingImagesSkipsUnresolvedSlots checks an unresolved
+// slot (box == nil - never asked for, see boxAt) contributes nothing,
+// rather than forcing it to resolve just to check - View.invalidateChangedImages
+// relies on this to stay cheap: most of a long document's slots are
+// never resolved at all.
+func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
+	settled := &EmptyBox{}
+	pendingImage := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
+	pending := &LineBox{parts: []InlineLayout{pendingImage}} // slots hold BlockLayout, not InlineLayout
+	stack := &StackBox{slots: []stackSlot{
+		{box: settled},
+		{box: pending},
+		{block: &sourceBlock{}}, // unresolved: box is nil
+	}}
+
+	got := stack.PendingImages()
+	if len(got) != 1 || got[0] != "x.png" {
+		t.Errorf("PendingImages() = %v, want [x.png] (unresolved slot skipped)", got)
+	}
+}
