@@ -214,6 +214,10 @@ relative one is:
 
 ![a test image fetched over https](https://httpbin.org/image/jpeg)
 
+An animated GIF:
+
+![an animated gif](homer_animated_gif.gif)
+
 ## Unsupported content
 
 Markdown constructs whynot doesn't understand don't crash the whole

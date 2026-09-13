@@ -101,6 +101,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
 	case ImageReady:
 		return &ImageBox{
 			img:    result.Image,
+			anim:   result.Animation,
 			bounds: scaleRect(result.Bounds, ctx.Scale),
 			source: i,
 		}

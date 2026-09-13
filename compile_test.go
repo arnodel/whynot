@@ -880,6 +880,36 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 	}
 }
 
+// TestImageGetInlineLayoutAnimated checks that an animated GIF src
+// produces an ImageBox with anim set (not img), with bounds scaled
+// from the animation's own (shared, per-frame) size.
+func TestImageGetInlineLayoutAnimated(t *testing.T) {
+	img := &InlineImage{src: "testdata/animated.gif"} // 64x64
+	ctx := RenderingContext{
+		Scale:        2,
+		ImageCache:   NewImageCache(FileImageSource{}),
+		FaceSelector: NewGoFontFaceSelector(72),
+		StyleSheet:   NewDarkStyleSheet(),
+	}
+	img.GetInlineLayout(ctx)
+	waitForSettled(t, ctx.ImageCache, img.src)
+
+	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	if !ok {
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+	}
+	if box.anim == nil {
+		t.Fatal("anim = nil, want the decoded AnimatedImage")
+	}
+	if box.img != nil {
+		t.Errorf("img = %v, want nil for an animated GIF", box.img)
+	}
+	want := image.Rect(0, 0, 128, 128) // 64x64 native * scale 2
+	if box.bounds != want {
+		t.Errorf("bounds = %v, want %v", box.bounds, want)
+	}
+}
+
 // TestParseResolvesEntitiesAndEscapes checks the v2 migration's behavior
 // change noted in the migration plan: text values are resolved (entity
 // references and backslash escapes decoded), unlike v1's raw Text().

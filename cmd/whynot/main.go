@@ -106,6 +106,7 @@ func main() {
 		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
 		zoom:                1,
+		start:               time.Now(),
 	}
 	game.current = document{location: location, view: game.newView(source, location)}
 	game.updateWindowTitle()
@@ -368,6 +369,17 @@ type game struct {
 	zoomInState, zoomOutState               buttonState
 	themeButton                             image.Rectangle
 	themeState                              buttonState
+
+	// start is when the game began, for whynot.RenderingContext.Time
+	// (elapsed time since rendering started - what an animated GIF's
+	// current frame is picked from). Only ever compared to itself via
+	// elapsed(), never to a wall-clock timestamp.
+	start time.Time
+}
+
+// elapsed is how long the game has been running - see start.
+func (g *game) elapsed() time.Duration {
+	return time.Since(g.start)
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its
@@ -572,7 +584,7 @@ func (g *game) follow(dest string) {
 		return
 	}
 	view := g.newView(source, resolved)
-	view.Layout(g.width, g.scale)
+	view.Layout(g.width, g.scale, g.elapsed())
 	if resolved.Fragment != "" {
 		view.ScrollToAnchor(resolved.Fragment)
 	}
@@ -641,7 +653,7 @@ func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 	})
 	entry.view.RestoreScrollPosition(entry.scroll)
 	entry.view.SetStyleSheet(g.styleSheet)
-	entry.view.Layout(g.width, g.scale)
+	entry.view.Layout(g.width, g.scale, g.elapsed())
 	g.current = entry.document
 	g.updateWindowTitle()
 }
@@ -658,7 +670,7 @@ func (g *game) reload() {
 	}
 	scroll := g.current.view.ScrollPosition()
 	view := g.newView(source, g.current.location)
-	view.Layout(g.width, g.scale)
+	view.Layout(g.width, g.scale, g.elapsed())
 	view.RestoreScrollPosition(scroll)
 	g.current.view = view
 	g.updateWindowTitle()
@@ -696,7 +708,7 @@ func (g *game) paste() {
 		return
 	}
 	view := g.newView(source, resolved)
-	view.Layout(g.width, g.scale)
+	view.Layout(g.width, g.scale, g.elapsed())
 	g.pushHistory()
 	g.current = document{location: resolved, view: view}
 	g.updateWindowTitle()
@@ -956,7 +968,7 @@ func (g *game) relayout() {
 	g.height = int(float64(g.outsideHeight) * g.deviceScale)
 	g.toolbarFaceSelector.SetDPI(g.deviceScale * 72)
 	g.layoutToolbar()
-	g.current.view.Layout(g.width, g.scale)
+	g.current.view.Layout(g.width, g.scale, g.elapsed())
 }
 
 // zoomStep is a fixed step of the original (100%) size, not of the

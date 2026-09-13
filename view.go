@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"strings"
+	"time"
 )
 
 // View renders a parsed Markdown document onto a Canvas. It owns the
@@ -199,7 +200,7 @@ func (v *View) Draw(dst Canvas, x, y int) {
 	if v.box == nil {
 		return
 	}
-	v.box.DrawFrom(dst, v.cursor, x+int(v.ctx.ScaledViewMargins().Left), y)
+	v.box.DrawFrom(dst, v.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
 }
 
 // HitTest identifies what's at document position (x, y) - the same
@@ -296,11 +297,16 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
-// * 72, matching main.go's convention). Cheap to call every frame: the
+// * 72, matching main.go's convention), and now - elapsed time since
+// rendering started, the embedder's own reference point (see
+// RenderingContext.Time) - which it stores unconditionally, even when
+// nothing else changed, since an animated image needs fresh time every
+// call to actually animate. Cheap to call every frame otherwise: the
 // layout tree only rebuilds when width or scale actually change.
-func (v *View) Layout(width int, scale float64) {
+func (v *View) Layout(width int, scale float64, now time.Duration) {
 	v.ctx.SetDPI(scale * 72)
 	v.ctx.Scale = scale
+	v.ctx.Time = now
 
 	if width == v.boxWidth && scale == v.boxScale {
 		v.invalidateChangedImages()

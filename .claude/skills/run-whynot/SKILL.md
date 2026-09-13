@@ -137,7 +137,12 @@ go test ./...
   (a goroutine started independently of the guest's Update/Draw calls) eventually completes and
   repaints - it may never appear to, regardless of real elapsed time or tick count. Verify that kind
   of behavior with normal Go tests (real goroutines, no vmhost) instead, and treat this driver as
-  good for input-driven, synchronous-per-tick behavior only.
+  good for input-driven, synchronous-per-tick behavior only. Reconfirmed on an unrelated later feature
+  (animated GIF playback, which also needs a background fetch to complete before there's anything to
+  show): same symptom, same `-settle-delay 1s` non-fix, on a `os.Open` of a local file with the exact
+  same content the guest already loads successfully elsewhere in the same document once no longer
+  gated behind a fresh async fetch. Treat this as a confirmed, general limitation of the driver, not
+  something to keep re-diagnosing per feature.
 
 ## Troubleshooting
 

@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"image/color"
+	"time"
 )
 
 type RenderingContext struct {
@@ -19,6 +20,15 @@ type RenderingContext struct {
 	// to NewImageCache(FileImageSource{}) (NewView), overridable via
 	// WithImageSource.
 	ImageCache *ImageCache
+
+	// Time is elapsed time since the embedder started rendering (its
+	// own reference point - only ever used relative to itself, never
+	// compared against a wall-clock timestamp), set every View.Layout
+	// call. The one consumer today is AnimatedImage.CurrentFrame,
+	// reached via DrawInline - kept here rather than read from a direct
+	// time.Now() call so frame selection stays a pure, deterministic
+	// function of its inputs, easy to test without any real waiting.
+	Time time.Duration
 }
 
 // The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -

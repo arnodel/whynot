@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"time"
 
 	"golang.org/x/image/font"
 )
@@ -16,7 +17,8 @@ type InlineLayout interface {
 	Bounds() image.Rectangle
 	Source() Source
 	SpaceWidth() int
-	DrawInline(dst Canvas, x, y int) int
+	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
+	DrawInline(dst Canvas, x, y int, now time.Duration) int
 	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
 	// PendingImages - see BlockLayout's identical method.
 	PendingImages() []string
@@ -87,7 +89,7 @@ func (b *TextBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
-func (b *TextBox) DrawInline(dst Canvas, x, y int) int {
+func (b *TextBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 	_, advance := b.BoundsAndAdvance()
 	dst.DrawText(b.Text, b.Face, x, y, b.Color)
 	if b.StrikeThickness > 0 {
@@ -138,10 +140,10 @@ func (b *ListItemMarkerBox) SpaceWidth() int {
 	return b.Marker.SpaceWidth()
 }
 
-func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int) int {
+func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 	_, advance := b.Marker.BoundsAndAdvance()
 	space := b.Marker.SpaceWidth()
-	b.Marker.DrawInline(dst, x-advance-space, y)
+	b.Marker.DrawInline(dst, x-advance-space, y, now)
 	return x - space
 }
 
@@ -170,7 +172,10 @@ type ImageBox struct {
 	// its dimensions are already known - bounds is still the correct,
 	// final (scaled) size, so DrawInline draws a placeholder rect
 	// instead, and nothing needs to reflow once img is filled in later.
+	// anim is set instead of img for an animated GIF - exactly one of
+	// the two is non-nil on a settled ImageBox.
 	img              image.Image
+	anim             *AnimatedImage
 	bounds           image.Rectangle
 	placeholderColor color.Color
 
@@ -200,11 +205,14 @@ func (b *ImageBox) SpaceWidth() int {
 	return 0
 }
 
-func (b *ImageBox) DrawInline(dst Canvas, x, y int) int {
-	if b.img == nil {
-		dst.DrawRect(x, y, b.bounds.Dx(), b.bounds.Dy(), b.placeholderColor)
-	} else {
+func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
+	switch {
+	case b.anim != nil:
+		dst.DrawImage(b.anim.CurrentFrame(now), x, y, b.bounds.Dx(), b.bounds.Dy())
+	case b.img != nil:
 		dst.DrawImage(b.img, x, y, b.bounds.Dx(), b.bounds.Dy())
+	default:
+		dst.DrawRect(x, y, b.bounds.Dx(), b.bounds.Dy(), b.placeholderColor)
 	}
 	return x + b.bounds.Dx()
 }

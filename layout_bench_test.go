@@ -100,11 +100,11 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 
@@ -141,11 +141,11 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, offsetY) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 
@@ -179,11 +179,11 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	totalHeight := box.Bounds().Dy()
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, totalHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, 0) // warm caches
+	whynot.DrawBlockLayout(box, dst, 0, 0, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, 0)
+		whynot.DrawBlockLayout(box, dst, 0, 0, 0)
 	}
 }
 
@@ -233,7 +233,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		box := rawBlock.GetBlockLayout(ctx, width) // fresh tree: cold CodeBlock caches
 		b.StartTimer()
 
-		whynot.DrawBlockLayout(box, dst, 0, offsetY)
+		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 

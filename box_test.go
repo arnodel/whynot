@@ -2,7 +2,9 @@ package whynot
 
 import (
 	"image"
+	"image/color"
 	"testing"
+	"time"
 )
 
 // sourceBlock is a minimal Block for HitTest tests that just need a
@@ -476,5 +478,34 @@ func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 	got := stack.PendingImages()
 	if len(got) != 1 || got[0] != "x.png" {
 		t.Errorf("PendingImages() = %v, want [x.png] (unresolved slot skipped)", got)
+	}
+}
+
+// TestImageBoxDrawInlineAnimated checks that drawing an ImageBox with
+// anim set actually consults now, not just whatever frame the
+// animation happened to start on - the whole point of threading now
+// through DrawInline instead of picking a frame once at layout time.
+func TestImageBoxDrawInlineAnimated(t *testing.T) {
+	f0 := image.NewUniform(color.Black)
+	f1 := image.NewUniform(color.White)
+	anim := &AnimatedImage{
+		frames: []image.Image{f0, f1},
+		delays: []time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
+		total:  20 * time.Millisecond,
+	}
+	box := &ImageBox{anim: anim, bounds: image.Rect(0, 0, 4, 4)}
+	dst := &recordingCanvas{}
+
+	box.DrawInline(dst, 0, 0, 0)
+	box.DrawInline(dst, 0, 0, 15*time.Millisecond)
+
+	if len(dst.images) != 2 {
+		t.Fatalf("got %d DrawImage calls, want 2", len(dst.images))
+	}
+	if dst.images[0] != f0 {
+		t.Errorf("frame at now=0 = %v, want f0", dst.images[0])
+	}
+	if dst.images[1] != f1 {
+		t.Errorf("frame at now=15ms = %v, want f1", dst.images[1])
 	}
 }

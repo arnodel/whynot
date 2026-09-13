@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
 	"image/png"
 	"io"
 	"testing"
@@ -279,6 +281,57 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 	}
 	if source.openCalls != 2 {
 		t.Errorf("openCalls = %d, want 2 (one per distinct resolved src)", source.openCalls)
+	}
+}
+
+// twoFrameGIF returns the encoded bytes of a minimal 2-frame animated
+// GIF, for tests that just need "a real animated GIF", not specific
+// pixel content (see animated_image_test.go for compositing
+// correctness).
+func twoFrameGIF(t *testing.T) []byte {
+	t.Helper()
+	palette := color.Palette{color.Black, color.White}
+	frame := func(c uint8) *image.Paletted {
+		p := image.NewPaletted(image.Rect(0, 0, 2, 2), palette)
+		for i := range p.Pix {
+			p.Pix[i] = c
+		}
+		return p
+	}
+	g := &gif.GIF{
+		Image:  []*image.Paletted{frame(0), frame(1)},
+		Delay:  []int{5, 5},
+		Config: image.Config{ColorModel: palette, Width: 2, Height: 2},
+	}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, g); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestImageCacheDecodesAnimatedGIF checks that a GIF source produces
+// an ImageResult with Animation set (not Image) - ImageCache picks the
+// decode path by the format name image.DecodeConfig already reports.
+func TestImageCacheDecodesAnimatedGIF(t *testing.T) {
+	source := &countingImageSource{resolved: "resolved.gif", data: twoFrameGIF(t)}
+	cache := NewImageCache(source)
+
+	result := waitForSettled(t, cache, "src.gif")
+	if result.Status != ImageReady {
+		t.Fatalf("status = %v, want ImageReady", result.Status)
+	}
+	if result.Image != nil {
+		t.Errorf("Image = %v, want nil for an animated GIF", result.Image)
+	}
+	if result.Animation == nil {
+		t.Fatal("Animation = nil, want a decoded AnimatedImage")
+	}
+	if len(result.Animation.frames) != 2 {
+		t.Errorf("got %d frames, want 2", len(result.Animation.frames))
+	}
+	if result.Bounds != image.Rect(0, 0, 2, 2) {
+		t.Errorf("Bounds = %v, want (0,0)-(2,2)", result.Bounds)
 	}
 }
 

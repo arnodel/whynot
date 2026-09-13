@@ -3,7 +3,6 @@ package whynot
 import (
 	"bytes"
 	"image"
-	_ "image/gif"  // registers the GIF format with image.Decode
 	_ "image/jpeg" // registers the JPEG format with image.Decode
 	_ "image/png"  // registers the PNG format with image.Decode
 	"io"
@@ -69,8 +68,13 @@ type ImageResult struct {
 	// still ImagePending (see ImageCache's header-peek). Zero while
 	// genuinely unknown.
 	Bounds image.Rectangle
-	// Image is the decoded image - valid only when Status == ImageReady.
+	// Image is the decoded image - valid only when Status == ImageReady
+	// and this isn't an animated GIF (Animation is set instead; exactly
+	// one of the two is set on a ready result).
 	Image image.Image
+	// Animation is set instead of Image when the decoded image is an
+	// animated GIF - see AnimatedImage.
+	Animation *AnimatedImage
 	// Err says why the most recent attempt failed - valid only when
 	// Status == ImageFailed.
 	Err error
@@ -124,6 +128,7 @@ type imageCacheEntry struct {
 	status ImageStatus
 	bounds image.Rectangle
 	img    image.Image
+	anim   *AnimatedImage
 	err    error
 
 	lastAttempt time.Time
@@ -161,7 +166,7 @@ func (c *ImageCache) Load(src string) (resolved string, result ImageResult) {
 		entry = &imageCacheEntry{status: ImagePending, lastAttempt: time.Now()}
 		c.cache[resolved] = entry
 	}
-	result = ImageResult{Status: entry.status, Bounds: entry.bounds, Image: entry.img, Err: entry.err}
+	result = ImageResult{Status: entry.status, Bounds: entry.bounds, Image: entry.img, Animation: entry.anim, Err: entry.err}
 	c.mu.Unlock()
 
 	if start {
@@ -198,27 +203,40 @@ func (c *ImageCache) ChangedSince(mark uint64) (changed []ImageChange, newMark u
 // the fetch/decode completes. The full decode then continues from
 // exactly where the header-peek left off (header's buffered bytes,
 // then whatever's left of rc), so nothing is re-fetched or re-read
-// from the start.
+// from the start. A GIF (DecodeConfig's own format name, already read
+// to get here) decodes every frame via decodeAnimatedGIF instead of
+// image.Decode's single-frame result.
 func (c *ImageCache) fetchAndDecode(resolved string) {
 	rc, err := c.source.Open(resolved)
 	if err != nil {
-		c.setResult(resolved, ImageFailed, nil, err)
+		c.setFailed(resolved, err)
 		return
 	}
 	defer rc.Close()
 
 	var header bytes.Buffer
-	if cfg, _, cfgErr := image.DecodeConfig(io.TeeReader(rc, &header)); cfgErr == nil {
+	format := ""
+	if cfg, fmt, cfgErr := image.DecodeConfig(io.TeeReader(rc, &header)); cfgErr == nil {
+		format = fmt
 		c.setBounds(resolved, image.Rectangle{Max: image.Pt(cfg.Width, cfg.Height)})
 	}
 
 	full := io.MultiReader(bytes.NewReader(header.Bytes()), rc)
-	img, _, decErr := image.Decode(full)
-	if decErr != nil {
-		c.setResult(resolved, ImageFailed, nil, decErr)
+	if format == "gif" {
+		anim, decErr := decodeAnimatedGIF(full)
+		if decErr != nil {
+			c.setFailed(resolved, decErr)
+			return
+		}
+		c.setReady(resolved, nil, anim)
 		return
 	}
-	c.setResult(resolved, ImageReady, img, nil)
+	img, _, decErr := image.Decode(full)
+	if decErr != nil {
+		c.setFailed(resolved, decErr)
+		return
+	}
+	c.setReady(resolved, img, nil)
 }
 
 func (c *ImageCache) setBounds(resolved string, bounds image.Rectangle) {
@@ -233,7 +251,9 @@ func (c *ImageCache) setBounds(resolved string, bounds image.Rectangle) {
 	c.recordBoundsLocked(entry, bounds)
 }
 
-func (c *ImageCache) setResult(resolved string, status ImageStatus, img image.Image, err error) {
+// setReady stores a decoded result - exactly one of img/anim is
+// non-nil, matching ImageResult's own Image/Animation split.
+func (c *ImageCache) setReady(resolved string, img image.Image, anim *AnimatedImage) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry := c.cache[resolved]
@@ -242,12 +262,31 @@ func (c *ImageCache) setResult(resolved string, status ImageStatus, img image.Im
 	}
 	c.version++
 	entry.changedAt = c.version
-	entry.status = status
+	entry.status = ImageReady
 	entry.img = img
-	entry.err = err
-	if img != nil {
+	entry.anim = anim
+	entry.err = nil
+	switch {
+	case img != nil:
 		c.recordBoundsLocked(entry, img.Bounds())
+	case anim != nil:
+		c.recordBoundsLocked(entry, anim.Bounds())
 	}
+}
+
+func (c *ImageCache) setFailed(resolved string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry := c.cache[resolved]
+	if entry == nil {
+		return
+	}
+	c.version++
+	entry.changedAt = c.version
+	entry.status = ImageFailed
+	entry.img = nil
+	entry.anim = nil
+	entry.err = err
 }
 
 // recordBoundsLocked sets entry.bounds, and - the first time it

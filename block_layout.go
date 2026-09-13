@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"time"
 )
 
 // Hit is what HitTest returns for an actual match: something that can
@@ -30,7 +31,11 @@ type Hit interface {
 type BlockLayout interface {
 	Bounds() image.Rectangle
 	Source() Source
-	drawContents(dst Canvas, x, y int)
+	// drawContents' now is elapsed time since rendering started
+	// (RenderingContext.Time) - unused by most implementations, read
+	// only by whatever ends up drawing an animated image (see
+	// ImageBox.DrawInline via InlineLayout).
+	drawContents(dst Canvas, x, y int, now time.Duration)
 	HitTest(p image.Point) (hit Hit, offset image.Point)
 	// PendingImages returns the resolved image srcs this box - or
 	// anything nested inside it - is still waiting to settle (still
@@ -48,11 +53,11 @@ type BlockLayout interface {
 // DrawBlockLayout is the sole entry point for drawing a BlockLayout: it skips drawContents
 // entirely when box's bounds don't overlap dst, so every BlockLayout gets that for
 // free regardless of who's calling it or where it sits in the tree.
-func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int) {
+func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int, now time.Duration) {
 	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
 		return
 	}
-	box.drawContents(dst, x, y)
+	box.drawContents(dst, x, y, now)
 }
 
 type LineBox struct {
@@ -160,7 +165,7 @@ func (b *LineBox) PendingImages() []string {
 	return pending
 }
 
-func (b *LineBox) drawContents(dst Canvas, x, y int) {
+func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	lineBounds, _ := b.BoundsAndAdvance()
 	y -= lineBounds.Min.Y
 
@@ -171,10 +176,10 @@ func (b *LineBox) drawContents(dst Canvas, x, y int) {
 	}
 	prevSpace := b.parts[0].SpaceWidth()
 
-	x = b.parts[0].DrawInline(dst, x, y)
+	x = b.parts[0].DrawInline(dst, x, y, now)
 	for _, box := range b.parts[1:] {
 		space := box.SpaceWidth()
-		x = box.DrawInline(dst, x+maxInt(prevSpace, space), y)
+		x = box.DrawInline(dst, x+maxInt(prevSpace, space), y, now)
 		prevSpace = space
 	}
 }
@@ -387,7 +392,7 @@ func (b *StackBox) moveCursor(c stackCursor, dy float64) stackCursor {
 	return b.normalizeCursor(stackCursor{index: c.index, offset: c.offset + dy})
 }
 
-func (b *StackBox) drawContents(dst Canvas, x, y int) {
+func (b *StackBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	viewport := dst.Bounds()
 	for i := range b.slots {
 		box := b.boxAt(i)
@@ -397,7 +402,7 @@ func (b *StackBox) drawContents(dst Canvas, x, y int) {
 			// viewport: nothing further down can be visible.
 			break
 		}
-		DrawBlockLayout(box, dst, x, y)
+		DrawBlockLayout(box, dst, x, y, now)
 		y += childBounds.Max.Y
 	}
 }
@@ -406,7 +411,7 @@ func (b *StackBox) drawContents(dst Canvas, x, y int) {
 // dst - unlike DrawBlockLayout, it never calls Bounds() on the whole tree first,
 // and never resolves or draws slots before c.index. Intended for View to
 // call at the scroll cursor.
-func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int) {
+func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int, now time.Duration) {
 	if c.index < 0 || c.index >= len(b.slots) {
 		return
 	}
@@ -418,7 +423,7 @@ func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int) {
 		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
 			break
 		}
-		DrawBlockLayout(box, dst, x, y)
+		DrawBlockLayout(box, dst, x, y, now)
 		y += childBounds.Max.Y
 	}
 }
@@ -447,7 +452,7 @@ func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
 	return nil, image.Point{}
 }
 
-func (b *EmptyBox) drawContents(dst Canvas, x, y int) {
+func (b *EmptyBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 }
 
 func (b *EmptyBox) PendingImages() []string {
@@ -495,8 +500,8 @@ func (b *ContainerBox) HitTest(p image.Point) (Hit, image.Point) {
 	return hit, offset.Add(b.innerPos)
 }
 
-func (b *ContainerBox) drawContents(dst Canvas, x, y int) {
-	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y)
+func (b *ContainerBox) drawContents(dst Canvas, x, y int, now time.Duration) {
+	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y, now)
 }
 
 func (b *ContainerBox) PendingImages() []string {
@@ -527,9 +532,9 @@ func (b *BlockquoteBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.width, b.inner.Bounds().Dy())
 }
 
-func (b *BlockquoteBox) drawContents(dst Canvas, x, y int) {
+func (b *BlockquoteBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	dst.DrawRect(x, y, b.barWidth, b.inner.Bounds().Dy(), b.barColor)
-	DrawBlockLayout(b.inner, dst, x+b.indent, y)
+	DrawBlockLayout(b.inner, dst, x+b.indent, y, now)
 }
 
 func (b *BlockquoteBox) PendingImages() []string {
@@ -586,7 +591,7 @@ func (b *TableBox) Bounds() image.Rectangle {
 	)
 }
 
-func (b *TableBox) drawContents(dst Canvas, x, y int) {
+func (b *TableBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	width := b.columnOffsets[len(b.columnOffsets)-1]
 	height := b.rowOffsets[len(b.rowOffsets)-1]
 
@@ -613,7 +618,7 @@ func (b *TableBox) drawContents(dst Canvas, x, y int) {
 
 	for row := range b.cells {
 		for col := range b.cells[row] {
-			DrawBlockLayout(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row])
+			DrawBlockLayout(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row], now)
 		}
 	}
 }
@@ -681,7 +686,7 @@ func (b *RuleBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.width, b.thickness)
 }
 
-func (b *RuleBox) drawContents(dst Canvas, x, y int) {
+func (b *RuleBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	dst.DrawRect(x, y, b.width, b.thickness, b.color)
 }
 
