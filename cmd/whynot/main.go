@@ -99,18 +99,15 @@ func main() {
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := whynot.NewGoFontFaceSelector(72 * scale)
 	game := &game{
-		current: document{
-			location: location,
-			view:     whynot.NewView(source, faceSelector, whynot.WithStyleSheet(styleSheet)),
-		},
 		faceSelector:        faceSelector,
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
 		styleSheet:          styleSheet,
 		darkTheme:           !*light,
-		renderer:            ebitenrenderer.New(),
+		renderer:            ebitenrenderer.New(ebitenrenderer.WithImageOpener(openImageBytes)),
 		debugHit:            *debugHit,
 		zoom:                1,
 	}
+	game.current = document{location: location, view: game.newView(source, location)}
 	game.updateWindowTitle()
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
@@ -181,6 +178,73 @@ func loadDocument(location *url.URL) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unsupported link scheme %q", location.Scheme)
 	}
+}
+
+// openImageLocation fetches the bytes at location - the same file-or-
+// http(s) rule loadDocument uses, minus the Content-Type check: an
+// image's Content-Type varies far more widely (image/png, image/jpeg,
+// image/gif, ...) than Markdown/plain-text's narrow set, so there's
+// nothing useful to gate on here.
+func openImageLocation(location *url.URL) (io.ReadCloser, error) {
+	switch location.Scheme {
+	case "http", "https":
+		client := http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(location.String())
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("%s: %s", location, resp.Status)
+		}
+		return resp.Body, nil
+	case "file", "":
+		return os.Open(location.Path)
+	default:
+		return nil, fmt.Errorf("unsupported image scheme %q", location.Scheme)
+	}
+}
+
+// openImageBytes adapts openImageLocation for ebitenrenderer's
+// WithImageOpener: by the time Canvas.DrawImage runs, src is already
+// the resolved absolute path/URL docImageLoader produced, so this only
+// needs to fetch, not resolve.
+func openImageBytes(src string) (io.ReadCloser, error) {
+	location, err := url.Parse(src)
+	if err != nil {
+		return nil, err
+	}
+	return openImageLocation(location)
+}
+
+// resolveAgainst resolves ref against base, the way a relative link or
+// image src in a document is meant to be interpreted - relative to
+// wherever the document itself came from, whether that's a local file
+// or an http(s) URL.
+func resolveAgainst(base *url.URL, ref string) (*url.URL, error) {
+	target, err := url.Parse(ref)
+	if err != nil {
+		return nil, err
+	}
+	return base.ResolveReference(target), nil
+}
+
+// docImageLoader implements whynot.ImageLoader by resolving an image's
+// src against base (a document's own location) exactly the way
+// (*game).resolveLink resolves a link's href, then fetching it the same
+// way loadDocument does - so a relative or http(s) image works
+// regardless of where its document came from.
+type docImageLoader struct {
+	base *url.URL
+}
+
+func (l docImageLoader) Open(src string) (string, io.ReadCloser, error) {
+	resolved, err := resolveAgainst(l.base, src)
+	if err != nil {
+		return src, nil, err
+	}
+	rc, err := openImageLocation(resolved)
+	return resolved.String(), rc, err
 }
 
 // readClipboard returns the clipboard's current text content, via each
@@ -460,11 +524,19 @@ func (g *game) updateWindowTitle() {
 // (in the address bar, since dest alone is just the literal Markdown
 // destination text) and to navigate there on click.
 func (g *game) resolveLink(dest string) (*url.URL, error) {
-	target, err := url.Parse(dest)
-	if err != nil {
-		return nil, err
-	}
-	return g.current.location.ResolveReference(target), nil
+	return resolveAgainst(g.current.location, dest)
+}
+
+// newView builds a View for source, loaded from location - bundling
+// the options every call site needs together: the current StyleSheet,
+// and an ImageLoader that resolves an image's src against location the
+// same way resolveLink resolves a link's href, so a relative or
+// http(s) image works regardless of where its document came from.
+func (g *game) newView(source []byte, location *url.URL) *whynot.View {
+	return whynot.NewView(source, g.faceSelector,
+		whynot.WithStyleSheet(g.styleSheet),
+		whynot.WithImageLoader(docImageLoader{base: location}),
+	)
 }
 
 // follow resolves dest against the current document's own location -
@@ -500,7 +572,7 @@ func (g *game) follow(dest string) {
 		log.Printf("loading %s: %v", resolved, err)
 		return
 	}
-	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	view := g.newView(source, resolved)
 	view.Layout(g.width, g.scale)
 	if resolved.Fragment != "" {
 		view.ScrollToAnchor(resolved.Fragment)
@@ -586,7 +658,7 @@ func (g *game) reload() {
 		return
 	}
 	scroll := g.current.view.ScrollPosition()
-	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	view := g.newView(source, g.current.location)
 	view.Layout(g.width, g.scale)
 	view.RestoreScrollPosition(scroll)
 	g.current.view = view
@@ -624,7 +696,7 @@ func (g *game) paste() {
 		log.Printf("loading %s: %v", resolved, err)
 		return
 	}
-	view := whynot.NewView(source, g.faceSelector, whynot.WithStyleSheet(g.styleSheet))
+	view := g.newView(source, resolved)
 	view.Layout(g.width, g.scale)
 	g.pushHistory()
 	g.current = document{location: resolved, view: view}
