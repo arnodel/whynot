@@ -29,7 +29,7 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
-//go:embed arrow_back.png arrow_forward.png refresh.png
+//go:embed arrow_back.png arrow_forward.png refresh.png add.png remove.png
 var iconFS embed.FS
 
 // icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
@@ -47,14 +47,21 @@ func icon(name string) *ebiten.Image {
 	return ebiten.NewImageFromImage(img)
 }
 
-// backIcon/forwardIcon/reloadIcon are the toolbar buttons' icons -
-// light, mostly-white silhouettes on a transparent background, so
-// drawIcon can tint them to match a button's current state the same
-// way drawButton already tints its border/fill.
+// backIcon/forwardIcon/reloadIcon/zoomInIcon/zoomOutIcon are the
+// toolbar buttons' icons - light, mostly-white silhouettes on a
+// transparent background, so drawIcon can tint them to match a
+// button's current state the same way drawButton already tints its
+// border/fill. Zoom uses plain +/- (add.png/remove.png), not the
+// magnifying-glass-with-+/- alternative also on hand: two of those
+// side by side read as busier than two plain marks, for no extra
+// clarity - a plain +/- pair is already the established convention
+// for zoom controls elsewhere (e.g. Google Maps).
 var (
 	backIcon    = icon("arrow_back.png")
 	forwardIcon = icon("arrow_forward.png")
 	reloadIcon  = icon("refresh.png")
+	zoomInIcon  = icon("add.png")
+	zoomOutIcon = icon("remove.png")
 )
 
 func main() {
@@ -274,10 +281,14 @@ type game struct {
 	// toolbarHeight and the button rectangles are recomputed by
 	// layoutToolbar whenever Layout runs - the document itself is drawn
 	// below toolbarHeight, so this is also the y-offset HitTest/Hover
-	// need subtracted from the raw cursor position.
+	// need subtracted from the raw cursor position. zoomIn/zoomOut sit
+	// on the toolbar's right edge, apart from back/forward/reload on
+	// the left - they're not navigation.
 	toolbarHeight                           int
 	backButton, forwardButton, reloadButton image.Rectangle
 	backState, forwardState, reloadState    buttonState
+	zoomInButton, zoomOutButton             image.Rectangle
+	zoomInState, zoomOutState               buttonState
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its
@@ -316,6 +327,8 @@ func (g *game) Update() error {
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: mouseDown && cursor.In(g.backButton)}
 	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: mouseDown && cursor.In(g.forwardButton)}
 	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: mouseDown && cursor.In(g.reloadButton)}
+	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: mouseDown && cursor.In(g.zoomInButton)}
+	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: mouseDown && cursor.In(g.zoomOutButton)}
 
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	switch {
@@ -327,6 +340,10 @@ func (g *game) Update() error {
 		g.forward()
 	case clicked && g.reloadState.hover:
 		g.reload()
+	case clicked && g.zoomInState.hover:
+		g.setZoom(g.zoom + zoomStep)
+	case clicked && g.zoomOutState.hover:
+		g.setZoom(g.zoom - zoomStep)
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
@@ -357,10 +374,6 @@ func (g *game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
 		g.paste()
 	}
-	// A fixed step of the original (100%) size, not of the current
-	// zoom - so it's 100%, 110%, 120%, ... rather than steps shrinking
-	// as you zoom out or growing as you zoom in.
-	const zoomStep = 0.1
 	switch {
 	case keyRepeat(ebiten.KeyEqual):
 		g.setZoom(g.zoom + zoomStep)
@@ -618,6 +631,8 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	drawButton(dst, canvas, backIcon, g.backButton, len(g.history) > 0, g.backState)
 	drawButton(dst, canvas, forwardIcon, g.forwardButton, len(g.future) > 0, g.forwardState)
 	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
+	drawButton(dst, canvas, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
+	drawButton(dst, canvas, zoomInIcon, g.zoomInButton, true, g.zoomInState)
 
 	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
 	if err != nil {
@@ -757,6 +772,21 @@ func (g *game) layoutToolbar() {
 	g.backButton = nextButton()
 	g.forwardButton = nextButton()
 	g.reloadButton = nextButton()
+
+	// zoomOut/zoomIn sit on the toolbar's right edge instead, grouped
+	// apart from back/forward/reload since they're not navigation.
+	// nextButtonFromRight fills from the right edge inward, so calling
+	// it for zoomIn first puts + at the very corner and - just to its
+	// left, reading left-to-right as "- +" (matching e.g. Chrome's own
+	// "- 100% +" zoom control).
+	right := g.width - pad
+	nextButtonFromRight := func() image.Rectangle {
+		r := image.Rect(right-btn, pad, right, pad+btn)
+		right = r.Min.X - pad
+		return r
+	}
+	g.zoomInButton = nextButtonFromRight()
+	g.zoomOutButton = nextButtonFromRight()
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -782,6 +812,12 @@ func (g *game) relayout() {
 	g.layoutToolbar()
 	g.current.view.Layout(g.width, g.scale)
 }
+
+// zoomStep is a fixed step of the original (100%) size, not of the
+// current zoom - so +/- (keyboard or button) goes 100%, 110%, 120%,
+// ... rather than steps shrinking as you zoom out or growing as you
+// zoom in.
+const zoomStep = 0.1
 
 // setZoom changes the zoom level (1.0 = 100%), clamped to a sane
 // range, and re-lays-out immediately at the new scale - the same idea
