@@ -196,8 +196,8 @@ every frame regardless of whether width/scale actually changed (`now`,
 elapsed time since the embedder started rendering, needs to keep
 advancing for animated images even when nothing else did — see "Image
 loading" below; the layout tree itself still only rebuilds when width
-or scale change). `cmd/whynot`'s `main.go` is the minimal example of
-wiring this up.
+or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
+example of wiring this up.
 
 ## Image loading
 
@@ -312,7 +312,7 @@ callers only query points already within their own rendered viewport.
 
 `cmd/whynot` can outline whatever's under the mouse each frame, via
 `HitTest`, gated behind the `-debug-hit` flag (off by default) - see
-`game.Draw` in [cmd/whynot/main.go](cmd/whynot/main.go).
+`game.Draw` in [cmd/whynot/draw.go](cmd/whynot/draw.go).
 
 ## Graceful degradation for unsupported Markdown
 

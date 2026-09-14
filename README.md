@@ -86,8 +86,8 @@ func main() {
 }
 ```
 
-`cmd/whynot/main.go` is the fuller version of this, handling display scale
-too.
+[`cmd/whynot`](cmd/whynot) is the fuller version of this, handling display
+scale too.
 
 ## Styling
 
@@ -147,7 +147,7 @@ None of the link-following/history logic lives in the library itself -
 `whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
 files, fetching URLs, and keeping a history stack are all `cmd/whynot`'s
-own, in [cmd/whynot/main.go](cmd/whynot/main.go). Image loading follows
+own (`load.go`, `navigate.go`). Image loading follows
 the same split, one layer further in: the library defines `ImageSource`
 (defaulting to a plain local file open) and owns caching the result
 (`ImageCache` - an image is resolved, fetched, and decoded at most once,
