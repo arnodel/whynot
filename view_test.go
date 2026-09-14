@@ -715,6 +715,111 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 	}
 }
 
+// TestViewDocumentBounds checks that DocumentBounds' height is just
+// the top-level slot count, width the last-known Layout width.
+func TestViewDocumentBounds(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 10)},
+			{box: NewEmptyBox(300, 20)},
+			{box: NewEmptyBox(300, 30)},
+		}},
+	}
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 3); got != want {
+		t.Errorf("DocumentBounds() = %v, want %v", got, want)
+	}
+}
+
+func TestViewDocumentBoundsNilBox(t *testing.T) {
+	v := &View{}
+	if got := v.DocumentBounds(); got != (image.Rectangle{}) {
+		t.Errorf("DocumentBounds() with no box laid out = %v, want the zero Rectangle", got)
+	}
+}
+
+// TestViewVisibleViewBounds checks that VisibleViewBounds counts
+// exactly the slots DrawFrom itself would draw into a viewport this
+// size, in the same "slot count" units DocumentBounds uses.
+func TestViewVisibleViewBounds(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 50)},
+			{box: NewEmptyBox(300, 50)},
+			{box: NewEmptyBox(300, 50)},
+			{box: NewEmptyBox(300, 50)},
+		}},
+		cursor: stackCursor{index: 1, offset: 10},
+	}
+	// Starting 10px into slot 1 (40px of it left), an 80px-tall
+	// viewport covers the rest of slot 1 (40px) and all of slot 2
+	// (its own top at 40px, within the viewport) - slot 3's top (90px)
+	// is past the 80px viewport, so it's excluded.
+	got := v.VisibleViewBounds(image.Pt(300, 80))
+	if want := (image.Rect(0, 1, 300, 3)); got != want {
+		t.Errorf("VisibleViewBounds() = %v, want %v", got, want)
+	}
+}
+
+// TestViewVisibleViewBoundsClampsAtDocumentEnd checks that a viewport
+// taller than the remaining document doesn't walk past the last slot.
+func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 50)},
+			{box: NewEmptyBox(300, 50)},
+		}},
+		cursor: stackCursor{index: 1, offset: 0},
+	}
+	got := v.VisibleViewBounds(image.Pt(300, 1000))
+	if want := (image.Rect(0, 1, 300, 2)); got != want {
+		t.Errorf("VisibleViewBounds() = %v, want %v (clamped to the last slot)", got, want)
+	}
+}
+
+func TestViewVisibleViewBoundsNilBox(t *testing.T) {
+	v := &View{}
+	if got := v.VisibleViewBounds(image.Pt(300, 100)); got != (image.Rectangle{}) {
+		t.Errorf("VisibleViewBounds() with no box laid out = %v, want the zero Rectangle", got)
+	}
+}
+
+// TestViewBoundsStableAcrossHoverRebuilds is the regression test for
+// the bug the parked scrollbar attempt hit: Hover triggers a full
+// rebuild on every highlight change, which could reset a naive height
+// estimate back to "just the current slot." DocumentBounds/
+// VisibleViewBounds sidestep that by using slot count (unaffected by
+// which slots happen to be memoized) rather than resolved pixel
+// heights, so both must stay exactly stable across repeated hover
+// rebuilds - not just approximately close.
+func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
+	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph\n\nfourth paragraph\n\nfifth paragraph")
+	v := NewView(source, NewGoFontFaceSelector(72))
+	v.Layout(300, 1, 0)
+	v.Scroll(20) // resolve a couple of slots, the way real scrolling would
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+
+	wantDoc := v.DocumentBounds()
+	wantVisible := v.VisibleViewBounds(image.Pt(300, 200))
+
+	for i := 0; i < 4; i++ {
+		v.Hover(x, y)   // HighlightNode: nil -> the link (rebuilds)
+		v.Hover(-1, -1) // HighlightNode: the link -> nil (rebuilds again)
+		if got := v.DocumentBounds(); got != wantDoc {
+			t.Fatalf("DocumentBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantDoc)
+		}
+		if got := v.VisibleViewBounds(image.Pt(300, 200)); got != wantVisible {
+			t.Fatalf("VisibleViewBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantVisible)
+		}
+	}
+}
+
 // TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot checks that
 // once an image's bounds are already known (the placeholder-rect
 // path), its later becoming ready invalidates only the one slot

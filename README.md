@@ -209,6 +209,10 @@ by implementation order now that most of the list is done.
 **Rendering and performance**
 - [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
       viewport culling - all handled by `whynot.View`
+- [x] `View.DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (in
+      top-level-slot-count units, not pixels - a coarse but free proxy, refined without
+      changing either signature if that ever matters) for a caller to build its own
+      scrollbar, or feed to any other UI it wants to drive from scroll position
 - [x] Large documents: layout and drawing are lazy, built outward from the current
       scroll position rather than the whole document, so cost tracks what's on screen,
       not the document's total size - a resize deep into a ~1000-line document costs
@@ -234,9 +238,10 @@ by implementation order now that most of the list is done.
 - [x] A link to a webpage opens in the system browser instead of failing; a link to
       Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
 - [x] Back/forward history, light/dark theme, zoom
-- [ ] Scrollbar - a first pass exists (branch `scrollbar`) but is parked: its size
-      estimate depends on per-slot data that an unrelated, pre-existing behavior
-      (a full rebuild on every hover change) wipes out while scrolling
+- [x] Scrollbar - drawn by `cmd/whynot` itself (`drawScrollbar`, `draw.go`), not the
+      library: `View.DocumentBounds`/`VisibleViewBounds` expose the geometry instead, so
+      an embedder using its own UI framework (or wanting a native scrollbar widget) can
+      build whatever it wants rather than being stuck with the library's own opinion
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 

@@ -183,6 +183,47 @@ func (v *View) ScrollToAnchor(id string) bool {
 	return false
 }
 
+// DocumentBounds returns the document's rough extent, origin at
+// (0, 0): width is what Layout was last called with; height is the
+// number of top-level slots the document breaks into (headings,
+// paragraphs, list items, tables, ...) - a coarse stand-in for a pixel
+// height, not a real one (slots vary a lot in height), but free to
+// compute (just a slot count, no layout needed) and exactly stable
+// across anything that doesn't change the document's own structure -
+// including a Hover-driven rebuild, which never does. A caller
+// building its own scrollbar (vertical, or - if it ever applies -
+// horizontal) scales the ratio between this and VisibleViewBounds to
+// whatever real pixel track it's drawing into.
+func (v *View) DocumentBounds() image.Rectangle {
+	if v.box == nil {
+		return image.Rectangle{}
+	}
+	return image.Rect(0, 0, v.boxWidth, len(v.box.slots))
+}
+
+// VisibleViewBounds returns the sub-rectangle of DocumentBounds
+// currently visible for a viewport of viewportSize (the same size
+// passed to Draw's dst) - same "slot count" units as DocumentBounds,
+// counting however many slots, from the current scroll position,
+// DrawFrom itself would actually draw into a viewport this size (same
+// walk, same break condition), so this resolves nothing beyond what a
+// real Draw call already would.
+func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
+	if v.box == nil || v.cursor.index >= len(v.box.slots) {
+		return image.Rectangle{}
+	}
+	y := -int(v.cursor.offset)
+	end := v.cursor.index
+	for i := v.cursor.index; i < len(v.box.slots); i++ {
+		if y > viewportSize.Y {
+			break
+		}
+		end = i + 1
+		y += v.box.boxAt(i).Bounds().Dy()
+	}
+	return image.Rect(0, v.cursor.index, viewportSize.X, end)
+}
+
 // Draw renders the document onto dst with its top-left corner at (x, y),
 // at the current scroll position. Content above the current cursor, and
 // content outside dst's bounds, is never resolved or drawn - Draw's cost

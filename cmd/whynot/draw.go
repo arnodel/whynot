@@ -21,6 +21,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.current.view.Draw(canvas, 0, g.toolbarHeight)
 	g.drawToolbar(screen, canvas)
 	g.drawZoomIndicator(canvas)
+	g.drawScrollbar(canvas)
 
 	if g.debugHit {
 		docY := g.hoverY - g.toolbarHeight
@@ -132,6 +133,37 @@ func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
 	r := image.Rect(x, y, x+w, y+h)
 	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
 	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
+}
+
+// drawScrollbar draws a thumb indicating the current scroll position,
+// derived entirely from View.DocumentBounds/VisibleViewBounds - proof
+// that those two methods are enough to build a scrollbar from outside
+// the library, not just plausible on paper. Both are in "slot count"
+// units, not pixels (see DocumentBounds), so the ratio between them is
+// what matters here, scaled to the real track height - skipped
+// entirely when there's nothing to scroll (the whole document, as
+// currently estimated, already fits).
+func (g *game) drawScrollbar(canvas whynot.Canvas) {
+	trackHeight := g.height - g.toolbarHeight
+	doc := g.current.view.DocumentBounds()
+	visible := g.current.view.VisibleViewBounds(image.Pt(g.width, trackHeight))
+	if doc.Dy() == 0 || visible.Dy() >= doc.Dy() {
+		return
+	}
+
+	width := int(6 * g.deviceScale)
+	minHeight := int(20 * g.deviceScale)
+
+	y := g.toolbarHeight + visible.Min.Y*trackHeight/doc.Dy()
+	height := visible.Dy() * trackHeight / doc.Dy()
+	if height < minHeight {
+		height = minHeight
+	}
+	if y+height > g.height {
+		y = g.height - height
+	}
+
+	canvas.DrawRect(g.width-width, y, width, height, color.RGBA{0x80, 0x80, 0x80, 0xA0})
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,
