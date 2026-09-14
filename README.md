@@ -111,7 +111,7 @@ go run ./cmd/whynot path/to/some.md
 ```
 
 Run with no argument and it opens a built-in welcome page (embedded in the
-binary, `cmd/whynot/welcome.md`) explaining how to use it - including
+binary, `cmd/whynot/assets/welcome.md`) explaining how to use it - including
 pasting a file path or `http(s)` URL (Cmd/Ctrl+V) to open it, and pasting
 the word "welcome" to come back. Beyond scrolling and resizing, it
 demonstrates what a caller can build on top of the library:

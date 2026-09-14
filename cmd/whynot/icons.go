@@ -2,20 +2,16 @@ package main
 
 import (
 	"bytes"
-	"embed"
 	"image/png"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-//go:embed arrow_back.png arrow_forward.png refresh.png add.png remove.png dark_mode.png light_mode.png
-var iconFS embed.FS
-
-// icon loads a PNG embedded via iconFS into an *ebiten.Image - decoded
-// once at startup (see backIcon/forwardIcon/reloadIcon below), not per
-// frame.
+// icon loads a PNG from assetsFS (assets/icons/) into an *ebiten.Image
+// - decoded once at startup (see backIcon/forwardIcon/reloadIcon
+// below), not per frame.
 func icon(name string) *ebiten.Image {
-	data, err := iconFS.ReadFile(name)
+	data, err := assetsFS.ReadFile("assets/icons/" + name)
 	if err != nil {
 		panic(err)
 	}

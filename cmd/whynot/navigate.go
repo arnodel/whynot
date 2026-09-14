@@ -55,11 +55,18 @@ func (g *game) resolveLink(dest string) (*url.URL, error) {
 // the options every call site needs together: the current StyleSheet,
 // and an ImageSource that resolves an image's src against location the
 // same way resolveLink resolves a link's href, so a relative or
-// http(s) image works regardless of where its document came from.
+// http(s) image works regardless of where its document came from. The
+// welcome page is the one exception: its own images (if any) are
+// bundled alongside it in assetsFS, not fetched, so it gets
+// welcomeImageSource instead of the general fetch-based one.
 func (g *game) newView(source []byte, location *url.URL) *whynot.View {
+	imageSource := whynot.ImageSource(docImageSource{base: location})
+	if location.Scheme == "whynot" {
+		imageSource = welcomeImageSource{}
+	}
 	return whynot.NewView(source, g.faceSelector,
 		whynot.WithStyleSheet(g.styleSheet),
-		whynot.WithImageSource(docImageSource{base: location}),
+		whynot.WithImageSource(imageSource),
 	)
 }
 

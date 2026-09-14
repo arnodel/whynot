@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
+	"io"
 	"net/url"
+	"path"
 	"runtime"
 )
-
-//go:embed welcome.md
-var welcomeMD []byte
 
 // welcomeURL identifies the embedded welcome page - an opaque, non-file,
 // non-http(s) URL so it can't collide with a real document location, but
@@ -31,7 +29,36 @@ func welcomeShortcut() string {
 	return "Ctrl+V"
 }
 
-// renderWelcome fills in welcomeMD's one platform-specific placeholder.
+// renderWelcome reads the embedded welcome page and fills in its one
+// platform-specific placeholder. Panics on error - assets/welcome.md
+// is embedded via assetsFS (see assets.go), so a failure here means the
+// binary itself was built wrong, not something a caller can recover
+// from at runtime.
 func renderWelcome() []byte {
-	return bytes.ReplaceAll(welcomeMD, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+	md, err := assetsFS.ReadFile("assets/welcome.md")
+	if err != nil {
+		panic(err)
+	}
+	return bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+}
+
+// welcomeImageSource implements whynot.ImageSource for images the
+// welcome page itself references - always bundled in assetsFS
+// alongside welcome.md, never fetched, so a src is just a path
+// relative to assets/ (e.g. an image sitting right next to welcome.md
+// is referenced from it as "screenshot.png", the same as any other
+// relative image reference). Used instead of docImageSource only when
+// the current document's location is welcomeURL - see newView.
+type welcomeImageSource struct{}
+
+func (welcomeImageSource) Resolve(src string) (string, error) {
+	return src, nil
+}
+
+func (welcomeImageSource) Open(src string) (io.ReadCloser, error) {
+	data, err := assetsFS.ReadFile(path.Join("assets", src))
+	if err != nil {
+		return nil, err
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
