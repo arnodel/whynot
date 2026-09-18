@@ -54,6 +54,18 @@ type View struct {
 	// transition either way; narrow enough not to be worth tracking
 	// separately whether this is currently trustworthy.
 	highlightSlot int
+
+	// slotHeights holds the last-known real height of each of v.box's
+	// top-level slots, in pixels - -1 for "never resolved yet".
+	// Refreshed from whatever's currently resolved every time
+	// heightEstimate reads it; left untouched (keeping its last real
+	// value) for a slot that's been invalidated but not yet
+	// re-resolved - Hover's surgical invalidation (see invalidateSlot)
+	// never actually changes a slot's height, so the stale value
+	// remains correct until it's naturally re-resolved. Reset only
+	// where v.box itself is rebuilt from scratch (see rebuild) - a real
+	// rebuild (unlike Hover) can change heights.
+	slotHeights []float64
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -202,45 +214,95 @@ func (v *View) ScrollToAnchor(id string) bool {
 	return false
 }
 
-// DocumentBounds returns the document's rough extent, origin at
+// heightEstimate returns the current best-known-or-estimated height of
+// every top-level slot, in pixels - real where resolved (refreshing
+// slotHeights as it goes), extrapolated from the average of whatever's
+// known otherwise. len(result) == len(v.box.slots). DocumentBounds and
+// VisibleViewBounds both derive from this one pass rather than each
+// walking the slots separately.
+func (v *View) heightEstimate() []float64 {
+	if len(v.slotHeights) != len(v.box.slots) {
+		v.slotHeights = make([]float64, len(v.box.slots))
+		for i := range v.slotHeights {
+			v.slotHeights[i] = -1
+		}
+	}
+	var sum float64
+	var knownCount int
+	for i := range v.box.slots {
+		if v.box.slots[i].box != nil {
+			v.slotHeights[i] = float64(v.box.slots[i].box.Bounds().Dy())
+		}
+		if v.slotHeights[i] >= 0 {
+			sum += v.slotHeights[i]
+			knownCount++
+		}
+	}
+	if knownCount == 0 || knownCount == len(v.slotHeights) {
+		return v.slotHeights
+	}
+	avg := sum / float64(knownCount)
+	out := make([]float64, len(v.slotHeights))
+	for i, h := range v.slotHeights {
+		if h < 0 {
+			h = avg
+		}
+		out[i] = h
+	}
+	return out
+}
+
+// DocumentBounds returns the document's estimated extent, origin at
 // (0, 0): width is what Layout was last called with; height is the
-// number of top-level slots the document breaks into (headings,
-// paragraphs, list items, tables, ...) - a coarse stand-in for a pixel
-// height, not a real one (slots vary a lot in height), but free to
-// compute (just a slot count, no layout needed) and exactly stable
-// across anything that doesn't change the document's own structure -
-// including a Hover-driven rebuild, which never does. A caller
-// building its own scrollbar (vertical, or - if it ever applies -
-// horizontal) scales the ratio between this and VisibleViewBounds to
-// whatever real pixel track it's drawing into.
+// current best estimate of the total document height (see
+// heightEstimate) - exact once every slot has been resolved at least
+// once, refined automatically before then as more of the document is
+// visited. A caller building its own scrollbar (vertical, or - if it
+// ever applies - horizontal) scales the ratio between this and
+// VisibleViewBounds to whatever real pixel track it's drawing into.
 func (v *View) DocumentBounds() image.Rectangle {
 	if v.box == nil {
 		return image.Rectangle{}
 	}
-	return image.Rect(0, 0, v.boxWidth, len(v.box.slots))
+	var total float64
+	for _, h := range v.heightEstimate() {
+		total += h
+	}
+	return image.Rect(0, 0, v.boxWidth, int(total))
 }
 
 // VisibleViewBounds returns the sub-rectangle of DocumentBounds
 // currently visible for a viewport of viewportSize (the same size
-// passed to Draw's dst) - same "slot count" units as DocumentBounds,
-// counting however many slots, from the current scroll position,
-// DrawFrom itself would actually draw into a viewport this size (same
-// walk, same break condition), so this resolves nothing beyond what a
-// real Draw call already would.
+// passed to Draw's dst). The top (everything above the cursor) uses
+// heightEstimate's estimate, same as DocumentBounds - cheap even after
+// a cursor jump (ScrollToAnchor) that skipped resolving everything in
+// between. The bottom edge, deliberately, does not: it walks forward
+// from the cursor resolving each slot for real (v.box.boxAt), exactly
+// the same slots and the same break condition DrawFrom itself uses -
+// since that range is what Draw is about to resolve anyway this frame,
+// there's no laziness benefit to estimating it instead, and using the
+// estimate here made the thumb's size visibly jump as slots crossed
+// from "estimated" to "just resolved" with a different-than-average
+// height while scrolling.
 func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 	if v.box == nil || v.cursor.index >= len(v.box.slots) {
 		return image.Rectangle{}
 	}
-	y := -int(v.cursor.offset)
-	end := v.cursor.index
+	heights := v.heightEstimate()
+	var before float64
+	for i := 0; i < v.cursor.index; i++ {
+		before += heights[i]
+	}
+	top := before + v.cursor.offset
+
+	bottom := before // running position, starts at the top of cursor.index's own slot
 	for i := v.cursor.index; i < len(v.box.slots); i++ {
-		if y > viewportSize.Y {
+		if bottom-top > float64(viewportSize.Y) {
 			break
 		}
-		end = i + 1
-		y += v.box.boxAt(i).Bounds().Dy()
+		bottom += float64(v.box.boxAt(i).Bounds().Dy())
 	}
-	return image.Rect(0, v.cursor.index, viewportSize.X, end)
+	return image.Rect(0, int(top), viewportSize.X, int(bottom))
 }
 
 // Draw renders the document onto dst with its top-left corner at (x, y),
@@ -510,6 +572,8 @@ func (v *View) SetStyleSheet(s StyleSheet) {
 // slots have no per-slot horizontal position the way they have a
 // height - Draw/HitTest shift by Left to compensate.
 func (v *View) rebuild() {
+	v.slotHeights = nil // a real rebuild can change any slot's height
+
 	ratio := 0.0
 	if v.box != nil && v.cursor.index < len(v.box.slots) {
 		if h := v.box.boxAt(v.cursor.index).Bounds().Dy(); h > 0 {

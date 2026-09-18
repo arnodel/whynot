@@ -138,11 +138,12 @@ func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
 // drawScrollbar draws a thumb indicating the current scroll position,
 // derived entirely from View.DocumentBounds/VisibleViewBounds - proof
 // that those two methods are enough to build a scrollbar from outside
-// the library, not just plausible on paper. Both are in "slot count"
-// units, not pixels (see DocumentBounds), so the ratio between them is
-// what matters here, scaled to the real track height - skipped
-// entirely when there's nothing to scroll (the whole document, as
-// currently estimated, already fits).
+// the library, not just plausible on paper. Both are themselves only
+// estimates until the whole document's been visited (see
+// DocumentBounds), so only the ratio between them is meaningful here,
+// scaled to the real track height - skipped entirely when there's
+// nothing to scroll (the whole document, as currently estimated,
+// already fits).
 func (g *game) drawScrollbar(canvas whynot.Canvas) {
 	trackHeight := g.height - g.toolbarHeight
 	doc := g.current.view.DocumentBounds()

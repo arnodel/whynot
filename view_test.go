@@ -837,8 +837,9 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 	}
 }
 
-// TestViewDocumentBounds checks that DocumentBounds' height is just
-// the top-level slot count, width the last-known Layout width.
+// TestViewDocumentBounds checks that DocumentBounds' height is the sum
+// of every top-level slot's real (resolved) height, width the
+// last-known Layout width.
 func TestViewDocumentBounds(t *testing.T) {
 	v := &View{
 		boxWidth: 300,
@@ -848,7 +849,7 @@ func TestViewDocumentBounds(t *testing.T) {
 			{box: NewEmptyBox(300, 30)},
 		}},
 	}
-	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 3); got != want {
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 60); got != want {
 		t.Errorf("DocumentBounds() = %v, want %v", got, want)
 	}
 }
@@ -860,9 +861,9 @@ func TestViewDocumentBoundsNilBox(t *testing.T) {
 	}
 }
 
-// TestViewVisibleViewBounds checks that VisibleViewBounds counts
-// exactly the slots DrawFrom itself would draw into a viewport this
-// size, in the same "slot count" units DocumentBounds uses.
+// TestViewVisibleViewBounds checks that VisibleViewBounds covers
+// exactly the pixel range DrawFrom itself would draw into a viewport
+// this size, in the same real-pixel-height units DocumentBounds uses.
 func TestViewVisibleViewBounds(t *testing.T) {
 	v := &View{
 		boxWidth: 300,
@@ -874,12 +875,13 @@ func TestViewVisibleViewBounds(t *testing.T) {
 		}},
 		cursor: stackCursor{index: 1, offset: 10},
 	}
-	// Starting 10px into slot 1 (40px of it left), an 80px-tall
-	// viewport covers the rest of slot 1 (40px) and all of slot 2
-	// (its own top at 40px, within the viewport) - slot 3's top (90px)
-	// is past the 80px viewport, so it's excluded.
+	// Slot 0 is 50px, so the view's top is at 50+10 = 60px. Starting
+	// 10px into slot 1 (40px of it left), an 80px-tall viewport covers
+	// the rest of slot 1 (40px) and all of slot 2 (its own top at
+	// 50+50=100px is within 60+80=140px) - slot 3's top (150px) is past
+	// the viewport's bottom, so it's excluded.
 	got := v.VisibleViewBounds(image.Pt(300, 80))
-	if want := (image.Rect(0, 1, 300, 3)); got != want {
+	if want := (image.Rect(0, 60, 300, 150)); got != want {
 		t.Errorf("VisibleViewBounds() = %v, want %v", got, want)
 	}
 }
@@ -896,8 +898,32 @@ func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 		cursor: stackCursor{index: 1, offset: 0},
 	}
 	got := v.VisibleViewBounds(image.Pt(300, 1000))
-	if want := (image.Rect(0, 1, 300, 2)); got != want {
+	if want := (image.Rect(0, 50, 300, 100)); got != want {
 		t.Errorf("VisibleViewBounds() = %v, want %v (clamped to the last slot)", got, want)
+	}
+}
+
+// TestViewVisibleViewBoundsResolvesRealHeights checks that the forward
+// walk computing the bottom edge resolves each slot for real (the same
+// way DrawFrom itself would), not from heightEstimate's extrapolated
+// average - using the average here was the actual bug behind the
+// thumb's size visibly jumping while scrolling: the average is a
+// moving target as more of the document gets visited, a real height
+// isn't.
+func TestViewVisibleViewBoundsResolvesRealHeights(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 10)},                         // resolved; average would be 10
+			{block: &fixedHeightBlock{height: 500}, width: 300}, // NOT resolved yet - real height 500, far from that average
+		}},
+	}
+	got := v.VisibleViewBounds(image.Pt(300, 1000))
+	if want := (image.Rect(0, 0, 300, 510)); got != want {
+		t.Errorf("VisibleViewBounds() = %v, want %v (slot 1 resolved for real, not estimated from the average)", got, want)
+	}
+	if v.box.slots[1].box == nil {
+		t.Error("VisibleViewBounds didn't actually resolve slot 1 - want it forced, the way DrawFrom would")
 	}
 }
 
@@ -908,14 +934,109 @@ func TestViewVisibleViewBoundsNilBox(t *testing.T) {
 	}
 }
 
+// TestViewHeightEstimateExtrapolates checks that an unresolved slot's
+// height is extrapolated from the average of what's already resolved,
+// and that actually resolving it afterward replaces the extrapolation
+// with its real height, even when that's far from the average.
+func TestViewHeightEstimateExtrapolates(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 100)},
+			{box: NewEmptyBox(300, 300)},
+			{}, // unresolved
+		}},
+	}
+	// avg of the two resolved slots (100, 300) is 200, extrapolated for
+	// the third -> total 100 + 300 + 200 = 600.
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 600); got != want {
+		t.Errorf("DocumentBounds() = %v, want %v (extrapolated)", got, want)
+	}
+
+	// Resolve slot 2 to a real height well below the average - the
+	// estimate must track the real value, not the stale extrapolation.
+	v.box.slots[2].box = NewEmptyBox(300, 50)
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 450); got != want {
+		t.Errorf("DocumentBounds() after resolving slot 2 = %v, want %v", got, want)
+	}
+}
+
+// TestViewHeightEstimatePersistsAcrossHoverInvalidation checks that
+// invalidating a slot (Hover's surgical invalidation, or any other)
+// doesn't regress its contribution to the estimate back to "unknown" -
+// the last real height it had stays in slotHeights and keeps being
+// used until the slot is naturally re-resolved.
+func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
+	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph")
+	v := NewView(source, NewGoFontFaceSelector(72))
+	v.Layout(300, 1, 0)
+	for i := range v.box.slots {
+		v.box.boxAt(i) // resolve every slot once
+	}
+	before := v.DocumentBounds()
+
+	x, y, ok := findTag(v, TagLink)
+	if !ok {
+		t.Fatal("no point in the document resolved to TagLink")
+	}
+	_, slot := v.linkNodeAt(x, y)
+
+	v.Hover(x, y)
+	v.Hover(-1, -1)
+
+	if v.box.slots[slot].box != nil {
+		t.Fatal("test setup: slot wasn't actually invalidated by Hover")
+	}
+	if got := v.slotHeights[slot]; got < 0 {
+		t.Fatalf("slotHeights[%d] = %v after invalidation, want the last-known real height preserved", slot, got)
+	}
+	if got := v.DocumentBounds(); got != before {
+		t.Errorf("DocumentBounds() after hover invalidation = %v, want unchanged %v", got, before)
+	}
+}
+
+// TestViewHeightEstimateResetsOnResize checks that a real rebuild (a
+// resize here) discards stale per-slot estimates rather than mixing
+// pre-resize heights into the post-resize total - unlike Hover, a
+// resize genuinely can change every slot's height.
+func TestViewHeightEstimateResetsOnResize(t *testing.T) {
+	v := &View{
+		block: &StackBlock{blocks: []Block{
+			&scaledHeightBlock{scale: 1}, // height == width given
+			&scaledHeightBlock{scale: 1},
+		}},
+		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()},
+	}
+	v.Layout(100, 1, 0)
+	v.box.boxAt(1)         // resolve slot 1 too, not just the cursor's own slot 0
+	_ = v.DocumentBounds() // populate slotHeights from both slots before the resize
+
+	// Resize - slot 1's real height is now 200px, but nothing has asked
+	// boxAt(1) again yet at the new width, so its stale 100px estimate
+	// (captured into slotHeights just above) would leak into the total
+	// if slotHeights weren't reset.
+	v.Layout(200, 1, 0)
+
+	// Slot 0 is resolved fresh (200px, real - rebuild's own cursor
+	// re-anchoring does this); slot 1 stays unresolved, so its
+	// contribution is extrapolated from what's known (200), not the
+	// stale 100 from before the resize.
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 200, 400); got != want {
+		t.Errorf("DocumentBounds() after resize = %v, want %v (stale slot 1 estimate discarded)", got, want)
+	}
+}
+
 // TestViewBoundsStableAcrossHoverRebuilds is the regression test for
-// the bug the parked scrollbar attempt hit: Hover triggers a full
-// rebuild on every highlight change, which could reset a naive height
-// estimate back to "just the current slot." DocumentBounds/
-// VisibleViewBounds sidestep that by using slot count (unaffected by
-// which slots happen to be memoized) rather than resolved pixel
-// heights, so both must stay exactly stable across repeated hover
-// rebuilds - not just approximately close.
+// the bug the parked scrollbar attempt originally hit: at the time,
+// Hover triggered a full rebuild on every highlight change, which
+// could reset a naive height estimate back to "just the current slot."
+// Hover is surgical now (see invalidateSlot) and never touches
+// slotHeights, so this passes not because DocumentBounds/
+// VisibleViewBounds are insulated from Hover's effects, but because
+// there's genuinely nothing for a hover-only change to invalidate -
+// the persisted per-slot estimates for whatever Hover nils out (the
+// highlighted link's own slot, at most) stay exactly as accurate as
+// before, since a highlight never changes a slot's real height.
 func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph\n\nfourth paragraph\n\nfifth paragraph")
 	v := NewView(source, NewGoFontFaceSelector(72))
