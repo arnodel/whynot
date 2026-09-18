@@ -276,14 +276,22 @@ func (v *View) DocumentBounds() image.Rectangle {
 // passed to Draw's dst). The top (everything above the cursor) uses
 // heightEstimate's estimate, same as DocumentBounds - cheap even after
 // a cursor jump (ScrollToAnchor) that skipped resolving everything in
-// between. The bottom edge, deliberately, does not: it walks forward
-// from the cursor resolving each slot for real (v.box.boxAt), exactly
-// the same slots and the same break condition DrawFrom itself uses -
-// since that range is what Draw is about to resolve anyway this frame,
-// there's no laziness benefit to estimating it instead, and using the
-// estimate here made the thumb's size visibly jump as slots crossed
-// from "estimated" to "just resolved" with a different-than-average
-// height while scrolling.
+// between. The bottom edge is exactly top+viewportSize.Y, clamped to
+// the document's total height - not "wherever the last slot DrawFrom
+// would draw happens to end", which is a subtly different quantity
+// that used to be used here: a slot's own bottom can fall well past
+// the viewport edge (a single large image or table, say), so pinning
+// the result to it made the thumb's size jump by however much that
+// last slot overshot, and which slot that is changes discretely as
+// slot boundaries slide past the viewport edge while scrolling - a
+// quantization artifact independent of estimation accuracy, still
+// there even once every slot's real height is known. The forward walk
+// below still force-resolves exactly the slots DrawFrom would draw
+// this frame (same range, same break condition) - not to derive the
+// bottom edge from anymore, but because that range is what Draw is
+// about to resolve anyway, so there's no laziness benefit to skipping
+// it, and doing so keeps the document total below as accurate as
+// possible for the part of the document nearest the viewport.
 func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 	if v.box == nil || v.cursor.index >= len(v.box.slots) {
 		return image.Rectangle{}
@@ -295,12 +303,17 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 	}
 	top := before + v.cursor.offset
 
-	bottom := before // running position, starts at the top of cursor.index's own slot
+	pos := before // running position, starts at the top of cursor.index's own slot
 	for i := v.cursor.index; i < len(v.box.slots); i++ {
-		if bottom-top > float64(viewportSize.Y) {
+		if pos-top > float64(viewportSize.Y) {
 			break
 		}
-		bottom += float64(v.box.boxAt(i).Bounds().Dy())
+		pos += float64(v.box.boxAt(i).Bounds().Dy())
+	}
+
+	bottom := top + float64(viewportSize.Y)
+	if docHeight := float64(v.DocumentBounds().Dy()); bottom > docHeight {
+		bottom = docHeight
 	}
 	return image.Rect(0, int(top), viewportSize.X, int(bottom))
 }

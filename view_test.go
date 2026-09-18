@@ -861,9 +861,10 @@ func TestViewDocumentBoundsNilBox(t *testing.T) {
 	}
 }
 
-// TestViewVisibleViewBounds checks that VisibleViewBounds covers
-// exactly the pixel range DrawFrom itself would draw into a viewport
-// this size, in the same real-pixel-height units DocumentBounds uses.
+// TestViewVisibleViewBounds checks that VisibleViewBounds's height is
+// exactly the viewport's own height (not wherever the last drawn slot
+// happens to end - see VisibleViewBounds' doc comment), clamped to the
+// document's total.
 func TestViewVisibleViewBounds(t *testing.T) {
 	v := &View{
 		boxWidth: 300,
@@ -875,13 +876,13 @@ func TestViewVisibleViewBounds(t *testing.T) {
 		}},
 		cursor: stackCursor{index: 1, offset: 10},
 	}
-	// Slot 0 is 50px, so the view's top is at 50+10 = 60px. Starting
-	// 10px into slot 1 (40px of it left), an 80px-tall viewport covers
-	// the rest of slot 1 (40px) and all of slot 2 (its own top at
-	// 50+50=100px is within 60+80=140px) - slot 3's top (150px) is past
-	// the viewport's bottom, so it's excluded.
+	// Slot 0 is 50px, so the view's top is at 50+10 = 60px. An 80px-tall
+	// viewport bottoms out at exactly 60+80 = 140px - not 150px (slot
+	// 2's own end), even though DrawFrom would still draw all of slot 2
+	// (its top at 100px is within the viewport) and only excludes slot
+	// 3 (top at 150px).
 	got := v.VisibleViewBounds(image.Pt(300, 80))
-	if want := (image.Rect(0, 60, 300, 150)); got != want {
+	if want := (image.Rect(0, 60, 300, 140)); got != want {
 		t.Errorf("VisibleViewBounds() = %v, want %v", got, want)
 	}
 }
