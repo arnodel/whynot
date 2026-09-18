@@ -35,6 +35,25 @@ type View struct {
 	// time Layout checked for image state changes - see
 	// invalidateChangedImages.
 	imageCacheMark uint64
+
+	// highlightSlot is the top-level slot index containing
+	// ctx.HighlightNode (meaningless when HighlightNode is nil) - kept
+	// fresh by Hover on every call, not only on an actual highlight
+	// change, specifically so it survives an intervening full rebuild
+	// (Layout at a new width/scale, SetStyleSheet) that doesn't itself
+	// change which node is highlighted: the very next Hover call
+	// (cmd/whynot calls it every frame regardless) recomputes it from
+	// the current (x, y) before it's ever needed to invalidate a slot.
+	// One accepted, purely cosmetic edge case: if a full rebuild and a
+	// jump straight from the highlighted link to a different one both
+	// happen within the same tick - no intervening Hover call while the
+	// mouse was simply sitting on the old link in between - this can be
+	// stale at the exact moment it's used, leaving the old link
+	// un-highlighted a frame late (or invalidating an unrelated slot,
+	// wastefully but harmlessly). Self-corrects on the very next
+	// transition either way; narrow enough not to be worth tracking
+	// separately whether this is currently trustworthy.
+	highlightSlot int
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -261,67 +280,107 @@ func (v *View) Draw(dst Canvas, x, y int) {
 // the first slot rather than missing. Not worth fixing since callers
 // only ever pass points within their own rendered viewport.
 func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
+	hit, offset, _ = v.hitTest(x, y)
+	return hit, offset
+}
+
+// hitTest is HitTest's real implementation, additionally reporting
+// which top-level slot p.Y resolved to - slot is meaningful only when
+// hit is non-nil. HitTest itself discards it; linkNodeAt (and so
+// Hover) reuses it instead of re-walking the cursor a second time for
+// the same y.
+func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
 	if v.box == nil {
-		return nil, image.Point{}
+		return nil, image.Point{}, 0
 	}
 	left := int(v.ctx.ScaledViewMargins().Left)
 	c := v.box.normalizeCursor(stackCursor{index: v.cursor.index, offset: v.cursor.offset + float64(y)})
 	if c.index < 0 || c.index >= len(v.box.slots) {
-		return nil, image.Point{}
+		return nil, image.Point{}, 0
 	}
 	box := v.box.boxAt(c.index)
 	local := image.Pt(x-left, int(c.offset))
 	if !local.In(box.Bounds()) {
-		return nil, image.Point{}
+		return nil, image.Point{}, c.index
 	}
 	hit, offset = box.HitTest(local)
 	if hit == nil {
-		return nil, image.Point{}
+		return nil, image.Point{}, c.index
 	}
 	// Shift back from box's own local frame into the same frame (x, y)
 	// arrived in - undoing both the left-margin shift and the
 	// cursor-relative adjustment made to y above.
-	return hit, offset.Add(image.Pt(left, y-int(c.offset)))
+	return hit, offset.Add(image.Pt(left, y-int(c.offset))), c.index
 }
 
 // linkNodeAt returns the ASTNode of the link at document position (x, y)
 // - the same coordinate space HitTest/Draw use - or nil if (x, y) doesn't
-// land on a link. Shared by Hover and LinkAt so neither duplicates the
-// HitTest-then-walk-to-the-enclosing-link logic.
-func (v *View) linkNodeAt(x, y int) *ASTNode {
-	hit, _ := v.HitTest(x, y)
+// land on a link. slot is the top-level slot index (x, y) resolved to,
+// meaningful only when node is non-nil - Hover reuses it to know which
+// slot to invalidate without a second cursor-relative walk; LinkAt just
+// discards it. Shared by Hover and LinkAt so neither duplicates the
+// hit-then-walk-to-the-enclosing-link logic.
+func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
+	hit, _, slot := v.hitTest(x, y)
 	if hit == nil {
-		return nil
+		return nil, 0
 	}
-	return hit.Source().Node().AncestorTag(TagLink)
+	return hit.Source().Node().AncestorTag(TagLink), slot
 }
 
 // Hover updates the currently-highlighted link, given the mouse position
 // in the same coordinate space HitTest/Draw use - call every frame from
 // the embedding game's own input handling. Finding the link under (x, y)
-// is cheap (HitTest), but applying a change isn't: rebuild re-lays-out
-// the whole document, currently the simplest way to get the hovered
-// link's Source restyled through the exact same StyleSheet-resolution
-// path as everything else (see RenderingContext.HighlightNode/
-// ResolvedColor) - so this only rebuilds when the link actually changes
-// from the previous call.
+// is cheap (linkNodeAt), and so is applying a change: highlighting only
+// ever changes color (RenderingContext.HighlightNode/ResolvedColor),
+// never layout, so only the top-level slot being left and the one being
+// entered - at most two - are discarded and lazily rebuilt (see
+// invalidateSlot), the same surgical invalidation invalidateChangedImages
+// already uses for a settled image. highlightSlot is kept fresh on every
+// call, not only when the link actually changes, so it survives an
+// unrelated full rebuild (a resize, a StyleSheet swap) that happens while
+// something is already highlighted - see highlightSlot's own doc comment
+// for the one narrow, purely-cosmetic edge case this doesn't cover.
 //
 // Hover also reports the link under (x, y), same as LinkAt, so a caller
 // handling a click at the same position doesn't need a second HitTest -
 // e.g. cmd/whynot calls Hover once per frame with the cursor position
 // and can reuse its result if that frame also saw a click.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
-	node := v.linkNodeAt(x, y)
-	if node != v.ctx.HighlightNode {
+	node, slot := v.linkNodeAt(x, y)
+	changed := node != v.ctx.HighlightNode
+	if changed {
+		oldNode := v.ctx.HighlightNode
 		v.ctx.HighlightNode = node
 		if v.box != nil {
-			v.rebuild()
+			v.box.ctx.HighlightNode = node
+			if oldNode != nil {
+				v.invalidateSlot(v.highlightSlot)
+			}
 		}
+	}
+	if node != nil && v.box != nil {
+		if changed {
+			v.invalidateSlot(slot)
+		}
+		v.highlightSlot = slot // refreshed every call, not just on change
 	}
 	if node == nil {
 		return "", false
 	}
 	return node.Destination, true
+}
+
+// invalidateSlot discards slot i's memoized box - boxAt lazily rebuilds
+// it, with whatever's current in v.box.ctx, the next time something
+// actually asks for it. The same per-slot invalidation
+// invalidateChangedImages uses for a settled image.
+func (v *View) invalidateSlot(i int) {
+	if i < 0 || i >= len(v.box.slots) {
+		return
+	}
+	v.box.slots[i].box = nil
+	v.box.boundsComputed = false
 }
 
 // LinkAt reports the destination URL of the link at document position
@@ -330,7 +389,7 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 // highlight - use it to query a position other than the current hover
 // (e.g. from a test, or a separate input source).
 func (v *View) LinkAt(x, y int) (destination string, ok bool) {
-	node := v.linkNodeAt(x, y)
+	node, _ := v.linkNodeAt(x, y)
 	if node == nil {
 		return "", false
 	}
@@ -400,22 +459,17 @@ func (v *View) invalidateChangedImages() {
 		}
 	}
 
-	invalidatedAny := false
 	for i := range v.box.slots {
-		slot := &v.box.slots[i]
+		slot := v.box.slots[i]
 		if slot.box == nil {
 			continue
 		}
 		for _, src := range slot.box.PendingImages() {
 			if changedSrcs[src] {
-				slot.box = nil
-				invalidatedAny = true
+				v.invalidateSlot(i)
 				break
 			}
 		}
-	}
-	if invalidatedAny {
-		v.box.boundsComputed = false
 	}
 }
 

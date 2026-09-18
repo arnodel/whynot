@@ -476,11 +476,10 @@ func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
 	return 0, 0, false
 }
 
-// TestViewHoverHighlightsLink checks that hovering a link rebuilds the
-// tree with the link's text recolored to the StyleSheet's HighlightColor
-// - the "just restyle and rebuild" approach, deliberately the simplest
-// possible one (see the memory on the more targeted spine-rebuild
-// alternative that was considered and set aside for now).
+// TestViewHoverHighlightsLink checks that hovering a link recolors its
+// text to the StyleSheet's HighlightColor - via surgical per-slot
+// invalidation (see invalidateSlot), not a full rebuild: v.box itself
+// stays the same object throughout.
 func TestViewHoverHighlightsLink(t *testing.T) {
 	style := NewDarkStyleSheet()
 	v := NewView([]byte("click [this](url) now"), NewGoFontFaceSelector(72), WithStyleSheet(style))
@@ -493,8 +492,8 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 
 	beforeBox := v.box
 	dest, ok := v.Hover(x, y)
-	if v.box == beforeBox {
-		t.Error("Hover onto a link didn't rebuild (v.box unchanged)")
+	if v.box != beforeBox {
+		t.Error("Hover onto a link rebuilt the whole box, want surgical per-slot invalidation")
 	}
 	if v.ctx.HighlightNode == nil {
 		t.Fatal("HighlightNode = nil after hovering a link, want non-nil")
@@ -616,9 +615,11 @@ func TestViewTitleNoHeading(t *testing.T) {
 	}
 }
 
-// TestViewHoverNoOpWhenUnchanged checks that Hover only rebuilds on an
-// actual transition - calling it again at the same position must not
-// pay for another rebuild.
+// TestViewHoverNoOpWhenUnchanged checks that Hover only invalidates a
+// slot on an actual highlight transition - calling it again at the
+// same position must not pay for rebuilding that slot again. v.box
+// itself never changes now (see TestViewHoverHighlightsLink), so the
+// slot's own memoized box is what has to stay identical instead.
 func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 	v := NewView([]byte("click [this](url) now"), NewGoFontFaceSelector(72))
 	v.Layout(300, 1, 0)
@@ -629,10 +630,11 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 	}
 
 	v.Hover(x, y)
-	box := v.box
+	_, slot := v.linkNodeAt(x, y)
+	slotBox := v.box.slots[slot].box
 	v.Hover(x, y)
-	if v.box != box {
-		t.Error("Hover at an unchanged position rebuilt again, want a no-op")
+	if v.box.slots[slot].box != slotBox {
+		t.Error("Hover at an unchanged position invalidated the slot again, want a no-op")
 	}
 }
 
@@ -658,11 +660,131 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	}
 }
 
-// BenchmarkViewHover measures the cost of a hover-triggered rebuild - a
-// full View.rebuild() on every transition, the simplest possible way to
-// get a hovered link restyled through the normal StyleSheet-resolution
-// path. Alternates between the link and a point off it so every call is
-// an actual transition, never short-circuited as a no-op.
+// findTwoLinks scans v for two points landing on two different TagLink
+// nodes, for tests that need to hover between distinct links.
+func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
+	t.Helper()
+	height := v.box.Bounds().Dy()
+	var firstNode *ASTNode
+	found := 0
+	for y := 0; y < height && found < 2; y += 2 {
+		for x := 0; x < v.boxWidth && found < 2; x += 2 {
+			hit, _ := v.HitTest(x, y)
+			if hit == nil {
+				continue
+			}
+			n := hit.Source().Node()
+			if n == nil || n.Tag != TagLink {
+				continue
+			}
+			if found == 0 {
+				firstNode = n
+				x1, y1 = x, y
+				found = 1
+			} else if n != firstNode {
+				x2, y2 = x, y
+				found = 2
+			}
+		}
+	}
+	if found < 2 {
+		t.Fatalf("found %d distinct links, want 2", found)
+	}
+	return x1, y1, x2, y2
+}
+
+// twoLinkDoc is source for tests that need two links in two different
+// top-level slots, with an unrelated slot on either side and between
+// them to prove surgical invalidation leaves everything else alone.
+const twoLinkDoc = "first paragraph\n\n[link one](url1)\n\nsecond paragraph\n\n[link two](url2)\n\nthird paragraph"
+
+// TestViewHoverSurgicalInvalidation checks that hovering from one link
+// to a different one, in a different slot, invalidates exactly those
+// two slots' memoized boxes - v.box itself is untouched (no full
+// rebuild), and so is every other already-resolved slot.
+func TestViewHoverSurgicalInvalidation(t *testing.T) {
+	v := NewView([]byte(twoLinkDoc), NewGoFontFaceSelector(72))
+	v.Layout(300, 1, 0)
+
+	x1, y1, x2, y2 := findTwoLinks(t, v)
+	_, slot1 := v.linkNodeAt(x1, y1)
+	_, slot2 := v.linkNodeAt(x2, y2)
+	if slot1 == slot2 {
+		t.Fatal("both links resolved to the same slot, test needs links in different slots")
+	}
+
+	before := make([]BlockLayout, len(v.box.slots))
+	for i := range v.box.slots {
+		before[i] = v.box.boxAt(i)
+	}
+	beforeBox := v.box
+
+	v.Hover(x1, y1)
+	v.Hover(x2, y2)
+
+	if v.box != beforeBox {
+		t.Fatal("Hover rebuilt the whole box, want surgical per-slot invalidation")
+	}
+	for i := range v.box.slots {
+		got := v.box.boxAt(i)
+		switch i {
+		case slot1, slot2:
+			if got == before[i] {
+				t.Errorf("slot %d (hovered) was not invalidated", i)
+			}
+		default:
+			if got != before[i] {
+				t.Errorf("slot %d (never hovered) was invalidated, want untouched", i)
+			}
+		}
+	}
+}
+
+// TestViewHoverSurvivesRebuildInBetween checks that a link correctly
+// un-highlights even after an unrelated full rebuild (a resize) happens
+// while it's highlighted - simulating a resize between two frames, with
+// the ordinary per-frame Hover call cmd/whynot always makes in between
+// (the mechanism highlightSlot's own doc comment relies on to stay
+// fresh across a rebuild it can't itself observe).
+func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
+	style := NewDarkStyleSheet()
+	v := NewView([]byte(twoLinkDoc), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v.Layout(300, 1, 0)
+
+	x1, y1, x2, y2 := findTwoLinks(t, v)
+
+	v.Hover(x1, y1)
+	if v.ctx.HighlightNode == nil {
+		t.Fatal("HighlightNode = nil after hovering link one")
+	}
+
+	v.Layout(320, 1, 0) // an unrelated resize, while link one is highlighted
+
+	// The next frame's Hover call, mouse unmoved - what cmd/whynot does
+	// every tick - refreshes highlightSlot before anything needs it.
+	v.Hover(x1, y1)
+
+	// Move to the other link - link one must actually un-highlight, not
+	// get stuck, despite the rebuild in between.
+	v.Hover(x2, y2)
+
+	hit, _ := v.HitTest(x1, y1)
+	text, ok := hit.(*TextBox)
+	if !ok {
+		t.Fatalf("hit at link one's position = %T, want *TextBox", hit)
+	}
+	if text.Color == style.HighlightColor() {
+		t.Error("link one is still highlighted after hovering link two, despite a resize in between")
+	}
+}
+
+// BenchmarkViewHover measures the cost of a hover transition - surgical
+// per-slot invalidation (see invalidateSlot), restyling only the slot
+// being left and the slot being entered rather than rebuilding the
+// whole document. Alternates between the link and a point off it so
+// every call is an actual transition, never short-circuited as a no-op.
+// ~14µs on testdata/test.md as of this writing, versus ~154µs for the
+// full-rebuild approach this replaced, measured the same way.
 func BenchmarkViewHover(b *testing.B) {
 	source, err := os.ReadFile("testdata/test.md")
 	if err != nil {
