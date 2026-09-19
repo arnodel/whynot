@@ -10,6 +10,25 @@ go run ./cmd/whynot path/to/some.md
 
 Use the mouse wheel to scroll; resize the window to see it reflow.
 
+## Try the standalone viewer
+
+On macOS or Linux:
+
+```bash
+brew install arnodel/tap/whynot
+```
+
+Otherwise, grab a binary for your platform from the
+[latest release](https://github.com/arnodel/whynot/releases/latest), or build
+it yourself:
+
+```bash
+go install github.com/arnodel/whynot/cmd/whynot@latest
+```
+
+Run it with no argument and it opens a built-in welcome page explaining how
+to use it.
+
 ## Why does this exist?
 
 Games sometimes need to show a chunk of formatted text - patch notes, an
@@ -102,7 +121,7 @@ pass it via `whynot.WithStyleSheet(s)`, or embed `DefaultStyleSheet` in your own
 override individual methods for full control over one aspect (e.g. per-node margins)
 without reimplementing the rest. Swapping a `View`'s `StyleSheet` at runtime
 (`View.SetStyleSheet`) re-lays-out the document immediately, which is all `cmd/whynot`'s
-L/D keys do.
+theme toggle button does.
 
 ## `cmd/whynot`: a standalone viewer
 
@@ -116,8 +135,13 @@ pasting a file path or `http(s)` URL (Cmd/Ctrl+V) to open it, and pasting
 the word "welcome" to come back. Beyond scrolling and resizing, it
 demonstrates what a caller can build on top of the library:
 
-- **`-light`** switches to the light theme at startup; **L**/**D** toggle
-  between light and dark while running.
+- **`-light`** switches to the light theme at startup; the toolbar button
+  toggles between light and dark while running.
+- **Dragging the scrollbar** jumps to a position (`View.ScrollToRatio`) -
+  it self-corrects toward wherever the mouse currently is as
+  not-yet-resolved parts of the document get resolved during the drag,
+  rather than drifting away from the cursor. **↓**/**↑** nudge the scroll
+  position a bit at a time, repeating while held.
 - **Hovering a link** highlights it (`View.Hover`).
 - **Clicking a link follows it** - a relative path loads another local
   file, an `http(s)` URL fetches it (opening it in the system's default
@@ -139,6 +163,8 @@ demonstrates what a caller can build on top of the library:
   alt text (or title, or a generic message) instead of a silent gap.
 - **`-debug-hit`** outlines whatever `View.HitTest` resolves under the
   cursor, for debugging.
+- **`-debug-stats`** (togglable at runtime with **F**) shows FPS/TPS and
+  per-frame Update/Draw timing.
 - A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
   a distinct color with a warning logged, instead of crashing the whole
   document - see [Features](#features).
@@ -209,10 +235,14 @@ by implementation order now that most of the list is done.
 **Rendering and performance**
 - [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
       viewport culling - all handled by `whynot.View`
-- [x] `View.DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (in
-      top-level-slot-count units, not pixels - a coarse but free proxy, refined without
-      changing either signature if that ever matters) for a caller to build its own
-      scrollbar, or feed to any other UI it wants to drive from scroll position
+- [x] `View.DocumentBounds`/`VisibleViewBounds` expose real per-slot pixel-height
+      geometry (each top-level slot's height, once resolved; extrapolated from the
+      average of what's known for the rest, refined as more of the document is visited)
+      for a caller to build its own scrollbar, or feed to any other UI it wants to drive
+      from scroll position. `View.ScrollToRatio` is the other direction - a caller
+      driving a scrollbar thumb drag recomputes the ratio from the mouse's current
+      position every frame rather than a target captured once, so a jump into
+      not-yet-resolved territory only ever corrects toward the cursor, never drifts
 - [x] Large documents: layout and drawing are lazy, built outward from the current
       scroll position rather than the whole document, so cost tracks what's on screen,
       not the document's total size - a resize deep into a ~1000-line document costs
@@ -241,7 +271,10 @@ by implementation order now that most of the list is done.
 - [x] Scrollbar - drawn by `cmd/whynot` itself (`drawScrollbar`, `draw.go`), not the
       library: `View.DocumentBounds`/`VisibleViewBounds` expose the geometry instead, so
       an embedder using its own UI framework (or wanting a native scrollbar widget) can
-      build whatever it wants rather than being stuck with the library's own opinion
+      build whatever it wants rather than being stuck with the library's own opinion.
+      Draggable (`View.ScrollToRatio`), with hover/drag color feedback and a
+      theme-aware color (a light thumb on the dark theme's near-black background would
+      be invisible against the light theme's white one, and vice versa)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 

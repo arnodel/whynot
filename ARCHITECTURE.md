@@ -199,6 +199,19 @@ loading" below; the layout tree itself still only rebuilds when width
 or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
 example of wiring this up.
 
+`DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
+scales the ratio between them to whatever real pixel track it's drawing a
+scrollbar into) built from the same laziness: each top-level slot's real
+pixel height once resolved, extrapolated from the average of what's known for
+any slot that isn't, refined as more of the document is visited — never a
+full-document layout pass just to answer "how tall is this, roughly."
+`ScrollToRatio` is the inverse (e.g. for a scrollbar thumb drag): it
+re-derives the target from the *current* estimate on every call rather than
+a value captured once, so jumping into not-yet-resolved territory only ever
+corrects toward wherever the caller's asking for next — a caller re-deriving
+its target from the live input position every frame can't drift, because
+nothing carries over between frames for it to drift from.
+
 ## Image loading
 
 An image's `src` never blocks layout or drawing. `ImageCache`

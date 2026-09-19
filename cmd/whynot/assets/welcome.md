@@ -12,9 +12,10 @@ Copy a file path or an `http(s)` URL to your clipboard, then paste it with **{{P
 ## Getting around
 
 - **Mouse wheel** scrolls; resize the window any time to see the document reflow.
-- **Space** / **Shift+Space** page down / up.
+- **↓** / **↑** scroll a bit at a time; **Space** / **Shift+Space** page down / up.
 - **+** / **-**, or the toolbar buttons, zoom in / out.
-- **L** / **D**, or the toolbar button, switch to the light / dark theme.
+- The toolbar button switches between the light / dark theme.
+- Drag the scrollbar, on the right edge, to jump to a position.
 - Click a link to follow it: a link to a webpage opens in your browser, while one to a Markdown
   document opens right here - like
   [whynot's own README](https://raw.githubusercontent.com/arnodel/whynot/main/README.md).
