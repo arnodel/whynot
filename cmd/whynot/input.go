@@ -9,6 +9,9 @@ import (
 )
 
 func (g *game) Update() error {
+	start := time.Now()
+	defer func() { g.updateDuration = time.Since(start) }()
+
 	_, dy := ebiten.Wheel()
 	g.current.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 

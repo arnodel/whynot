@@ -66,6 +66,14 @@ type game struct {
 	renderer  *ebitenrenderer.Renderer
 	debugHit  bool
 
+	// debugStats shows FPS/TPS and per-frame timing (see
+	// drawDebugStats) - updateDuration/drawDuration are the most
+	// recent Update/Draw call's wall-clock time, timed unconditionally
+	// (cheap - two time.Now() calls) so toggling debugStats on doesn't
+	// need to wait a frame for the first reading.
+	debugStats                   bool
+	updateDuration, drawDuration time.Duration
+
 	hoverX, hoverY int
 	// hoverDest is the link under the cursor, if any - what the address
 	// bar shows instead of the current location while hovering.

@@ -14,6 +14,7 @@ import (
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
+	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing")
 	flag.Parse()
 
 	// No file/URL given: land on the welcome page rather than a
@@ -49,6 +50,7 @@ func main() {
 		darkTheme:           !*light,
 		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
+		debugStats:          *debugStats,
 		zoom:                1,
 		start:               time.Now(),
 	}

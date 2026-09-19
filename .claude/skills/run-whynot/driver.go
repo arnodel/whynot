@@ -43,6 +43,7 @@ var (
 	modifierKey = flag.String("modifier", "", "name of an ebiten.Key (e.g. \"Meta\") to hold down for the duration of -key's press+release - e.g. \"Meta\" plus -key V for Cmd+V")
 	holdTicks   = flag.Int("hold-ticks", 1, "number of ticks to hold -key down before releasing it - >1 to test key-repeat behavior (inpututil.KeyPressDuration)")
 	debugHit    = flag.Bool("debug-hit", false, "pass -debug-hit through to the guest, so the captured frame shows the red HitTest outline at the cursor")
+	debugStats  = flag.Bool("debug-stats", false, "pass -debug-stats through to the guest, so the captured frame shows the FPS/timing overlay")
 	settleDelay = flag.Duration("settle-delay", 0, "real wall-clock time to sleep before the settle ticks - AdvanceTicks doesn't pace to real time (many ticks can execute in milliseconds), so a guest waiting on a background fetch (e.g. an async image load) needs this to actually get a chance to finish before the frame is captured")
 )
 
@@ -223,6 +224,9 @@ func xmain() error {
 		// own flag.Parse() stops parsing flags at the first non-flag
 		// argument.
 		guestArgs = append(guestArgs, "-debug-hit")
+	}
+	if *debugStats {
+		guestArgs = append(guestArgs, "-debug-stats")
 	}
 	if *source != "" {
 		abs, err := filepath.Abs(*source)

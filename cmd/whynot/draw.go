@@ -13,6 +13,9 @@ import (
 )
 
 func (g *game) Draw(screen *ebiten.Image) {
+	start := time.Now()
+	defer func() { g.drawDuration = time.Since(start) }()
+
 	canvas := g.renderer.NewCanvas(screen)
 
 	// View.Draw fills the background itself, from the View's StyleSheet -
@@ -22,6 +25,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.drawToolbar(screen, canvas)
 	g.drawZoomIndicator(canvas)
 	g.drawScrollbar(canvas)
+	g.drawDebugStats(canvas)
 
 	if g.debugHit {
 		docY := g.hoverY - g.toolbarHeight
@@ -133,6 +137,46 @@ func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
 	r := image.Rect(x, y, x+w, y+h)
 	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
 	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
+}
+
+// drawDebugStats shows ebiten's own rolling FPS/TPS (ActualFPS/
+// ActualTPS) alongside the most recent Update/Draw call durations -
+// gated behind -debug-stats. Durations lag one frame behind (this
+// frame's own Draw call isn't finished timing itself until after this
+// runs), which is fine for a rough perf readout.
+func (g *game) drawDebugStats(canvas whynot.Canvas) {
+	if !g.debugStats {
+		return
+	}
+	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	if err != nil {
+		return
+	}
+	lines := [2]string{
+		fmt.Sprintf("%.0f fps  %.0f tps", ebiten.ActualFPS(), ebiten.ActualTPS()),
+		fmt.Sprintf("upd %.2fms  draw %.2fms", g.updateDuration.Seconds()*1000, g.drawDuration.Seconds()*1000),
+	}
+
+	padX, padY := int(10*g.deviceScale), int(6*g.deviceScale)
+	margin := int(12 * g.deviceScale)
+	lineH := (face.Metrics().Ascent + face.Metrics().Descent).Ceil()
+
+	textW := 0
+	for _, l := range lines {
+		if w := font.MeasureString(face, l).Ceil(); w > textW {
+			textW = w
+		}
+	}
+	w, h := textW+2*padX, lineH*len(lines)+2*padY
+
+	x := margin
+	y := g.toolbarHeight + margin
+	r := image.Rect(x, y, x+w, y+h)
+	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
+	baseline := r.Min.Y + padY + face.Metrics().Ascent.Ceil()
+	for i, l := range lines {
+		canvas.DrawText(l, face, r.Min.X+padX, baseline+i*lineH, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
+	}
 }
 
 // scrollbarThumbRect returns the scrollbar thumb's rectangle in screen
