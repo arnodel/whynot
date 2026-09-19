@@ -25,14 +25,8 @@ const (
 	panelMargin  = 60 // inset on all sides, so the background shows around the panel
 )
 
-// backgroundColor is deliberately not black/white/gray - distinct
-// from anything the document itself draws - so a screenshot makes it
-// obvious whether Panel content ever leaks outside its bounds.
-var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF}
+var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF} // green, to make it distinct from the panel contents
 
-// exampleDoc is generated rather than spelled out - length matters
-// here (long enough to need scrolling within the panel), wording
-// doesn't.
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Panel example\n\n")

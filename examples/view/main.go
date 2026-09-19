@@ -15,8 +15,6 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
-// exampleDoc is generated rather than spelled out - length matters
-// here (long enough to need scrolling), wording doesn't.
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# View example\n\n")
