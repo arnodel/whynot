@@ -37,34 +37,17 @@ type View struct {
 	imageCacheMark uint64
 
 	// highlightSlot is the top-level slot index containing
-	// ctx.HighlightNode (meaningless when HighlightNode is nil) - kept
-	// fresh by Hover on every call, not only on an actual highlight
-	// change, specifically so it survives an intervening full rebuild
-	// (Layout at a new width/scale, SetStyleSheet) that doesn't itself
-	// change which node is highlighted: the very next Hover call
-	// (cmd/whynot calls it every frame regardless) recomputes it from
-	// the current (x, y) before it's ever needed to invalidate a slot.
-	// One accepted, purely cosmetic edge case: if a full rebuild and a
-	// jump straight from the highlighted link to a different one both
-	// happen within the same tick - no intervening Hover call while the
-	// mouse was simply sitting on the old link in between - this can be
-	// stale at the exact moment it's used, leaving the old link
-	// un-highlighted a frame late (or invalidating an unrelated slot,
-	// wastefully but harmlessly). Self-corrects on the very next
-	// transition either way; narrow enough not to be worth tracking
-	// separately whether this is currently trustworthy.
+	// ctx.HighlightNode (meaningless when HighlightNode is nil). Hover
+	// refreshes it on every call, not just on a change, so it self-heals
+	// after an intervening rebuild without needing a separate "is this
+	// still trustworthy" flag.
 	highlightSlot int
 
-	// slotHeights holds the last-known real height of each of v.box's
-	// top-level slots, in pixels - -1 for "never resolved yet".
-	// Refreshed from whatever's currently resolved every time
-	// heightEstimate reads it; left untouched (keeping its last real
-	// value) for a slot that's been invalidated but not yet
-	// re-resolved - Hover's surgical invalidation (see invalidateSlot)
-	// never actually changes a slot's height, so the stale value
-	// remains correct until it's naturally re-resolved. Reset only
-	// where v.box itself is rebuilt from scratch (see rebuild) - a real
-	// rebuild (unlike Hover) can change heights.
+	// slotHeights holds the last-known-or-estimated height of each
+	// v.box top-level slot, in pixels - -1 for never known. Refreshed
+	// lazily by heightEstimate; otherwise left alone across invalidation
+	// or rebuild, since a stale per-slot value is a better estimate than
+	// falling back to the document-wide average.
 	slotHeights []float64
 }
 
@@ -217,9 +200,7 @@ func (v *View) ScrollToAnchor(id string) bool {
 // heightEstimate returns the current best-known-or-estimated height of
 // every top-level slot, in pixels - real where resolved (refreshing
 // slotHeights as it goes), extrapolated from the average of whatever's
-// known otherwise. len(result) == len(v.box.slots). DocumentBounds and
-// VisibleViewBounds both derive from this one pass rather than each
-// walking the slots separately.
+// known otherwise. len(result) == len(v.box.slots).
 func (v *View) heightEstimate() []float64 {
 	if len(v.slotHeights) != len(v.box.slots) {
 		v.slotHeights = make([]float64, len(v.box.slots))
@@ -253,13 +234,10 @@ func (v *View) heightEstimate() []float64 {
 }
 
 // DocumentBounds returns the document's estimated extent, origin at
-// (0, 0): width is what Layout was last called with; height is the
-// current best estimate of the total document height (see
-// heightEstimate) - exact once every slot has been resolved at least
-// once, refined automatically before then as more of the document is
-// visited. A caller building its own scrollbar (vertical, or - if it
-// ever applies - horizontal) scales the ratio between this and
-// VisibleViewBounds to whatever real pixel track it's drawing into.
+// (0, 0): width is the last Layout width; height is the current best
+// estimate of the total (see heightEstimate), exact once every slot
+// has been resolved. A caller scales the ratio between this and
+// VisibleViewBounds to build its own scrollbar.
 func (v *View) DocumentBounds() image.Rectangle {
 	if v.box == nil {
 		return image.Rectangle{}
@@ -273,25 +251,17 @@ func (v *View) DocumentBounds() image.Rectangle {
 
 // VisibleViewBounds returns the sub-rectangle of DocumentBounds
 // currently visible for a viewport of viewportSize (the same size
-// passed to Draw's dst). The top (everything above the cursor) uses
-// heightEstimate's estimate, same as DocumentBounds - cheap even after
-// a cursor jump (ScrollToAnchor) that skipped resolving everything in
-// between. The bottom edge is exactly top+viewportSize.Y, clamped to
-// the document's total height - not "wherever the last slot DrawFrom
-// would draw happens to end", which is a subtly different quantity
-// that used to be used here: a slot's own bottom can fall well past
-// the viewport edge (a single large image or table, say), so pinning
-// the result to it made the thumb's size jump by however much that
-// last slot overshot, and which slot that is changes discretely as
-// slot boundaries slide past the viewport edge while scrolling - a
-// quantization artifact independent of estimation accuracy, still
-// there even once every slot's real height is known. The forward walk
-// below still force-resolves exactly the slots DrawFrom would draw
-// this frame (same range, same break condition) - not to derive the
-// bottom edge from anymore, but because that range is what Draw is
-// about to resolve anyway, so there's no laziness benefit to skipping
-// it, and doing so keeps the document total below as accurate as
-// possible for the part of the document nearest the viewport.
+// passed to Draw's dst). The bottom edge is exactly top+viewportSize.Y,
+// clamped to the document's total - deliberately not "wherever the
+// last slot DrawFrom would draw happens to end": a slot's own bottom
+// can overshoot the viewport by a lot (a large image or table), and
+// which slot ends up last shifts discretely while scrolling, so
+// pinning the result to it made the thumb's size visibly jump - a
+// quantization artifact independent of estimation accuracy. The
+// forward walk below still force-resolves the same slots DrawFrom
+// would draw this frame, as a side effect: no laziness benefit in
+// skipping it, since Draw resolves them anyway, and doing so keeps the
+// document total as accurate as possible near the viewport.
 func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 	if v.box == nil || v.cursor.index >= len(v.box.slots) {
 		return image.Rectangle{}
@@ -360,10 +330,8 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 }
 
 // hitTest is HitTest's real implementation, additionally reporting
-// which top-level slot p.Y resolved to - slot is meaningful only when
-// hit is non-nil. HitTest itself discards it; linkNodeAt (and so
-// Hover) reuses it instead of re-walking the cursor a second time for
-// the same y.
+// which top-level slot p.Y resolved to (meaningful only when hit is
+// non-nil) - reused by linkNodeAt/Hover to avoid a second cursor walk.
 func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
 	if v.box == nil {
 		return nil, image.Point{}, 0
@@ -388,13 +356,10 @@ func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
 	return hit, offset.Add(image.Pt(left, y-int(c.offset))), c.index
 }
 
-// linkNodeAt returns the ASTNode of the link at document position (x, y)
-// - the same coordinate space HitTest/Draw use - or nil if (x, y) doesn't
-// land on a link. slot is the top-level slot index (x, y) resolved to,
-// meaningful only when node is non-nil - Hover reuses it to know which
-// slot to invalidate without a second cursor-relative walk; LinkAt just
-// discards it. Shared by Hover and LinkAt so neither duplicates the
-// hit-then-walk-to-the-enclosing-link logic.
+// linkNodeAt returns the ASTNode of the link at document position
+// (x, y), or nil if none - same coordinate space as HitTest. slot is
+// the resolved top-level slot (meaningful only when node is non-nil),
+// reused by Hover to invalidate without a second cursor walk.
 func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
 	hit, _, slot := v.hitTest(x, y)
 	if hit == nil {
@@ -405,22 +370,13 @@ func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
 
 // Hover updates the currently-highlighted link, given the mouse position
 // in the same coordinate space HitTest/Draw use - call every frame from
-// the embedding game's own input handling. Finding the link under (x, y)
-// is cheap (linkNodeAt), and so is applying a change: highlighting only
-// ever changes color (RenderingContext.HighlightNode/ResolvedColor),
-// never layout, so only the top-level slot being left and the one being
-// entered - at most two - are discarded and lazily rebuilt (see
-// invalidateSlot), the same surgical invalidation invalidateChangedImages
-// already uses for a settled image. highlightSlot is kept fresh on every
-// call, not only when the link actually changes, so it survives an
-// unrelated full rebuild (a resize, a StyleSheet swap) that happens while
-// something is already highlighted - see highlightSlot's own doc comment
-// for the one narrow, purely-cosmetic edge case this doesn't cover.
+// the embedding game's own input handling. Highlighting only ever
+// changes color, never layout, so at most two slots (the one left, the
+// one entered) are surgically invalidated rather than triggering a
+// full rebuild.
 //
 // Hover also reports the link under (x, y), same as LinkAt, so a caller
-// handling a click at the same position doesn't need a second HitTest -
-// e.g. cmd/whynot calls Hover once per frame with the cursor position
-// and can reuse its result if that frame also saw a click.
+// handling a click at the same position doesn't need a second HitTest.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
 	changed := node != v.ctx.HighlightNode
@@ -447,9 +403,7 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 }
 
 // invalidateSlot discards slot i's memoized box - boxAt lazily rebuilds
-// it, with whatever's current in v.box.ctx, the next time something
-// actually asks for it. The same per-slot invalidation
-// invalidateChangedImages uses for a settled image.
+// it the next time something actually asks for it.
 func (v *View) invalidateSlot(i int) {
 	if i < 0 || i >= len(v.box.slots) {
 		return
@@ -492,29 +446,19 @@ func (v *View) Layout(width int, scale float64, now time.Duration) {
 	v.rebuild()
 }
 
-// invalidateChangedImages is Layout's response to an unchanged width/
-// scale: images load asynchronously and in the background (see
-// ImageCache), so even when nothing about the View's own configuration
-// changed, an image it's showing a placeholder or fallback for may
-// have settled since the last call and need picking up.
+// invalidateChangedImages is Layout's response to an unchanged
+// width/scale: an image may have settled since the last call (see
+// ImageCache) and need picking up. Only a slot actually waiting on a
+// changed src is invalidated; everything else is left alone.
 //
-// A slot that was never resolved (most of a long document - see
-// StackBox.boxAt) is left alone: nothing pending was ever reported for
-// it, since nobody's asked for it yet. Of the slots that were
-// resolved, one whose PendingImages() doesn't intersect what changed -
-// fully settled, or waiting on a different, still-unrelated image - is
-// also left exactly as it is. Only a slot actually waiting on
-// something that changed gets its memoized box discarded, so the very
-// next boxAt (imminent, since this is by definition already near the
-// viewport) rebuilds just that one.
-//
-// The one exception is a change with BoundsRevealed: a slot showing
-// "(loading image…)" text has no predictable size, so learning the
-// image's real size for the first time can change that slot's height -
-// unlike every other transition, which happens at an already-known,
-// already-laid-out size. That can shift what's currently visible, so
-// it goes through the full rebuild (with its existing ratio-based
-// scroll re-anchoring) instead of the surgical path.
+// A change with BoundsRevealed is special: the first time an image's
+// real size becomes known can change its slot's height (every other
+// transition happens at an already-known, already-laid-out size - see
+// ImageChange.BoundsRevealed). That only matters if the cursor is
+// anchored in that slot, in which case its offset is re-anchored by
+// ratio (reanchorCursor) - scoped to that one slot rather than a full
+// rebuild, which would otherwise discard every other slot's height
+// estimate too.
 func (v *View) invalidateChangedImages() {
 	if v.box == nil || v.ctx.ImageCache == nil {
 		return
@@ -528,23 +472,32 @@ func (v *View) invalidateChangedImages() {
 	changedSrcs := make(map[string]bool, len(changes))
 	for _, c := range changes {
 		changedSrcs[c.Src] = true
-		if c.BoundsRevealed {
-			v.rebuild()
-			return
-		}
 	}
 
+	var reanchor bool
+	var oldHeight int
 	for i := range v.box.slots {
 		slot := v.box.slots[i]
 		if slot.box == nil {
 			continue
 		}
+		changed := false
 		for _, src := range slot.box.PendingImages() {
 			if changedSrcs[src] {
-				v.invalidateSlot(i)
+				changed = true
 				break
 			}
 		}
+		if !changed {
+			continue
+		}
+		if i == v.cursor.index {
+			reanchor, oldHeight = true, slot.box.Bounds().Dy()
+		}
+		v.invalidateSlot(i)
+	}
+	if reanchor {
+		v.reanchorCursor(oldHeight)
 	}
 }
 
@@ -567,31 +520,23 @@ func (v *View) SetStyleSheet(s StyleSheet) {
 	v.rebuild()
 }
 
-// rebuild re-lays-out the document at the current width, re-anchoring the
-// scroll position by ratio through the current slot rather than by raw
-// pixel offset, so a change to content heights (from a resize or a
-// StyleSheet swap) doesn't change what's visible - and since the cursor
-// is already (index, offset), this only needs one old and one new height,
-// not a scan of the tree.
+// rebuild re-lays-out the document at the current width. slotHeights
+// is deliberately left alone (not reset) - the old per-slot heights
+// remain useful seed estimates even though width/scale/StyleSheet can
+// change any of them; heightEstimate reinitializes from scratch only
+// if the slot count itself changed.
 //
 // The document is wrapped with a leading and trailing EmptyBox sized to
 // the StyleSheet's ViewMargins, so the view's outer margin is real (if
-// empty) space in the tree - the same way StackBlock.GetBlockLayout
-// already represents inter-block gaps - rather than a separate draw-time
-// overlay: scrolling clamps past the last block into the bottom margin
-// exactly like clamping at the true end of the document, and a click
-// inside either margin misses, since EmptyBox.HitTest always declines.
-// Left/Right instead narrow the width passed to GetBlockLayout, since
-// slots have no per-slot horizontal position the way they have a
-// height - Draw/HitTest shift by Left to compensate.
+// empty) space in the tree rather than a separate draw-time overlay:
+// scrolling clamps into the bottom margin like the true end of the
+// document, and a click inside either margin misses (EmptyBox.HitTest
+// always declines). Left/Right instead narrow the width passed to
+// GetBlockLayout; Draw/HitTest shift by Left to compensate.
 func (v *View) rebuild() {
-	v.slotHeights = nil // a real rebuild can change any slot's height
-
-	ratio := 0.0
+	oldHeight := 0
 	if v.box != nil && v.cursor.index < len(v.box.slots) {
-		if h := v.box.boxAt(v.cursor.index).Bounds().Dy(); h > 0 {
-			ratio = v.cursor.offset / float64(h)
-		}
+		oldHeight = v.box.boxAt(v.cursor.index).Bounds().Dy()
 	}
 
 	margin := v.ctx.ScaledViewMargins()
@@ -608,6 +553,21 @@ func (v *View) rebuild() {
 		v.box.slots = append(v.box.slots, stackSlot{box: NewEmptyBox(contentWidth, bottom)})
 	}
 
+	v.reanchorCursor(oldHeight)
+}
+
+// reanchorCursor rescales v.cursor's offset to the same proportion
+// through its own slot's new height as oldHeight represented, so
+// scrolling stays at the same logical position across a change that
+// may have resized that slot - rather than leaving offset pointing at
+// a leftover pixel that might now mean something else, or overflow the
+// slot entirely. oldHeight <= 0 means no ratio is known, landing at
+// the slot's own top instead.
+func (v *View) reanchorCursor(oldHeight int) {
+	ratio := 0.0
+	if oldHeight > 0 {
+		ratio = v.cursor.offset / float64(oldHeight)
+	}
 	if v.cursor.index >= len(v.box.slots) {
 		v.cursor.index = len(v.box.slots) - 1
 	}

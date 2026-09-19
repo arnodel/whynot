@@ -996,11 +996,11 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	}
 }
 
-// TestViewHeightEstimateResetsOnResize checks that a real rebuild (a
-// resize here) discards stale per-slot estimates rather than mixing
-// pre-resize heights into the post-resize total - unlike Hover, a
-// resize genuinely can change every slot's height.
-func TestViewHeightEstimateResetsOnResize(t *testing.T) {
+// TestViewHeightEstimateSeedsFromStaleValueAcrossResize checks that a
+// resize keeps a slot's pre-resize height as a seed estimate rather
+// than discarding it to the document-wide average - refined back to
+// exact once the slot is actually re-resolved at the new width.
+func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 	v := &View{
 		block: &StackBlock{blocks: []Block{
 			&scaledHeightBlock{scale: 1}, // height == width given
@@ -1013,17 +1013,21 @@ func TestViewHeightEstimateResetsOnResize(t *testing.T) {
 	_ = v.DocumentBounds() // populate slotHeights from both slots before the resize
 
 	// Resize - slot 1's real height is now 200px, but nothing has asked
-	// boxAt(1) again yet at the new width, so its stale 100px estimate
-	// (captured into slotHeights just above) would leak into the total
-	// if slotHeights weren't reset.
+	// boxAt(1) again yet at the new width.
 	v.Layout(200, 1, 0)
 
 	// Slot 0 is resolved fresh (200px, real - rebuild's own cursor
-	// re-anchoring does this); slot 1 stays unresolved, so its
-	// contribution is extrapolated from what's known (200), not the
-	// stale 100 from before the resize.
+	// re-anchoring does this); slot 1 stays at its stale pre-resize
+	// estimate (100) until actually re-resolved.
+	if got, want := v.DocumentBounds(), image.Rect(0, 0, 200, 300); got != want {
+		t.Errorf("DocumentBounds() after resize = %v, want %v (slot 1's stale estimate kept as a seed)", got, want)
+	}
+
+	// Once slot 1 is actually re-resolved at the new width, its real
+	// (200px) height replaces the stale seed.
+	v.box.boxAt(1)
 	if got, want := v.DocumentBounds(), image.Rect(0, 0, 200, 400); got != want {
-		t.Errorf("DocumentBounds() after resize = %v, want %v (stale slot 1 estimate discarded)", got, want)
+		t.Errorf("DocumentBounds() after resolving slot 1 = %v, want %v (stale seed replaced by the real height)", got, want)
 	}
 }
 
@@ -1134,14 +1138,13 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	}
 }
 
-// TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed checks
-// that an image with no known size until its fetch fully completes -
-// unlike the placeholder-rect case above - triggers a full rebuild
-// (every slot, not just the image's own) once its bounds are revealed,
-// since a "(loading image…)" text placeholder's height is arbitrary
-// and the real image's may differ, unlike a correctly-pre-sized
-// placeholder rect.
-func TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed(t *testing.T) {
+// TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed checks
+// that an image's bounds being revealed only invalidates its own slot,
+// leaving every other slot's memoized box and height estimate
+// untouched - not a full rebuild, even though this is the one
+// transition that can change a slot's height (see
+// ImageChange.BoundsRevealed).
+func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	full := onePixelPNG(t)
 	release := make(chan struct{})
 	source := &countingImageSource{
@@ -1158,6 +1161,7 @@ func TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed(t *testing.T
 	view.box.Bounds() // force every slot to resolve once, including the image's
 
 	firstSlotBefore := view.box.slots[0].box
+	thirdSlotBefore := view.box.slots[2].box
 	cursorBefore := view.cursor
 
 	close(release)
@@ -1175,10 +1179,70 @@ func TestViewInvalidateChangedImagesRebuildsFullyWhenBoundsRevealed(t *testing.T
 	view.Layout(300, 1, 0) // same width/scale -> invalidateChangedImages
 	view.box.Bounds()
 
-	if view.box.slots[0].box == firstSlotBefore {
-		t.Error("unrelated slot 0 was not rebuilt - want a full rebuild once bounds were revealed")
+	if view.box.slots[0].box != firstSlotBefore {
+		t.Error("unrelated slot 0 was touched - want only the image's own slot invalidated")
+	}
+	if view.box.slots[2].box != thirdSlotBefore {
+		t.Error("unrelated slot 2 was touched - want only the image's own slot invalidated")
 	}
 	if view.cursor != cursorBefore {
-		t.Errorf("cursor = %+v, want unchanged %+v (an unscrolled view's ratio-based reanchor should land back at the same position)", view.cursor, cursorBefore)
+		t.Errorf("cursor = %+v, want unchanged %+v (the cursor isn't anchored in the changed slot, so nothing needs reanchoring)", view.cursor, cursorBefore)
+	}
+}
+
+// TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot checks
+// that when the cursor is anchored in the slot whose bounds are being
+// revealed, its offset is rescaled by ratio to the slot's new height
+// rather than left pointing at a stale pixel.
+func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
+	full := onePixelPNG(t)
+	release := make(chan struct{})
+	source := &countingImageSource{
+		resolved: "img.png",
+		open: func() (io.ReadCloser, error) {
+			<-release
+			return io.NopCloser(bytes.NewReader(full)), nil
+		},
+	}
+
+	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
+	view := NewView([]byte(doc), NewGoFontFaceSelector(72), WithImageSource(source))
+	view.Layout(300, 1, 0)
+	// Slots: 0 = leading view margin, 1 = "first paragraph here", 2 =
+	// inter-block gap, 3 = the image's own paragraph, 4 = gap, 5 =
+	// "third paragraph here", 6 = trailing view margin (compile.go
+	// inserts a margin-gap slot between each pair of top-level blocks -
+	// see TestViewSetStyleSheetReanchorsScroll).
+	const imageSlot = 3
+	oldHeight := view.box.boxAt(imageSlot).Bounds().Dy() // the placeholder's height
+	firstParaBefore := view.box.slots[1].box
+
+	// Scroll the cursor to be halfway down the image's own placeholder.
+	view.cursor = stackCursor{index: imageSlot, offset: float64(oldHeight) / 2}
+
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if changes, _ := view.ctx.ImageCache.ChangedSince(0); len(changes) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("image never settled")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	view.Layout(300, 1, 0) // same width/scale -> invalidateChangedImages
+
+	if view.box.slots[1].box != firstParaBefore {
+		t.Error("unrelated slot 1 was touched")
+	}
+	if view.cursor.index != imageSlot {
+		t.Fatalf("cursor.index = %d, want still %d (the image's own slot)", view.cursor.index, imageSlot)
+	}
+	newHeight := view.box.boxAt(imageSlot).Bounds().Dy()
+	wantOffset := float64(newHeight) / 2
+	if got := view.cursor.offset; got < wantOffset-0.001 || got > wantOffset+0.001 {
+		t.Errorf("cursor.offset = %v, want %v (half of the new height %d, same ratio as before)", got, wantOffset, newHeight)
 	}
 }
