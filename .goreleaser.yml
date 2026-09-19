@@ -89,8 +89,13 @@ release:
   header: |
     ## whynot {{.Version}}
 
-    A Markdown renderer for Ebitengine. Download the archive for your
-    platform below, unzip it, and run `whynot` (or `whynot some-file.md`).
+    On macOS:
+    ```bash
+    brew install arnodel/tap/whynot
+    ```
+
+    Otherwise, download the archive for your platform below, unzip it,
+    and run `whynot` (or `whynot some-file.md`).
 
     Building from source instead:
     ```bash
@@ -98,3 +103,32 @@ release:
     ```
   footer: |
     **Full Changelog**: https://github.com/arnodel/whynot/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Homebrew tap - publishes to the existing arnodel/homebrew-tap repo
+# (already set up for jsonstream). Needs a TAP_GITHUB_TOKEN secret on
+# this repo: a fine-grained PAT scoped to homebrew-tap only, with
+# Contents (read/write) + Metadata (read) permissions, passed through
+# by .github/workflows/release.yaml.
+homebrew_casks:
+  - name: whynot
+    ids:
+      - whynot-archive
+    repository:
+      owner: arnodel
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    description: "A Markdown file renderer for Ebitengine games"
+    homepage: "https://github.com/arnodel/whynot"
+    license: "Apache-2.0"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    binaries:
+      - whynot
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/whynot"]
+          end
