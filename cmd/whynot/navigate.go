@@ -27,15 +27,15 @@ func (g *game) setTheme(dark bool) {
 
 func (g *game) setStyleSheet(s whynot.StyleSheet) {
 	g.styleSheet = s
-	g.current.view.SetStyleSheet(s)
+	g.panel.SetStyleSheet(s)
 }
 
 // updateWindowTitle sets the OS window title to the current document's
 // own title (View.Title: its first heading, any level), or a generic
-// fallback if it has none - call whenever g.current.view is replaced
+// fallback if it has none - call whenever panel's View is replaced
 // with a different document's.
 func (g *game) updateWindowTitle() {
-	title, ok := g.current.view.Title()
+	title, ok := g.panel.View().Title()
 	if !ok {
 		title = "Untitled document"
 	}
@@ -48,7 +48,22 @@ func (g *game) updateWindowTitle() {
 // (in the address bar, since dest alone is just the literal Markdown
 // destination text) and to navigate there on click.
 func (g *game) resolveLink(dest string) (*url.URL, error) {
-	return resolveAgainst(g.current.location, dest)
+	return resolveAgainst(g.location, dest)
+}
+
+// onLinkHover is panel.OnLinkHover: dest is the raw destination text of
+// whatever's under the cursor, or "" when nothing is - resolved (same
+// as resolveLink does for a click) so the address bar shows where a
+// relative or fragment-only link actually points, not just its literal
+// Markdown text.
+func (g *game) onLinkHover(dest string) {
+	g.hoverDest = ""
+	if dest == "" {
+		return
+	}
+	if resolved, err := g.resolveLink(dest); err == nil {
+		g.hoverDest = resolved.String()
+	}
 }
 
 // newView builds a View for source, loaded from location - bundling
@@ -85,16 +100,16 @@ func (g *game) follow(dest string) {
 		return
 	}
 
-	if samePage(g.current.location, resolved) {
+	if samePage(g.location, resolved) {
 		if resolved.Fragment == "" {
 			return
 		}
 		g.pushHistory()
-		g.current.view.ScrollToAnchor(resolved.Fragment)
-		// resolved (unlike g.current.location) carries the fragment, so
-		// the address bar reflects the jump even though the document
-		// itself didn't change.
-		g.current.location = resolved
+		g.panel.View().ScrollToAnchor(resolved.Fragment)
+		// resolved (unlike g.location) carries the fragment, so the
+		// address bar reflects the jump even though the document itself
+		// didn't change.
+		g.location = resolved
 		return
 	}
 
@@ -113,8 +128,9 @@ func (g *game) follow(dest string) {
 	if resolved.Fragment != "" {
 		view.ScrollToAnchor(resolved.Fragment)
 	}
-	g.pushHistory()
-	g.current = document{location: resolved, view: view}
+	g.pushHistory() // must run before SetView - it reads the page being left
+	g.panel.SetView(view)
+	g.location = resolved
 	g.updateWindowTitle()
 }
 
@@ -123,9 +139,10 @@ func (g *game) follow(dest string) {
 // a browser discards forward history once you navigate anywhere new
 // rather than pressing its forward button.
 func (g *game) pushHistory() {
+	view := g.panel.View()
 	g.history = append(g.history, historyEntry{
-		document: g.current,
-		scroll:   g.current.view.ScrollPosition(),
+		document: document{location: g.location, view: view},
+		scroll:   view.ScrollPosition(),
 	})
 	g.future = nil
 }
@@ -167,19 +184,19 @@ func (g *game) forward() {
 // being left behind onto undoStack (g.future when going back, g.history
 // when going forward) so the trip itself can be undone. entry's View
 // may be stale if the window was resized or the theme toggled while it
-// wasn't current, so its scroll position is restored first, then its
-// StyleSheet and layout are refreshed - in that order, so each
-// rebuild's ratio-preserving cursor logic works from the right
+// wasn't current, so its scroll position is restored first, then
+// panel.SetView refreshes its StyleSheet and layout - in that order, so
+// each rebuild's ratio-preserving cursor logic works from the right
 // position.
 func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
+	current := g.panel.View()
 	*undoStack = append(*undoStack, historyEntry{
-		document: g.current,
-		scroll:   g.current.view.ScrollPosition(),
+		document: document{location: g.location, view: current},
+		scroll:   current.ScrollPosition(),
 	})
 	entry.view.RestoreScrollPosition(entry.scroll)
-	entry.view.SetStyleSheet(g.styleSheet)
-	entry.view.Layout(g.width, g.scale, g.elapsed())
-	g.current = entry.document
+	g.panel.SetView(entry.view) // re-applies g.styleSheet, then relayouts
+	g.location = entry.location
 	g.updateWindowTitle()
 }
 
@@ -188,21 +205,21 @@ func (g *game) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 // same place, just re-read. Scroll position is carried over to the new
 // View the same way it already is across a resize or theme change.
 func (g *game) reload() {
-	source, err := loadDocument(g.current.location)
+	source, err := loadDocument(g.location)
 	if err != nil {
 		var htmlErr *htmlContentError
 		if errors.As(err, &htmlErr) {
-			openInBrowser(g.current.location.String())
+			openInBrowser(g.location.String())
 			return
 		}
-		log.Printf("reloading %s: %v", g.current.location, err)
+		log.Printf("reloading %s: %v", g.location, err)
 		return
 	}
-	scroll := g.current.view.ScrollPosition()
-	view := g.newView(source, g.current.location)
+	scroll := g.panel.View().ScrollPosition()
+	view := g.newView(source, g.location)
 	view.Layout(g.width, g.scale, g.elapsed())
 	view.RestoreScrollPosition(scroll)
-	g.current.view = view
+	g.panel.SetView(view)
 	g.updateWindowTitle()
 }
 
@@ -247,7 +264,8 @@ func (g *game) paste() {
 	}
 	view := g.newView(source, resolved)
 	view.Layout(g.width, g.scale, g.elapsed())
-	g.pushHistory()
-	g.current = document{location: resolved, view: view}
+	g.pushHistory() // must run before SetView - it reads the page being left
+	g.panel.SetView(view)
+	g.location = resolved
 	g.updateWindowTitle()
 }

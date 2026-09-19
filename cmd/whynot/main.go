@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"image"
 	"log"
 	"time"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
+
+// initialWindowWidth/Height are ebiten's starting window size, and also
+// what game.outsideWidth/Height are seeded to in main - so the very
+// first Bounds/Scale handed to NewPanel already match what ebiten's own
+// first Layout callback would report, rather than a throwaway guess
+// immediately superseded.
+const initialWindowWidth, initialWindowHeight = 1024, 768
 
 // version is set via -X main.version=... at build time (see
 // .goreleaser.yml) - "dev" for an ordinary local build. Shown on the
@@ -40,7 +48,7 @@ func main() {
 		panic(err)
 	}
 
-	ebiten.SetWindowSize(1024, 768)
+	ebiten.SetWindowSize(initialWindowWidth, initialWindowHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	styleSheet := whynot.StyleSheet(whynot.NewDarkStyleSheet())
@@ -50,7 +58,7 @@ func main() {
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := whynot.NewGoFontFaceSelector(72 * scale)
-	game := &game{
+	g := &game{
 		faceSelector:        faceSelector,
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
 		styleSheet:          styleSheet,
@@ -59,11 +67,31 @@ func main() {
 		debugHit:            *debugHit,
 		debugStats:          *debugStats,
 		zoom:                1,
+		outsideWidth:        initialWindowWidth,
+		outsideHeight:       initialWindowHeight,
 		start:               time.Now(),
 	}
-	game.current = document{location: location, view: game.newView(source, location)}
-	game.updateWindowTitle()
-	if err := ebiten.RunGame(game); err != nil {
+	g.applyDeviceScale()
+
+	view := g.newView(source, location)
+	g.panel = ebitenrenderer.NewPanel(view, g.renderer,
+		image.Rect(0, g.toolbarHeight, g.width, g.height),
+		ebitenrenderer.WithScrollbar(),
+		// Load-bearing, not cosmetic: panel's own scrollbar color reads
+		// its own remembered StyleSheet (only ever set via
+		// SetStyleSheet/WithStyleSheet), not the View's - without this,
+		// the scrollbar would render with panel's flat gray fallback
+		// until the user's first theme toggle, even though the View
+		// itself is already correctly themed via newView above.
+		ebitenrenderer.WithStyleSheet(g.styleSheet),
+	)
+	g.panel.SetScale(g.scale)
+	g.panel.OnLinkClick = g.follow
+	g.panel.OnLinkHover = g.onLinkHover
+
+	g.location = location
+	g.updateWindowTitle()
+	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }

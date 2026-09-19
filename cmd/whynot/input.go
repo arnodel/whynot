@@ -12,36 +12,9 @@ func (g *game) Update() error {
 	start := time.Now()
 	defer func() { g.updateDuration = time.Since(start) }()
 
-	_, dy := ebiten.Wheel()
-	g.current.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
+	g.panel.Update()
 
 	g.hoverX, g.hoverY = ebiten.CursorPosition()
-
-	if g.updateScrollbarDrag() {
-		// The scrollbar thumb owns this drag - don't also treat it as
-		// a document hover/click underneath it.
-		return nil
-	}
-
-	docY := g.hoverY - g.toolbarHeight
-
-	var dest string
-	var hasLink bool
-	if docY >= 0 {
-		dest, hasLink = g.current.view.Hover(g.hoverX, docY)
-	} else {
-		// Over the toolbar, not the document - (-1, -1) can't land on
-		// anything, so this only ever clears a highlight left over from
-		// just having moved off a link.
-		g.current.view.Hover(-1, -1)
-	}
-	g.hoverDest = ""
-	if hasLink {
-		if resolved, err := g.resolveLink(dest); err == nil {
-			g.hoverDest = resolved.String()
-		}
-	}
-
 	cursor := image.Pt(g.hoverX, g.hoverY)
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: mouseDown && cursor.In(g.backButton)}
@@ -53,8 +26,6 @@ func (g *game) Update() error {
 
 	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	switch {
-	case hasLink && clicked:
-		g.follow(dest)
 	case clicked && g.backState.hover:
 		g.back()
 	case clicked && g.forwardState.hover:
@@ -82,20 +53,23 @@ func (g *game) Update() error {
 		const pageOverlapFrac = 0.1
 		page := float64(g.height-g.toolbarHeight) * (1 - pageOverlapFrac)
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.current.view.Scroll(page)
+			g.panel.View().Scroll(page)
 		} else {
-			g.current.view.Scroll(-page)
+			g.panel.View().Scroll(-page)
 		}
 	}
 	// A few lines at a time, repeating while held (see keyRepeat) -
 	// finer-grained than Space's page jump, for nudging up/down a
-	// short way without overshooting.
+	// short way without overshooting. Calls View.Scroll directly rather
+	// than panel.ScrollDown/Up, which scale by panel's own combined
+	// scale (deviceScale*zoom) - this stays deviceScale-alone,
+	// deliberately zoom-independent like Space above.
 	const arrowScrollLines = 40
 	switch {
 	case keyRepeat(ebiten.KeyDown):
-		g.current.view.Scroll(-arrowScrollLines * g.deviceScale)
+		g.panel.View().Scroll(-arrowScrollLines * g.deviceScale)
 	case keyRepeat(ebiten.KeyUp):
-		g.current.view.Scroll(arrowScrollLines * g.deviceScale)
+		g.panel.View().Scroll(arrowScrollLines * g.deviceScale)
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
@@ -111,46 +85,6 @@ func (g *game) Update() error {
 		g.setZoom(g.zoom - zoomStep)
 	}
 	return nil
-}
-
-// updateScrollbarDrag handles pressing, dragging, and releasing the
-// scrollbar thumb, reporting whether it consumed this frame's mouse
-// input (so Update skips the normal document hover/click handling
-// underneath it), and updates scrollbarState for drawScrollbar. The
-// target ratio is recomputed from the cursor's current position every
-// call, not a value captured once at drag start, so a jump into
-// not-yet-resolved territory (see View.ScrollToRatio) only ever
-// corrects toward the cursor, never drifts from it. Likewise, the
-// thumb rect is re-fetched every call (not just at drag start) so
-// scrollbarGrabRatio is always applied to the thumb's *current*
-// height.
-func (g *game) updateScrollbarDrag() bool {
-	r, ok := g.scrollbarThumbRect()
-	hovering := ok && image.Pt(g.hoverX, g.hoverY).In(r)
-	defer func() {
-		g.scrollbarState = buttonState{hover: hovering || g.draggingScrollbar, pressed: g.draggingScrollbar}
-	}()
-
-	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		g.draggingScrollbar = false
-		return false
-	}
-
-	if !g.draggingScrollbar {
-		if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) || !hovering {
-			return false
-		}
-		g.draggingScrollbar = true
-		g.scrollbarGrabRatio = float64(g.hoverY-r.Min.Y) / float64(r.Dy())
-	}
-
-	trackHeight := g.height - g.toolbarHeight
-	if !ok || trackHeight <= 0 {
-		return true
-	}
-	target := float64(g.hoverY) - g.scrollbarGrabRatio*float64(r.Dy())
-	g.current.view.ScrollToRatio((target - float64(g.toolbarHeight)) / float64(trackHeight))
-	return true
 }
 
 // keyRepeat reports whether a held key should fire again this tick -

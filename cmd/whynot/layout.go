@@ -57,22 +57,30 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return g.width, g.height
 }
 
-// relayout recomputes physical width/height (from deviceScale alone)
-// and scale (deviceScale*zoom) from the last known logical window size
-// (outsideWidth/outsideHeight), and applies them to the toolbar and
-// the current View - shared by the ebiten-driven Layout callback and
-// setZoom, which needs the same recomputation to happen immediately
-// rather than waiting for ebiten's next own Layout call (same reason
-// follow/back/reload/paste each lay out their View immediately instead
-// of leaving it for next frame).
-func (g *game) relayout() {
+// applyDeviceScale recomputes physical width/height (from deviceScale
+// alone) and scale (deviceScale*zoom) from the last known logical
+// window size (outsideWidth/outsideHeight), and lays out the toolbar -
+// split out from relayout so main can compute a correct initial
+// Bounds/Scale for NewPanel before panel exists to receive them via
+// SetBounds/SetScale.
+func (g *game) applyDeviceScale() {
 	g.deviceScale = ebiten.Monitor().DeviceScaleFactor()
 	g.scale = g.deviceScale * g.zoom
 	g.width = int(float64(g.outsideWidth) * g.deviceScale)
 	g.height = int(float64(g.outsideHeight) * g.deviceScale)
 	g.toolbarFaceSelector.SetDPI(g.deviceScale * 72)
 	g.layoutToolbar()
-	g.current.view.Layout(g.width, g.scale, g.elapsed())
+}
+
+// relayout applies applyDeviceScale's result to panel - shared by the
+// ebiten-driven Layout callback and setZoom, which needs the same
+// recomputation to happen immediately rather than waiting for ebiten's
+// next own Layout call (same reason follow/back/reload/paste each lay
+// out their View immediately instead of leaving it for next frame).
+func (g *game) relayout() {
+	g.applyDeviceScale()
+	g.panel.SetBounds(image.Rect(0, g.toolbarHeight, g.width, g.height))
+	g.panel.SetScale(g.scale)
 }
 
 // zoomStep is a fixed step of the original (100%) size, not of the

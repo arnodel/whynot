@@ -282,13 +282,12 @@ by implementation order now that most of the list is done.
 - [x] A link to a webpage opens in the system browser instead of failing; a link to
       Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
 - [x] Back/forward history, light/dark theme, zoom
-- [x] Scrollbar - drawn by `cmd/whynot` itself (`drawScrollbar`, `draw.go`), not the
-      library: `View.DocumentBounds`/`VisibleViewBounds` expose the geometry instead, so
-      an embedder using its own UI framework (or wanting a native scrollbar widget) can
-      build whatever it wants rather than being stuck with the library's own opinion.
-      Draggable (`View.ScrollToRatio`), with hover/drag color feedback and a
-      theme-aware color (a light thumb on the dark theme's near-black background would
-      be invisible against the light theme's white one, and vice versa)
+- [x] Scrollbar - via `ebitenrenderer.Panel`'s `WithScrollbar()` (not the library itself:
+      `View.DocumentBounds`/`VisibleViewBounds` expose the geometry an embedder needs to
+      build its own, whether that's `Panel`'s version, a native scrollbar widget, or
+      something else entirely). Draggable (`View.ScrollToRatio`), with hover/drag color
+      feedback and a theme-aware color (a light thumb on the dark theme's near-black
+      background would be invisible against the light theme's white one, and vice versa)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 

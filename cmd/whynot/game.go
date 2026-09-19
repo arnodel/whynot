@@ -31,7 +31,16 @@ type historyEntry struct {
 // game adapts a whynot.View to ebiten's Game interface: it owns window/input
 // plumbing only, all rendering behavior lives in the library.
 type game struct {
-	current document
+	// location is where the current document (panel.View()) was loaded
+	// from - kept separately from the View itself, which panel alone
+	// owns (see panel, below); document still pairs the two together
+	// for historyEntry, where each entry owns its own *whynot.View.
+	location *url.URL
+	// panel owns the current View, its layout, and all document-area
+	// input handling (hover/click, wheel scroll, scrollbar drag) -
+	// everything except the toolbar, keyboard shortcuts, and
+	// history/navigation, which stay game's own concern.
+	panel *ebitenrenderer.Panel
 	// history is the stack of places navigated away from, most recent
 	// last. A cross-document jump's entry keeps that document's own
 	// *whynot.View, so going back restores its exact scroll position
@@ -77,21 +86,9 @@ type game struct {
 
 	hoverX, hoverY int
 	// hoverDest is the link under the cursor, if any - what the address
-	// bar shows instead of the current location while hovering.
+	// bar shows instead of the current location while hovering. Set via
+	// onLinkHover, wired as panel.OnLinkHover.
 	hoverDest string
-
-	// draggingScrollbar is whether the scrollbar thumb is currently
-	// being dragged, and scrollbarGrabRatio is where within the thumb's
-	// own height it was grabbed (0 = top, 1 = bottom; captured once, at
-	// drag start) - a ratio of the thumb's height rather than an
-	// absolute pixel offset, since the thumb's height itself can shrink
-	// over the course of a drag as more of the document resolves; an
-	// absolute offset could then point outside the (now shorter) thumb
-	// entirely. scrollbarState drives the thumb's drawn color, the same
-	// hover/pressed pattern the toolbar buttons already use.
-	draggingScrollbar  bool
-	scrollbarGrabRatio float64
-	scrollbarState     buttonState
 
 	// outsideWidth, outsideHeight are the logical (device-independent)
 	// window dimensions ebiten's own Layout callback last reported -
@@ -133,10 +130,11 @@ type game struct {
 
 	// toolbarHeight and the button rectangles are recomputed by
 	// layoutToolbar whenever Layout runs - the document itself is drawn
-	// below toolbarHeight, so this is also the y-offset HitTest/Hover
-	// need subtracted from the raw cursor position. zoomIn/zoomOut sit
-	// on the toolbar's right edge, apart from back/forward/reload on
-	// the left - they're not navigation.
+	// below toolbarHeight (relayout sets panel's Bounds to start there,
+	// so panel's own input handling and debug-hit's HitTest both offset
+	// by it via panel.Bounds() rather than this field directly).
+	// zoomIn/zoomOut sit on the toolbar's right edge, apart from
+	// back/forward/reload on the left - they're not navigation.
 	toolbarHeight                           int
 	backButton, forwardButton, reloadButton image.Rectangle
 	backState, forwardState, reloadState    buttonState

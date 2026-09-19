@@ -16,21 +16,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 	start := time.Now()
 	defer func() { g.drawDuration = time.Since(start) }()
 
-	canvas := g.renderer.NewCanvas(screen)
+	// panel fills its own background (from the View's StyleSheet),
+	// draws the document, and its scrollbar - real SubImage-clipped to
+	// its own bounds, so it can never bleed into the toolbar above it.
+	g.panel.Draw(screen)
 
-	// View.Draw fills the background itself, from the View's StyleSheet -
-	// no separate clear step needed here. It's drawn below the toolbar,
-	// which is painted over it afterward.
-	g.current.view.Draw(canvas, 0, g.toolbarHeight)
+	canvas := g.renderer.NewCanvas(screen)
 	g.drawToolbar(screen, canvas)
 	g.drawZoomIndicator(canvas)
-	g.drawScrollbar(canvas)
 	g.drawDebugStats(canvas)
 
 	if g.debugHit {
-		docY := g.hoverY - g.toolbarHeight
-		if hit, offset := g.current.view.HitTest(g.hoverX, docY); hit != nil {
-			drawOutline(canvas, hit.Bounds().Add(offset).Add(image.Pt(0, g.toolbarHeight)), color.RGBA{255, 0, 0, 255})
+		cursor := image.Pt(g.hoverX, g.hoverY)
+		if cursor.In(g.panel.Bounds()) {
+			rel := cursor.Sub(g.panel.Bounds().Min)
+			if hit, offset := g.panel.View().HitTest(rel.X, rel.Y); hit != nil {
+				drawOutline(canvas, hit.Bounds().Add(offset).Add(g.panel.Bounds().Min), color.RGBA{255, 0, 0, 255})
+			}
 		}
 	}
 }
@@ -61,7 +63,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	if err != nil {
 		return
 	}
-	text, textColor := g.current.location.String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
+	text, textColor := g.location.String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
 	if g.hoverDest != "" {
 		text, textColor = g.hoverDest, g.styleSheet.HighlightColor()
 	}
@@ -177,73 +179,6 @@ func (g *game) drawDebugStats(canvas whynot.Canvas) {
 	for i, l := range lines {
 		canvas.DrawText(l, face, r.Min.X+padX, baseline+i*lineH, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
 	}
-}
-
-// scrollbarThumbRect returns the scrollbar thumb's rectangle in screen
-// space, derived entirely from View.DocumentBounds/VisibleViewBounds -
-// proof that those two methods are enough to build a scrollbar from
-// outside the library, not just plausible on paper. Both are
-// themselves only estimates until the whole document's been visited
-// (see DocumentBounds), so only the ratio between them is meaningful
-// here, scaled to the real track height. ok is false when there's
-// nothing to scroll (the document, as currently estimated, already
-// fits the viewport) - shared by drawScrollbar and input.go's drag
-// handling, so grabbing and dragging the thumb always agrees with
-// what's drawn.
-//
-// The thumb's width is derived from the View's own right margin
-// (View.ScaledViewMargins) rather than a hardcoded constant, so a
-// custom StyleSheet with a wider or narrower margin gets a
-// proportionally sized scrollbar automatically, without a second knob
-// to keep in sync - and, as a consequence, the thumb also gets wider
-// as the document is zoomed in, since the margin itself does. 0.3
-// reproduces the previous hardcoded 6px width exactly against the
-// default 20px margin; not a value with any other significance.
-func (g *game) scrollbarThumbRect() (r image.Rectangle, ok bool) {
-	trackHeight := g.height - g.toolbarHeight
-	doc := g.current.view.DocumentBounds()
-	visible := g.current.view.VisibleViewBounds(image.Pt(g.width, trackHeight))
-	if doc.Dy() == 0 || visible.Dy() >= doc.Dy() {
-		return image.Rectangle{}, false
-	}
-
-	margin := g.current.view.ScaledViewMargins()
-	width := int(margin.Right * 0.3)
-	if width < 1 {
-		width = 1
-	}
-	minHeight := int(20 * g.deviceScale)
-
-	y := g.toolbarHeight + visible.Min.Y*trackHeight/doc.Dy()
-	height := visible.Dy() * trackHeight / doc.Dy()
-	if height < minHeight {
-		height = minHeight
-	}
-	if y+height > g.height {
-		y = g.height - height
-	}
-
-	return image.Rect(g.width-width, y, g.width, y+height), true
-}
-
-func (g *game) drawScrollbar(canvas whynot.Canvas) {
-	r, ok := g.scrollbarThumbRect()
-	if !ok {
-		return
-	}
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), g.scrollbarColor())
-}
-
-// scrollbarColor picks the thumb's color for g.scrollbarState via
-// g.styleSheet's own ScrollbarColor, if it implements the optional
-// whynot.ScrollbarStyleSheet - both of whynot's built-in themes do, so
-// this only actually falls back to the flat default for a hand-rolled
-// StyleSheet that doesn't opt in.
-func (g *game) scrollbarColor() color.Color {
-	if sh, ok := g.styleSheet.(whynot.ScrollbarStyleSheet); ok {
-		return sh.ScrollbarColor(g.scrollbarState.hover, g.scrollbarState.pressed)
-	}
-	return color.RGBA{0x80, 0x80, 0x80, 0xA0}
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,
