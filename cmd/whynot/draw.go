@@ -218,14 +218,35 @@ func (g *game) drawScrollbar(canvas whynot.Canvas) {
 	if !ok {
 		return
 	}
-	clr := color.RGBA{0x80, 0x80, 0x80, 0xA0}
+	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), g.scrollbarColor())
+}
+
+// scrollbarColor picks the thumb's color for g.scrollbarState, mirrored
+// across g.darkTheme: a light gray that lightens further on hover/drag
+// reads fine against the dark theme's near-black document background,
+// but the same colors are nearly invisible against the light theme's
+// white one - so light mode uses a dark gray that darkens further
+// instead, the same "gets more prominent as you interact" feel in the
+// opposite direction.
+func (g *game) scrollbarColor() color.Color {
+	if g.darkTheme {
+		switch {
+		case g.scrollbarState.pressed:
+			return color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}
+		case g.scrollbarState.hover:
+			return color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}
+		default:
+			return color.RGBA{0x80, 0x80, 0x80, 0xA0}
+		}
+	}
 	switch {
 	case g.scrollbarState.pressed:
-		clr = color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}
+		return color.RGBA{0x20, 0x20, 0x20, 0xE0}
 	case g.scrollbarState.hover:
-		clr = color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}
+		return color.RGBA{0x40, 0x40, 0x40, 0xC0}
+	default:
+		return color.RGBA{0x60, 0x60, 0x60, 0xA0}
 	}
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), clr)
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,
