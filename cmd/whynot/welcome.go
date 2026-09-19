@@ -30,13 +30,13 @@ func welcomeShortcut() string {
 }
 
 // versionSuffix is what {{VERSION}} in the welcome page expands to -
-// blank for an ordinary local build (version is still its zero value
-// "dev"), "vX.Y.Z" for a real tagged release (see version, main.go).
-// The page's own heading already has a leading space before
-// {{VERSION}}, so this doesn't add one itself.
+// "dev" for an ordinary local build (version is still its zero value),
+// "vX.Y.Z" for a real tagged release (see version, main.go). The
+// page's own heading already has a leading space before {{VERSION}},
+// so this doesn't add one itself.
 func versionSuffix() string {
 	if version == "dev" {
-		return ""
+		return version
 	}
 	return "v" + version
 }
