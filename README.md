@@ -44,7 +44,7 @@ layout model, and the reasoning behind some of the trickier bits (lazy
 layout, scroll anchoring) are documented in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Using it as a library
+## Embed a Markdown viewer in your ebiten game
 
 The library (root package `whynot`) has no rendering backend dependency -
 it only depends on `goldmark` for parsing. `ebitenrenderer` implements
