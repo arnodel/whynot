@@ -38,11 +38,10 @@ UI toolkit. Why Not renders straight onto an `ebiten.Image`, using
 
 ## Status
 
-Early and incomplete - see [Features](#features) below for what's done and what
-isn't. The API may still change. Architecture, internal
-layout model, and the reasoning behind some of the trickier bits (lazy
-layout, scroll anchoring) are documented in
-[ARCHITECTURE.md](ARCHITECTURE.md).
+Pre-1.0 - the API may still change. See [Features](#features) below for
+what's implemented. Architecture, internal layout model, and the
+reasoning behind some of the trickier bits (lazy layout, scroll
+anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Embed a Markdown viewer in your ebiten game
 
