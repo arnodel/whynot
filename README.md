@@ -56,21 +56,70 @@ depending on how much control you want.
 scrolling, link hover/click, and an optional draggable scrollbar
 (`WithScrollbar()`) - all scoped to whatever rectangle you give it, so
 it's safe to embed as part of a larger game window without stepping on
-whatever else is there. It's what `cmd/whynot` itself is built on:
+whatever else is there. It's what `cmd/whynot` itself is built on.
+
+[`examples/panel`](examples/panel) inset a `Panel` into part of a window
+that fills the rest with plain green - other game content standing in -
+to prove it: nothing whynot draws ever leaks past its own bounds.
+
+![A Panel embedded with margin on every side, other content
+visible around it](examples/panel/screenshot.png)
 
 ```go
 package main
 
 import (
+	"fmt"
 	"image"
+	"image/color"
 	"log"
-	"os"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
+
+const (
+	windowWidth  = 800
+	windowHeight = 600
+	panelMargin  = 60 // inset on all sides, so the background shows around the panel
+)
+
+// backgroundColor is deliberately not black/white/gray - distinct
+// from anything the document itself draws - so a screenshot makes it
+// obvious whether Panel content ever leaks outside its bounds.
+var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF}
+
+// exampleDoc is generated rather than spelled out - length matters
+// here (long enough to need scrolling within the panel), wording
+// doesn't.
+func exampleDoc() string {
+	var b strings.Builder
+	b.WriteString("# Panel example\n\n")
+	b.WriteString("This document exists to prove that `ebitenrenderer.Panel` clips its drawing to\n")
+	b.WriteString("its own bounds even when embedded inside a larger window that draws other\n")
+	b.WriteString("content around it.\n\n")
+	for i := 1; i <= 8; i++ {
+		fmt.Fprintf(&b, "## Section %d\n\n", i)
+		b.WriteString("Some text, quite a bit of it actually, more than one line's worth, so the\n")
+		b.WriteString("document is tall enough to need scrolling within its panel.\n\n")
+	}
+	return b.String()
+}
+
+func main() {
+	view := whynot.NewView([]byte(exampleDoc()), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
+	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
+	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
+
+	ebiten.SetWindowSize(windowWidth, windowHeight)
+	ebiten.SetWindowTitle("whynot panel example")
+	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
+		log.Fatal(err)
+	}
+}
 
 type game struct {
 	panel *ebitenrenderer.Panel
@@ -82,31 +131,16 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
+	screen.Fill(backgroundColor)
 	g.panel.Draw(screen)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	g.panel.SetBounds(image.Rect(0, 0, outsideWidth, outsideHeight))
-	return outsideWidth, outsideHeight
-}
-
-func main() {
-	source, err := os.ReadFile("doc.md")
-	if err != nil {
-		log.Fatal(err)
-	}
-	view := whynot.NewView(source, whynot.NewGoFontFaceSelector(72))
-	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(),
-		image.Rect(0, 0, 1024, 768), ebitenrenderer.WithScrollbar())
-	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
-		log.Fatal(err)
-	}
+	return windowWidth, windowHeight
 }
 ```
 
-See [`cmd/panelexample`](cmd/panelexample) for a fuller runnable example -
-a `Panel` inset into part of a window with other game content drawn
-around it, proving it stays clipped to its own bounds.
+Run it yourself: `go run ./examples/panel`.
 
 ### Finer control: `whynot.View` directly
 
@@ -325,7 +359,7 @@ by implementation order now that most of the list is done.
       `ebiten.Game`'s own window - coordinate translation, hover/click, wheel
       scroll gated on its own bounds, and an optional draggable scrollbar
       (`WithScrollbar`), all bounds-aware so a panel never affects anything
-      outside its own rectangle. See [`cmd/panelexample`](cmd/panelexample)
+      outside its own rectangle. See [above](#embed-a-markdown-viewer-in-your-ebiten-game)
 
 **Styling**
 - [x] Fully customizable via the `StyleSheet` interface (see [above](#styling)) -

@@ -13,9 +13,10 @@ program.
 | Path | What it is |
 |---|---|
 | repo root | the library (package `whynot`) - parsing, layout, and the `Canvas` interface; no rendering backend dependency |
-| `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`; the only place outside `cmd/whynot` that imports `ebiten` |
-| `cmd/whynot/` | CLI demo: window setup + input plumbing only, all rendering behavior lives in the library |
+| `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
+| `cmd/whynot/` | the one real tool: a standalone viewer, window setup + input plumbing only, all rendering behavior lives in the library |
 | `cmd/test/` | unrelated scratch program, not part of this project |
+| `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |
 | `testdata/` | fixture Markdown/images used by the library's own tests (`go test` ignores this directory as a package) |
 
 ## The four-layer rendering pipeline
