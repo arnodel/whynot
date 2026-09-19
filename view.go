@@ -46,9 +46,9 @@ type View struct {
 
 	// slotHeights holds the last-known-or-estimated height of each
 	// v.box top-level slot, in pixels - -1 for never known. Refreshed
-	// lazily by heightEstimate; otherwise left alone across invalidation
-	// or rebuild, since a stale per-slot value is a better estimate than
-	// falling back to the document-wide average.
+	// lazily by refreshSlotHeights; otherwise left alone across
+	// invalidation or rebuild, since a stale per-slot value is a better
+	// estimate than falling back to the document-wide average.
 	slotHeights []float64
 }
 
@@ -211,17 +211,22 @@ func (v *View) ScrollToRatio(ratio float64) {
 		return
 	}
 	ratio = math.Max(0, math.Min(1, ratio))
-	total := float64(v.DocumentBounds().Dy())
-	v.cursor = v.box.normalizeCursor(v.cursorAtOffset(ratio * total))
+	avg := v.refreshSlotHeights()
+	var total float64
+	for i := range v.slotHeights {
+		total += v.estimatedHeight(i, avg)
+	}
+	v.cursor = v.box.normalizeCursor(v.cursorAtOffset(ratio*total, avg))
 }
 
-// cursorAtOffset returns the stackCursor for document offset y (in
-// heightEstimate's units), walking the estimate rather than forcing
-// any slot to resolve - the caller normalizes it afterward, which
-// resolves the landing slot for real and corrects offset if the
-// estimate was off enough to spill into a neighbor.
-func (v *View) cursorAtOffset(y float64) stackCursor {
-	for i, h := range v.heightEstimate() {
+// cursorAtOffset returns the stackCursor for document offset y, using
+// avg (see refreshSlotHeights) for any not-yet-resolved slot - the
+// caller normalizes it afterward, which resolves the landing slot for
+// real and corrects offset if the estimate was off enough to spill
+// into a neighbor.
+func (v *View) cursorAtOffset(y, avg float64) stackCursor {
+	for i := range v.box.slots {
+		h := v.estimatedHeight(i, avg)
 		if y < h || i == len(v.box.slots)-1 {
 			return stackCursor{index: i, offset: y}
 		}
@@ -230,11 +235,25 @@ func (v *View) cursorAtOffset(y float64) stackCursor {
 	return stackCursor{}
 }
 
-// heightEstimate returns the current best-known-or-estimated height of
-// every top-level slot, in pixels - real where resolved (refreshing
-// slotHeights as it goes), extrapolated from the average of whatever's
-// known otherwise. len(result) == len(v.box.slots).
-func (v *View) heightEstimate() []float64 {
+// refreshSlotHeights updates v.slotHeights in place from whatever's
+// currently resolved (see StackBox.boxAt) and returns avg - the value
+// estimatedHeight substitutes for any slot still at -1 (never resolved
+// or seeded). Doesn't allocate beyond the one-time resize when the
+// slot count itself changes.
+//
+// Re-reads Bounds() on every already-resolved slot on every call,
+// rather than tracking which slots are already known-fresh and
+// skipping them - deliberately: every BlockLayout.Bounds() this
+// project has (StackBox, TextBox, LineBox, ...) already memoizes
+// itself internally (its own "computed" flag, checked once and
+// cached), so a slot whose box hasn't changed costs a cheap flag check
+// here regardless, not real work. Tracking box identity here too to
+// skip even that would need an extra parallel slice kept in sync at
+// every write site (see VisibleViewBounds's forcing walk) for a
+// measured difference of ~0 (benchmarked on testdata/test.md) - worth
+// revisiting only if some future BlockLayout's Bounds() stops being
+// cheap to call repeatedly.
+func (v *View) refreshSlotHeights() (avg float64) {
 	if len(v.slotHeights) != len(v.box.slots) {
 		v.slotHeights = make([]float64, len(v.box.slots))
 		for i := range v.slotHeights {
@@ -244,40 +263,42 @@ func (v *View) heightEstimate() []float64 {
 	var sum float64
 	var knownCount int
 	for i := range v.box.slots {
-		if v.box.slots[i].box != nil {
-			v.slotHeights[i] = float64(v.box.slots[i].box.Bounds().Dy())
+		if box := v.box.slots[i].box; box != nil {
+			v.slotHeights[i] = float64(box.Bounds().Dy())
 		}
 		if v.slotHeights[i] >= 0 {
 			sum += v.slotHeights[i]
 			knownCount++
 		}
 	}
-	if knownCount == 0 || knownCount == len(v.slotHeights) {
-		return v.slotHeights
+	if knownCount == 0 {
+		return 0
 	}
-	avg := sum / float64(knownCount)
-	out := make([]float64, len(v.slotHeights))
-	for i, h := range v.slotHeights {
-		if h < 0 {
-			h = avg
-		}
-		out[i] = h
+	return sum / float64(knownCount)
+}
+
+// estimatedHeight returns slot i's real height if known, else avg
+// (see refreshSlotHeights).
+func (v *View) estimatedHeight(i int, avg float64) float64 {
+	if h := v.slotHeights[i]; h >= 0 {
+		return h
 	}
-	return out
+	return avg
 }
 
 // DocumentBounds returns the document's estimated extent, origin at
 // (0, 0): width is the last Layout width; height is the current best
-// estimate of the total (see heightEstimate), exact once every slot
-// has been resolved. A caller scales the ratio between this and
+// estimate of the total (see refreshSlotHeights), exact once every
+// slot has been resolved. A caller scales the ratio between this and
 // VisibleViewBounds to build its own scrollbar.
 func (v *View) DocumentBounds() image.Rectangle {
 	if v.box == nil {
 		return image.Rectangle{}
 	}
+	avg := v.refreshSlotHeights()
 	var total float64
-	for _, h := range v.heightEstimate() {
-		total += h
+	for i := range v.slotHeights {
+		total += v.estimatedHeight(i, avg)
 	}
 	return image.Rect(0, 0, v.boxWidth, int(total))
 }
@@ -299,24 +320,37 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 	if v.box == nil || v.cursor.index >= len(v.box.slots) {
 		return image.Rectangle{}
 	}
-	heights := v.heightEstimate()
-	var before float64
-	for i := 0; i < v.cursor.index; i++ {
-		before += heights[i]
+	avg := v.refreshSlotHeights()
+	var before, total float64
+	for i := range v.slotHeights {
+		h := v.estimatedHeight(i, avg)
+		total += h
+		if i < v.cursor.index {
+			before += h
+		}
 	}
 	top := before + v.cursor.offset
 
+	// The walk below resolves each slot it touches for real, which can
+	// replace that slot's avg-based contribution to total with a very
+	// different real one (see TestViewVisibleViewBoundsResolvesRealHeights) -
+	// correct total in place rather than re-deriving it with a second
+	// full pass over every slot afterward.
 	pos := before // running position, starts at the top of cursor.index's own slot
 	for i := v.cursor.index; i < len(v.box.slots); i++ {
 		if pos-top > float64(viewportSize.Y) {
 			break
 		}
-		pos += float64(v.box.boxAt(i).Bounds().Dy())
+		estimated := v.estimatedHeight(i, avg)
+		real := float64(v.box.boxAt(i).Bounds().Dy())
+		v.slotHeights[i] = real
+		total += real - estimated
+		pos += real
 	}
 
 	bottom := top + float64(viewportSize.Y)
-	if docHeight := float64(v.DocumentBounds().Dy()); bottom > docHeight {
-		bottom = docHeight
+	if bottom > total {
+		bottom = total
 	}
 	return image.Rect(0, int(top), viewportSize.X, int(bottom))
 }
