@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"image"
+	"math"
 	"strings"
 	"time"
 )
@@ -195,6 +196,38 @@ func (v *View) ScrollToAnchor(id string) bool {
 		}
 	}
 	return false
+}
+
+// ScrollToRatio sets the scroll position to ratio (clamped to [0, 1])
+// through the document's current best-estimated height - e.g. for a
+// caller implementing scrollbar-thumb dragging, where DocumentBounds/
+// VisibleViewBounds already give the inverse ratio back. Recomputes
+// from the live estimate every call rather than a target captured
+// once, so a jump into not-yet-resolved territory only ever corrects
+// toward whatever ratio the caller asks for next, never drifts from
+// it.
+func (v *View) ScrollToRatio(ratio float64) {
+	if v.box == nil {
+		return
+	}
+	ratio = math.Max(0, math.Min(1, ratio))
+	total := float64(v.DocumentBounds().Dy())
+	v.cursor = v.box.normalizeCursor(v.cursorAtOffset(ratio * total))
+}
+
+// cursorAtOffset returns the stackCursor for document offset y (in
+// heightEstimate's units), walking the estimate rather than forcing
+// any slot to resolve - the caller normalizes it afterward, which
+// resolves the landing slot for real and corrects offset if the
+// estimate was off enough to spill into a neighbor.
+func (v *View) cursorAtOffset(y float64) stackCursor {
+	for i, h := range v.heightEstimate() {
+		if y < h || i == len(v.box.slots)-1 {
+			return stackCursor{index: i, offset: y}
+		}
+		y -= h
+	}
+	return stackCursor{}
 }
 
 // heightEstimate returns the current best-known-or-estimated height of

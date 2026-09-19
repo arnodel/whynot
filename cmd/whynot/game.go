@@ -71,6 +71,17 @@ type game struct {
 	// bar shows instead of the current location while hovering.
 	hoverDest string
 
+	// draggingScrollbar is whether the scrollbar thumb is currently
+	// being dragged, and scrollbarGrabRatio is where within the thumb's
+	// own height it was grabbed (0 = top, 1 = bottom; captured once, at
+	// drag start) - a ratio of the thumb's height rather than an
+	// absolute pixel offset, since the thumb's height itself can shrink
+	// over the course of a drag as more of the document resolves; an
+	// absolute offset could then point outside the (now shorter) thumb
+	// entirely.
+	draggingScrollbar  bool
+	scrollbarGrabRatio float64
+
 	// outsideWidth, outsideHeight are the logical (device-independent)
 	// window dimensions ebiten's own Layout callback last reported -
 	// relayout recomputes deviceScale/width/height/scale from these

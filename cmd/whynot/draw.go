@@ -135,21 +135,23 @@ func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
 	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
 }
 
-// drawScrollbar draws a thumb indicating the current scroll position,
-// derived entirely from View.DocumentBounds/VisibleViewBounds - proof
-// that those two methods are enough to build a scrollbar from outside
-// the library, not just plausible on paper. Both are themselves only
-// estimates until the whole document's been visited (see
-// DocumentBounds), so only the ratio between them is meaningful here,
-// scaled to the real track height - skipped entirely when there's
-// nothing to scroll (the whole document, as currently estimated,
-// already fits).
-func (g *game) drawScrollbar(canvas whynot.Canvas) {
+// scrollbarThumbRect returns the scrollbar thumb's rectangle in screen
+// space, derived entirely from View.DocumentBounds/VisibleViewBounds -
+// proof that those two methods are enough to build a scrollbar from
+// outside the library, not just plausible on paper. Both are
+// themselves only estimates until the whole document's been visited
+// (see DocumentBounds), so only the ratio between them is meaningful
+// here, scaled to the real track height. ok is false when there's
+// nothing to scroll (the document, as currently estimated, already
+// fits the viewport) - shared by drawScrollbar and input.go's drag
+// handling, so grabbing and dragging the thumb always agrees with
+// what's drawn.
+func (g *game) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 	trackHeight := g.height - g.toolbarHeight
 	doc := g.current.view.DocumentBounds()
 	visible := g.current.view.VisibleViewBounds(image.Pt(g.width, trackHeight))
 	if doc.Dy() == 0 || visible.Dy() >= doc.Dy() {
-		return
+		return image.Rectangle{}, false
 	}
 
 	width := int(6 * g.deviceScale)
@@ -164,7 +166,15 @@ func (g *game) drawScrollbar(canvas whynot.Canvas) {
 		y = g.height - height
 	}
 
-	canvas.DrawRect(g.width-width, y, width, height, color.RGBA{0x80, 0x80, 0x80, 0xA0})
+	return image.Rect(g.width-width, y, g.width, y+height), true
+}
+
+func (g *game) drawScrollbar(canvas whynot.Canvas) {
+	r, ok := g.scrollbarThumbRect()
+	if !ok {
+		return
+	}
+	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x80, 0x80, 0x80, 0xA0})
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,

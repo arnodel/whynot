@@ -593,6 +593,91 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 	}
 }
 
+// TestViewScrollToRatio checks that ScrollToRatio lands at the
+// expected slot/offset for a few ratios through a document of known
+// per-slot heights (100, 100, 100, 100 - total 400).
+func TestViewScrollToRatio(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 100)},
+			{box: NewEmptyBox(300, 100)},
+			{box: NewEmptyBox(300, 100)},
+			{box: NewEmptyBox(300, 100)},
+		}},
+	}
+
+	cases := []struct {
+		ratio float64
+		want  stackCursor
+	}{
+		{0, stackCursor{index: 0, offset: 0}},
+		{0.25, stackCursor{index: 1, offset: 0}},
+		{0.5, stackCursor{index: 2, offset: 0}},
+		{0.6, stackCursor{index: 2, offset: 40}},
+		{1, stackCursor{index: 3, offset: 100}},
+	}
+	for _, c := range cases {
+		v.ScrollToRatio(c.ratio)
+		if v.cursor != c.want {
+			t.Errorf("ScrollToRatio(%v) cursor = %+v, want %+v", c.ratio, v.cursor, c.want)
+		}
+	}
+}
+
+// TestViewScrollToRatioClampsOutOfRange checks that a ratio outside
+// [0, 1] - e.g. a scrollbar drag past the track's own ends - clamps
+// rather than landing outside the document.
+func TestViewScrollToRatioClampsOutOfRange(t *testing.T) {
+	v := &View{
+		boxWidth: 300,
+		box: &StackBox{slots: []stackSlot{
+			{box: NewEmptyBox(300, 100)},
+			{box: NewEmptyBox(300, 100)},
+		}},
+	}
+
+	v.ScrollToRatio(-1)
+	if want := (stackCursor{index: 0, offset: 0}); v.cursor != want {
+		t.Errorf("ScrollToRatio(-1) cursor = %+v, want %+v", v.cursor, want)
+	}
+
+	v.ScrollToRatio(2)
+	if want := (stackCursor{index: 1, offset: 100}); v.cursor != want {
+		t.Errorf("ScrollToRatio(2) cursor = %+v, want %+v", v.cursor, want)
+	}
+}
+
+// TestViewScrollToRatioNilBox checks that ScrollToRatio is a no-op
+// before Layout has ever run, rather than panicking.
+func TestViewScrollToRatioNilBox(t *testing.T) {
+	v := &View{}
+	v.ScrollToRatio(0.5) // must not panic
+}
+
+// TestViewScrollToRatioSelfConsistent checks the property the whole
+// design leans on for drag-to-scroll: within one call, the ratio
+// ScrollToRatio is given and the ratio VisibleViewBounds reports back
+// afterward agree - both read the same heightEstimate snapshot, so a
+// caller re-deriving its target from the current mouse position every
+// frame can only ever correct toward that position, never drift from
+// it (see project_scrollbar_hover_rebuild_tension).
+func TestViewScrollToRatioSelfConsistent(t *testing.T) {
+	source := []byte(strings.Repeat("# Heading\n\nSome text, quite a bit of it actually.\n\n", 30))
+	v := NewView(source, NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v.Layout(300, 1, 0)
+
+	const viewportH = 200
+	for _, ratio := range []float64{0.1, 0.9, 0.3, 0.7, 0.5} {
+		v.ScrollToRatio(ratio)
+		doc := float64(v.DocumentBounds().Dy())
+		got := float64(v.VisibleViewBounds(image.Pt(300, viewportH)).Min.Y) / doc
+		if diff := got - ratio; diff < -0.01 || diff > 0.01 {
+			t.Errorf("ScrollToRatio(%v): VisibleViewBounds ratio back = %v, want within 0.01", ratio, got)
+		}
+	}
+}
+
 // TestViewTitle checks that Title finds the document's first heading,
 // at any level, skipping non-heading blocks before it, and joins a
 // multi-word heading's words back into a single string.

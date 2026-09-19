@@ -13,6 +13,13 @@ func (g *game) Update() error {
 	g.current.view.Scroll(dy * ebiten.Monitor().DeviceScaleFactor() * 2)
 
 	g.hoverX, g.hoverY = ebiten.CursorPosition()
+
+	if g.updateScrollbarDrag() {
+		// The scrollbar thumb owns this drag - don't also treat it as
+		// a document hover/click underneath it.
+		return nil
+	}
+
 	docY := g.hoverY - g.toolbarHeight
 
 	var dest string
@@ -94,6 +101,40 @@ func (g *game) Update() error {
 		g.setZoom(g.zoom - zoomStep)
 	}
 	return nil
+}
+
+// updateScrollbarDrag handles pressing, dragging, and releasing the
+// scrollbar thumb, reporting whether it consumed this frame's mouse
+// input (so Update skips the normal document hover/click handling
+// underneath it). The target ratio is recomputed from the cursor's
+// current position every call, not a value captured once at drag
+// start, so a jump into not-yet-resolved territory (see
+// View.ScrollToRatio) only ever corrects toward the cursor, never
+// drifts from it. Likewise, the thumb rect is re-fetched every call
+// (not just at drag start) so scrollbarGrabRatio is always applied to
+// the thumb's *current* height.
+func (g *game) updateScrollbarDrag() bool {
+	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		g.draggingScrollbar = false
+		return false
+	}
+
+	r, ok := g.scrollbarThumbRect()
+	if !g.draggingScrollbar {
+		if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) || !ok || !image.Pt(g.hoverX, g.hoverY).In(r) {
+			return false
+		}
+		g.draggingScrollbar = true
+		g.scrollbarGrabRatio = float64(g.hoverY-r.Min.Y) / float64(r.Dy())
+	}
+
+	trackHeight := g.height - g.toolbarHeight
+	if !ok || trackHeight <= 0 {
+		return true
+	}
+	target := float64(g.hoverY) - g.scrollbarGrabRatio*float64(r.Dy())
+	g.current.view.ScrollToRatio((target - float64(g.toolbarHeight)) / float64(trackHeight))
+	return true
 }
 
 // keyRepeat reports whether a held key should fire again this tick -
