@@ -1,4 +1,4 @@
-# Welcome to Why Not?
+# Welcome to Why Not?{{VERSION}}
 
 **whynot** is a Markdown file renderer for [ebiten](https://ebitengine.org/) games. This app,
 `cmd/whynot`, is a small standalone viewer built on top of the library - point it at a file or a

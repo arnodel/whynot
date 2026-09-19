@@ -11,6 +11,13 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
+// version is set via -X main.version=... at build time (see
+// .goreleaser.yml) - "dev" for an ordinary local build. Shown on the
+// welcome page (see renderWelcome's {{VERSION}} substitution), which
+// puts it in the window title too, since that's the document's own
+// first heading.
+var version = "dev"
+
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")

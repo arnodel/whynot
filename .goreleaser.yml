@@ -1,0 +1,100 @@
+# GoReleaser configuration for whynot
+# See: https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: whynot
+    main: ./cmd/whynot
+    binary: whynot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Windows on arm64 is niche and untested here.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      # Strip debug info for smaller binaries; embed the release version
+      # (shown on the welcome page - see main.version); suppress the
+      # console window that would otherwise flash open behind the GUI
+      # on Windows (ebitengine/hideconsole, already a dependency, also
+      # hides it at runtime - this avoids the flash in the first place).
+      - -s -w
+      - -X main.version={{ .Version }}
+      - '{{ if eq .Os "windows" }}-H=windowsgui{{ end }}'
+
+archives:
+  - id: whynot-archive
+    ids:
+      - whynot
+    formats:
+      - zip
+    format_overrides:
+      - goos: linux
+        formats:
+          - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- .Arch }}
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+  groups:
+    - title: "Features"
+      regexp: '^feat:'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^fix:'
+      order: 1
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: arnodel
+    name: whynot
+  draft: false
+  prerelease: auto
+  name_template: "whynot {{.Version}}"
+  header: |
+    ## whynot {{.Version}}
+
+    A Markdown renderer for Ebitengine. Download the archive for your
+    platform below, unzip it, and run `whynot` (or `whynot some-file.md`).
+
+    Building from source instead:
+    ```bash
+    go install github.com/arnodel/whynot/cmd/whynot@{{.Tag}}
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/arnodel/whynot/compare/{{ .PreviousTag }}...{{ .Tag }}

@@ -29,17 +29,28 @@ func welcomeShortcut() string {
 	return "Ctrl+V"
 }
 
-// renderWelcome reads the embedded welcome page and fills in its one
-// platform-specific placeholder. Panics on error - assets/welcome.md
-// is embedded via assetsFS (see assets.go), so a failure here means the
-// binary itself was built wrong, not something a caller can recover
-// from at runtime.
+// versionSuffix is what {{VERSION}} in the welcome page expands to -
+// blank for an ordinary local build (version is still its zero value
+// "dev"), " vX.Y.Z" for a real tagged release (see version, main.go).
+func versionSuffix() string {
+	if version == "dev" {
+		return ""
+	}
+	return " v" + version
+}
+
+// renderWelcome reads the embedded welcome page and fills in its
+// placeholders. Panics on error - assets/welcome.md is embedded via
+// assetsFS (see assets.go), so a failure here means the binary itself
+// was built wrong, not something a caller can recover from at runtime.
 func renderWelcome() []byte {
 	md, err := assetsFS.ReadFile("assets/welcome.md")
 	if err != nil {
 		panic(err)
 	}
-	return bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+	md = bytes.ReplaceAll(md, []byte("{{VERSION}}"), []byte(versionSuffix()))
+	return md
 }
 
 // welcomeImageSource implements whynot.ImageSource for images the
