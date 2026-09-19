@@ -190,6 +190,15 @@ func (g *game) drawDebugStats(canvas whynot.Canvas) {
 // fits the viewport) - shared by drawScrollbar and input.go's drag
 // handling, so grabbing and dragging the thumb always agrees with
 // what's drawn.
+//
+// The thumb's width is derived from the View's own right margin
+// (View.ScaledViewMargins) rather than a hardcoded constant, so a
+// custom StyleSheet with a wider or narrower margin gets a
+// proportionally sized scrollbar automatically, without a second knob
+// to keep in sync - and, as a consequence, the thumb also gets wider
+// as the document is zoomed in, since the margin itself does. 0.3
+// reproduces the previous hardcoded 6px width exactly against the
+// default 20px margin; not a value with any other significance.
 func (g *game) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 	trackHeight := g.height - g.toolbarHeight
 	doc := g.current.view.DocumentBounds()
@@ -198,7 +207,11 @@ func (g *game) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 		return image.Rectangle{}, false
 	}
 
-	width := int(6 * g.deviceScale)
+	margin := g.current.view.ScaledViewMargins()
+	width := int(margin.Right * 0.3)
+	if width < 1 {
+		width = 1
+	}
 	minHeight := int(20 * g.deviceScale)
 
 	y := g.toolbarHeight + visible.Min.Y*trackHeight/doc.Dy()
@@ -221,32 +234,16 @@ func (g *game) drawScrollbar(canvas whynot.Canvas) {
 	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), g.scrollbarColor())
 }
 
-// scrollbarColor picks the thumb's color for g.scrollbarState, mirrored
-// across g.darkTheme: a light gray that lightens further on hover/drag
-// reads fine against the dark theme's near-black document background,
-// but the same colors are nearly invisible against the light theme's
-// white one - so light mode uses a dark gray that darkens further
-// instead, the same "gets more prominent as you interact" feel in the
-// opposite direction.
+// scrollbarColor picks the thumb's color for g.scrollbarState via
+// g.styleSheet's own ScrollbarColor, if it implements the optional
+// whynot.ScrollbarStyleSheet - both of whynot's built-in themes do, so
+// this only actually falls back to the flat default for a hand-rolled
+// StyleSheet that doesn't opt in.
 func (g *game) scrollbarColor() color.Color {
-	if g.darkTheme {
-		switch {
-		case g.scrollbarState.pressed:
-			return color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}
-		case g.scrollbarState.hover:
-			return color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}
-		default:
-			return color.RGBA{0x80, 0x80, 0x80, 0xA0}
-		}
+	if sh, ok := g.styleSheet.(whynot.ScrollbarStyleSheet); ok {
+		return sh.ScrollbarColor(g.scrollbarState.hover, g.scrollbarState.pressed)
 	}
-	switch {
-	case g.scrollbarState.pressed:
-		return color.RGBA{0x20, 0x20, 0x20, 0xE0}
-	case g.scrollbarState.hover:
-		return color.RGBA{0x40, 0x40, 0x40, 0xC0}
-	default:
-		return color.RGBA{0x60, 0x60, 0x60, 0xA0}
-	}
+	return color.RGBA{0x80, 0x80, 0x80, 0xA0}
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,

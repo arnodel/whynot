@@ -216,6 +216,41 @@ func TestNewLightStyleSheetColors(t *testing.T) {
 	if light.CodeColor == dark.CodeColor {
 		t.Errorf("light CodeColor = dark's (%v), want a color readable on a light background", light.CodeColor)
 	}
+	if light.Scrollbar == dark.Scrollbar {
+		t.Errorf("light Scrollbar = dark's (%+v), want colors readable on a light background", light.Scrollbar)
+	}
+}
+
+// TestDefaultStyleSheetScrollbarColor checks that both of whynot's
+// built-in themes implement the optional ScrollbarStyleSheet interface,
+// and that ScrollbarColor picks the right one of the three Scrollbar
+// colors for each combination of hover/pressed.
+func TestDefaultStyleSheetScrollbarColor(t *testing.T) {
+	cases := []struct {
+		name           string
+		sheet          *DefaultStyleSheet
+		hover, pressed bool
+		want           color.Color
+	}{
+		{"dark idle", NewDarkStyleSheet(), false, false, color.RGBA{0x80, 0x80, 0x80, 0xA0}},
+		{"dark hover", NewDarkStyleSheet(), true, false, color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}},
+		{"dark pressed", NewDarkStyleSheet(), true, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
+		{"dark pressed without hover", NewDarkStyleSheet(), false, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
+		{"light idle", NewLightStyleSheet(), false, false, color.RGBA{0x60, 0x60, 0x60, 0xA0}},
+		{"light hover", NewLightStyleSheet(), true, false, color.RGBA{0x40, 0x40, 0x40, 0xC0}},
+		{"light pressed", NewLightStyleSheet(), true, true, color.RGBA{0x20, 0x20, 0x20, 0xE0}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sh, ok := StyleSheet(c.sheet).(ScrollbarStyleSheet)
+			if !ok {
+				t.Fatal("does not implement ScrollbarStyleSheet")
+			}
+			if got := sh.ScrollbarColor(c.hover, c.pressed); got != c.want {
+				t.Errorf("ScrollbarColor(%v, %v) = %v, want %v", c.hover, c.pressed, got, c.want)
+			}
+		})
+	}
 }
 
 // TestNewLightStyleSheetSharesNonColorValues checks that margins, sizes,

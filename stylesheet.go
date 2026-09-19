@@ -105,6 +105,31 @@ type StyleSheet interface {
 	TableGeometry(node *ASTNode) TableGeometry
 }
 
+// ScrollbarStyleSheet is an optional StyleSheet capability: a StyleSheet
+// that also knows how to color a scrollbar thumb. It's optional, not
+// part of StyleSheet itself, because a scrollbar is drawn by whatever
+// embeds a View (cmd/whynot today, a future ebitenrenderer.Panel later)
+// - View itself never draws one - so a StyleSheet that's never paired
+// with a scrollbar (e.g. a test StyleSheet) isn't forced to implement
+// it. A caller that wants a scrollbar type-asserts its StyleSheet
+// against this interface and falls back to a reasonable default color
+// when it isn't implemented.
+type ScrollbarStyleSheet interface {
+	// ScrollbarColor returns the color to draw the scrollbar thumb in.
+	// hover is true whenever the thumb is highlighted (including while
+	// dragging); pressed is true only while actively being dragged.
+	ScrollbarColor(hover, pressed bool) color.Color
+}
+
+// ScrollbarColors is the three colors DefaultStyleSheet.ScrollbarColor
+// picks between - idle, hovered, and actively-dragged - kept as one
+// struct (like BlockquoteGeometry/TableGeometry) since overriding one
+// almost always means reconsidering all three together, as one "gets
+// more prominent as you interact" progression.
+type ScrollbarColors struct {
+	Idle, Hover, Pressed color.Color
+}
+
 // DefaultStyleSheet is the concrete, configurable StyleSheet implementation
 // whynot's built-in themes (NewDarkStyleSheet, NewLightStyleSheet) are both
 // built from - the two differ only in the field values their constructors
@@ -191,6 +216,15 @@ type DefaultStyleSheet struct {
 	// the "Color" suffix for the same reason Background is.
 	Highlight color.Color
 
+	// Scrollbar is the thumb's three interaction-state colors - see
+	// ScrollbarColor. Unlike ThematicBreakColor/BlockquoteBarColor/
+	// TableFrameColor (whynot's own content decorations), a scrollbar is
+	// drawn outside whynot entirely, by whatever embeds a View - this
+	// field only supplies the color that embedder asks for. Named
+	// without the "Color" suffix for the same reason Background/
+	// Highlight are.
+	Scrollbar ScrollbarColors
+
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
 	// colors/margins/fonts, rarely a table's own column-gap width) - a
@@ -203,6 +237,7 @@ type DefaultStyleSheet struct {
 }
 
 var _ StyleSheet = (*DefaultStyleSheet)(nil)
+var _ ScrollbarStyleSheet = (*DefaultStyleSheet)(nil)
 
 // NewDarkStyleSheet returns whynot's built-in dark theme - light text on a
 // dark background - and is what NewView uses when no StyleSheet is given.
@@ -260,6 +295,15 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		// background, so NewLightStyleSheet leaves it as-is.
 		Highlight: color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
 
+		// NewLightStyleSheet overrides this fully (see below) - unlike
+		// Highlight above, these don't read well against both
+		// backgrounds.
+		Scrollbar: ScrollbarColors{
+			Idle:    color.RGBA{0x80, 0x80, 0x80, 0xA0},
+			Hover:   color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
+			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
+		},
+
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
@@ -295,7 +339,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 // BlockquoteBarColor, TableFrameColor, and ImagePlaceholderColor are
 // also left as NewDarkStyleSheet's mid-grey, which reads fine against
 // either a light or dark background, unlike
-// TextColor/Background/LinkColor/CodeColor, which need real
+// TextColor/Background/LinkColor/CodeColor/Scrollbar, which need real
 // light-appropriate values.
 func NewLightStyleSheet() *DefaultStyleSheet {
 	s := NewDarkStyleSheet()
@@ -303,6 +347,11 @@ func NewLightStyleSheet() *DefaultStyleSheet {
 	s.Background = color.White
 	s.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
 	s.CodeColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
+	s.Scrollbar = ScrollbarColors{
+		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
+		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
+		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
+	}
 	return s
 }
 
@@ -414,6 +463,17 @@ func (s *DefaultStyleSheet) ViewMargins() Margins {
 
 func (s *DefaultStyleSheet) HighlightColor() color.Color {
 	return s.Highlight
+}
+
+func (s *DefaultStyleSheet) ScrollbarColor(hover, pressed bool) color.Color {
+	switch {
+	case pressed:
+		return s.Scrollbar.Pressed
+	case hover:
+		return s.Scrollbar.Hover
+	default:
+		return s.Scrollbar.Idle
+	}
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged

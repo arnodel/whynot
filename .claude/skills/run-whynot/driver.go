@@ -44,6 +44,7 @@ var (
 	holdTicks   = flag.Int("hold-ticks", 1, "number of ticks to hold -key down before releasing it - >1 to test key-repeat behavior (inpututil.KeyPressDuration)")
 	debugHit    = flag.Bool("debug-hit", false, "pass -debug-hit through to the guest, so the captured frame shows the red HitTest outline at the cursor")
 	debugStats  = flag.Bool("debug-stats", false, "pass -debug-stats through to the guest, so the captured frame shows the FPS/timing overlay")
+	light       = flag.Bool("light", false, "pass -light through to the guest, so it starts in the light theme")
 	settleDelay = flag.Duration("settle-delay", 0, "real wall-clock time to sleep before the settle ticks - AdvanceTicks doesn't pace to real time (many ticks can execute in milliseconds), so a guest waiting on a background fetch (e.g. an async image load) needs this to actually get a chance to finish before the frame is captured")
 )
 
@@ -227,6 +228,9 @@ func xmain() error {
 	}
 	if *debugStats {
 		guestArgs = append(guestArgs, "-debug-stats")
+	}
+	if *light {
+		guestArgs = append(guestArgs, "-light")
 	}
 	if *source != "" {
 		abs, err := filepath.Abs(*source)
