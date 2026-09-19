@@ -197,7 +197,13 @@ elapsed time since the embedder started rendering, needs to keep
 advancing for animated images even when nothing else did — see "Image
 loading" below; the layout tree itself still only rebuilds when width
 or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
-example of wiring this up.
+example of wiring this up by hand; `ebitenrenderer.Panel`
+([panel.go](ebitenrenderer/panel.go)) packages the same wiring (plus
+hover/click/wheel/scrollbar-drag input handling, all gated on its own
+bounds) into a reusable type for embedding a `View` into part of a
+larger `ebiten.Game`'s window - deliberately ebiten-only, unlike `View`
+itself, since a game embedding it is never going to swap engines out
+from under it.
 
 `DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
 scales the ratio between them to whatever real pixel track it's drawing a

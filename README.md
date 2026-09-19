@@ -108,6 +108,13 @@ func main() {
 [`cmd/whynot`](cmd/whynot) is the fuller version of this, handling display
 scale too.
 
+To embed a scrollable document into part of a larger game's own window
+instead of owning the whole `ebiten.Game` loop, use `ebitenrenderer.Panel`
+in place of hand-rolling the above: it wraps a `View` with bounds-aware
+input handling (hover/click, wheel scroll gated on its own rectangle, an
+optional draggable scrollbar) so nothing outside those bounds is affected.
+See [`cmd/panelexample`](cmd/panelexample) for a minimal runnable example.
+
 ## Styling
 
 Appearance - colors, margins, text sizes/weights, and a handful of dimensional
@@ -254,6 +261,13 @@ by implementation order now that most of the list is done.
       its source, rather than crashing - a reference-style link's own `[ref]: url`
       definition line and an HTML comment are recognized as intentionally invisible
       rather than unsupported, since no Markdown renderer ever shows them either
+
+**Embedding**
+- [x] `ebitenrenderer.Panel` embeds a scrollable document into part of a larger
+      `ebiten.Game`'s own window - coordinate translation, hover/click, wheel
+      scroll gated on its own bounds, and an optional draggable scrollbar
+      (`WithScrollbar`), all bounds-aware so a panel never affects anything
+      outside its own rectangle. See [`cmd/panelexample`](cmd/panelexample)
 
 **Styling**
 - [x] Fully customizable via the `StyleSheet` interface (see [above](#styling)) -
