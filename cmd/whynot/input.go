@@ -87,13 +87,17 @@ func (g *game) Update() error {
 			g.current.view.Scroll(-page)
 		}
 	}
-
+	// A few lines at a time, repeating while held (see keyRepeat) -
+	// finer-grained than Space's page jump, for nudging up/down a
+	// short way without overshooting.
+	const arrowScrollLines = 40
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyL):
-		g.setTheme(false)
-	case inpututil.IsKeyJustPressed(ebiten.KeyD):
-		g.setTheme(true)
+	case keyRepeat(ebiten.KeyDown):
+		g.current.view.Scroll(-arrowScrollLines * g.deviceScale)
+	case keyRepeat(ebiten.KeyUp):
+		g.current.view.Scroll(arrowScrollLines * g.deviceScale)
 	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
 		g.debugStats = !g.debugStats
 	}
