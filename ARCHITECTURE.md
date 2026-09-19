@@ -17,6 +17,7 @@ program.
 | `cmd/whynot/` | the one real tool: a standalone viewer, window setup + input plumbing only, all rendering behavior lives in the library |
 | `cmd/test/` | unrelated scratch program, not part of this project |
 | `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |
+| `examples/view/` | runnable example of `whynot.View` wired up by hand (`go run ./examples/view`) |
 | `testdata/` | fixture Markdown/images used by the library's own tests (`go test` ignores this directory as a package) |
 
 ## The four-layer rendering pipeline

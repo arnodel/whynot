@@ -149,12 +149,16 @@ over input handling, or to fit whynot into an `Update`/`Draw` structure
 that doesn't match what `Panel` assumes - the same building blocks
 `Panel` itself is built on:
 
+![A View filling the whole window, no toolbar or
+scrollbar](examples/view/screenshot.png)
+
 ```go
 package main
 
 import (
+	"fmt"
 	"log"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -162,6 +166,22 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
+
+// exampleDoc is generated rather than spelled out - length matters
+// here (long enough to need scrolling), wording doesn't.
+func exampleDoc() string {
+	var b strings.Builder
+	b.WriteString("# View example\n\n")
+	b.WriteString("This document is rendered by wiring `whynot.View` up directly - full control\n")
+	b.WriteString("over input handling, at the cost of doing it yourself (see `ebitenrenderer.Panel`\n")
+	b.WriteString("for the turnkey alternative).\n\n")
+	for i := 1; i <= 8; i++ {
+		fmt.Fprintf(&b, "## Section %d\n\n", i)
+		b.WriteString("Some text, quite a bit of it actually, more than one line's worth, so the\n")
+		b.WriteString("document is tall enough to need scrolling.\n\n")
+	}
+	return b.String()
+}
 
 type game struct {
 	view     *whynot.View
@@ -189,20 +209,20 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
-	source, err := os.ReadFile("doc.md")
-	if err != nil {
-		log.Fatal(err)
-	}
 	g := &game{
-		view:     whynot.NewView(source, whynot.NewGoFontFaceSelector(72)),
+		view:     whynot.NewView([]byte(exampleDoc()), whynot.NewGoFontFaceSelector(72)),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
+	ebiten.SetWindowSize(800, 600)
+	ebiten.SetWindowTitle("whynot view example")
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
 ```
+
+Run it yourself: `go run ./examples/view`.
 
 [`cmd/whynot`](cmd/whynot) is a fuller example built the `Panel` way (see
 above), handling display scale, zoom, and a toolbar too.
