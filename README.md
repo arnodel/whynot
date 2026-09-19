@@ -48,13 +48,78 @@ layout, scroll anchoring) are documented in
 
 The library (root package `whynot`) has no rendering backend dependency -
 it only depends on `goldmark` for parsing. `ebitenrenderer` implements
-`whynot.Canvas` on top of `ebiten`; a caller wires the two together:
+`whynot.Canvas` on top of `ebiten`. Two ways to wire the two together,
+depending on how much control you want.
+
+### The turnkey way: `ebitenrenderer.Panel`
+
+`Panel` wraps a `View` with input handling already done for you -
+scrolling, link hover/click, and an optional draggable scrollbar
+(`WithScrollbar()`) - all scoped to whatever rectangle you give it, so
+it's safe to embed as part of a larger game window without stepping on
+whatever else is there. It's what `cmd/whynot` itself is built on:
 
 ```go
 package main
 
 import (
-	"image/color"
+	"image"
+	"log"
+	"os"
+
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/ebitenrenderer"
+)
+
+type game struct {
+	panel *ebitenrenderer.Panel
+}
+
+func (g *game) Update() error {
+	g.panel.Update()
+	return nil
+}
+
+func (g *game) Draw(screen *ebiten.Image) {
+	g.panel.Draw(screen)
+}
+
+func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
+	g.panel.SetBounds(image.Rect(0, 0, outsideWidth, outsideHeight))
+	return outsideWidth, outsideHeight
+}
+
+func main() {
+	source, err := os.ReadFile("doc.md")
+	if err != nil {
+		log.Fatal(err)
+	}
+	view := whynot.NewView(source, whynot.NewGoFontFaceSelector(72))
+	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(),
+		image.Rect(0, 0, 1024, 768), ebitenrenderer.WithScrollbar())
+	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+See [`cmd/panelexample`](cmd/panelexample) for a fuller runnable example -
+a `Panel` inset into part of a window with other game content drawn
+around it, proving it stays clipped to its own bounds.
+
+### Finer control: `whynot.View` directly
+
+Drop to `View` (plus `ebitenrenderer.Canvas`) yourself for full control
+over input handling, or to fit whynot into an `Update`/`Draw` structure
+that doesn't match what `Panel` assumes - the same building blocks
+`Panel` itself is built on:
+
+```go
+package main
+
+import (
 	"log"
 	"os"
 	"time"
@@ -78,7 +143,8 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	screen.Fill(color.Black) // whynot never fills its own background
+	// View.Draw fills its own background (from the View's StyleSheet) -
+	// no separate clear step needed here.
 	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
 }
 
@@ -105,15 +171,8 @@ func main() {
 }
 ```
 
-[`cmd/whynot`](cmd/whynot) is the fuller version of this, handling display
-scale too.
-
-To embed a scrollable document into part of a larger game's own window
-instead of owning the whole `ebiten.Game` loop, use `ebitenrenderer.Panel`
-in place of hand-rolling the above: it wraps a `View` with bounds-aware
-input handling (hover/click, wheel scroll gated on its own rectangle, an
-optional draggable scrollbar) so nothing outside those bounds is affected.
-See [`cmd/panelexample`](cmd/panelexample) for a minimal runnable example.
+[`cmd/whynot`](cmd/whynot) is a fuller example built the `Panel` way (see
+above), handling display scale, zoom, and a toolbar too.
 
 ## Styling
 
