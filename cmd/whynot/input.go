@@ -94,6 +94,9 @@ func (g *game) Update() error {
 	case inpututil.IsKeyJustPressed(ebiten.KeyD):
 		g.setTheme(true)
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
+		g.debugStats = !g.debugStats
+	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
 		g.paste()
 	}

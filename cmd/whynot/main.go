@@ -14,7 +14,7 @@ import (
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
-	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing")
+	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
 	flag.Parse()
 
 	// No file/URL given: land on the welcome page rather than a

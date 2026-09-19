@@ -67,10 +67,11 @@ type game struct {
 	debugHit  bool
 
 	// debugStats shows FPS/TPS and per-frame timing (see
-	// drawDebugStats) - updateDuration/drawDuration are the most
-	// recent Update/Draw call's wall-clock time, timed unconditionally
-	// (cheap - two time.Now() calls) so toggling debugStats on doesn't
-	// need to wait a frame for the first reading.
+	// drawDebugStats) - set from -debug-stats at startup, togglable at
+	// runtime with F (see Update). updateDuration/drawDuration are the
+	// most recent Update/Draw call's wall-clock time, timed
+	// unconditionally (cheap - two time.Now() calls) so toggling
+	// debugStats on doesn't need to wait a frame for the first reading.
 	debugStats                   bool
 	updateDuration, drawDuration time.Duration
 
