@@ -174,7 +174,14 @@ func (g *game) drawScrollbar(canvas whynot.Canvas) {
 	if !ok {
 		return
 	}
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x80, 0x80, 0x80, 0xA0})
+	clr := color.RGBA{0x80, 0x80, 0x80, 0xA0}
+	switch {
+	case g.scrollbarState.pressed:
+		clr = color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}
+	case g.scrollbarState.hover:
+		clr = color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}
+	}
+	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), clr)
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,

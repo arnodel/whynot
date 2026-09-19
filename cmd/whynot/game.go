@@ -78,9 +78,11 @@ type game struct {
 	// absolute pixel offset, since the thumb's height itself can shrink
 	// over the course of a drag as more of the document resolves; an
 	// absolute offset could then point outside the (now shorter) thumb
-	// entirely.
+	// entirely. scrollbarState drives the thumb's drawn color, the same
+	// hover/pressed pattern the toolbar buttons already use.
 	draggingScrollbar  bool
 	scrollbarGrabRatio float64
+	scrollbarState     buttonState
 
 	// outsideWidth, outsideHeight are the logical (device-independent)
 	// window dimensions ebiten's own Layout callback last reported -

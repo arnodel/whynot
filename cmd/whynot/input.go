@@ -106,22 +106,28 @@ func (g *game) Update() error {
 // updateScrollbarDrag handles pressing, dragging, and releasing the
 // scrollbar thumb, reporting whether it consumed this frame's mouse
 // input (so Update skips the normal document hover/click handling
-// underneath it). The target ratio is recomputed from the cursor's
-// current position every call, not a value captured once at drag
-// start, so a jump into not-yet-resolved territory (see
-// View.ScrollToRatio) only ever corrects toward the cursor, never
-// drifts from it. Likewise, the thumb rect is re-fetched every call
-// (not just at drag start) so scrollbarGrabRatio is always applied to
-// the thumb's *current* height.
+// underneath it), and updates scrollbarState for drawScrollbar. The
+// target ratio is recomputed from the cursor's current position every
+// call, not a value captured once at drag start, so a jump into
+// not-yet-resolved territory (see View.ScrollToRatio) only ever
+// corrects toward the cursor, never drifts from it. Likewise, the
+// thumb rect is re-fetched every call (not just at drag start) so
+// scrollbarGrabRatio is always applied to the thumb's *current*
+// height.
 func (g *game) updateScrollbarDrag() bool {
+	r, ok := g.scrollbarThumbRect()
+	hovering := ok && image.Pt(g.hoverX, g.hoverY).In(r)
+	defer func() {
+		g.scrollbarState = buttonState{hover: hovering || g.draggingScrollbar, pressed: g.draggingScrollbar}
+	}()
+
 	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		g.draggingScrollbar = false
 		return false
 	}
 
-	r, ok := g.scrollbarThumbRect()
 	if !g.draggingScrollbar {
-		if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) || !ok || !image.Pt(g.hoverX, g.hoverY).In(r) {
+		if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) || !hovering {
 			return false
 		}
 		g.draggingScrollbar = true
