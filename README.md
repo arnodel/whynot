@@ -1,16 +1,30 @@
 # Why Not?
 
-A Markdown renderer for [ebiten](https://ebitengine.org/) games, written in
-Go. Point it at a `[]byte` of Markdown and it lays out and draws the
-document onto the screen - scrolling, resizing, and reflow handled for you.
+A Markdown document viewer for [ebiten](https://ebitengine.org/) games,
+written in Go - for anything that needs to show real formatted text (patch
+notes, an in-game journal, help screens, a credits scroll) without pulling
+in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
+and draws the document straight onto an `ebiten.Image`, using
+[goldmark](https://github.com/yuin/goldmark) to parse.
 
-```
-go run ./cmd/whynot path/to/some.md
-```
-
-Use the mouse wheel to scroll; resize the window to see it reflow.
+- **Broad Markdown coverage** - tables, nested lists, images (including
+  animated GIFs), links, blockquotes, code blocks, and more - degrading
+  gracefully instead of crashing on anything not yet supported
+- **Built for long documents** - layout and drawing are lazy, anchored at
+  the current scroll position, so a resize or scroll costs the same
+  whether the document is 10 lines or 10,000
+- **Fully customizable styling** - colors, margins, and text styles all
+  resolve through one `StyleSheet` interface (dark and light themes built
+  in), swappable at runtime
+- **Drop-in embedding** - `ebitenrenderer.Panel` adds a scrollable,
+  zoomable Markdown view to part of a larger game window in a few lines,
+  with resizing, hover/click, and an optional scrollbar all handled for
+  you
 
 ## Try the standalone viewer
+
+`cmd/whynot` is a small standalone app built entirely on the library - the
+easiest way to see what whynot can do.
 
 On macOS or Linux:
 
@@ -28,13 +42,6 @@ go install github.com/arnodel/whynot/cmd/whynot@latest
 
 Run it with no argument and it opens a built-in welcome page explaining how
 to use it.
-
-## Why does this exist?
-
-Games sometimes need to show a chunk of formatted text - patch notes, an
-in-game journal, help screens, a credits scroll - without pulling in a full
-UI toolkit. Why Not renders straight onto an `ebiten.Image`, using
-[goldmark](https://github.com/yuin/goldmark) to parse.
 
 ## Status
 
