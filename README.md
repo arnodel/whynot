@@ -326,6 +326,10 @@ pasting a file path or `http(s)` URL (Cmd/Ctrl+V) to open it, and pasting
 the word "welcome" to come back. Beyond scrolling and resizing, it
 demonstrates what a caller can build on top of the library:
 
+- **Document text uses this platform's own fonts** (`systemfont.SystemFontFaceSelector`,
+  via `RegisterPreferredFont` - see [above](#fonts)) when it can find them, falling back
+  to the bundled Go fonts for anything it can't - watch stderr for exactly what got
+  resolved.
 - **`-light`** switches to the light theme at startup; the toolbar button
   toggles between light and dark while running.
 - **Dragging the scrollbar** jumps to a position (`View.ScrollToRatio`) -
@@ -478,6 +482,8 @@ by implementation order now that most of the list is done.
 - [x] A link to a webpage opens in the system browser instead of failing; a link to
       Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
 - [x] Back/forward history, light/dark theme, zoom
+- [x] Renders document text in this platform's own fonts when it can find them
+      (`systemfont.RegisterPreferredFont`), falling back to the bundled Go fonts
 - [x] Scrollbar - via `ebitenrenderer.Panel`'s `WithScrollbar()` (not the library itself:
       `View.DocumentBounds`/`VisibleViewBounds` expose the geometry an embedder needs to
       build its own, whether that's `Panel`'s version, a native scrollbar widget, or
