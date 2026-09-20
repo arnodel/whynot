@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/sfnt"
 )
 
 // spyFaceSelector records the arguments it was called with, so tests can
@@ -29,7 +31,7 @@ func (s *spyFaceSelector) SetDPI(dpi float64) {
 
 func TestCustomFontFaceSelectorSelectsRegisteredFont(t *testing.T) {
 	s := NewCustomFontFaceSelector(72, WithFallback(nil))
-	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
+	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF, 0); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
 	face, err := s.SelectFace(TextStyle{Size: 16, Family: Proportional})
@@ -43,7 +45,7 @@ func TestCustomFontFaceSelectorSelectsRegisteredFont(t *testing.T) {
 
 func TestCustomFontFaceSelectorCachesFace(t *testing.T) {
 	s := NewCustomFontFaceSelector(72, WithFallback(nil))
-	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
+	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF, 0); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
 	style := TextStyle{Size: 16, Family: Proportional}
@@ -71,7 +73,7 @@ func TestCustomFontFaceSelectorNormalizationMatchesBuiltin(t *testing.T) {
 	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	// Register at an "off" weight/style that should still bucket into the
 	// Bold/Italic slot, mirroring GoFontFaceSelector's own bucketing.
-	if err := s.AddFont(Proportional, font.WeightSemiBold, font.StyleOblique, gobold.TTF); err != nil {
+	if err := s.AddFont(Proportional, font.WeightSemiBold, font.StyleOblique, gobold.TTF, 0); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
 	face, err := s.SelectFace(TextStyle{Size: 16, Weight: font.WeightBold, Style: font.StyleItalic, Family: Proportional})
@@ -119,13 +121,27 @@ func TestCustomFontFaceSelectorNilFallback(t *testing.T) {
 
 func TestCustomFontFaceSelectorAddFontInvalidBytes(t *testing.T) {
 	s := NewCustomFontFaceSelector(72)
-	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, []byte("not a font")); err == nil {
+	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, []byte("not a font"), 0); err == nil {
 		t.Fatal("AddFont with invalid bytes returned no error, want one")
 	}
 	// The failed registration should leave the slot unfilled, still falling
 	// back cleanly.
 	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Proportional}); err != nil {
 		t.Errorf("SelectFace after a failed AddFont: %v, want a clean fallback", err)
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontIndexOutOfRange(t *testing.T) {
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF, 3)
+	if err == nil {
+		t.Fatal("AddFont with an out-of-range index returned no error, want one")
+	}
+	if !errors.Is(err, sfnt.ErrNotFound) {
+		t.Errorf("AddFont out-of-range error = %v, want it to wrap sfnt.ErrNotFound", err)
+	}
+	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Proportional}); err == nil {
+		t.Error("SelectFace after a failed AddFont with a nil fallback returned no error, want one")
 	}
 }
 
@@ -136,21 +152,84 @@ func TestCustomFontFaceSelectorAddFontFile(t *testing.T) {
 		t.Fatalf("writing test font file: %v", err)
 	}
 	s := NewCustomFontFaceSelector(72, WithFallback(nil))
-	if err := s.AddFontFile(Proportional, font.WeightNormal, font.StyleNormal, path); err != nil {
+	if err := s.AddFontFile(Proportional, font.WeightNormal, font.StyleNormal, path, 0); err != nil {
 		t.Fatalf("AddFontFile: %v", err)
 	}
 	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Proportional}); err != nil {
 		t.Errorf("SelectFace after AddFontFile: %v", err)
 	}
 
-	if err := s.AddFontFile(Proportional, font.WeightNormal, font.StyleNormal, filepath.Join(dir, "missing.ttf")); err == nil {
+	if err := s.AddFontFile(Proportional, font.WeightNormal, font.StyleNormal, filepath.Join(dir, "missing.ttf"), 0); err == nil {
 		t.Error("AddFontFile with a nonexistent path returned no error, want one")
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontCollectionRegistersMatchingFamily(t *testing.T) {
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	registered, err := s.AddFontCollection(Proportional, goregular.TTF, "Go")
+	if err != nil {
+		t.Fatalf("AddFontCollection: %v", err)
+	}
+	if registered != 1 {
+		t.Fatalf("registered = %d, want 1", registered)
+	}
+	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Proportional}); err != nil {
+		t.Errorf("SelectFace after AddFontCollection: %v", err)
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontCollectionEmptyMatchFamily(t *testing.T) {
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	registered, err := s.AddFontCollection(Proportional, goregular.TTF, "")
+	if err != nil {
+		t.Fatalf("AddFontCollection: %v", err)
+	}
+	if registered != 1 {
+		t.Fatalf("registered = %d, want 1 (empty matchFamily should register regardless of family)", registered)
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontCollectionFamilyMismatch(t *testing.T) {
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	registered, err := s.AddFontCollection(Proportional, goregular.TTF, "Arial")
+	if err != nil {
+		t.Fatalf("AddFontCollection: %v", err)
+	}
+	if registered != 0 {
+		t.Fatalf("registered = %d, want 0 (real family is \"Go\", not \"Arial\")", registered)
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontCollectionInvalidBytes(t *testing.T) {
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	if _, err := s.AddFontCollection(Proportional, []byte("not a font"), ""); err == nil {
+		t.Error("AddFontCollection with invalid bytes returned no error, want one")
+	}
+}
+
+func TestCustomFontFaceSelectorAddFontCollectionFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "font.ttf")
+	if err := os.WriteFile(path, goregular.TTF, 0o644); err != nil {
+		t.Fatalf("writing test font file: %v", err)
+	}
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
+	registered, err := s.AddFontCollectionFile(Proportional, path, "Go")
+	if err != nil {
+		t.Fatalf("AddFontCollectionFile: %v", err)
+	}
+	if registered != 1 {
+		t.Fatalf("registered = %d, want 1", registered)
+	}
+
+	if _, err := s.AddFontCollectionFile(Proportional, filepath.Join(dir, "missing.ttf"), "Go"); err == nil {
+		t.Error("AddFontCollectionFile with a nonexistent path returned no error, want one")
 	}
 }
 
 func TestCustomFontFaceSelectorSetDPIInvalidatesCache(t *testing.T) {
 	s := NewCustomFontFaceSelector(72, WithFallback(nil))
-	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
+	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF, 0); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
 	style := TextStyle{Size: 16, Family: Proportional}

@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/font/sfnt"
 )
 
 // CustomFontFaceSelector is a FaceSelector backed by caller-supplied
@@ -58,19 +59,30 @@ func NewCustomFontFaceSelector(dpi float64, opts ...CustomFontFaceSelectorOption
 	return s
 }
 
-// AddFont registers data (TTF or OTF bytes) as the font to serve for the
-// (family, weight, style) slot, replacing whatever was registered for that
-// slot before. weight and style are bucketed exactly like a resolved
-// TextStyle is in SelectFace (see normalizedFontKey).
+// AddFont registers data (TTF/OTF bytes, or a .ttc/.otc collection) for
+// exactly the (family, weight, style) slot given, replacing whatever was
+// registered for that slot before. index picks which subfont within data
+// to use - 0 for an ordinary single-font file (opentype.ParseCollection
+// treats it as a 1-font collection), or a specific subfont's index within
+// a known .ttc/.otc. weight and style are bucketed exactly like a
+// resolved TextStyle is in SelectFace (see normalizedFontKey).
 //
-// data is parsed immediately, so a malformed font is reported here, at
-// registration time, rather than surfacing later from SelectFace. On a
-// parse error nothing is registered and any already-cached faces are left
-// untouched.
-func (s *CustomFontFaceSelector) AddFont(family FontFamily, weight font.Weight, style font.Style, data []byte) error {
-	parsed, err := opentype.Parse(data)
+// data is parsed immediately, so a malformed font or an out-of-range
+// index is reported here, at registration time, rather than surfacing
+// later from SelectFace. On error nothing is registered and any
+// already-cached faces are left untouched.
+//
+// Use AddFontCollection instead to register every subfont a collection
+// contains that can be confidently classified, rather than picking one by
+// index yourself.
+func (s *CustomFontFaceSelector) AddFont(family FontFamily, weight font.Weight, style font.Style, data []byte, index int) error {
+	collection, err := opentype.ParseCollection(data)
 	if err != nil {
 		return fmt.Errorf("whynot: parsing font: %w", err)
+	}
+	parsed, err := collection.Font(index)
+	if err != nil {
+		return fmt.Errorf("whynot: parsing font: selecting subfont %d: %w", index, err)
 	}
 	key := normalizedFontKey(TextStyle{Weight: weight, Style: style, Family: family})
 	s.fonts[key] = parsed
@@ -83,17 +95,71 @@ func (s *CustomFontFaceSelector) AddFont(family FontFamily, weight font.Weight, 
 	return nil
 }
 
-// AddFontFile reads path and registers its contents for the (family, weight,
-// style) slot, exactly as AddFont would with the file's bytes. A convenience
-// for the common case of loading a font straight from disk; font bytes
-// coming from anywhere else (embed.FS, a network fetch) still go through
-// AddFont directly, the same way NewView itself only ever takes []byte.
-func (s *CustomFontFaceSelector) AddFontFile(family FontFamily, weight font.Weight, style font.Style, path string) error {
+// AddFontFile is AddFont, reading data from path instead of taking it
+// directly. A convenience for the common case of loading a font straight
+// from disk; font bytes coming from anywhere else (embed.FS, a network
+// fetch) still go through AddFont directly, the same way NewView itself
+// only ever takes []byte.
+func (s *CustomFontFaceSelector) AddFontFile(family FontFamily, weight font.Weight, style font.Style, path string, index int) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("whynot: reading font file: %w", err)
 	}
-	return s.AddFont(family, weight, style, data)
+	return s.AddFont(family, weight, style, data, index)
+}
+
+// AddFontCollection registers every subfont in data (a .ttc/.otc
+// collection, or a plain single-font TTF/OTF) that classifies cleanly
+// into a (weight, style) slot for family, via each subfont's own
+// name-table subfamily string (see classifySubfamily in
+// fontclassify.go). If matchFamily is non-empty, a subfont is also
+// required to have its own name-table family reasonably match it
+// (case/space/punctuation-insensitive, either direction as a substring -
+// see subfontBelongsToFamily) - pass "" to register every classifiable
+// subfont regardless of its own family name, e.g. when data is already
+// known to hold only the one family wanted.
+//
+// Anything unrecognized (Light/Thin/Black/SemiBold/Condensed/... - see
+// classifySubfamily's doc comment for why these are skipped rather than
+// guessed) or family-mismatched is simply not registered, not an error -
+// those slots are served by the fallback FaceSelector instead. The only
+// error this returns is a failure to parse data at all; it returns how
+// many subfonts were registered otherwise.
+func (s *CustomFontFaceSelector) AddFontCollection(family FontFamily, data []byte, matchFamily string) (registered int, err error) {
+	collection, err := opentype.ParseCollection(data)
+	if err != nil {
+		return 0, fmt.Errorf("whynot: parsing font: %w", err)
+	}
+	var buf sfnt.Buffer
+	for i := 0; i < collection.NumFonts(); i++ {
+		sub, err := collection.Font(i)
+		if err != nil {
+			continue
+		}
+		if !subfontBelongsToFamily(sub, &buf, matchFamily) {
+			continue
+		}
+		subfamily := subfontName(sub, &buf, sfnt.NameIDTypographicSubfamily, sfnt.NameIDSubfamily)
+		weight, style, ok := classifySubfamily(subfamily)
+		if !ok {
+			continue
+		}
+		if err := s.AddFont(family, weight, style, data, i); err != nil {
+			continue
+		}
+		registered++
+	}
+	return registered, nil
+}
+
+// AddFontCollectionFile is AddFontCollection, reading data from path
+// instead of taking it directly.
+func (s *CustomFontFaceSelector) AddFontCollectionFile(family FontFamily, path string, matchFamily string) (registered int, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("whynot: reading font file: %w", err)
+	}
+	return s.AddFontCollection(family, data, matchFamily)
 }
 
 func (s *CustomFontFaceSelector) SelectFace(style TextStyle) (font.Face, error) {

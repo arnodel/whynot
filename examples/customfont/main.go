@@ -65,12 +65,12 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func buildFaceSelector(fontPath string) whynot.FaceSelector {
 	selector := whynot.NewCustomFontFaceSelector(72)
 	if fontPath == "" {
-		if err := selector.AddFont(whynot.Proportional, font.WeightNormal, font.StyleNormal, defaultFontData); err != nil {
+		if err := selector.AddFont(whynot.Proportional, font.WeightNormal, font.StyleNormal, defaultFontData, 0); err != nil {
 			log.Fatalf("loading the bundled default font: %v", err)
 		}
 		return selector
 	}
-	if err := selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, fontPath); err != nil {
+	if err := selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, fontPath, 0); err != nil {
 		log.Fatalf("loading %s: %v", fontPath, err)
 	}
 	return selector
