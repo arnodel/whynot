@@ -41,8 +41,12 @@ go install github.com/arnodel/whynot/cmd/whynot@latest
 ```
 
 Run it with no argument and it opens a built-in welcome page explaining how
-to use it. Pass a Markdown file path (or URL) as an argument to view that file. Here is
-a screenshot of using it to view this README.
+to use it. Pass a Markdown file path (or URL) as an argument to view that file.
+Here is a screenshot from:
+
+```bash
+whynot https://raw.githubusercontent.com/arnodel/whynot/refs/heads/main/README.md
+```
 
 ![whynot showing this README](assets/whynot-screenshot.png)
 
