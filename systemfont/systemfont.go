@@ -12,6 +12,7 @@ package systemfont
 import (
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/adrg/sysfont"
 
@@ -64,24 +65,58 @@ func NewSystemFontFaceSelector(dpi float64, opts ...whynot.CustomFontFaceSelecto
 // otherwise a no-op - those slots are served by the fallback FaceSelector
 // instead, which is why this has no error return.
 func (s *SystemFontFaceSelector) RegisterSystemFont(family whynot.FontFamily, query string) {
+	s.registerSystemFont(family, query)
+}
+
+// registerSystemFont is RegisterSystemFont's implementation, returning how
+// many subfonts were registered - RegisterPreferredFont uses this to tell
+// whether a candidate name actually resolved to anything usable, without
+// exposing that as part of RegisterSystemFont's own public, no-return
+// signature.
+func (s *SystemFontFaceSelector) registerSystemFont(family whynot.FontFamily, query string) int {
 	match := s.finder.Match(query)
 	if match == nil || match.Filename == "" {
 		log.Printf(logPrefix+"no installed font found for %q", query)
-		return
+		return 0
 	}
 	data, err := os.ReadFile(match.Filename)
 	if err != nil {
 		log.Printf(logPrefix+"reading %s (matched %q): %v", match.Filename, query, err)
-		return
+		return 0
 	}
 	registered, err := s.AddFontCollection(family, data, match.Family)
 	if err != nil {
 		log.Printf(logPrefix+"parsing %s (matched %q): %v", match.Filename, query, err)
-		return
+		return 0
 	}
 	if registered == 0 {
 		log.Printf(logPrefix+"matched %q to %s but registered no usable subfont from it", query, match.Filename)
-		return
+		return 0
 	}
 	log.Printf(logPrefix+"registered %d subfont(s) from %s for %q", registered, match.Filename, query)
+	return registered
+}
+
+// RegisterPreferredFont registers whatever this platform's most likely
+// "system UI" font is for family, without requiring the caller to name a
+// specific installed font themselves. There's no portable, dependency-free
+// way to ask the OS directly for its actual configured UI font (that means
+// cgo on macOS, a registry/API call on Windows, or shelling out to
+// fontconfig on Linux - real, separate platform-specific work this package
+// deliberately doesn't take on), so this tries a short, curated,
+// GOOS-aware list of common candidate names instead (see
+// preferredFontCandidates) via RegisterSystemFont, in order, stopping at
+// the first one that actually registers something. If none of the
+// candidates are installed (or family has no curated candidates at all -
+// see preferredFontCandidates), it logs that and leaves every slot to the
+// fallback FaceSelector, the same as an ordinary unmatched
+// RegisterSystemFont query would.
+func (s *SystemFontFaceSelector) RegisterPreferredFont(family whynot.FontFamily) {
+	candidates := preferredFontCandidates(runtime.GOOS, family)
+	for _, query := range candidates {
+		if s.registerSystemFont(family, query) > 0 {
+			return
+		}
+	}
+	log.Printf(logPrefix+"none of the preferred-font candidates for %v resolved on GOOS=%s (tried %v)", family, runtime.GOOS, candidates)
 }

@@ -293,8 +293,26 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   `CustomFontFaceSelector.AddFontCollection` to read every subfont in its file (a plain
   font, or every named variant in a `.ttc`/`.otc`) and register the ones it can
   confidently classify into a (weight, style) slot - anything it can't find or classify
-  falls back to the bundled Go fonts. See [`examples/systemfont`](examples/systemfont)
-  for a runnable version.
+  falls back to the bundled Go fonts.
+
+  Don't want to name a specific font at all? `RegisterPreferredFont` picks this
+  platform's most likely UI font for you, from a small curated, GOOS-aware candidate
+  list (e.g. Helvetica Neue/Helvetica on macOS, Segoe UI on Windows, DejaVu Sans on
+  Linux) - trying each in order until one actually resolves:
+
+  ```go
+  selector := systemfont.NewSystemFontFaceSelector(72)
+  selector.RegisterPreferredFont(whynot.Proportional)
+  selector.RegisterPreferredFont(whynot.Monospace)
+  view := whynot.NewView(source, selector)
+  ```
+
+  There's no portable way to ask the OS directly for its actual configured UI font
+  without new platform-specific work (cgo on macOS, a registry/API call on Windows,
+  `fontconfig` on Linux), so this is a best-effort guess, not a guarantee - it logs
+  exactly what it tried and what (if anything) resolved, the same as `RegisterSystemFont`
+  does. See [`examples/systemfont`](examples/systemfont) for a runnable version - with no
+  flags at all, it uses `RegisterPreferredFont` for both families.
 
 ## `cmd/whynot`: a standalone viewer
 
@@ -450,7 +468,9 @@ by implementation order now that most of the list is done.
       fonts for anything not overridden
 - [x] System-installed fonts by name via `systemfont.SystemFontFaceSelector` (see
       [above](#fonts)) - resolves an installed font (e.g. "Arial") and registers every
-      style variant it can confidently classify, same fallback story
+      style variant it can confidently classify, same fallback story. Don't know a name
+      to ask for? `RegisterPreferredFont` guesses this platform's likely UI font from a
+      short curated candidate list instead
 
 **`cmd/whynot`, the standalone viewer**
 - [x] Built-in welcome page, shown by default, explaining how to use the app

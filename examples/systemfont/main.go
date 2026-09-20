@@ -1,21 +1,19 @@
 // Command systemfont is a runnable example of systemfont.SystemFontFaceSelector.
-// By default it tries to resolve "Helvetica" for regular proportional text
-// and "Courier" for monospace text via RegisterSystemFont - real installed
-// families with distinct bold/italic faces on macOS; pass -family or
-// -monospace-family to try something else (e.g. "Arial"/"Courier New" on
-// Windows). What a query actually resolves to depends entirely on what's
-// installed and how sysfont's fuzzy matching scores it - e.g. "Arial" on a
-// Mac without a real Arial installed can resolve to an unrelated, styleless
-// substitute instead of failing outright, which won't look distinct from
-// the bundled Go fonts. If a requested family isn't found at all,
-// RegisterSystemFont logs a warning and this example falls back
-// transparently to the bundled Go fonts for that slot - watch stderr to
-// see what actually got resolved either way.
+// By default it doesn't name a font at all: RegisterPreferredFont picks
+// this platform's most likely UI font (a short curated, GOOS-aware
+// candidate list - see systemfont.RegisterPreferredFont's doc comment)
+// for both regular proportional text and monospace text, so nobody has to
+// guess or hardcode a specific installed font name. Pass -family or
+// -monospace-family to try a specific name instead (e.g. "Arial" on
+// Windows) via RegisterSystemFont directly. Either way, what actually
+// gets used depends on what's installed and how sysfont's fuzzy matching
+// scores it - a requested (or candidate) family that isn't found at all
+// logs a warning and falls back transparently to the bundled Go fonts for
+// that slot; watch stderr to see exactly what got resolved.
 package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -27,18 +25,19 @@ import (
 	"github.com/arnodel/whynot/systemfont"
 )
 
-func exampleDoc(family, monospaceFamily string) string {
+func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# System font example\n\n")
-	fmt.Fprintf(&b, "Regular proportional text here should be **%s**, and `monospace text`\n", family)
-	fmt.Fprintf(&b, "should be **%s**, if installed on this machine - check stderr for\n", monospaceFamily)
-	b.WriteString("whether each one actually resolved.\n\n")
+	b.WriteString("Regular proportional text and `monospace text` here should both come\n")
+	b.WriteString("from real installed fonts, if this machine has any - check stderr for\n")
+	b.WriteString("exactly what got resolved (and why, if nothing did).\n\n")
 	b.WriteString("**Bold** and *italic* proportional text use the matched font's own\n")
 	b.WriteString("bold/italic face too, when it has one - falling back to the bundled Go\n")
 	b.WriteString("fonts for that slot instead when it doesn't. Some fonts bundle every\n")
 	b.WriteString("style into one file `AddFontCollection` reads in one go:\n")
-	b.WriteString("**`bold monospace`** and *`italic monospace`* should both come from\n")
-	fmt.Fprintf(&b, "%s too, not the Go fonts, if it has those styles.\n", monospaceFamily)
+	b.WriteString("**`bold monospace`** and *`italic monospace`* should both come from a\n")
+	b.WriteString("real installed monospace font too, not the Go fonts, if it has those\n")
+	b.WriteString("styles.\n")
 	return b.String()
 }
 
@@ -67,16 +66,24 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
-	family := flag.String("family", "Helvetica", "installed font family to try for regular proportional text")
-	monospaceFamily := flag.String("monospace-family", "Courier", "installed font family to try for monospace text")
+	family := flag.String("family", "", "installed font family for regular proportional text (default: this platform's preferred font, no name needed)")
+	monospaceFamily := flag.String("monospace-family", "", "installed font family for monospace text (default: this platform's preferred monospace font)")
 	flag.Parse()
 
 	selector := systemfont.NewSystemFontFaceSelector(72)
-	selector.RegisterSystemFont(whynot.Proportional, *family)
-	selector.RegisterSystemFont(whynot.Monospace, *monospaceFamily)
+	if *family != "" {
+		selector.RegisterSystemFont(whynot.Proportional, *family)
+	} else {
+		selector.RegisterPreferredFont(whynot.Proportional)
+	}
+	if *monospaceFamily != "" {
+		selector.RegisterSystemFont(whynot.Monospace, *monospaceFamily)
+	} else {
+		selector.RegisterPreferredFont(whynot.Monospace)
+	}
 
 	g := &game{
-		view:     whynot.NewView([]byte(exampleDoc(*family, *monospaceFamily)), selector),
+		view:     whynot.NewView([]byte(exampleDoc()), selector),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
