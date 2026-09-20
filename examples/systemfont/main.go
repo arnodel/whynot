@@ -1,10 +1,16 @@
 // Command systemfont is a runnable example of systemfont.SystemFontFaceSelector.
-// By default it tries to resolve "Arial" for regular proportional text and
-// "Courier New" for monospace text via RegisterSystemFont; pass -family or
-// -monospace-family to try something else. If a requested family isn't
-// installed (or isn't found for any other reason), RegisterSystemFont logs
-// a warning and this example falls back transparently to the bundled Go
-// fonts for that slot - watch stderr to see what actually got resolved.
+// By default it tries to resolve "Helvetica" for regular proportional text
+// and "Courier" for monospace text via RegisterSystemFont - real installed
+// families with distinct bold/italic faces on macOS; pass -family or
+// -monospace-family to try something else (e.g. "Arial"/"Courier New" on
+// Windows). What a query actually resolves to depends entirely on what's
+// installed and how sysfont's fuzzy matching scores it - e.g. "Arial" on a
+// Mac without a real Arial installed can resolve to an unrelated, styleless
+// substitute instead of failing outright, which won't look distinct from
+// the bundled Go fonts. If a requested family isn't found at all,
+// RegisterSystemFont logs a warning and this example falls back
+// transparently to the bundled Go fonts for that slot - watch stderr to
+// see what actually got resolved either way.
 package main
 
 import (
@@ -29,9 +35,9 @@ func exampleDoc(family, monospaceFamily string) string {
 	b.WriteString("whether each one actually resolved.\n\n")
 	b.WriteString("**Bold** and *italic* proportional text use the matched font's own\n")
 	b.WriteString("bold/italic face too, when it has one - falling back to the bundled Go\n")
-	b.WriteString("fonts for a family (like Papyrus, the default here) that doesn't. Some\n")
-	b.WriteString("fonts bundle every style into one file `AddFontCollection` reads in one\n")
-	b.WriteString("go: **`bold monospace`** and *`italic monospace`* should both come from\n")
+	b.WriteString("fonts for that slot instead when it doesn't. Some fonts bundle every\n")
+	b.WriteString("style into one file `AddFontCollection` reads in one go:\n")
+	b.WriteString("**`bold monospace`** and *`italic monospace`* should both come from\n")
 	fmt.Fprintf(&b, "%s too, not the Go fonts, if it has those styles.\n", monospaceFamily)
 	return b.String()
 }
@@ -61,8 +67,8 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
-	family := flag.String("family", "Arial", "installed font family to try for regular proportional text")
-	monospaceFamily := flag.String("monospace-family", "Courier New", "installed font family to try for monospace text")
+	family := flag.String("family", "Helvetica", "installed font family to try for regular proportional text")
+	monospaceFamily := flag.String("monospace-family", "Courier", "installed font family to try for monospace text")
 	flag.Parse()
 
 	selector := systemfont.NewSystemFontFaceSelector(72)
