@@ -1,6 +1,8 @@
 package whynot
 
 import (
+	"fmt"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gobolditalic"
@@ -24,6 +26,21 @@ const (
 	Monospace
 	SmallCaps
 )
+
+// String names f for logging/debugging - e.g. a FaceSelector reporting
+// which family a font-resolution decision was made for.
+func (f FontFamily) String() string {
+	switch f {
+	case Proportional:
+		return "Proportional"
+	case Monospace:
+		return "Monospace"
+	case SmallCaps:
+		return "SmallCaps"
+	default:
+		return fmt.Sprintf("FontFamily(%d)", int(f))
+	}
+}
 
 type TextStyle struct {
 	Size   float64

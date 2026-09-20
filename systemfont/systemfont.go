@@ -76,24 +76,30 @@ func (s *SystemFontFaceSelector) RegisterSystemFont(family whynot.FontFamily, qu
 func (s *SystemFontFaceSelector) registerSystemFont(family whynot.FontFamily, query string) int {
 	match := s.finder.Match(query)
 	if match == nil || match.Filename == "" {
-		log.Printf(logPrefix+"no installed font found for %q", query)
+		log.Printf(logPrefix+"%v: no installed font found for %q", family, query)
 		return 0
 	}
+	// match.Family is what sysfont actually resolved query to, which can
+	// genuinely differ from it (fuzzy matching, or its own fallback/
+	// alternative-family logic when nothing close is installed) - logging
+	// both is what makes "what font was found" answerable from this line
+	// alone, without having to separately know sysfont's own matching
+	// quirks.
 	data, err := os.ReadFile(match.Filename)
 	if err != nil {
-		log.Printf(logPrefix+"reading %s (matched %q): %v", match.Filename, query, err)
+		log.Printf(logPrefix+"%v: reading %s (matched %q as %q): %v", family, match.Filename, query, match.Family, err)
 		return 0
 	}
 	registered, err := s.AddFontCollection(family, data, match.Family)
 	if err != nil {
-		log.Printf(logPrefix+"parsing %s (matched %q): %v", match.Filename, query, err)
+		log.Printf(logPrefix+"%v: parsing %s (matched %q as %q): %v", family, match.Filename, query, match.Family, err)
 		return 0
 	}
 	if registered == 0 {
-		log.Printf(logPrefix+"matched %q to %s but registered no usable subfont from it", query, match.Filename)
+		log.Printf(logPrefix+"%v: matched %q to %q (%s) but registered no usable subfont from it", family, query, match.Family, match.Filename)
 		return 0
 	}
-	log.Printf(logPrefix+"registered %d subfont(s) from %s for %q", registered, match.Filename, query)
+	log.Printf(logPrefix+"%v: registered %d subfont(s) from %q (%s) for %q", family, registered, match.Family, match.Filename, query)
 	return registered
 }
 
