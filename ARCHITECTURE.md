@@ -417,6 +417,19 @@ These are real, understood, and not yet fixed:
   or one-box-per-line" shape in [block.go](block.go). A shared
   `linesFromInline(ctx, parts, width) []BlockLayout` helper would remove the
   copy-paste.
+- **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
+  jump, including while sitting still.** `preLayoutNearby` (see "Image
+  loading" above) resolves real slots beyond the visible viewport in the
+  background, on every `Layout` call, regardless of whether the user is
+  scrolling - and `DocumentBounds`' total, so a scrollbar's own size and
+  position, is a raw, unsmoothed function of whatever's currently
+  resolved. So a slot well off-screen settling to a real height different
+  from the average estimating it can visibly shift the thumb even with
+  zero user input, not just right as the cursor reaches it. Making the
+  estimate converge to the truth faster made it visibly less stable
+  meanwhile - nothing here smooths what a caller reads. Needs a real
+  design (a second notion of "resolved for speed" vs. "resolved for the
+  estimate," roughly), not a quick patch - not yet resolved.
 
 ## What's next
 

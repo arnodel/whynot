@@ -340,9 +340,10 @@ by implementation order now that most of the list is done.
 - [x] Loading never blocks rendering - a still-pending image shows a placeholder at its
       final size once known (or a "loading" fallback before that); a missing or
       undecodable image falls back to alt text, then title, then a generic message
-- [ ] Prefetch images ahead of the scroll position - today an image only starts loading
-      once its containing slot is actually resolved (in practice, scrolled near), not
-      when the document is first opened
+- [x] Prefetch images ahead of the scroll position - a standalone image's own load
+      starts well before its containing slot is actually resolved, in both scroll
+      directions (`View.Layout`'s `preLayoutNearby`/`prefetchImageSources`), not only
+      once it's scrolled right up to it
 
 **Links and navigation**
 - [x] Links and autolinks, including reference-style (`[text][ref]`) - highlighted on
@@ -355,6 +356,9 @@ by implementation order now that most of the list is done.
 **Rendering and performance**
 - [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
       viewport culling - all handled by `whynot.View`
+- [x] Smooth scrolling - `View.Scroll`'s position is a `float64`, accumulating
+      fractional wheel deltas exactly rather than rounding each call, so repeated
+      small scrolls end up exactly where one large one would
 - [x] `View.DocumentBounds`/`VisibleViewBounds` expose real per-slot pixel-height
       geometry (each top-level slot's height, once resolved; extrapolated from the
       average of what's known for the rest, refined as more of the document is visited)
