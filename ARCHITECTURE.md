@@ -252,17 +252,52 @@ slot unrelated to the change, or a slot nobody has scrolled near yet,
 is left untouched. The one exception is a change that reveals an
 image's bounds for the first time: since that's the one transition
 that can change a slot's height unpredictably (every other transition
-happens at an already-known, already-laid-out size), it goes through a
-full `rebuild()` instead, with the usual ratio-based scroll
-re-anchoring.
+happens at an already-known, already-laid-out size), it's handled
+surgically rather than through a full rebuild — only that one slot is
+invalidated (`invalidateSlot`), and only if the scroll cursor is
+anchored inside it does its offset get re-derived by ratio through the
+new height (`reanchorCursor`). A changed slot *before* the cursor -
+already scrolled past - is invalidated the same way but re-resolved
+immediately, right there, rather than left lazy: nothing ever walks
+backward over an earlier slot again on its own, so a lazily-invalidated
+one would silently freeze `DocumentBounds`' estimate at a stale value
+forever.
 
-No prefetching happens today — an image only starts loading once its
-containing slot is actually resolved (`StackBox.boxAt`), which in
-practice means scrolling near it, not when the document is first
-opened. `Load`'s own dedup (a genuine miss, or a failed entry past its
-retry delay, is the only case that starts a new fetch) would make
-speculative prefetching straightforward to add later without changing
-this design.
+`View.Layout` also does two kinds of prefetching every call, both
+scoped to a margin around the current scroll cursor rather than the
+whole document (`preLayoutNearby`/`prefetchImageSources`, `view.go`) -
+this exists because an image resolving to a much bigger real size than
+the small placeholder that was estimating it, right as the scroll
+cursor reaches it, is exactly the scenario that can make a
+`DocumentBounds`-based scrollbar visibly jump backward even though the
+user only ever scrolled forward (the ratio's denominator grows more
+than its numerator does in the same frame - see `ebitenrenderer.Panel`'s
+`scrollbarThumbRect`, the one thing actually building a scrollbar from
+these numbers today). Getting a slot's real size known *before* the
+cursor arrives, not right as it does, avoids the surprise instead of
+smoothing over it after the fact:
+
+- `preLayoutNearby` fully resolves slots (`StackBox.boxAt`) within a
+  few thousand pixels of the visible viewport, in both directions,
+  time-budgeted (a couple of milliseconds per `Layout` call) rather
+  than all at once - a big jump (`ScrollToRatio`, `ScrollToAnchor`, a
+  resize) can leave a lot of newly-close ground, so catching up is
+  spread over however many frames it takes.
+- `prefetchImageSources` reaches much further (tens of thousands of
+  pixels), since it never lays anything out - it only inspects each
+  slot's already-parsed `Block` (no `GetBlockLayout` call) for one
+  that's *just* a standalone image (`soleImageSrc`) and kicks off
+  `ImageCache.Load` early, giving a slow network fetch a head start
+  cheaply, deliberately not sharing `preLayoutNearby`'s smaller,
+  CPU-time-budgeted radius.
+
+Neither guarantees the jump is impossible - a pathologically slow fetch
+could still occasionally lose the race against a very fast scroll - but
+both make it rare without abandoning lazy layout for large documents:
+`boxAt` already memoizes, so resolving the same nearby window again
+next frame is a cheap no-op, and the only real work is for genuinely
+new ground - the same total work ordinary scrolling would have paid
+reactively anyway, just shifted earlier.
 
 An animated GIF decodes to an `AnimatedImage` ([animated_image.go](animated_image.go))
 instead of a plain `image.Image` — `ImageResult`/`ImageBox` carry

@@ -214,5 +214,5 @@ func (p *Panel) elapsed() time.Duration {
 // - called by SetBounds, SetScale, SetView, and NewPanel, mirroring
 // cmd/whynot's own relayout (layout.go).
 func (p *Panel) relayout() {
-	p.view.Layout(p.bounds.Dx(), p.scale, p.elapsed())
+	p.view.Layout(p.bounds.Dx(), p.bounds.Dy(), p.scale, p.elapsed())
 }

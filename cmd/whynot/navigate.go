@@ -124,7 +124,7 @@ func (g *game) follow(dest string) {
 		return
 	}
 	view := g.newView(source, resolved)
-	view.Layout(g.width, g.scale, g.elapsed())
+	view.Layout(g.width, g.height-g.toolbarHeight, g.scale, g.elapsed())
 	if resolved.Fragment != "" {
 		view.ScrollToAnchor(resolved.Fragment)
 	}
@@ -217,7 +217,7 @@ func (g *game) reload() {
 	}
 	scroll := g.panel.View().ScrollPosition()
 	view := g.newView(source, g.location)
-	view.Layout(g.width, g.scale, g.elapsed())
+	view.Layout(g.width, g.height-g.toolbarHeight, g.scale, g.elapsed())
 	view.RestoreScrollPosition(scroll)
 	g.panel.SetView(view)
 	g.updateWindowTitle()
@@ -263,7 +263,7 @@ func (g *game) paste() {
 		return
 	}
 	view := g.newView(source, resolved)
-	view.Layout(g.width, g.scale, g.elapsed())
+	view.Layout(g.width, g.height-g.toolbarHeight, g.scale, g.elapsed())
 	g.pushHistory() // must run before SetView - it reads the page being left
 	g.panel.SetView(view)
 	g.location = resolved

@@ -510,18 +510,26 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 // nothing else changed, since an animated image needs fresh time every
 // call to actually animate. Cheap to call every frame otherwise: the
 // layout tree only rebuilds when width or scale actually change.
-func (v *View) Layout(width int, scale float64, now time.Duration) {
+//
+// height is the viewport's own height - not used for wrapping (only
+// width affects that), only to tell preLayoutNearby/prefetchImageSources
+// where the visible area ends, so their own forward reach starts beyond
+// it rather than re-spending budget on ground Draw/VisibleViewBounds
+// would resolve anyway. Not stored - used transiently within this call.
+func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 	v.ctx.SetDPI(scale * 72)
 	v.ctx.Scale = scale
 	v.ctx.Time = now
 
 	if width == v.boxWidth && scale == v.boxScale {
 		v.invalidateChangedImages()
-		return
+	} else {
+		v.boxWidth = width
+		v.boxScale = scale
+		v.rebuild()
 	}
-	v.boxWidth = width
-	v.boxScale = scale
-	v.rebuild()
+	v.preLayoutNearby(height)
+	v.prefetchImageSources(height)
 }
 
 // invalidateChangedImages is Layout's response to an unchanged
@@ -537,6 +545,14 @@ func (v *View) Layout(width int, scale float64, now time.Duration) {
 // ratio (reanchorCursor) - scoped to that one slot rather than a full
 // rebuild, which would otherwise discard every other slot's height
 // estimate too.
+//
+// A changed slot before the cursor - already scrolled past - is
+// re-resolved immediately rather than left lazily invalidated: nothing
+// ever walks backward over an earlier slot again on its own
+// (VisibleViewBounds's forward walk and DrawFrom both only ever go from
+// cursor.index onward), so slotHeights[i], and so DocumentBounds' own
+// total, would otherwise freeze at its stale pre-invalidation value
+// forever.
 func (v *View) invalidateChangedImages() {
 	if v.box == nil || v.ctx.ImageCache == nil {
 		return
@@ -573,10 +589,152 @@ func (v *View) invalidateChangedImages() {
 			reanchor, oldHeight = true, slot.box.Bounds().Dy()
 		}
 		v.invalidateSlot(i)
+		if i < v.cursor.index {
+			v.box.boxAt(i)
+		}
 	}
 	if reanchor {
 		v.reanchorCursor(oldHeight)
 	}
+}
+
+// preLayoutHeightRadius is how far beyond the visible viewport
+// preLayoutNearby fully lays out content ahead of time, in physical
+// pixels - a few screens' worth for ordinary content. Real height once
+// known (boxAt never blocks - a still-pending image just reports its
+// current placeholder height, see ImageCache.Load), so this can
+// overshoot a bit for a slot that turns out taller than expected once
+// resolved, never stall waiting to find out.
+const preLayoutHeightRadius = 3000
+
+// preLayoutTimeBudget bounds how long preLayoutNearby spends per Layout
+// call - the real limit in practice, preLayoutHeightRadius a secondary
+// backstop for a document made of expensive-to-lay-out slots. A big
+// jump (ScrollToRatio, ScrollToAnchor, RestoreScrollPosition, ...) can
+// leave a lot of newly-close ground; spending at most this long per
+// frame spreads that catch-up over however many frames it takes, rather
+// than stalling one.
+const preLayoutTimeBudget = 2 * time.Millisecond
+
+// preLayoutNearby resolves slots within preLayoutHeightRadius of the
+// visible viewport, in both directions, before Draw/VisibleViewBounds
+// would otherwise force them for real - so a slot's real height is
+// usually already known by the time the user actually scrolls there,
+// instead of being discovered as a surprise right under the cursor
+// (the scrollbar-jump bug this exists to fix - see
+// ebitenrenderer.Panel's scrollbarThumbRect). viewportHeight - this
+// Layout call's own height - is subtracted from the forward walk's
+// budget only, so it starts counting from where the visible area ends,
+// not from the cursor itself; the backward walk needs no such
+// adjustment, since the slot just above the cursor is already
+// off-screen.
+//
+// boxAt already memoizes (a no-op nil-check for an already-resolved
+// slot), so re-walking the same nearby window next frame is cheap; the
+// only real work is for genuinely new ground - the same total work
+// ordinary scrolling would have paid reactively anyway, just shifted
+// earlier. Also helps the already-passed-slot case invalidateChangedImages
+// handles directly: reaching backward here re-resolves a recently
+// invalidated slot too, before its stale height would otherwise get read
+// again - though invalidateChangedImages's own fix doesn't depend on
+// this window reaching far enough, since this one is bounded and that
+// one isn't.
+func (v *View) preLayoutNearby(viewportHeight int) {
+	if v.box == nil {
+		return
+	}
+	deadline := time.Now().Add(preLayoutTimeBudget)
+	v.preLayoutDirection(v.cursor.index, 1, float64(viewportHeight), deadline)
+	v.preLayoutDirection(v.cursor.index-1, -1, 0, deadline)
+}
+
+// preLayoutDirection resolves slots starting at i, stepping by dir (+1
+// forward, -1 backward), accumulating each one's real height (skipping
+// skipHeight of it first - see preLayoutNearby) until that reaches
+// preLayoutHeightRadius or deadline passes.
+func (v *View) preLayoutDirection(i, dir int, skipHeight float64, deadline time.Time) {
+	height := -skipHeight
+	for step := 0; i >= 0 && i < len(v.box.slots) && height < preLayoutHeightRadius; step++ {
+		if step&7 == 7 && time.Now().After(deadline) {
+			return
+		}
+		height += float64(v.box.boxAt(i).Bounds().Dy())
+		i += dir
+	}
+}
+
+// prefetchImageSourceHeightRadius is prefetchImageSources' reach - much
+// larger than preLayoutHeightRadius, since this never lays anything out
+// (see prefetchImageSources): just a Block type check and, for a match,
+// a cache lookup already deduped by ImageCache.Load - cheap enough that
+// a generous fixed radius, no time budget, is fine.
+const prefetchImageSourceHeightRadius = 20000
+
+// prefetchImageSources starts loading (ImageCache.Load) any standalone
+// image paragraph within prefetchImageSourceHeightRadius of the visible
+// viewport, in both directions, that hasn't been asked for yet -
+// without laying anything out, unlike preLayoutNearby. Deliberately
+// narrow: only a slot that's entirely one image (soleImageSrc) is
+// prefetched - the dominant real case for a large, estimate-disrupting
+// image (a screenshot, a diagram). An image mixed into running text is
+// left to load when its slot is actually resolved, same as before: it's
+// rarely large enough alone to disrupt the estimate, and finding it
+// would mean walking arbitrarily nested content (blockquotes, list
+// items, table cells) instead of just the top-level slots StackBox
+// already enumerates.
+func (v *View) prefetchImageSources(viewportHeight int) {
+	if v.box == nil || v.ctx.ImageCache == nil {
+		return
+	}
+	avg := v.refreshSlotHeights()
+	v.prefetchImageSourcesDirection(v.cursor.index, 1, float64(viewportHeight), avg)
+	v.prefetchImageSourcesDirection(v.cursor.index-1, -1, 0, avg)
+}
+
+func (v *View) prefetchImageSourcesDirection(i, dir int, skipHeight, avg float64) {
+	height := -skipHeight
+	for i >= 0 && i < len(v.box.slots) && height < prefetchImageSourceHeightRadius {
+		if src, ok := soleImageSrc(v.box.slots[i].block); ok {
+			v.ctx.ImageCache.Load(src)
+		}
+		height += v.estimatedHeight(i, avg)
+		i += dir
+	}
+}
+
+// soleImageSrc reports the src of block's one InlineImage, if block is
+// a TextBlock or ListItemHeadBlock whose only content is a single image
+// - see prefetchImageSources. block is nil for a rebuild-added margin
+// slot's EmptyBox (never a content slot), which safely falls through
+// the type switch's default case. Every real top-level paragraph is
+// wrapped in a MarginBlock (see compile.go) - peeled off first so the
+// type switch below reaches the TextBlock/ListItemHeadBlock underneath
+// it, the same unwrapping compile_test.go's own unwrap does for tests.
+func soleImageSrc(block Block) (string, bool) {
+	for {
+		mb, ok := block.(*MarginBlock)
+		if !ok {
+			break
+		}
+		block = mb.Block
+	}
+	var parts []Inline
+	switch b := block.(type) {
+	case *TextBlock:
+		parts = b.parts
+	case *ListItemHeadBlock:
+		parts = b.parts
+	default:
+		return "", false
+	}
+	if len(parts) != 1 {
+		return "", false
+	}
+	img, ok := parts[0].(*InlineImage)
+	if !ok {
+		return "", false
+	}
+	return img.src, true
 }
 
 // SetStyleSheet swaps the View's StyleSheet and takes effect immediately -
