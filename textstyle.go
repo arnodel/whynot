@@ -34,7 +34,36 @@ type TextStyle struct {
 
 type FaceSelector interface {
 	SelectFace(TextStyle) (font.Face, error)
+	// SetDPI updates the DPI used to rasterize faces going forward,
+	// invalidating any cached font.Face built at the old DPI. Called every
+	// View.Layout frame (see view.go), so implementations must treat a
+	// call with an unchanged dpi as a cheap no-op.
 	SetDPI(float64)
+}
+
+// normalizedFontKey buckets style's Weight into one of WeightNormal,
+// WeightMedium, or WeightBold, and folds StyleOblique into StyleItalic -
+// Size and any other fields are left zero. This is the lookup-key shape
+// both goFonts and CustomFontFaceSelector's registered fonts use, so a
+// resolved TextStyle (arbitrary Size/Weight) maps onto the same slot
+// whether it's served by the built-in fonts or a caller-registered one.
+func normalizedFontKey(style TextStyle) TextStyle {
+	var key TextStyle
+	switch {
+	case style.Weight <= font.WeightNormal:
+		key.Weight = font.WeightNormal
+	case style.Weight <= font.WeightMedium:
+		key.Weight = font.WeightMedium
+	default:
+		key.Weight = font.WeightBold
+	}
+	if style.Style == font.StyleOblique {
+		key.Style = font.StyleItalic
+	} else {
+		key.Style = style.Style
+	}
+	key.Family = style.Family
+	return key
 }
 
 type GoFontFaceSelector struct {
@@ -63,21 +92,7 @@ func (s *GoFontFaceSelector) SelectFace(style TextStyle) (font.Face, error) {
 	if ok {
 		return face, nil
 	}
-	var normStyle TextStyle
-	switch {
-	case style.Weight <= font.WeightNormal:
-		normStyle.Weight = font.WeightNormal
-	case style.Weight <= font.WeightMedium:
-		normStyle.Weight = font.WeightMedium
-	default:
-		normStyle.Weight = font.WeightBold
-	}
-	if style.Style == font.StyleOblique {
-		normStyle.Style = font.StyleItalic
-	} else {
-		normStyle.Style = style.Style
-	}
-	normStyle.Family = style.Family
+	normStyle := normalizedFontKey(style)
 	fontsrc := goFonts[normStyle]
 	goFont, err := opentype.Parse(fontsrc)
 	if err != nil {

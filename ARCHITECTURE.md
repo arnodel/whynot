@@ -60,6 +60,9 @@ render under a different `StyleSheet` without re-parsing. `TextStyle`
 (the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
 resolves *to* and what `FaceSelector` resolves *from* - the vocabulary
 connecting the two, not something a `Block` carries itself.
+`FaceSelector` has two implementations: `GoFontFaceSelector`, serving the
+bundled Go fonts, and `CustomFontFaceSelector`, serving caller-registered
+TTF/OTF bytes with a fallback `FaceSelector` for anything unregistered.
 
 ### Layer 0 — Parse
 

@@ -248,6 +248,31 @@ without reimplementing the rest. Swapping a `View`'s `StyleSheet` at runtime
 (`View.SetStyleSheet`) re-lays-out the document immediately, which is all `cmd/whynot`'s
 theme toggle button does.
 
+## Fonts
+
+`NewView`'s second argument is a `FaceSelector` ([textstyle.go](textstyle.go)) -
+`SelectFace(TextStyle) (font.Face, error)` plus `SetDPI(float64)` - the interface
+every example above passes `whynot.NewGoFontFaceSelector(72)` to. It's decoupled from
+`StyleSheet`: `StyleSheet` decides *which* size/weight/style/family a piece of text
+gets, `FaceSelector` decides what font file actually renders that combination.
+
+- `GoFontFaceSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
+  - what every example above uses.
+- `CustomFontFaceSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
+  (`AddFontFile`), per (family, weight, style) slot, wrapping a fallback `FaceSelector`
+  (typically `NewGoFontFaceSelector`) for any slot you don't register - so you only
+  need to supply the fonts you actually want to override:
+
+  ```go
+  fallback := whynot.NewGoFontFaceSelector(72)
+  selector := whynot.NewCustomFontFaceSelector(72, fallback)
+  selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf")
+  view := whynot.NewView(source, selector)
+  ```
+
+  See [`examples/customfont`](examples/customfont) (`go run ./examples/customfont
+  -font path/to/font.ttf`) for a runnable version.
+
 ## `cmd/whynot`: a standalone viewer
 
 ```
@@ -397,6 +422,9 @@ by implementation order now that most of the list is done.
       it; override one field on `DefaultStyleSheet`, or embed it in a custom
       `StyleSheet` for full control. Swappable at runtime (`View.SetStyleSheet`) -
       `cmd/whynot`'s light/dark toggle is just two `DefaultStyleSheet` instances
+- [x] Custom font files via `CustomFontFaceSelector` (see [above](#fonts)) - register
+      your own TTF/OTF bytes per weight/style slot, falling back to the bundled Go
+      fonts for anything not overridden
 
 **`cmd/whynot`, the standalone viewer**
 - [x] Built-in welcome page, shown by default, explaining how to use the app
