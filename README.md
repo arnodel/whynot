@@ -41,7 +41,9 @@ go install github.com/arnodel/whynot/cmd/whynot@latest
 ```
 
 Run it with no argument and it opens a built-in welcome page explaining how
-to use it.
+to use it. Here is a screenshot of using it to view this README.
+
+![whynot showing this README](assets/whynot-screenshot.png)
 
 ## Status
 
