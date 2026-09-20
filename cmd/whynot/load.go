@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,26 @@ func absFileURL(path string) (*url.URL, error) {
 		return nil, err
 	}
 	return &url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}, nil
+}
+
+// resolveLocationArg turns text - a command-line argument, or pasted
+// clipboard content (see game.paste) - into a location to load: the
+// word "welcome" for the built-in welcome page, an http(s) URL parsed
+// as-is, or an existing local file path turned into an absolute file:
+// URL - in that order, so e.g. a URL is never misread as a file path
+// the way absFileURL alone would (filepath.Abs happily "resolves" any
+// string, URLs included, against the working directory).
+func resolveLocationArg(text string) (*url.URL, error) {
+	if strings.EqualFold(text, "welcome") {
+		return welcomeURL, nil
+	}
+	if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+		return u, nil
+	}
+	if _, err := os.Stat(text); err == nil {
+		return absFileURL(text)
+	}
+	return nil, fmt.Errorf("%q isn't \"welcome\", a URL, or an existing file path", text)
 }
 
 // htmlContentError means loadDocument found an http(s) response whose

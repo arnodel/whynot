@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -237,18 +236,9 @@ func (g *game) paste() {
 	}
 	text = strings.TrimSpace(text)
 
-	var resolved *url.URL
-	if strings.EqualFold(text, "welcome") {
-		resolved = welcomeURL
-	} else if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-		resolved = u
-	} else if _, err := os.Stat(text); err == nil {
-		if abs, err := absFileURL(text); err == nil {
-			resolved = abs
-		}
-	}
-	if resolved == nil {
-		log.Printf("clipboard content %q isn't \"welcome\", a URL, or an existing file path", text)
+	resolved, err := resolveLocationArg(text)
+	if err != nil {
+		log.Printf("clipboard content: %v", err)
 		return
 	}
 

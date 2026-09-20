@@ -38,7 +38,7 @@ func main() {
 	location := welcomeURL
 	if flag.NArg() != 0 {
 		var err error
-		location, err = absFileURL(flag.Arg(0))
+		location, err = resolveLocationArg(flag.Arg(0))
 		if err != nil {
 			panic(err)
 		}
