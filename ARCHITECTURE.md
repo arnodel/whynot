@@ -55,8 +55,8 @@ semantic tag (`TagParagraph`, `TagHeading1`..`6`, `TagEmphasis`, `TagLink`,
 against a `StyleSheet` ([stylesheet.go](stylesheet.go)) - `Margins`,
 `TextStyle` (via `RenderingContext.ResolvedTextStyle`, merging
 contributions across ancestry so e.g. `Strong` nested inside `Emphasis`
-picks up both), `Color`/`BorderColor`, `StrikeThickness`, table/blockquote
-geometry - during `GetBlockLayout`/`GetInlineLayout`, so the same parsed document can
+picks up both), `Color`/`BorderColor`, `StrikeThickness`, `LineHeight`,
+table/blockquote geometry - during `GetBlockLayout`/`GetInlineLayout`, so the same parsed document can
 render under a different `StyleSheet` without re-parsing. `TextStyle`
 (the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
 resolves *to* and what `FaceSelector` resolves *from* - the vocabulary

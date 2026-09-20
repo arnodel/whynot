@@ -194,6 +194,10 @@ func TestDefaultStyleSheetDimensions(t *testing.T) {
 	if got := s.TableGeometry(nil); got != wantTable {
 		t.Errorf("TableGeometry() = %+v, want %+v", got, wantTable)
 	}
+
+	if got := s.LineHeight(nil); got != 1.2 {
+		t.Errorf("LineHeight() = %v, want 1.2", got)
+	}
 }
 
 // TestNewLightStyleSheetColors checks that the light theme actually

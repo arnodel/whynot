@@ -103,6 +103,17 @@ type StyleSheet interface {
 	ThematicBreakThickness(node *ASTNode) float64
 	BlockquoteGeometry(node *ASTNode) BlockquoteGeometry
 	TableGeometry(node *ASTNode) TableGeometry
+
+	// LineHeight returns the multiplier applied to a line's natural
+	// Ascent+Descent to get the vertical space reserved for it - CSS's
+	// line-height, as a unitless ratio (e.g. 1.2 means 120% of the font's
+	// own single-line height). A font's own metrics don't reliably encode
+	// comfortable reading spacing (many real fonts report a zero or
+	// near-zero line gap), so this is what actually separates wrapped
+	// lines within a paragraph - distinct from Margins, which only
+	// separates one block from the next. 1.0 means no extra space beyond
+	// the font's bare ascent/descent.
+	LineHeight(node *ASTNode) float64
 }
 
 // ScrollbarStyleSheet is an optional StyleSheet capability: a StyleSheet
@@ -234,6 +245,7 @@ type DefaultStyleSheet struct {
 	thematicBreakThickness float64
 	blockquoteGeometry     BlockquoteGeometry
 	tableGeometry          TableGeometry
+	lineHeight             float64
 }
 
 var _ StyleSheet = (*DefaultStyleSheet)(nil)
@@ -321,6 +333,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
+		lineHeight:             1.2,
 		blockquoteGeometry:     BlockquoteGeometry{Indent: 16, BarWidth: 3},
 		tableGeometry: TableGeometry{
 			FrameThickness:      2,
@@ -497,4 +510,8 @@ func (s *DefaultStyleSheet) BlockquoteGeometry(node *ASTNode) BlockquoteGeometry
 
 func (s *DefaultStyleSheet) TableGeometry(node *ASTNode) TableGeometry {
 	return s.tableGeometry
+}
+
+func (s *DefaultStyleSheet) LineHeight(node *ASTNode) float64 {
+	return s.lineHeight
 }

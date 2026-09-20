@@ -155,6 +155,35 @@ func TestTextBoxHitTest(t *testing.T) {
 	}
 }
 
+// TestTextBoxLineHeight checks that a LineHeight greater than 1 grows the
+// box symmetrically (extra space split evenly above/below the font's own
+// Ascent/Descent, not just tacked onto one edge), and that the zero value
+// (an unset TextBox, e.g. built directly rather than through
+// InlineText.GetInlineLayout) reproduces the bare Ascent+Descent bounds
+// from before LineHeight existed.
+func TestTextBoxLineHeight(t *testing.T) {
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
+	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	unleaded := &TextBox{Text: "hi", Face: face} // LineHeight left at its zero value
+	unleadedBounds, _ := unleaded.BoundsAndAdvance()
+
+	leaded := &TextBox{Text: "hi", Face: face, LineHeight: 1.2}
+	leadedBounds, _ := leaded.BoundsAndAdvance()
+
+	if leadedBounds.Dy() <= unleadedBounds.Dy() {
+		t.Fatalf("leaded height = %d, want more than the unleaded height %d", leadedBounds.Dy(), unleadedBounds.Dy())
+	}
+	topGrowth := unleadedBounds.Min.Y - leadedBounds.Min.Y
+	bottomGrowth := leadedBounds.Max.Y - unleadedBounds.Max.Y
+	if diff := topGrowth - bottomGrowth; diff < -1 || diff > 1 {
+		t.Errorf("extra space isn't split evenly: top grew by %d, bottom by %d", topGrowth, bottomGrowth)
+	}
+}
+
 // TestListItemMarkerBoxHitTest checks the negative-offset math directly:
 // DrawInline draws the marker at x-advance-space, not x, so HitTest has
 // to check the same actual position - a point at the "naive" x should

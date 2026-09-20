@@ -36,6 +36,7 @@ func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayo
 		Face:            face,
 		Color:           ctx.ResolvedColor(t.node),
 		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
+		LineHeight:      ctx.StyleSheet.LineHeight(t.node),
 		source:          t,
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"golang.org/x/image/font"
+	"golang.org/x/image/math/fixed"
 )
 
 // InlineLayout's HitTest mirrors DrawInline's own calling convention exactly
@@ -32,6 +33,16 @@ type TextBox struct {
 	// StrikeThickness is the strikethrough line's thickness in pixels; 0
 	// means no strikethrough.
 	StrikeThickness int
+
+	// LineHeight is the multiplier applied to Face's natural Ascent+Descent
+	// to get this box's vertical extent (StyleSheet.LineHeight) - the
+	// font's own metrics don't reliably encode comfortable line spacing
+	// (see BoundsAndAdvance), so this is what actually separates
+	// consecutive wrapped lines within a paragraph. The zero value (an
+	// unset TextBox, e.g. built directly by a test rather than through
+	// InlineText.GetInlineLayout) falls back to the pre-LineHeight
+	// behavior - bare Ascent+Descent, no extra space.
+	LineHeight float64
 
 	// pending is set only when this TextBox is standing in for an image
 	// that hasn't settled yet (InlineImage.GetInlineLayout's "loading"
@@ -68,11 +79,31 @@ func (b *TextBox) BoundsAndAdvance() (image.Rectangle, int) {
 	if !b.boundsComputed {
 		bounds, advance := font.BoundString(b.Face, b.Text)
 		metrics := b.Face.Metrics()
+		// A font's own Metrics().Height (its recommended line-to-line
+		// spacing) doesn't reliably exceed bare Ascent+Descent - many real
+		// fonts, including the bundled Go fonts, report an essentially
+		// zero line gap - so it can't be trusted to give comfortable
+		// reading spacing on its own. LineHeight (StyleSheet-driven, see
+		// TextBox.LineHeight) is what actually adds it: the extra space is
+		// split evenly above and below the font's natural ascent/descent
+		// band, the same half-leading distribution CSS's line-height
+		// uses, so glyphs stay vertically centered in their taller line
+		// box rather than crowding its top. LineHeight <= 1 (including
+		// the zero value an unset TextBox has) adds nothing, reproducing
+		// the plain Ascent+Descent bounds from before this field existed.
+		natural := metrics.Ascent + metrics.Descent
+		extra := fixed.Int26_6(float64(natural)*b.LineHeight) - natural
+		if extra < 0 {
+			extra = 0
+		}
+		halfExtra := extra / 2
+		top := metrics.Ascent + halfExtra
+		bottom := metrics.Descent + (extra - halfExtra)
 		b.bounds = image.Rect(
 			bounds.Min.X.Floor(),
-			-metrics.Ascent.Ceil(),
+			-top.Ceil(),
 			bounds.Max.X.Ceil(),
-			metrics.Descent.Ceil(),
+			bottom.Ceil(),
 		)
 		b.advance = advance.Ceil()
 		b.boundsComputed = true
