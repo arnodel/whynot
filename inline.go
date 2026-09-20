@@ -7,7 +7,12 @@ import (
 
 type Inline interface {
 	Source
-	GetInlineLayout(RenderingContext) InlineLayout
+	// GetInlineLayout builds this Inline's layout, width the same
+	// effectively-unbounded-or-real wrap width a Block's own
+	// GetBlockLayout receives (see naturalWidthMeasure) - only
+	// InlineImage uses it (see fitWidth), every other implementation
+	// ignores it.
+	GetInlineLayout(ctx RenderingContext, width int) InlineLayout
 }
 
 type InlineText struct {
@@ -21,7 +26,7 @@ func (t *InlineText) Node() *ASTNode {
 	return t.node
 }
 
-func (t *InlineText) GetInlineLayout(ctx RenderingContext) InlineLayout {
+func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
 	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(t.node))
 	if err != nil {
 		panic(err)
@@ -74,12 +79,16 @@ func (i *InlineImage) Node() *ASTNode {
 //   - Ready: the decoded image, scaled by ctx.Scale like every other
 //     sized quantity in the layout system (RenderingContext.ScaledMargins
 //     and friends), so images grow and shrink along with zoom/DPI
-//     instead of staying pixel-locked.
+//     instead of staying pixel-locked - then capped to width, preserving
+//     aspect ratio, if that scaled size would still be wider (see
+//     fitWidth) - the inline layer's equivalent of CSS's max-width: 100%,
+//     so an image dropped into a document at its own native resolution
+//     doesn't overflow the page.
 //   - Pending with bounds already known (the header-peek in
 //     ImageCache.fetchAndDecode beat the caller here): an ImageBox at
-//     the correct, final (scaled) size, but with no image yet -
-//     DrawInline draws a placeholder instead, and nothing needs to
-//     reflow once the real pixels arrive later.
+//     the correct, final (scaled and width-capped) size, but with no
+//     image yet - DrawInline draws a placeholder instead, and nothing
+//     needs to reflow once the real pixels arrive later.
 //   - Pending with no bounds yet, or Failed (unreadable, undecodable, or
 //     mid-retry-cooldown): falls back to text instead of a silent
 //     zero-size gap - reusing InlineText's own GetInlineLayout, so it
@@ -88,7 +97,7 @@ func (i *InlineImage) Node() *ASTNode {
 //     stamped with which src it's standing in for, so
 //     View.invalidateChangedImages knows to revisit it once that
 //     changes.
-func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
+func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
 	cache := ctx.ImageCache
 	if cache == nil {
 		if i.ownCache == nil {
@@ -102,23 +111,23 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext) InlineLayout {
 		return &ImageBox{
 			img:    result.Image,
 			anim:   result.Animation,
-			bounds: scaleRect(result.Bounds, ctx.Scale),
+			bounds: fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 			source: i,
 		}
 	case ImagePending:
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
-				bounds:           scaleRect(result.Bounds, ctx.Scale),
+				bounds:           fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 				placeholderColor: ctx.StyleSheet.BorderColor(i.node),
 				pending:          []string{resolved},
 				source:           i,
 			}
 		}
-		box := (&InlineText{text: "(loading image…)", node: i.node}).GetInlineLayout(ctx).(*TextBox)
+		box := (&InlineText{text: "(loading image…)", node: i.node}).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	default: // ImageFailed
-		box := i.fallback(resolved).GetInlineLayout(ctx).(*TextBox)
+		box := i.fallback(resolved).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	}
@@ -147,4 +156,17 @@ func scaleRect(r image.Rectangle, scale float64) image.Rectangle {
 		int(float64(r.Dx())*scale),
 		int(float64(r.Dy())*scale),
 	)}
+}
+
+// fitWidth scales r down, preserving aspect ratio, so its width never
+// exceeds width - CSS's max-width: 100%, applied to an inline image.
+// width <= 0 means unbounded (e.g. TableBlock's natural-width
+// measurement pass, naturalWidthMeasure); r already fitting is the same
+// case either way, returned unchanged. Never scales up - a small image
+// stays its own size regardless of how much room is available.
+func fitWidth(r image.Rectangle, width int) image.Rectangle {
+	if width <= 0 || r.Dx() <= width {
+		return r
+	}
+	return image.Rect(0, 0, width, r.Dy()*width/r.Dx())
 }

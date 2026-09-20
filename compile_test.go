@@ -718,13 +718,13 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: styleSheet}
 
 	plainNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagEmphasis)
-	plain := (&InlineText{text: "x", node: plainNode}).GetInlineLayout(ctx).(*TextBox)
+	plain := (&InlineText{text: "x", node: plainNode}).GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	if plain.StrikeThickness != 0 {
 		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
 	}
 
 	struckNode := (*ASTNode)(nil).AddChild(TagParagraph).AddChild(TagStrikethrough)
-	struck := (&InlineText{text: "x", node: struckNode}).GetInlineLayout(ctx).(*TextBox)
+	struck := (&InlineText{text: "x", node: struckNode}).GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	want := int(styleSheet.StrikeThickness(struckNode) * ctx.Scale)
 	if struck.StrikeThickness != want {
 		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)
@@ -792,12 +792,12 @@ func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 	// path a real document's very first layout pass would exercise.
 	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
 
-	img.GetInlineLayout(ctx)
+	img.GetInlineLayout(ctx, naturalWidthMeasure)
 	waitForSettled(t, img.ownCache, img.src)
 
-	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*ImageBox)
 	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
 	want := image.Rect(0, 0, 400, 600)
 	if box.bounds != want {
@@ -819,11 +819,11 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 		FaceSelector: NewGoFontFaceSelector(72),
 		StyleSheet:   NewDarkStyleSheet(),
 	}
-	img.GetInlineLayout(ctx)
+	img.GetInlineLayout(ctx, naturalWidthMeasure)
 	waitForSettled(t, ctx.ImageCache, img.src)
-	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*ImageBox)
 	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
 	want := image.Rect(0, 0, 800, 1200)
 	if box.bounds != want {
@@ -831,6 +831,51 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	}
 	if box.img == nil {
 		t.Error("img = nil, want the decoded image")
+	}
+}
+
+// TestImageGetInlineLayoutFitsWidth checks an image whose ctx.Scale-d
+// size would still exceed the width it's given is scaled down further,
+// preserving aspect ratio (see fitWidth) - CSS's max-width: 100%,
+// applied to an inline image, so a document author's own image at its
+// native resolution never overflows the page.
+func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
+	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
+	ctx := RenderingContext{
+		Scale:        1,
+		ImageCache:   NewImageCache(FileImageSource{}),
+		FaceSelector: NewGoFontFaceSelector(72),
+		StyleSheet:   NewDarkStyleSheet(),
+	}
+	img.GetInlineLayout(ctx, 200)
+	waitForSettled(t, ctx.ImageCache, img.src)
+	box, ok := img.GetInlineLayout(ctx, 200).(*ImageBox)
+	if !ok {
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, 200))
+	}
+	want := image.Rect(0, 0, 200, 300)
+	if box.bounds != want {
+		t.Errorf("bounds = %v, want %v", box.bounds, want)
+	}
+}
+
+func TestFitWidth(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		r     image.Rectangle
+		width int
+		want  image.Rectangle
+	}{
+		{"already fits", image.Rect(0, 0, 100, 50), 200, image.Rect(0, 0, 100, 50)},
+		{"exactly fits", image.Rect(0, 0, 200, 50), 200, image.Rect(0, 0, 200, 50)},
+		{"too wide, scaled down", image.Rect(0, 0, 400, 600), 200, image.Rect(0, 0, 200, 300)},
+		{"unbounded width", image.Rect(0, 0, 400, 600), 0, image.Rect(0, 0, 400, 600)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fitWidth(tc.r, tc.width); got != tc.want {
+				t.Errorf("fitWidth(%v, %d) = %v, want %v", tc.r, tc.width, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -866,9 +911,9 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		{"generic message when neither", &InlineImage{src: "nope.png", fallbackNode: fallbackNode}, "(image not found: nope.png)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			box, ok := tc.img.GetInlineLayout(ctx).(*TextBox)
+			box, ok := tc.img.GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 			if !ok {
-				t.Fatalf("GetInlineLayout returned %T, want *TextBox", tc.img.GetInlineLayout(ctx))
+				t.Fatalf("GetInlineLayout returned %T, want *TextBox", tc.img.GetInlineLayout(ctx, naturalWidthMeasure))
 			}
 			if box.Text != tc.want {
 				t.Errorf("Text = %q, want %q", box.Text, tc.want)
@@ -891,12 +936,12 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 		FaceSelector: NewGoFontFaceSelector(72),
 		StyleSheet:   NewDarkStyleSheet(),
 	}
-	img.GetInlineLayout(ctx)
+	img.GetInlineLayout(ctx, naturalWidthMeasure)
 	waitForSettled(t, ctx.ImageCache, img.src)
 
-	box, ok := img.GetInlineLayout(ctx).(*ImageBox)
+	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*ImageBox)
 	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx))
+		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
 	if box.anim == nil {
 		t.Fatal("anim = nil, want the decoded AnimatedImage")

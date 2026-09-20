@@ -145,7 +145,7 @@ func (b *CodeBlock) Node() *ASTNode {
 func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	lineBoxes := make([]BlockLayout, len(b.lines))
 	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{parts: []InlineLayout{line.GetInlineLayout(ctx)}}
+		lineBoxes[i] = &LineBox{parts: []InlineLayout{line.GetInlineLayout(ctx, width)}}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
 }
@@ -166,7 +166,7 @@ func (b *TextBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 	lines := []BlockLayout{}
 	boxes := make([]InlineLayout, len(b.parts))
 	for i, part := range b.parts {
-		boxes[i] = part.GetInlineLayout(ctx)
+		boxes[i] = part.GetInlineLayout(ctx, width)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
@@ -200,10 +200,10 @@ func (b *ListItemHeadBlock) GetBlockLayout(ctx RenderingContext, width int) Bloc
 	boxes := make([]InlineLayout, len(b.parts)+1)
 
 	boxes[0] = &ListItemMarkerBox{
-		Marker: b.marker.GetInlineLayout(ctx),
+		Marker: b.marker.GetInlineLayout(ctx, width),
 	}
 	for i, part := range b.parts {
-		boxes[i+1] = part.GetInlineLayout(ctx)
+		boxes[i+1] = part.GetInlineLayout(ctx, width)
 	}
 	for len(boxes) > 0 {
 		i, _ := splitBoxes(boxes, width)
