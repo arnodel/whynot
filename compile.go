@@ -174,26 +174,22 @@ func headingTag(level int) ASTTag {
 func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker byte, tight bool, parent *ASTNode) Block {
 	itemNode := parent.AddChild(TagListItem)
 	var items []Inline
-	var markerString string
-	switch marker {
-	case '-', '+', '*':
-		markerString = string(marker)
-	case ')':
-		markerString = fmt.Sprintf("%d)", index)
-	case '.':
-		markerString = fmt.Sprintf("%d.", index)
-	default:
-		panic("Unsupported marker")
-	}
+	var markerInline Inline
 	if status, ok := extension.TaskStatusOf(node); ok {
-		// Go's built-in font has no ballot-box/checkmark glyphs (☐ ☑ ✓
-		// etc. all miss) - □/■ are covered and the same width, so the
-		// list stays aligned either way.
-		if status == extension.TaskStatusCompleted {
-			markerString = "■"
-		} else {
-			markerString = "□"
+		markerInline = &TaskCheckbox{checked: status == extension.TaskStatusCompleted, node: itemNode}
+	} else {
+		var markerString string
+		switch marker {
+		case '-', '+', '*':
+			markerString = string(marker)
+		case ')':
+			markerString = fmt.Sprintf("%d)", index)
+		case '.':
+			markerString = fmt.Sprintf("%d.", index)
+		default:
+			panic("Unsupported marker")
 		}
+		markerInline = &InlineText{text: markerString, node: itemNode}
 	}
 
 	// A leading Paragraph is the item's own text, flowed with the marker
@@ -214,7 +210,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	}
 
 	head := Block(&ListItemHeadBlock{
-		marker: &InlineText{text: markerString, node: itemNode},
+		marker: markerInline,
 		parts:  items,
 		node:   itemNode,
 	})
