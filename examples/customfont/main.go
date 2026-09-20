@@ -1,14 +1,15 @@
-// Command customfont is a runnable example of whynot.CustomFontFaceSelector
-// - pass -font path/to/font.ttf to load a real font file from disk for
-// regular proportional text; every other slot (bold, italic, monospace,
-// small caps) has nothing registered, so it falls back transparently to
-// the bundled Go fonts via whynot.NewGoFontFaceSelector. Run with no -font
-// to see everything served by the fallback alone.
+// Command customfont is a runnable example of whynot.CustomFontFaceSelector.
+// By default it registers the bundled Pacifico-Regular.ttf (SIL Open Font
+// License, see OFL.txt) for regular proportional text; pass
+// -font path/to/font.ttf to use a different font instead. Either way, every
+// other slot (bold, italic, monospace, small caps) has nothing registered,
+// so it falls back transparently to the bundled Go fonts via
+// whynot.NewGoFontFaceSelector.
 package main
 
 import (
+	_ "embed"
 	"flag"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -20,13 +21,17 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
+//go:embed Pacifico-Regular.ttf
+var defaultFontData []byte
+
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Custom font example\n\n")
-	b.WriteString("Regular proportional text here is loaded from `-font`, if given.\n")
-	b.WriteString("Some **bold** text, some *italic* text, and some `monospace` text -\n")
-	b.WriteString("all three still come from the bundled Go fonts, since only the\n")
-	b.WriteString("regular/proportional slot is registered by this example.\n")
+	b.WriteString("Regular proportional text here is Pacifico, a handwriting font, unless\n")
+	b.WriteString("`-font` points at something else. Some **bold** text, some *italic* text,\n")
+	b.WriteString("and some `monospace` text - all three still come from the bundled Go\n")
+	b.WriteString("fonts, since only the regular/proportional slot is registered by this\n")
+	b.WriteString("example.\n")
 	return b.String()
 }
 
@@ -60,7 +65,9 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func buildFaceSelector(fontPath string) whynot.FaceSelector {
 	selector := whynot.NewCustomFontFaceSelector(72)
 	if fontPath == "" {
-		fmt.Println("no -font given: every slot falls back to the bundled Go fonts")
+		if err := selector.AddFont(whynot.Proportional, font.WeightNormal, font.StyleNormal, defaultFontData); err != nil {
+			log.Fatalf("loading the bundled default font: %v", err)
+		}
 		return selector
 	}
 	if err := selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, fontPath); err != nil {
@@ -70,7 +77,7 @@ func buildFaceSelector(fontPath string) whynot.FaceSelector {
 }
 
 func main() {
-	fontPath := flag.String("font", "", "path to a TTF/OTF file for regular proportional text (optional)")
+	fontPath := flag.String("font", "", "path to a TTF/OTF file for regular proportional text (defaults to the bundled Pacifico)")
 	flag.Parse()
 
 	g := &game{

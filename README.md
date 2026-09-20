@@ -270,8 +270,9 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   view := whynot.NewView(source, selector)
   ```
 
-  See [`examples/customfont`](examples/customfont) (`go run ./examples/customfont
-  -font path/to/font.ttf`) for a runnable version.
+  See [`examples/customfont`](examples/customfont) for a runnable version - `go run
+  ./examples/customfont` uses a bundled font (Pacifico, SIL Open Font License) by
+  default, or pass `-font path/to/font.ttf` to try your own.
 
 ## `cmd/whynot`: a standalone viewer
 
