@@ -58,8 +58,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func buildFaceSelector(fontPath string) whynot.FaceSelector {
-	fallback := whynot.NewGoFontFaceSelector(72)
-	selector := whynot.NewCustomFontFaceSelector(72, fallback)
+	selector := whynot.NewCustomFontFaceSelector(72)
 	if fontPath == "" {
 		fmt.Println("no -font given: every slot falls back to the bundled Go fonts")
 		return selector

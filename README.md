@@ -259,13 +259,13 @@ gets, `FaceSelector` decides what font file actually renders that combination.
 - `GoFontFaceSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
   - what every example above uses.
 - `CustomFontFaceSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
-  (`AddFontFile`), per (family, weight, style) slot, wrapping a fallback `FaceSelector`
-  (typically `NewGoFontFaceSelector`) for any slot you don't register - so you only
-  need to supply the fonts you actually want to override:
+  (`AddFontFile`), per (family, weight, style) slot, falling back to a
+  `NewGoFontFaceSelector` for any slot you don't register - so you only need to supply
+  the fonts you actually want to override (or `whynot.WithFallback(...)` a different
+  one, `nil` included, at construction):
 
   ```go
-  fallback := whynot.NewGoFontFaceSelector(72)
-  selector := whynot.NewCustomFontFaceSelector(72, fallback)
+  selector := whynot.NewCustomFontFaceSelector(72)
   selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf")
   view := whynot.NewView(source, selector)
   ```

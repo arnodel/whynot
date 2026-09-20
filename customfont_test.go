@@ -28,7 +28,7 @@ func (s *spyFaceSelector) SetDPI(dpi float64) {
 }
 
 func TestCustomFontFaceSelectorSelectsRegisteredFont(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestCustomFontFaceSelectorSelectsRegisteredFont(t *testing.T) {
 }
 
 func TestCustomFontFaceSelectorCachesFace(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCustomFontFaceSelectorCachesFace(t *testing.T) {
 }
 
 func TestCustomFontFaceSelectorNormalizationMatchesBuiltin(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	// Register at an "off" weight/style that should still bucket into the
 	// Bold/Italic slot, mirroring GoFontFaceSelector's own bucketing.
 	if err := s.AddFont(Proportional, font.WeightSemiBold, font.StyleOblique, gobold.TTF); err != nil {
@@ -89,7 +89,7 @@ func TestCustomFontFaceSelectorFallsBackForUnfilledSlot(t *testing.T) {
 		t.Fatalf("building a face for the fallback spy: %v", err)
 	}
 	spy := &spyFaceSelector{face: goFont}
-	s := NewCustomFontFaceSelector(72, spy)
+	s := NewCustomFontFaceSelector(72, WithFallback(spy))
 	style := TextStyle{Size: 16, Family: Monospace}
 	face, err := s.SelectFace(style)
 	if err != nil {
@@ -103,15 +103,22 @@ func TestCustomFontFaceSelectorFallsBackForUnfilledSlot(t *testing.T) {
 	}
 }
 
+func TestCustomFontFaceSelectorDefaultFallbackIsGoFonts(t *testing.T) {
+	s := NewCustomFontFaceSelector(72)
+	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Monospace}); err != nil {
+		t.Errorf("SelectFace with no options and an unfilled slot: %v, want it served by the default GoFontFaceSelector fallback", err)
+	}
+}
+
 func TestCustomFontFaceSelectorNilFallback(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	if _, err := s.SelectFace(TextStyle{Size: 16, Family: Monospace}); err == nil {
 		t.Error("SelectFace with a nil fallback and an unfilled slot returned no error, want one")
 	}
 }
 
 func TestCustomFontFaceSelectorAddFontInvalidBytes(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, NewGoFontFaceSelector(72))
+	s := NewCustomFontFaceSelector(72)
 	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, []byte("not a font")); err == nil {
 		t.Fatal("AddFont with invalid bytes returned no error, want one")
 	}
@@ -128,7 +135,7 @@ func TestCustomFontFaceSelectorAddFontFile(t *testing.T) {
 	if err := os.WriteFile(path, goregular.TTF, 0o644); err != nil {
 		t.Fatalf("writing test font file: %v", err)
 	}
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	if err := s.AddFontFile(Proportional, font.WeightNormal, font.StyleNormal, path); err != nil {
 		t.Fatalf("AddFontFile: %v", err)
 	}
@@ -142,7 +149,7 @@ func TestCustomFontFaceSelectorAddFontFile(t *testing.T) {
 }
 
 func TestCustomFontFaceSelectorSetDPIInvalidatesCache(t *testing.T) {
-	s := NewCustomFontFaceSelector(72, nil)
+	s := NewCustomFontFaceSelector(72, WithFallback(nil))
 	if err := s.AddFont(Proportional, font.WeightNormal, font.StyleNormal, goregular.TTF); err != nil {
 		t.Fatalf("AddFont: %v", err)
 	}
@@ -163,7 +170,7 @@ func TestCustomFontFaceSelectorSetDPIInvalidatesCache(t *testing.T) {
 
 func TestCustomFontFaceSelectorSetDPIPropagatesToFallback(t *testing.T) {
 	spy := &spyFaceSelector{}
-	s := NewCustomFontFaceSelector(72, spy)
+	s := NewCustomFontFaceSelector(72, WithFallback(spy))
 	s.SetDPI(96)
 	s.SetDPI(96) // called again with the same value: must still forward unconditionally
 	want := []float64{96, 96}

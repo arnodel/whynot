@@ -11,10 +11,11 @@ import (
 // CustomFontFaceSelector is a FaceSelector backed by caller-supplied
 // TTF/OTF font bytes, registered per (FontFamily, weight-bucket, style)
 // slot via AddFont. Any (family, weight, style) combination with nothing
-// registered is delegated to fallback - typically NewGoFontFaceSelector(dpi)
-// - so callers only need to supply the fonts they actually care about
-// overriding. A nil fallback means "no fallback": SelectFace returns an
-// error for any unfilled slot instead of delegating.
+// registered is delegated to a fallback FaceSelector - NewGoFontFaceSelector
+// by default, overridable via WithFallback - so callers only need to supply
+// the fonts they actually care about overriding. WithFallback(nil) means
+// "no fallback": SelectFace returns an error for any unfilled slot instead
+// of delegating.
 type CustomFontFaceSelector struct {
 	fonts       map[TextStyle]*opentype.Font // keyed by normalizedFontKey
 	faceCache   map[TextStyle]font.Face      // keyed by the full resolved TextStyle
@@ -25,18 +26,36 @@ type CustomFontFaceSelector struct {
 
 var _ FaceSelector = (*CustomFontFaceSelector)(nil)
 
+// CustomFontFaceSelectorOption customizes a CustomFontFaceSelector at
+// construction, via NewCustomFontFaceSelector's opts parameter.
+type CustomFontFaceSelectorOption func(*CustomFontFaceSelector)
+
+// WithFallback overrides the FaceSelector NewCustomFontFaceSelector
+// otherwise defaults to (NewGoFontFaceSelector) for any (family, weight,
+// style) slot nothing was registered for. Pass nil to disable fallback
+// entirely - SelectFace then returns an error for an unfilled slot instead.
+func WithFallback(fallback FaceSelector) CustomFontFaceSelectorOption {
+	return func(s *CustomFontFaceSelector) {
+		s.fallback = fallback
+	}
+}
+
 // NewCustomFontFaceSelector returns a CustomFontFaceSelector with nothing
-// registered yet - every SelectFace call delegates to fallback until
-// AddFont/AddFontFile is called. See CustomFontFaceSelector's doc comment
-// for the meaning of a nil fallback.
-func NewCustomFontFaceSelector(dpi float64, fallback FaceSelector) *CustomFontFaceSelector {
-	return &CustomFontFaceSelector{
+// registered yet - every SelectFace call delegates to its fallback
+// FaceSelector (NewGoFontFaceSelector(dpi) unless overridden via
+// WithFallback) until AddFont/AddFontFile is called.
+func NewCustomFontFaceSelector(dpi float64, opts ...CustomFontFaceSelectorOption) *CustomFontFaceSelector {
+	s := &CustomFontFaceSelector{
 		fonts:       map[TextStyle]*opentype.Font{},
 		faceCache:   map[TextStyle]font.Face{},
 		dpi:         dpi,
-		fallback:    fallback,
+		fallback:    NewGoFontFaceSelector(dpi),
 		fontHinting: font.HintingNone,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // AddFont registers data (TTF or OTF bytes) as the font to serve for the
