@@ -7,7 +7,10 @@ out, so even a very large document scrolls and resizes just as smoothly as a sho
 
 ## Open a document
 
-Copy a file path or an `http(s)` URL to your clipboard, then paste it with **{{PASTE_SHORTCUT}}**.
+You can do this in two ways
+
+- Start it with `whynot path/to/my/document.md`
+- Copy a file path or an `http(s)` URL to your clipboard, then paste it with **{{PASTE_SHORTCUT}}**.
 
 ## Getting around
 
