@@ -86,11 +86,21 @@ func (c *Canvas) Bounds() image.Rectangle {
 func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 	goXFace := c.renderer.goXFace(face)
 
-	// whynot's layout (box.go, via font.BoundString) computes every
-	// position treating y as the text baseline, but text/v2's default
-	// rendering origin is the top of the line, not the baseline - so
-	// shift up by the ascent to land at the baseline layout expects.
-	ascent := goXFace.Metrics().HAscent
+	// whynot's layout (inline_layout.go's TextBox.BoundsAndAdvance)
+	// computes every line position treating y as the text baseline, using
+	// face.Metrics().Ascent.Ceil() - the *rounded* ascent. text/v2's own
+	// rendering origin is the top of the line, not the baseline, so this
+	// shifts up by that same rounded ascent to land exactly where layout
+	// expects. Using text/v2's own raw (unrounded) HAscent here instead
+	// would round-trip correctly for any single face in isolation, but
+	// two different faces almost never share the exact same fractional
+	// ascent - so mixing faces on one line (e.g. a monospace code span
+	// next to proportional text, both sized so layout treats them as
+	// sharing a baseline) would land each face's glyphs on a different
+	// sub-pixel row: a small but real, visible baseline misalignment.
+	// Matching layout's own rounding convention exactly removes that
+	// per-face drift.
+	ascent := float64(face.Metrics().Ascent.Ceil())
 
 	opts := &text.DrawOptions{}
 	opts.GeoM.Translate(float64(x), float64(y)-ascent)
