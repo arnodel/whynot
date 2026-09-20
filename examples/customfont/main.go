@@ -47,8 +47,14 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	g.view.Layout(outsideWidth, outsideHeight, 1, time.Since(g.start))
-	return outsideWidth, outsideHeight
+	// Render at the display's real device scale, not just outsideWidth/
+	// outsideHeight (logical points) - otherwise ebiten renders at 1x and
+	// upscales to fit a HiDPI/Retina screen, blurring every glyph.
+	scale := ebiten.Monitor().DeviceScaleFactor()
+	width := int(float64(outsideWidth) * scale)
+	height := int(float64(outsideHeight) * scale)
+	g.view.Layout(width, height, scale, time.Since(g.start))
+	return width, height
 }
 
 func buildFaceSelector(fontPath string) whynot.FaceSelector {
