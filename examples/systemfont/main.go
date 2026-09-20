@@ -26,9 +26,13 @@ func exampleDoc(family, monospaceFamily string) string {
 	b.WriteString("# System font example\n\n")
 	fmt.Fprintf(&b, "Regular proportional text here should be **%s**, and `monospace text`\n", family)
 	fmt.Fprintf(&b, "should be **%s**, if installed on this machine - check stderr for\n", monospaceFamily)
-	b.WriteString("whether each one actually resolved. Some **bold** text and some *italic*\n")
-	b.WriteString("text still come from the bundled Go fonts, since only the regular/\n")
-	b.WriteString("proportional and monospace slots are registered by this example.\n")
+	b.WriteString("whether each one actually resolved.\n\n")
+	b.WriteString("**Bold** and *italic* proportional text use the matched font's own\n")
+	b.WriteString("bold/italic face too, when it has one - falling back to the bundled Go\n")
+	b.WriteString("fonts for a family (like Papyrus, the default here) that doesn't. Some\n")
+	b.WriteString("fonts bundle every style into one file `AddFontCollection` reads in one\n")
+	b.WriteString("go: **`bold monospace`** and *`italic monospace`* should both come from\n")
+	fmt.Fprintf(&b, "%s too, not the Go fonts, if it has those styles.\n", monospaceFamily)
 	return b.String()
 }
 
