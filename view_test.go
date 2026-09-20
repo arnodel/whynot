@@ -1567,11 +1567,11 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 		t.Fatal("test setup: couldn't find the image's own slot")
 	}
 
-	// A local file decodes fast - give prefetchImageSources's own fetch
-	// (kicked off by the Layout call above) a generous moment to
-	// settle before scrolling starts, same as real usage gets for free
-	// while the reader is still reading earlier content.
-	time.Sleep(50 * time.Millisecond)
+	// Wait for prefetchImageSources's own fetch (kicked off by the
+	// Layout call above) to settle before scrolling starts - same as
+	// real usage gets for free while the reader is still reading
+	// earlier content, just deterministic here instead of a fixed sleep.
+	waitForSettled(t, v.ctx.ImageCache, "testdata/cat.jpeg")
 
 	for v.cursor.index < imgSlot {
 		v.Scroll(-50)
