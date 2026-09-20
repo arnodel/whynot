@@ -14,6 +14,7 @@ program.
 |---|---|
 | repo root | the library (package `whynot`) - parsing, layout, and the `Canvas` interface; no rendering backend dependency |
 | `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
+| `systemfont/` | implements a third `whynot.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `CustomFontFaceSelector.AddFontCollection` |
 | `cmd/whynot/` | the one real tool: a standalone viewer, window setup + input plumbing only, all rendering behavior lives in the library |
 | `cmd/test/` | unrelated scratch program, not part of this project |
 | `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |
@@ -60,9 +61,12 @@ render under a different `StyleSheet` without re-parsing. `TextStyle`
 (the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
 resolves *to* and what `FaceSelector` resolves *from* - the vocabulary
 connecting the two, not something a `Block` carries itself.
-`FaceSelector` has two implementations: `GoFontFaceSelector`, serving the
-bundled Go fonts, and `CustomFontFaceSelector`, serving caller-registered
-TTF/OTF bytes with a fallback `FaceSelector` for anything unregistered.
+`FaceSelector` has three implementations: `GoFontFaceSelector`, serving the
+bundled Go fonts; `CustomFontFaceSelector`, serving caller-registered
+TTF/OTF bytes (including `AddFontCollection`, which registers every
+classifiable subfont of a `.ttc`/`.otc`); and `systemfont.SystemFontFaceSelector`,
+resolving fonts by name from the host's installed fonts on top of it -
+each with a fallback `FaceSelector` for anything unregistered/unresolved.
 
 ### Layer 0 — Parse
 

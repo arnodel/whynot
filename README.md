@@ -259,20 +259,42 @@ gets, `FaceSelector` decides what font file actually renders that combination.
 - `GoFontFaceSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
   - what every example above uses.
 - `CustomFontFaceSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
-  (`AddFontFile`), per (family, weight, style) slot, falling back to a
-  `NewGoFontFaceSelector` for any slot you don't register - so you only need to supply
-  the fonts you actually want to override (or `whynot.WithFallback(...)` a different
-  one, `nil` included, at construction):
+  (`AddFontFile`), per (family, weight, style) slot - both take a trailing subfont
+  `index` (almost always `0`; only matters for a `.ttc`/`.otc` collection) - falling
+  back to a `NewGoFontFaceSelector` for any slot you don't register, so you only need
+  to supply the fonts you actually want to override (or `whynot.WithFallback(...)` a
+  different one, `nil` included, at construction):
 
   ```go
   selector := whynot.NewCustomFontFaceSelector(72)
-  selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf")
+  selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
   view := whynot.NewView(source, selector)
   ```
+
+  `AddFontCollection`/`AddFontCollectionFile` register every subfont a `.ttc`/`.otc`
+  contains that can be confidently classified from its own name-table data, instead of
+  picking one slot by index yourself - the primitive `systemfont` (below) builds on.
 
   See [`examples/customfont`](examples/customfont) for a runnable version - `go run
   ./examples/customfont` uses a bundled font (Pacifico, SIL Open Font License) by
   default, or pass `-font path/to/font.ttf` to try your own.
+- `systemfont.SystemFontFaceSelector` (a separate package,
+  `github.com/arnodel/whynot/systemfont`, to keep its `adrg/sysfont` dependency out of
+  the core library) resolves fonts *by name* from whatever's installed on the host
+  machine, instead of requiring font bytes/files up front:
+
+  ```go
+  selector := systemfont.NewSystemFontFaceSelector(72)
+  selector.RegisterSystemFont(whynot.Proportional, "Arial")
+  view := whynot.NewView(source, selector)
+  ```
+
+  `RegisterSystemFont` finds the best-matching installed font, then uses
+  `CustomFontFaceSelector.AddFontCollection` to read every subfont in its file (a plain
+  font, or every named variant in a `.ttc`/`.otc`) and register the ones it can
+  confidently classify into a (weight, style) slot - anything it can't find or classify
+  falls back to the bundled Go fonts. See [`examples/systemfont`](examples/systemfont)
+  for a runnable version.
 
 ## `cmd/whynot`: a standalone viewer
 
@@ -426,6 +448,9 @@ by implementation order now that most of the list is done.
 - [x] Custom font files via `CustomFontFaceSelector` (see [above](#fonts)) - register
       your own TTF/OTF bytes per weight/style slot, falling back to the bundled Go
       fonts for anything not overridden
+- [x] System-installed fonts by name via `systemfont.SystemFontFaceSelector` (see
+      [above](#fonts)) - resolves an installed font (e.g. "Arial") and registers every
+      style variant it can confidently classify, same fallback story
 
 **`cmd/whynot`, the standalone viewer**
 - [x] Built-in welcome page, shown by default, explaining how to use the app
