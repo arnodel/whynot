@@ -195,6 +195,102 @@ func (b *ListItemMarkerBox) PendingImages() []string {
 	return b.Marker.PendingImages()
 }
 
+// CheckboxBox is a GFM task list item's checkbox marker, drawn with plain
+// filled rects (Canvas.DrawRect) rather than a font glyph - TaskCheckbox's
+// fallback for a face that doesn't have the ballot-box glyphs (☐/☑; most
+// fonts, including the bundled Go fonts, don't). An outlined square for
+// unchecked, the same outline with a filled square inside for checked -
+// deliberately not a baked icon image: this way it needs no embedded
+// asset, scales naturally from the resolved face's own metrics (already
+// DPI/zoom-scaled, like every face SelectFace returns - so it tracks font
+// size and zoom together without a separate StyleSheet dimensional
+// constant), and always matches the resolved text color instead of being
+// a fixed-color raster that could clash with a custom StyleSheet.
+type CheckboxBox struct {
+	checked    bool
+	size       int
+	thickness  int
+	spaceWidth int
+	color      color.Color
+	source     Inline
+}
+
+var _ InlineLayout = (*CheckboxBox)(nil)
+
+// newCheckboxBox sizes the box as a fraction of face's own (already
+// scaled) Ascent - CapHeight/XHeight would give a tighter fit, but some
+// fonts report them as 0 or even negative, so Ascent (always populated)
+// is the reliable choice.
+func newCheckboxBox(checked bool, face font.Face, color color.Color, source Inline) *CheckboxBox {
+	ascent := face.Metrics().Ascent.Ceil()
+	size := int(float64(ascent) * 0.72)
+	if size < 2 {
+		size = 2
+	}
+	thickness := size / 8
+	if thickness < 1 {
+		thickness = 1
+	}
+	spaceAdvance, _ := face.GlyphAdvance(' ')
+	return &CheckboxBox{
+		checked:    checked,
+		size:       size,
+		thickness:  thickness,
+		spaceWidth: spaceAdvance.Ceil(),
+		color:      color,
+		source:     source,
+	}
+}
+
+func (b *CheckboxBox) Source() Source {
+	return b.source
+}
+
+// BoundsAndAdvance places the box entirely above the baseline (Min.Y =
+// -size, Max.Y = 0, matching how a same-sized glyph like □ itself sits),
+// so it lines up with surrounding text the same way TaskCheckbox's glyph
+// path does.
+func (b *CheckboxBox) BoundsAndAdvance() (image.Rectangle, int) {
+	return image.Rect(0, -b.size, b.size, 0), b.size
+}
+
+func (b *CheckboxBox) Bounds() image.Rectangle {
+	bounds, _ := b.BoundsAndAdvance()
+	return bounds
+}
+
+func (b *CheckboxBox) SpaceWidth() int {
+	return b.spaceWidth
+}
+
+func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
+	top := y - b.size
+	t := b.thickness
+	dst.DrawRect(x, top, b.size, t, b.color)          // top edge
+	dst.DrawRect(x, top+b.size-t, b.size, t, b.color) // bottom edge
+	dst.DrawRect(x, top, t, b.size, b.color)          // left edge
+	dst.DrawRect(x+b.size-t, top, t, b.size, b.color) // right edge
+	if b.checked {
+		pad := b.size / 4
+		if inner := b.size - 2*pad; inner > 0 {
+			dst.DrawRect(x+pad, top+pad, inner, inner, b.color)
+		}
+	}
+	return x + b.size
+}
+
+func (b *CheckboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
+	bounds, advance := b.BoundsAndAdvance()
+	if p.In(bounds.Add(image.Pt(x, y))) {
+		return b, image.Pt(x, y), x + advance
+	}
+	return nil, image.Point{}, x + advance
+}
+
+func (b *CheckboxBox) PendingImages() []string {
+	return nil
+}
+
 type ImageBox struct {
 	// img is the already-decoded image ImageCache.Load returned -
 	// carried forward from InlineImage.GetInlineLayout so DrawInline

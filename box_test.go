@@ -5,6 +5,9 @@ import (
 	"image/color"
 	"testing"
 	"time"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/math/fixed"
 )
 
 // sourceBlock is a minimal Block for HitTest tests that just need a
@@ -536,5 +539,146 @@ func TestImageBoxDrawInlineAnimated(t *testing.T) {
 	}
 	if dst.images[1] != f1 {
 		t.Errorf("frame at now=15ms = %v, want f1", dst.images[1])
+	}
+}
+
+// fixedFaceSelector always returns face, regardless of the requested
+// TextStyle - lets a test control exactly which font.Face TaskCheckbox
+// resolves against.
+type fixedFaceSelector struct{ face font.Face }
+
+func (f fixedFaceSelector) SelectFace(TextStyle) (font.Face, error) { return f.face, nil }
+func (f fixedFaceSelector) SetDPI(float64)                          {}
+
+// fakeGlyphFace wraps a real font.Face, overriding GlyphAdvance for
+// specific runes - lets a test force TaskCheckbox's glyph-vs-fallback
+// branch deterministically, without needing a real font that happens to
+// have (or lack) the ballot-box glyphs.
+type fakeGlyphFace struct {
+	font.Face
+	has map[rune]bool
+}
+
+func (f fakeGlyphFace) GlyphAdvance(r rune) (fixed.Int26_6, bool) {
+	if has, known := f.has[r]; known {
+		if !has {
+			return 0, false
+		}
+		return fixed.I(10), true
+	}
+	return f.Face.GlyphAdvance(r)
+}
+
+func goRegularFace(t *testing.T) font.Face {
+	t.Helper()
+	face, err := NewGoFontFaceSelector(72).SelectFace(TextStyle{Size: 16})
+	if err != nil {
+		t.Fatalf("building a face: %v", err)
+	}
+	return face
+}
+
+// TestTaskCheckboxFallsBackToCheckboxBox checks the path that actually
+// runs against the real bundled Go fonts today: they have no ☐/☑ glyphs
+// (see compile.go's own comment on why □/■ were used before TaskCheckbox
+// existed), so GetInlineLayout must fall back to CheckboxBox rather than
+// a TextBox with an unrenderable glyph.
+func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	for _, checked := range []bool{false, true} {
+		c := &TaskCheckbox{checked: checked, node: &ASTNode{Tag: TagListItem}}
+		layout := c.GetInlineLayout(ctx, 100)
+		cb, ok := layout.(*CheckboxBox)
+		if !ok {
+			t.Fatalf("checked=%v layout = %T, want *CheckboxBox", checked, layout)
+		}
+		if cb.checked != checked {
+			t.Errorf("checked=%v: CheckboxBox.checked = %v", checked, cb.checked)
+		}
+	}
+}
+
+// TestTaskCheckboxUsesGlyphWhenAvailable checks the other branch, using
+// fakeGlyphFace to simulate a font that does have ☐/☑ - can't be exercised
+// against a real bundled font, since none of them do.
+func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
+	fake := fakeGlyphFace{
+		Face: goRegularFace(t),
+		has:  map[rune]bool{checkboxUnchecked: true, checkboxChecked: true},
+	}
+	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, StyleSheet: NewDarkStyleSheet()}
+
+	cases := []struct {
+		checked bool
+		want    rune
+	}{
+		{false, checkboxUnchecked},
+		{true, checkboxChecked},
+	}
+	for _, c := range cases {
+		box := &TaskCheckbox{checked: c.checked, node: &ASTNode{Tag: TagListItem}}
+		layout := box.GetInlineLayout(ctx, 100)
+		tb, ok := layout.(*TextBox)
+		if !ok {
+			t.Fatalf("checked=%v layout = %T, want *TextBox", c.checked, layout)
+		}
+		if want := string(c.want); tb.Text != want {
+			t.Errorf("checked=%v: Text = %q, want %q", c.checked, tb.Text, want)
+		}
+	}
+}
+
+// TestCheckboxBoxBounds checks the box sits entirely above the baseline
+// (Min.Y < 0, Max.Y == 0), the same convention TextBox's glyph path
+// follows, so a checkbox aligns with surrounding text either way.
+func TestCheckboxBoxBounds(t *testing.T) {
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	bounds, advance := b.BoundsAndAdvance()
+	if bounds.Min.Y >= 0 || bounds.Max.Y != 0 {
+		t.Errorf("bounds = %v, want Min.Y < 0 and Max.Y == 0", bounds)
+	}
+	if advance != b.size || bounds.Dx() != b.size {
+		t.Errorf("advance=%d bounds.Dx()=%d, want both == size (%d)", advance, bounds.Dx(), b.size)
+	}
+}
+
+// TestCheckboxBoxDrawInline checks the actual visual difference between
+// checked and unchecked: unchecked draws exactly the 4 border edges,
+// checked draws those same 4 edges plus one filled interior rect.
+func TestCheckboxBoxDrawInline(t *testing.T) {
+	face := goRegularFace(t)
+	unchecked := newCheckboxBox(false, face, color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	dst := &recordingCanvas{}
+	unchecked.DrawInline(dst, 0, 0, 0)
+	if len(dst.rects) != 4 {
+		t.Errorf("unchecked issued %d DrawRect calls, want 4 (just the border)", len(dst.rects))
+	}
+
+	checked := newCheckboxBox(true, face, color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	dst = &recordingCanvas{}
+	checked.DrawInline(dst, 0, 0, 0)
+	if len(dst.rects) != 5 {
+		t.Errorf("checked issued %d DrawRect calls, want 5 (border + interior fill)", len(dst.rects))
+	}
+}
+
+// TestCheckboxBoxHitTest checks hit-testing against the box's own footprint.
+func TestCheckboxBoxHitTest(t *testing.T) {
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	bounds, advance := b.BoundsAndAdvance()
+
+	hit, offset, next := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
+	if hit == nil {
+		t.Fatal("HitTest inside the box = nil hit, want a match")
+	}
+	if got := hit.Bounds().Add(offset); got != bounds {
+		t.Errorf("bounds = %v, want %v", got, bounds)
+	}
+	if next != advance {
+		t.Errorf("next = %d, want %d", next, advance)
+	}
+
+	if hit, _, _ := b.HitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); hit != nil {
+		t.Error("HitTest far below the box = a match, want a miss")
 	}
 }

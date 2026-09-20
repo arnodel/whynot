@@ -41,6 +41,55 @@ func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayo
 	}
 }
 
+// checkboxUnchecked/checkboxChecked are the semantically-correct ballot-box
+// glyphs for a task list item's marker (☐/☑) - used when the active face
+// actually has them (see TaskCheckbox.GetInlineLayout). Most fonts that
+// have either have both, since they're adjacent in the same Unicode block.
+const (
+	checkboxUnchecked = '☐'
+	checkboxChecked   = '☑'
+)
+
+// TaskCheckbox is a GFM task list item's checkbox marker (- [ ]/- [x]).
+// Resolved at layout time, not compile time: whether to draw the real
+// ballot-box glyph or a procedurally-drawn box (see CheckboxBox) depends
+// on whether the active FaceSelector/StyleSheet's resolved font actually
+// has that glyph, which can change across a re-layout (zoom, theme, a
+// caller registering a different font) even though the semantic tree
+// itself never does - most fonts, including the bundled Go fonts, don't
+// have it.
+type TaskCheckbox struct {
+	checked bool
+	node    *ASTNode
+}
+
+var _ Inline = (*TaskCheckbox)(nil)
+
+func (c *TaskCheckbox) Node() *ASTNode {
+	return c.node
+}
+
+func (c *TaskCheckbox) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
+	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(c.node))
+	if err != nil {
+		panic(err)
+	}
+	r := rune(checkboxUnchecked)
+	if c.checked {
+		r = checkboxChecked
+	}
+	if _, ok := face.GlyphAdvance(r); ok {
+		return &TextBox{
+			Text:       string(r),
+			Face:       face,
+			Color:      ctx.ResolvedColor(c.node),
+			LineHeight: ctx.StyleSheet.LineHeight(c.node),
+			source:     c,
+		}
+	}
+	return newCheckboxBox(c.checked, face, ctx.ResolvedColor(c.node), c)
+}
+
 type InlineImage struct {
 	src   string
 	alt   string

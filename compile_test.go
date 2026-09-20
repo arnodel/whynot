@@ -139,13 +139,20 @@ func TestParseTaskList(t *testing.T) {
 		t.Fatalf("list = %#v, want a 3-item StackBlock", stack.blocks[0])
 	}
 
-	wantMarker := []string{"□", "■", "-"}
+	wantChecked := []bool{false, true}
 	wantWords := [][]string{{"todo", "item"}, {"done", "item"}, {"plain", "item"}}
 	for i, block := range list.blocks {
 		head, _ := listItemParts(t, block)
-		marker, ok := head.marker.(*InlineText)
-		if !ok || marker.text != wantMarker[i] {
-			t.Errorf("item %d marker = %#v, want %q", i, head.marker, wantMarker[i])
+		if i < 2 {
+			marker, ok := head.marker.(*TaskCheckbox)
+			if !ok || marker.checked != wantChecked[i] {
+				t.Errorf("item %d marker = %#v, want *TaskCheckbox{checked: %v}", i, head.marker, wantChecked[i])
+			}
+		} else {
+			marker, ok := head.marker.(*InlineText)
+			if !ok || marker.text != "-" {
+				t.Errorf("item %d marker = %#v, want %q", i, head.marker, "-")
+			}
 		}
 		// The checkbox syntax must be fully consumed by the task list
 		// parser - it shouldn't leak into the item's own text as a
