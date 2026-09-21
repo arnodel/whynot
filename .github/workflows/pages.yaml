@@ -1,0 +1,53 @@
+name: Deploy WASM demo to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time - a newer push cancels an in-flight
+# deploy of an older one rather than queueing behind it, so Pages
+# always ends up serving the latest main.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+
+      # cmd/whynot/web is the whole site: index.html + wasm_exec.js
+      # already live there (see that directory's own README), this
+      # step just adds the compiled binary alongside them - the same
+      # build a local `GOOS=js GOARCH=wasm go build` from that
+      # directory would produce.
+      - name: Build whynot.wasm
+        run: GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: cmd/whynot/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

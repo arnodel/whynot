@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>whynot</title>
+<style>
+  /* Ebitengine's js backend creates and manages its own <canvas>,
+     appended to <body> and styled to fill it - nothing to set up here
+     beyond making sure the page itself has no margin to fight with. */
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; }
+</style>
+</head>
+<body>
+<script src="wasm_exec.js"></script>
+<script>
+  // ?doc=<url> becomes cmd/whynot's usual first command-line argument
+  // (flag.Arg(0), read by main() exactly like a desktop invocation's
+  // `whynot <url>`) - Go's own wasm runtime exposes argv as a plain
+  // settable array on the Go object, read once when run() starts, so
+  // this needs no Go-side code at all. Anything other than "welcome" or
+  // an http(s) URL (a local path, in particular - there's no
+  // filesystem here) is rejected with the same error a desktop build
+  // gives for a bad argument, logged to the console. No ?doc= at all
+  // falls back to the built-in welcome page, same as no argument does
+  // on desktop.
+  const go = new Go();
+  const doc = new URLSearchParams(window.location.search).get("doc");
+  if (doc) {
+    go.argv = go.argv.concat([doc]);
+  }
+
+  // arrayBuffer()+instantiate, not instantiateStreaming(fetch(...)):
+  // streaming instantiation requires the server to send the exact
+  // "application/wasm" Content-Type, which not every static file
+  // server (e.g. an older `python3 -m http.server`) gets right for
+  // .wasm - this version works regardless.
+  fetch("whynot.wasm")
+    .then((resp) => resp.arrayBuffer())
+    .then((bytes) => WebAssembly.instantiate(bytes, go.importObject))
+    .then((result) => go.run(result.instance));
+</script>
+</body>
+</html>

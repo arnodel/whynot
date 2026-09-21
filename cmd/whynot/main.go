@@ -10,7 +10,6 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
-	"github.com/arnodel/whynot/systemfont"
 )
 
 // initialWindowWidth/Height are ebiten's starting window size, and also
@@ -58,17 +57,7 @@ func main() {
 	}
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
-	// The document's own text uses whatever this platform's real UI/
-	// monospace fonts are, when RegisterPreferredFont can find them -
-	// falling back to the bundled Go fonts (its default fallback,
-	// unchanged) for anything it can't. The toolbar deliberately keeps
-	// its own separate, plain GoFontFaceSelector below - chrome, not
-	// document content, and constructing a second SystemFontFaceSelector
-	// here would mean a second, redundant host font-directory scan for a
-	// cosmetic-only benefit.
-	faceSelector := systemfont.NewSystemFontFaceSelector(72 * scale)
-	faceSelector.RegisterPreferredFont(whynot.Proportional)
-	faceSelector.RegisterPreferredFont(whynot.Monospace)
+	faceSelector := newDocumentFaceSelector(scale)
 	g := &game{
 		faceSelector:        faceSelector,
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
