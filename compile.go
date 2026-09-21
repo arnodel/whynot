@@ -328,7 +328,16 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
-		return c.appendString(items, t.Value.Value(c.source), astNode)
+		items = c.appendString(items, t.Value.Value(c.source), astNode)
+		// The newline itself isn't in either Text node's Value - goldmark
+		// represents a line break purely via this flag - so without this,
+		// the next word would glue on with no space (e.g. "laid\nout" ->
+		// "laidout"). No forced-break rendering exists yet, so both
+		// kinds just become a space.
+		if t.SoftLineBreak() || t.HardLineBreak() {
+			c.pendingSpace = true
+		}
+		return items
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
 		childNode := astNode.AddChild(TagEmphasis)

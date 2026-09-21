@@ -355,6 +355,26 @@ func TestParseSpaceBetweenNonTextSiblings(t *testing.T) {
 	}
 }
 
+// TestParseSoftLineBreakIsASpace is a regression test: a soft line break
+// (a plain newline inside a paragraph, e.g. "laid\nout") is never part of
+// either surrounding Text node's own Value - goldmark represents it
+// purely as a SoftLineBreak flag on the first one, with the newline
+// itself excluded from both segments (confirmed directly against
+// goldmark v2) - so it must still be treated as a normal breakable
+// space, not silently glue "laid" and "out" together into "laidout".
+func TestParseSoftLineBreakIsASpace(t *testing.T) {
+	doc := Parse([]byte("ever laid\nout, so"))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"ever", "laid", "out,", "so"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	if para.parts[2].(*InlineText).glued {
+		t.Errorf("%q glued = true, want false (a soft line break is a space, not adjacency)", got[2])
+	}
+}
+
 // TestParseNonBreakingSpace checks that a literal NBSP (U+00A0) or an
 // &nbsp; entity - goldmark normalizes both to the same rune, with no
 // AST-level distinction from an ordinary space - becomes its own atomic
