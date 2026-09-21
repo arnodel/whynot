@@ -55,13 +55,9 @@ func TestClassifyDistinguishesStringFromNumber(t *testing.T) {
 	}
 }
 
-// TestClassifyDistinguishesTypeFromKeyword is the regression this
-// package's design depends on getting right the other way around:
-// chroma.KeywordType's SubCategory() floors to the same 1000-wide
-// bucket as a plain chroma.Keyword, so classify must check it
-// explicitly, ahead of the SubCategory() switch, or a builtin type name
-// (Go's int/string/bool) would render in the ordinary keyword color
-// instead of its own TokenType color.
+// TestClassifyDistinguishesTypeFromKeyword checks that a builtin type
+// name (chroma.KeywordType) gets its own TokenType color rather than
+// falling into the same bucket as a plain chroma.Keyword.
 func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
 	if got := classify(chroma.KeywordType); got != whynot.TokenType {
 		t.Errorf("classify(KeywordType) = %v, want TokenType", got)
@@ -71,12 +67,10 @@ func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
 	}
 }
 
-// TestClassifyDistinguishesFunctionFromPlain is a regression test: a
-// bare chroma.NameFunction has no case anywhere in classify's
-// SubCategory() switch (its bucket, 2300, matches none of them), so
-// without the explicit pre-check it would silently fall through to
-// TokenPlain, losing function highlighting entirely rather than failing
-// loudly.
+// TestClassifyDistinguishesFunctionFromPlain checks that
+// chroma.NameFunction gets its own TokenFunction color rather than
+// silently falling through to TokenPlain (it has no SubCategory()
+// bucket of its own).
 func TestClassifyDistinguishesFunctionFromPlain(t *testing.T) {
 	if got := classify(chroma.NameFunction); got != whynot.TokenFunction {
 		t.Errorf("classify(NameFunction) = %v, want TokenFunction", got)

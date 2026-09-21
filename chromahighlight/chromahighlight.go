@@ -39,41 +39,24 @@ func (Highlighter) Highlight(language, code string) []whynot.HighlightSpan {
 	return spans
 }
 
-// classify collapses chroma's ~50 TokenTypes down to whynot's small
-// TokenClass set via TokenType.SubCategory() - NOT Category(), which
+// classify maps a chroma.TokenType to whynot's coarser TokenClass.
+//
+// chroma.KeywordType/NameClass and chroma.NameFunction/
+// NameFunctionMagic are checked explicitly, ahead of the SubCategory()
+// switch below: without that, KeywordType would land in the same bucket
+// as a plain Keyword, and NameClass/NameFunction aren't covered by any
+// bucket at all. SubCategory(), not Category(), because Category()
 // would merge LiteralString and LiteralNumber into one indistinguishable
-// "Literal" bucket (confirmed from chroma's own source: Category() is the
-// 1000-wide bucket, SubCategory() the 100-wide one LiteralString/
-// LiteralNumber actually differ at).
+// bucket.
 //
-// chroma.KeywordType/chroma.NameClass and chroma.NameFunction/
-// chroma.NameFunctionMagic are checked explicitly, ahead of the
-// SubCategory() switch, specifically to pull them out of that bucketing:
-// KeywordType's SubCategory() would otherwise land in the same
-// 1000-wide bucket as a plain chroma.Keyword (KeywordType is 1006,
-// Keyword 1000 - SubCategory() floors both to 1000), merging a builtin
-// type name (Go's int/string/bool) into the ordinary keyword color
-// instead of TokenType; NameFunction's SubCategory() (2300) isn't
-// covered by any existing case at all, so without this it would just
-// fall through to TokenPlain. chroma.NameBuiltin is deliberately NOT
-// included in either - it's shared between builtin functions (Python's
-// len, print) and, in some lexers, builtin types too (Python tags an
-// "int" annotation as NameBuiltin, not KeywordType) - so folding it into
-// either TokenType or TokenFunction would sometimes mislabel the other.
+// chroma.NameBuiltin is deliberately left unclassified: some lexers use
+// it for both builtin functions and builtin type names, so mapping it
+// to either TokenFunction or TokenType would sometimes mislabel the
+// other.
 //
-// Neither TokenType nor TokenFunction can recognize every usage this
-// way: a lexer has no real type/binding information, only syntax, so a
-// *declaration* (chroma.NameClass for "class Point", chroma.NameFunction
-// for "func greet") is generally recognizable, but a plain *usage* of
-// that same name isn't always - confirmed against chroma's own Go
-// lexer, which tags a custom type's every occurrence, declaration and
-// usage alike, as chroma.NameOther (indistinguishable from any other
-// identifier), while conveniently tagging a function *call* the same as
-// its declaration (chroma.NameFunction, via a generic "identifier
-// followed by (" rule) - chroma's Python lexer, by contrast, only
-// recognizes a function's declaration, not its later calls. These gaps
-// are limitations of each underlying lexer, not something classify can
-// work around.
+// A lexer only sees syntax, not real type/binding information, so
+// TokenType and TokenFunction can usually recognize a declaration but
+// not every later usage of the same name - see their own doc comments.
 func classify(t chroma.TokenType) whynot.TokenClass {
 	switch t {
 	case chroma.KeywordType, chroma.NameClass:

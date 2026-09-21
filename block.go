@@ -153,11 +153,7 @@ func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 		for j, part := range parts {
 			boxes[j] = part.GetInlineLayout(ctx, width)
 		}
-		// Glue: true - a code line's parts are already-contiguous
-		// substrings of the source line (see highlightLines), any
-		// whitespace between tokens already included verbatim in a
-		// plain-class span, unlike TextBlock's word-split parts which
-		// need LineBox's normal inter-word gap reconstructed.
+		// Glue: true - see LineBox.Glue's own doc comment.
 		lineBoxes[i] = &LineBox{parts: boxes, Glue: true}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}

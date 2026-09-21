@@ -514,15 +514,10 @@ func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 }
 
 // TestStackBoxBoundsCountsZeroWidthSlot is a regression test:
-// image.Rectangle.Union treats a zero-width rectangle as empty
-// (Rectangle.Empty() only checks Min.X >= Max.X, ignoring Y) and drops it
-// from the union entirely, so a naive Union-based accumulation of a
-// zero-width-but-nonzero-height slot (e.g. a blank line inside a
-// highlighted code block - see highlightLines' blank-line placeholder)
-// previously discarded that slot's height, under-reporting the stack's
-// total height and causing whatever came after it to overlap the
-// stack's real, drawn content (drawContents advances y unconditionally
-// via childBounds.Max.Y, so it never had this bug - only Bounds() did).
+// image.Rectangle.Union treats a zero-width rectangle as empty (Go only
+// checks Min.X >= Max.X, ignoring Y) and drops it from the union, so a
+// zero-width-but-real-height slot (e.g. a blank highlighted code line)
+// must not silently lose its height contribution.
 func TestStackBoxBoundsCountsZeroWidthSlot(t *testing.T) {
 	stack := &StackBox{slots: preResolvedSlots([]BlockLayout{
 		NewEmptyBox(50, 20),

@@ -35,21 +35,15 @@ type TokenClass int
 const (
 	TokenPlain TokenClass = iota // no special color - inherits the block's own CodeBlockColor
 	TokenKeyword
-	// TokenType is a type name - a language's builtin primitive types
-	// (e.g. Go's int/string/bool) and a declared custom type/class name
-	// share this one class deliberately, so e.g. a builtin type and a
-	// user-defined struct read as the same kind of thing. A
-	// Highlighter's own lexer may not always be able to tell a custom
-	// type's every *usage* apart from an ordinary identifier (that
-	// needs real type information, not just lexing) - see
-	// chromahighlight.classify's doc comment for the concrete
-	// limitation this hits with chroma specifically.
+	// TokenType is a type name - a builtin primitive type and a declared
+	// custom type/class name share this one class, so e.g. int and a
+	// user-defined struct read as the same kind of thing. A Highlighter
+	// isn't expected to recognize every usage of a type, only what it
+	// can tell from syntax (typically its declaration).
 	TokenType
-	// TokenFunction is a function/method name - like TokenType, a
-	// Highlighter's lexer can usually recognize a function's
-	// *declaration* this way, but not always its every later *usage*
-	// (same caveat as TokenType's doc comment - see
-	// chromahighlight.classify).
+	// TokenFunction is a function/method name - same expectation as
+	// TokenType: recognize what's clear from syntax (a declaration, and
+	// often a call), not necessarily every usage.
 	TokenFunction
 	TokenString
 	TokenNumber
@@ -83,16 +77,13 @@ var tokenClassTags = map[TokenClass]ASTTag{
 	TokenComment:  TagCodeComment,
 }
 
-// highlightLines runs h over rawLines (already tab-expanded, concatenated
-// - each rawLine already carries its own trailing "\n", see compile.go's
-// KindCodeBlock case - so a highlighter has real multi-line context for
-// constructs like block comments), then splits its returned spans back
-// into whynot's one-slice-per-visual-line shape. A single HighlightSpan
-// can itself cover several lines (e.g. a block comment) - this is a real
-// resplitting step, not a 1:1 relabeling. Returns nil if h's output
-// doesn't reproduce exactly len(rawLines) lines (a misbehaving
-// Highlighter), so the caller can fall back to plain, unhighlighted
-// rendering rather than risk a corrupted line count.
+// highlightLines runs h over rawLines joined into one string (giving a
+// Highlighter real multi-line context, e.g. for block comments), then
+// splits its returned spans back into whynot's one-slice-per-visual-line
+// shape - a single HighlightSpan can itself cover several lines. Returns
+// nil if h's output doesn't reproduce exactly len(rawLines) lines (a
+// misbehaving Highlighter), so the caller can fall back to plain,
+// unhighlighted rendering instead.
 func highlightLines(h Highlighter, blockNode *ASTNode, language string, rawLines []string) [][]Inline {
 	if len(rawLines) == 0 {
 		return [][]Inline{}

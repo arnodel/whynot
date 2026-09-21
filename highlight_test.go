@@ -100,14 +100,9 @@ func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
 }
 
 // TestHighlightLinesRawLinesAlreadyCarryNewlines is a regression test:
-// rawLines (as compile.go's KindCodeBlock case actually builds them) each
-// already end in their own "\n" - highlightLines must concatenate them
-// verbatim, not insert an extra "\n" between them, or a Highlighter that
-// echoes its input back (like a real tokenizer effectively does for a
-// plain span) would see a spurious blank line between every pair of
-// lines, which - due to how per-line splitting and the len(rawLines)
-// capacity guard interact - previously produced an empty-parts line
-// rather than tripping the mismatched-line-count fallback.
+// rawLines each already end in their own "\n" (see compile.go's
+// KindCodeBlock case), so highlightLines must concatenate them verbatim
+// rather than inserting an extra "\n" between them.
 func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
 		return []HighlightSpan{{Text: code, Class: TokenPlain}}
@@ -129,11 +124,8 @@ func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 }
 
 // TestHighlightLinesBlankLineGetsAPart is a regression test: a blank
-// source line inside a highlighted code block (e.g. separating two
-// paragraphs of a comment, or just stylistic spacing) contributes no
-// span text at all, which previously left that line's parts slice empty
-// - LineBox indexes parts[0] unconditionally, so a real Highlighter
-// (chroma) run against a document with a blank line in a fenced block
+// source line contributes no span text, which previously left its
+// parts slice empty - LineBox indexes parts[0] unconditionally, so this
 // crashed rendering. Every line must end up with at least one part.
 func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
 	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
