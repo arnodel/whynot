@@ -286,6 +286,65 @@ func TestLineBoxBoundsIndentedText(t *testing.T) {
 	}
 }
 
+// TestLineBoxGluedNoGap checks that a Glued part gets no inter-item gap -
+// unlike an ordinary part, whose gap comes from SpaceWidth() collapsing
+// (see LineBox.gap) - the mechanism InlineLayout.Glued exists for (e.g. a
+// word directly abutting a code span in the source, with no whitespace
+// between them: "a(`b`)").
+func TestLineBoxGluedNoGap(t *testing.T) {
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
+	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &TextBox{Text: "a(", Face: face}
+	_, aAdvance := a.BoundsAndAdvance()
+	b := &TextBox{Text: "b", Face: face}
+	_, bAdvance := b.BoundsAndAdvance()
+
+	glued := &LineBox{parts: []InlineLayout{a, &TextBox{Text: "b", Face: face, glued: true}}}
+	_, gluedAdvance := glued.BoundsAndAdvance()
+	if want := aAdvance + bAdvance; gluedAdvance != want {
+		t.Errorf("glued advance = %d, want %d (aAdvance+bAdvance, no gap)", gluedAdvance, want)
+	}
+
+	spaced := &LineBox{parts: []InlineLayout{a, b}}
+	_, spacedAdvance := spaced.BoundsAndAdvance()
+	if spacedAdvance <= gluedAdvance {
+		t.Errorf("spaced advance = %d, want > glued advance %d (an ordinary gap should be added)", spacedAdvance, gluedAdvance)
+	}
+}
+
+// TestSplitBoxesGluedBoundaryUnbreakable checks that splitBoxes never
+// cuts a line between two Glued items, even when doing so would
+// otherwise be the natural wrap point - mirroring how a single oversized
+// word already overflows the line today rather than being split.
+func TestSplitBoxesGluedBoundaryUnbreakable(t *testing.T) {
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
+	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &TextBox{Text: "aaaaaaaaaa", Face: face}
+	b := &TextBox{Text: "bbbbbbbbbb", Face: face, glued: true}
+	c := &TextBox{Text: "cccccccccc", Face: face}
+	boxes := []InlineLayout{a, b, c}
+
+	_, aAdvance := a.BoundsAndAdvance()
+	_, bAdvance := b.BoundsAndAdvance()
+
+	// Wide enough for "a" alone, but not for "a"+"b" together - if the
+	// a/b boundary were breakable, this would cut right after a. Since
+	// it's glued, the cut must defer to after b (the next real
+	// boundary) instead, even though a+b together overflow width.
+	width := aAdvance + bAdvance/2
+
+	n, _ := splitBoxes(boxes, width)
+	if n != 2 {
+		t.Fatalf("splitBoxes returned %d boxes, want 2 (a+b glued together, c deferred to the next line)", n)
+	}
+}
+
 // TestStackBoxHitTestIndentedLine is a regression test: StackBox.HitTest's
 // containment check used to reject hits on the right-hand side of an
 // indented code line, because Bounds() under-reported its width - see

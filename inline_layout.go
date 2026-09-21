@@ -18,6 +18,15 @@ type InlineLayout interface {
 	Bounds() image.Rectangle
 	Source() Source
 	SpaceWidth() int
+	// Glued reports whether this item directly abuts the previous one in
+	// its line with no source whitespace between them - e.g. a word right
+	// next to a code span, or a non-breaking space's own neighbors. A
+	// glued boundary gets no rendered gap (splitBoxes, LineBox's
+	// BoundsAndAdvance/HitTest/drawContents) and is never a line-break
+	// point (splitBoxes). Meaningless for an item that's never anything
+	// but a line's first part (ListItemMarkerBox, CheckboxBox) - never
+	// queried there.
+	Glued() bool
 	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
 	DrawInline(dst Canvas, x, y int, now time.Duration) int
 	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
@@ -43,6 +52,12 @@ type TextBox struct {
 	// InlineText.GetInlineLayout) falls back to the pre-LineHeight
 	// behavior - bare Ascent+Descent, no extra space.
 	LineHeight float64
+
+	// glued - see InlineLayout.Glued's doc comment. Set once at
+	// construction (InlineText.GetInlineLayout), from the source
+	// whitespace tracked at compile time (see MarkdownCompiler.
+	// pendingSpace) - never mutated after.
+	glued bool
 
 	// pending is set only when this TextBox is standing in for an image
 	// that hasn't settled yet (InlineImage.GetInlineLayout's "loading"
@@ -111,6 +126,10 @@ func (b *TextBox) BoundsAndAdvance() (image.Rectangle, int) {
 	return b.bounds, b.advance
 }
 
+func (b *TextBox) Glued() bool {
+	return b.glued
+}
+
 func (b *TextBox) SpaceWidth() int {
 	if !b.spaceComputed {
 		adv, _ := b.Face.GlyphAdvance(' ')
@@ -169,6 +188,13 @@ func (b *ListItemMarkerBox) Source() Source {
 
 func (b *ListItemMarkerBox) SpaceWidth() int {
 	return b.Marker.SpaceWidth()
+}
+
+// Glued is always false - a ListItemMarkerBox is only ever a line's first
+// part (ListItemHeadBlock.GetBlockLayout), so it's never queried by the
+// gap/break logic that Glued exists for.
+func (b *ListItemMarkerBox) Glued() bool {
+	return false
 }
 
 func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
@@ -263,6 +289,13 @@ func (b *CheckboxBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
+// Glued is always false - a CheckboxBox only ever appears as a
+// ListItemMarkerBox's Marker (a list item's task checkbox), so like
+// ListItemMarkerBox itself it's never queried by the gap/break logic.
+func (b *CheckboxBox) Glued() bool {
+	return false
+}
+
 func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 	top := y - b.size
 	t := b.thickness
@@ -310,6 +343,9 @@ type ImageBox struct {
 	// while img == nil - see PendingImages.
 	pending []string
 
+	// glued - see InlineLayout.Glued's doc comment and TextBox.glued.
+	glued bool
+
 	// source is the InlineImage this ImageBox was built from - see Source.
 	source Inline
 }
@@ -330,6 +366,10 @@ func (b *ImageBox) Bounds() image.Rectangle {
 
 func (b *ImageBox) SpaceWidth() int {
 	return 0
+}
+
+func (b *ImageBox) Glued() bool {
+	return b.glued
 }
 
 func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
@@ -355,6 +395,12 @@ func (b *ImageBox) PendingImages() []string {
 	return b.pending
 }
 
+// splitBoxes finds how many of boxes fit on one line within width,
+// returning that count and the resulting line's bounds. A box that's
+// Glued() to the one before it can never be its own break point - like a
+// single oversized word, a glued run stays together on this line no
+// matter what (possibly overflowing width), deferring the wrap decision
+// to the next non-glued boundary after it.
 func splitBoxes(boxes []InlineLayout, width int) (int, image.Rectangle) {
 	if len(boxes) == 0 {
 		return 0, image.Rectangle{}
@@ -370,20 +416,24 @@ func splitBoxes(boxes []InlineLayout, width int) (int, image.Rectangle) {
 		boxBounds, boxAdvance := box.BoundsAndAdvance()
 
 		space := box.SpaceWidth()
-		advance += maxInt(space, prevSpace)
+		nextAdvance := advance
+		if !box.Glued() {
+			nextAdvance += maxInt(space, prevSpace)
+		}
 		prevSpace = space
 
-		movedBoxBounds := boxBounds.Add(image.Pt(advance, 0))
-		bounds = bounds.Union(movedBoxBounds)
+		movedBoxBounds := boxBounds.Add(image.Pt(nextAdvance, 0))
+		nextBounds := bounds.Union(movedBoxBounds)
 		// bounds.Dx(), not Max.X: a later word's own bounds can pull
 		// Min.X away from 0 (e.g. left-side bearing), so Max.X alone
 		// isn't the line's true width - comparing it directly against
 		// width makes the wrap constraint tighter than intended, by
 		// however far Min.X has drifted.
-		if bounds.Dx() > width {
+		if nextBounds.Dx() > width && !box.Glued() {
 			return i + 1, bounds
 		}
-		advance += boxAdvance
+		bounds = nextBounds
+		advance = nextAdvance + boxAdvance
 	}
 	return len(boxes), bounds
 }

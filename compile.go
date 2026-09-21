@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"unicode"
 
 	gmast "github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/extension"
@@ -62,6 +63,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 	case gmast.KindParagraph:
 		astNode := parent.AddChild(TagParagraph)
 		var items []Inline
+		c.pendingSpace = true
 		child := node.FirstChild()
 		for child != nil {
 			items = c.AppendInlineNode(items, child, astNode)
@@ -75,6 +77,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			astNode.ID = attr.Value(c.source)
 		}
 		var items []Inline
+		c.pendingSpace = true
 		child := node.FirstChild()
 		for child != nil {
 			items = c.AppendInlineNode(items, child, astNode)
@@ -223,6 +226,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	// its own - GetBlockLayout already handles that with no special-casing.
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
+		c.pendingSpace = true
 		child := next.FirstChild()
 		for child != nil {
 			items = c.AppendInlineNode(items, child, itemNode)
@@ -301,6 +305,7 @@ func (c *MarkdownCompiler) CompileTableRow(node gmast.Node, parent *ASTNode) []t
 		tc := cellNode.(*extast.TableCell)
 		cellASTNode := parent.AddChild(TagTableCell)
 		var parts []Inline
+		c.pendingSpace = true
 		for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
 			parts = c.AppendInlineNode(parts, child, cellASTNode)
 		}
@@ -323,7 +328,7 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
-		return appendString(items, t.Value.Value(c.source), astNode)
+		return c.appendString(items, t.Value.Value(c.source), astNode)
 	case gmast.KindEmphasis:
 		child := node.FirstChild()
 		childNode := astNode.AddChild(TagEmphasis)
@@ -343,10 +348,12 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 	case gmast.KindCodeSpan:
 		cs := node.(*gmast.CodeSpan)
 		childNode := astNode.AddChild(TagCodeSpan)
-		return appendString(items, cs.Value.Value(c.source), childNode)
+		return c.appendString(items, cs.Value.Value(c.source), childNode)
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
 		imageNode := astNode.AddChild(TagImage)
+		glued := !c.pendingSpace
+		c.pendingSpace = false
 		return append(items, &InlineImage{
 			src:   imgNode.Destination.Value(c.source),
 			alt:   altText(imgNode, c.source),
@@ -359,6 +366,7 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 			// isn't idempotent, so mutating the tree there would
 			// grow a new child every time instead of reusing one.
 			fallbackNode: imageNode.AddChild(TagUnsupported),
+			glued:        glued,
 		})
 	case gmast.KindLink:
 		link := node.(*gmast.Link)
@@ -374,7 +382,7 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 		al := node.(*gmast.AutoLink)
 		childNode := astNode.AddChild(TagLink)
 		childNode.Destination = al.Destination.Value(c.source)
-		return appendString(items, al.Label.Value(c.source), childNode)
+		return c.appendString(items, al.Label.Value(c.source), childNode)
 	case extast.KindStrikethrough:
 		child := node.FirstChild()
 		childNode := astNode.AddChild(TagStrikethrough)
@@ -407,7 +415,7 @@ func (c *MarkdownCompiler) appendUnsupportedInline(items []Inline, node gmast.No
 		}
 	}
 	log.Printf("whynot: unsupported %s inline content, showing its source instead", node.Kind())
-	return appendString(items, text, astNode.AddChild(TagUnsupported))
+	return c.appendString(items, text, astNode.AddChild(TagUnsupported))
 }
 
 // tableCellAlignment translates goldmark's own alignment enum to
@@ -454,10 +462,46 @@ func altText(node gmast.Node, source []byte) string {
 	return b.String()
 }
 
-func appendString(items []Inline, s string, node *ASTNode) []Inline {
-	textParts := strings.Fields(s)
-	for _, part := range textParts {
-		items = append(items, &InlineText{text: part, node: node})
+// nbsp is a non-breaking space (U+00A0) - what a literal NBSP character or
+// an `&nbsp;` entity in the source both normalize to by the time goldmark
+// hands us a Text node's Value (there's no AST-level distinction between
+// them, or from an ordinary space, confirmed against goldmark v2 directly).
+const nbsp = ' '
+
+// appendString splits s into Inline items along the same lines a browser
+// would collapse/wrap plain text: each maximal run of ordinary breakable
+// whitespace becomes a gap between words (as strings.Fields did before),
+// but unlike strings.Fields, a literal non-breaking space is never treated
+// as that kind of gap - it becomes its own atomic word instead, so it
+// can carry Glued (see InlineLayout.Glued) on both sides and end up
+// visually spaced but never a line-break point.
+//
+// Each produced item's Glued reflects c.pendingSpace, the whitespace
+// carried over from wherever the previous item (in this call or an
+// earlier one, however many sibling nodes back) left off - see
+// MarkdownCompiler.pendingSpace's own doc comment for why that carry is
+// needed at all (a whitespace-only Text node between two non-text
+// siblings, e.g. "**a** *b*", produces zero items of its own here but
+// still needs to un-glue whatever comes next).
+func (c *MarkdownCompiler) appendString(items []Inline, s string, node *ASTNode) []Inline {
+	runes := []rune(s)
+	for i := 0; i < len(runes); {
+		switch r := runes[i]; {
+		case r == nbsp:
+			items = append(items, &InlineText{text: string(nbsp), node: node, glued: !c.pendingSpace})
+			c.pendingSpace = false
+			i++
+		case unicode.IsSpace(r):
+			c.pendingSpace = true
+			i++
+		default:
+			start := i
+			for i < len(runes) && runes[i] != nbsp && !unicode.IsSpace(runes[i]) {
+				i++
+			}
+			items = append(items, &InlineText{text: string(runes[start:i]), node: node, glued: !c.pendingSpace})
+			c.pendingSpace = false
+		}
 	}
 	return items
 }

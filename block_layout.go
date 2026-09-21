@@ -107,7 +107,7 @@ func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
 		prevSpace := b.parts[0].SpaceWidth()
 		for _, box := range b.parts[1:] {
 			space := box.SpaceWidth()
-			advance += b.gap(prevSpace, space)
+			advance += b.gap(prevSpace, space, box.Glued())
 			prevSpace = space
 			boxBounds, boxAdvance := box.BoundsAndAdvance()
 			bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
@@ -157,7 +157,7 @@ func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 	x = next
 	for _, part := range b.parts[1:] {
 		space := part.SpaceWidth()
-		hit, offset, next := part.HitTest(p, x+b.gap(prevSpace, space), y)
+		hit, offset, next := part.HitTest(p, x+b.gap(prevSpace, space, part.Glued()), y)
 		if hit != nil {
 			return hit, offset
 		}
@@ -189,7 +189,7 @@ func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	x = b.parts[0].DrawInline(dst, x, y, now)
 	for _, box := range b.parts[1:] {
 		space := box.SpaceWidth()
-		x = box.DrawInline(dst, x+b.gap(prevSpace, space), y, now)
+		x = box.DrawInline(dst, x+b.gap(prevSpace, space, box.Glued()), y, now)
 		prevSpace = space
 	}
 }
@@ -198,9 +198,11 @@ func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 // SpaceWidth() of the part before it and of this one - the wider of the
 // two, matching how a real space character's width can differ between
 // two different fonts/sizes on either side of it - unless Glue disables
-// gaps entirely.
-func (b *LineBox) gap(prevSpace, space int) int {
-	if b.Glue {
+// gaps entirely (a whole-line bypass, for CodeBlock's verbatim lines), or
+// glued is true (a single part's own boundary has no source whitespace -
+// see InlineLayout.Glued).
+func (b *LineBox) gap(prevSpace, space int, glued bool) int {
+	if b.Glue || glued {
 		return 0
 	}
 	return maxInt(prevSpace, space)
