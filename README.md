@@ -316,8 +316,11 @@ gets, `FaceSelector` decides what font file actually renders that combination.
 
 ## Syntax highlighting
 
-By default, a fenced or indented code block renders in one flat color
-(`StyleSheet`'s `CodeColor`). Passing a `whynot.Highlighter` - `Highlight(language,
+By default, a fenced or indented code block renders in one flat, neutral color
+(`StyleSheet`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
+eye-catching accent color instead (`CodeSpanColor`), since a small isolated word in
+prose reads fine as an accent while a whole block of it would fight with any
+syntax-highlighted spans inside it. Passing a `whynot.Highlighter` - `Highlight(language,
 code string) []HighlightSpan`, classifying the block's source into consecutive typed
 spans - colors it token-by-token instead, via `whynot.WithHighlighter` (or
 `whynot.WithSyntaxHighlighter` if you call `whynot.Parse` directly rather than

@@ -98,7 +98,7 @@ func TestDefaultStyleSheetColor(t *testing.T) {
 		tag  ASTTag
 		want color.Color
 	}{
-		{TagCodeBlock, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
+		{TagCodeBlock, color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
 		{TagCodeSpan, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
 		{TagLink, color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
 		{TagCodeKeyword, color.RGBA{0xC5, 0x86, 0xF2, 0xFF}},
@@ -221,8 +221,11 @@ func TestNewLightStyleSheetColors(t *testing.T) {
 	if light.LinkColor == dark.LinkColor {
 		t.Errorf("light LinkColor = dark's (%v), want a color readable on a light background", light.LinkColor)
 	}
-	if light.CodeColor == dark.CodeColor {
-		t.Errorf("light CodeColor = dark's (%v), want a color readable on a light background", light.CodeColor)
+	if light.CodeBlockColor == dark.CodeBlockColor {
+		t.Errorf("light CodeBlockColor = dark's (%v), want a color readable on a light background", light.CodeBlockColor)
+	}
+	if light.CodeSpanColor == dark.CodeSpanColor {
+		t.Errorf("light CodeSpanColor = dark's (%v), want a color readable on a light background", light.CodeSpanColor)
 	}
 	if light.Scrollbar == dark.Scrollbar {
 		t.Errorf("light Scrollbar = dark's (%+v), want colors readable on a light background", light.Scrollbar)

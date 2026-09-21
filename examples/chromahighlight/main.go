@@ -3,7 +3,7 @@
 // Fenced code blocks in a recognized language render token-by-token in the
 // active StyleSheet's SyntaxColors palette; an unrecognized language (or a
 // plain indented block, which has no fence to name one) falls back to the
-// same flat CodeColor rendering as without a highlighter at all.
+// same flat CodeBlockColor rendering as without a highlighter at all.
 package main
 
 import (

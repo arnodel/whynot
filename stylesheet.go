@@ -179,7 +179,12 @@ type DefaultStyleSheet struct {
 
 	CodeBlockMargins   Margins
 	CodeBlockTextStyle PartialTextStyle
-	CodeColor          color.Color
+	// CodeBlockColor is deliberately a neutral gray rather than an accent
+	// color: a whole block of code in a bright color reads as garish and
+	// fights with syntax-highlighted spans inside it (see SyntaxColors) -
+	// unlike CodeSpanColor, a single inline `code` word stays fine as an
+	// accent since it's a small, isolated highlight within prose.
+	CodeBlockColor color.Color
 
 	// UnsupportedColor is the text color for a Markdown construct
 	// whynot doesn't understand - rendered as a code block (see
@@ -191,6 +196,9 @@ type DefaultStyleSheet struct {
 	// have no margins of their own to bundle alongside, unlike the
 	// block-level tags above.
 	CodeSpanTextStyle PartialTextStyle
+	// CodeSpanColor is an accent color, unlike CodeBlockColor - see its
+	// own doc comment.
+	CodeSpanColor     color.Color
 	EmphasisTextStyle PartialTextStyle
 	StrongTextStyle   PartialTextStyle
 
@@ -301,7 +309,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 
 		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
 		CodeBlockTextStyle: PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
-		CodeColor:          color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		CodeBlockColor:     color.RGBA{0xD4, 0xD4, 0xD4, 0xFF},
 
 		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
 		// below, a strong red reads as an error against either a light
@@ -309,6 +317,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		UnsupportedColor: color.RGBA{0xFF, 0x33, 0x33, 0xFF},
 
 		CodeSpanTextStyle: PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily},
+		CodeSpanColor:     color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
 		EmphasisTextStyle: PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle},
 		StrongTextStyle:   PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight},
 
@@ -333,8 +342,8 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 
 		// NewLightStyleSheet overrides this fully (see below) - a palette
 		// tuned for a dark background won't read well on light and vice
-		// versa, the same reason TextColor/LinkColor/CodeColor differ
-		// between the two themes.
+		// versa, the same reason TextColor/LinkColor/CodeBlockColor/
+		// CodeSpanColor differ between the two themes.
 		Syntax: SyntaxColors{
 			Keyword: color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
 			String:  color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
@@ -378,14 +387,15 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 // BlockquoteBarColor, TableFrameColor, and ImagePlaceholderColor are
 // also left as NewDarkStyleSheet's mid-grey, which reads fine against
 // either a light or dark background, unlike
-// TextColor/Background/LinkColor/CodeColor/Scrollbar, which need real
-// light-appropriate values.
+// TextColor/Background/LinkColor/CodeBlockColor/CodeSpanColor/Scrollbar,
+// which need real light-appropriate values.
 func NewLightStyleSheet() *DefaultStyleSheet {
 	s := NewDarkStyleSheet()
 	s.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
 	s.Background = color.White
 	s.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
-	s.CodeColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
+	s.CodeBlockColor = color.RGBA{0x33, 0x33, 0x33, 0xFF}
+	s.CodeSpanColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
 	s.Scrollbar = ScrollbarColors{
 		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
 		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
@@ -469,8 +479,10 @@ func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 		return s.TextColor
 	}
 	switch node.Tag {
-	case TagCodeBlock, TagCodeSpan:
-		return s.CodeColor
+	case TagCodeBlock:
+		return s.CodeBlockColor
+	case TagCodeSpan:
+		return s.CodeSpanColor
 	case TagCodeKeyword:
 		return s.Syntax.Keyword
 	case TagCodeString:
