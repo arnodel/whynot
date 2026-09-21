@@ -2,3 +2,4 @@
 /cmd/whynot/whynot
 /dist
 /examples/wasm/whynot.wasm
+/cmd/whynot/web/whynot.wasm

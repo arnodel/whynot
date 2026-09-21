@@ -26,7 +26,14 @@ and draws the document straight onto an `ebiten.Image`, using
 `cmd/whynot` is a small standalone app built entirely on the library - the
 easiest way to see what whynot can do.
 
-On macOS or Linux:
+**[Try it right now in your browser](https://arnodel.github.io/whynot/)** - no install,
+running entirely client-side via Ebitengine's own `js`/`wasm` backend (see
+[`cmd/whynot/web`](cmd/whynot/web)). Local file opening, paste-to-open, and following a
+link to a real webpage aren't wired up there yet - everything else, including opening a
+Markdown document by URL (`?doc=<url>`, or just follow a link), works the same as
+installed.
+
+Otherwise, on macOS or Linux:
 
 ```bash
 brew install arnodel/tap/whynot
@@ -539,12 +546,6 @@ Floated but not scoped or started:
   [above](#embed-a-markdown-viewer-in-your-ebiten-game)) is already the seam for this, the
   documented boundary between layout and actual drawing, so a second backend wouldn't touch
   layout or parsing at all
-- ~~Compile to WASM and run in the browser~~ - a minimal first step exists:
-  [`examples/wasm`](examples/wasm) renders one embedded document entirely client-side via
-  Ebitengine's own `js`/`wasm` backend. `cmd/whynot` itself doesn't compile for
-  `GOOS=js GOARCH=wasm` yet though (`systemfont`'s font-directory scanner has no `js`
-  implementation) - matching that requires either an alternative font-selection path in
-  the browser or trimming it out there
 - A different Markdown parser, or a different input format entirely (e.g. reStructuredText) -
   `Parse()` is the only goldmark-specific code in the library; everything downstream just
   consumes a `Block`/`ASTNode` tree with no idea where it came from
