@@ -18,7 +18,20 @@ import (
 // ASTNode - Parse itself only builds structure.
 func Parse(source []byte, opts ...ParseOption) Block {
 	p := parser.New(
-		parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser),
+		parser.WithExtensions(
+			extension.TaskListItemParser,
+			extension.StrikethroughParser,
+			extension.TableParser,
+			// Substitutes straight quotes/dashes/ellipsis for their
+			// typographic equivalents ("x" -> "x", -- -> en dash, etc.) as
+			// a plain Text node, same as any other inline text - its
+			// default substitutions are HTML entities (e.g. "&rsquo;"),
+			// but Text.Value's decoder resolves those the same way it
+			// already resolves &nbsp;/&amp; in ordinary prose (see
+			// TestParseResolvesEntitiesAndEscapes), so no extra config is
+			// needed to get literal runes out of it.
+			extension.TypographerParser,
+		),
 		parser.WithAutoHeadingID(),
 	)
 	node := p.Parse(source)

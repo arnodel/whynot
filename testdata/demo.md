@@ -147,6 +147,16 @@ A thematic break separates sections, like the one below.
 
 ---
 
+## Typography
+
+Straight quotes become curly ones: "a quoted phrase" and 'a nested
+example'. Em dashes work unspaced---like this---and en dashes work
+spaced -- like this. An ellipsis trails off...
+
+Punctuation stays glued to the word next to it even when it's a
+separate node under the hood, so it can't come apart at a line break:
+Alice's book, the '90s, doin' fine, and don't stop.
+
 ## Tables
 
 A basic table, with a header row:

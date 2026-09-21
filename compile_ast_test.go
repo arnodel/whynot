@@ -225,10 +225,14 @@ func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 	if len(stack.blocks) != 2 {
 		t.Fatalf("len(blocks) = %d, want 2 (the comment should produce no block)", len(stack.blocks))
 	}
-	for i, want := range []string{"Before.", "After."} {
+	// "Before"/"." (and "After"/".") are two separate Inline items, not
+	// one - the Typographer extension's trigger byte for "." splits the
+	// text run even where it substitutes nothing, though InlineLayout.
+	// Glued still renders/wraps them as a single unbreakable unit.
+	for i, want := range [][]string{{"Before", "."}, {"After", "."}} {
 		para := stack.blocks[i].(*MarginBlock).Block.(*TextBlock)
-		if got := para.parts[0].(*InlineText).text; got != want {
-			t.Errorf("blocks[%d] text = %q, want %q", i, got, want)
+		if got := textOf(t, para.parts); !stringsEqual(got, want) {
+			t.Errorf("blocks[%d] words = %v, want %v", i, got, want)
 		}
 	}
 }
