@@ -419,12 +419,12 @@ by implementation order now that most of the list is done.
 - [x] Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
 - [x] Strikethrough (`~~x~~`)
 - [x] Inline code
-- [ ] Typographer (smart quotes/dashes) - blocked on a real gap in the inline model:
-      goldmark emits the substitution as a separate Text node with no whitespace from
-      its neighbor (e.g. `Alice's` -> `"Alice"`, `"'"`, `"s "` as three siblings), but
-      `appendString` word-splits each sibling independently, so adjacent no-space
-      siblings would render as separately-spaced words - needs word-adjacency tracking
-      across sibling Inlines first
+- [x] Typographer (smart quotes/dashes, `"x"` -> "x", unspaced `--`/`---` -> en/em
+      dash, `...` -> ellipsis) - goldmark's `extension.TypographerParser`, enabled by
+      default. Was blocked on a real gap in the inline model (goldmark emits the
+      substitution as a separate Text node with no whitespace from its neighbor, e.g.
+      `Alice's` -> `"Alice"`, `"'"`, `"s "` as three siblings) until word-adjacency
+      tracking between sibling Inlines landed
 
 **Block structures**
 - [x] Fenced and indented code blocks

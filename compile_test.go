@@ -363,10 +363,14 @@ func TestParseSpaceBetweenNonTextSiblings(t *testing.T) {
 // goldmark v2) - so it must still be treated as a normal breakable
 // space, not silently glue "laid" and "out" together into "laidout".
 func TestParseSoftLineBreakIsASpace(t *testing.T) {
-	doc := Parse([]byte("ever laid\nout, so"))
+	// "out there", not "out, so" - a trailing comma would also split off
+	// its own Inline item once the Typographer extension is enabled (see
+	// TestParseTypographerDashes and friends), which is beside this
+	// test's point.
+	doc := Parse([]byte("ever laid\nout there"))
 	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)
-	want := []string{"ever", "laid", "out,", "so"}
+	want := []string{"ever", "laid", "out", "there"}
 	if !stringsEqual(got, want) {
 		t.Fatalf("words = %v, want %v", got, want)
 	}
@@ -1157,5 +1161,116 @@ func TestParseResolvesEntitiesAndEscapes(t *testing.T) {
 	want := []string{"Fish", "&", "chips", "and", "&", "and", "*literal*"}
 	if !stringsEqual(got, want) {
 		t.Errorf("words = %v, want %v", got, want)
+	}
+}
+
+// TestParseTypographerSmartQuotes checks that straight quotes become curly
+// ones - goldmark's extension.TypographerParser substitutes its default
+// HTML entities (e.g. "&rsquo;"), but Text.Value's decoder resolves those
+// the same way it already resolves &amp;/&nbsp; in ordinary prose (see
+// TestParseResolvesEntitiesAndEscapes), so the literal curly rune comes out
+// with no extra config.
+func TestParseTypographerSmartQuotes(t *testing.T) {
+	doc := Parse([]byte(`"hello" and 'world'`))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"“", "hello", "”", "and", "‘", "world", "’"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+}
+
+// TestParseTypographerApostropheGluedToWord is the adjacency case the
+// README's Typographer feature entry used to call out as the blocker:
+// goldmark gives "Alice's" as three siblings with no whitespace between
+// them - Text("Alice"), a synthetic Text("’") for the substituted
+// apostrophe, Text("s book") - so without InlineLayout.Glued tracking
+// (see project_inline_adjacency_spacing) this would render as "Alice ’ s
+// book" and could wrap mid-word. Checks both the glued flags and that it
+// can't be split across a line break even at a width that would force a
+// wrap if the boundaries were (wrongly) breakable.
+func TestParseTypographerApostropheGluedToWord(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	doc := Parse([]byte("Alice's book"))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"Alice", "’", "s", "book"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	if para.parts[0].(*InlineText).glued {
+		t.Errorf("parts[0] (%q) glued = true, want false (nothing precedes it)", got[0])
+	}
+	for i := 1; i <= 2; i++ {
+		if !para.parts[i].(*InlineText).glued {
+			t.Errorf("parts[%d] (%q) glued = false, want true (no source space around the substituted apostrophe)", i, got[i])
+		}
+	}
+	if para.parts[3].(*InlineText).glued {
+		t.Errorf("parts[3] (%q) glued = true, want false (real source space before it)", got[3])
+	}
+
+	box := para.GetBlockLayout(ctx, 1).(*StackBox)
+	if len(box.slots) != 2 {
+		t.Errorf("built at width 1, got %d lines, want 2 (\"Alice’s\" stays together, \"book\" is the only breakable boundary)", len(box.slots))
+	}
+}
+
+// TestParseTypographerDashes checks that an unspaced "---"/"--" becomes a
+// glued em/en dash (no source whitespace, so no rendered gap and no line
+// break, same mechanism as the apostrophe case), while a spaced "--"
+// becomes an ordinary breakable en dash - CommonMark/Markdown convention
+// distinguishes the two by whether the author put spaces around it.
+func TestParseTypographerDashes(t *testing.T) {
+	cases := []struct {
+		name        string
+		source      string
+		want        []string
+		wantGlued   []bool
+		description string
+	}{
+		{
+			name:      "unspaced em dash",
+			source:    "word---word",
+			want:      []string{"word", "—", "word"},
+			wantGlued: []bool{false, true, true},
+		},
+		{
+			name:      "spaced en dash",
+			source:    "word -- word",
+			want:      []string{"word", "–", "word"},
+			wantGlued: []bool{false, false, false},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := Parse([]byte(tc.source))
+			para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+			got := textOf(t, para.parts)
+			if !stringsEqual(got, tc.want) {
+				t.Fatalf("words = %v, want %v", got, tc.want)
+			}
+			for i, want := range tc.wantGlued {
+				if glued := para.parts[i].(*InlineText).glued; glued != want {
+					t.Errorf("parts[%d] (%q) glued = %v, want %v", i, got[i], glued, want)
+				}
+			}
+		})
+	}
+}
+
+// TestParseTypographerEllipsis checks the third substitution kind (besides
+// quotes and dashes) - "..." becomes a single "…" glued to the word before
+// it, same mechanism as the others.
+func TestParseTypographerEllipsis(t *testing.T) {
+	doc := Parse([]byte("wait..."))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"wait", "…"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	if !para.parts[1].(*InlineText).glued {
+		t.Errorf("parts[1] (%q) glued = false, want true (no source space before it)", got[1])
 	}
 }
