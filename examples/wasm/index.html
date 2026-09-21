@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>whynot in WebAssembly</title>
+<style>
+  /* Ebitengine's js backend creates and manages its own <canvas>,
+     appended to <body> and styled to fill it - nothing to set up here
+     beyond making sure the page itself has no margin to fight with. */
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; }
+</style>
+</head>
+<body>
+<script src="wasm_exec.js"></script>
+<script>
+  // arrayBuffer()+instantiate, not instantiateStreaming(fetch(...)):
+  // streaming instantiation requires the server to send the exact
+  // "application/wasm" Content-Type, which not every static file
+  // server (e.g. an older `python3 -m http.server`) gets right for
+  // .wasm - this version works regardless.
+  const go = new Go();
+  fetch("whynot.wasm")
+    .then((resp) => resp.arrayBuffer())
+    .then((bytes) => WebAssembly.instantiate(bytes, go.importObject))
+    .then((result) => go.run(result.instance));
+</script>
+</body>
+</html>
