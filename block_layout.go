@@ -261,10 +261,24 @@ func asStackBox(box BlockLayout) *StackBox {
 func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
+		y := 0
 		for i := range b.slots {
 			box := b.boxAt(i)
-			bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
+			boxBounds := box.Bounds()
+			bounds = bounds.Union(boxBounds.Add(image.Pt(0, y)))
+			y += boxBounds.Dy()
 		}
+		// y, not whatever the Union loop above landed on, is the real
+		// total height: image.Rectangle.Union treats a zero-width
+		// rectangle as empty and drops it from the union entirely
+		// (Go's Rectangle.Empty() only checks Min.X >= Max.X, ignoring
+		// Y), which silently discards a slot's height if it happens to
+		// have zero width but real height - e.g. a blank line inside a
+		// highlighted code block (see highlightLines' blank-line
+		// placeholder). Tracking y by direct summation, the same way
+		// drawContents already advances its own y, keeps Bounds()
+		// consistent with what actually gets drawn regardless.
+		bounds.Max.Y = y
 		b.bounds = bounds
 		b.boundsComputed = true
 	}

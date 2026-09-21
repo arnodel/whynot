@@ -33,7 +33,7 @@ type HighlightSpan struct {
 type TokenClass int
 
 const (
-	TokenPlain TokenClass = iota // no special color - inherits the block's own CodeColor
+	TokenPlain TokenClass = iota // no special color - inherits the block's own CodeBlockColor
 	TokenKeyword
 	TokenString
 	TokenNumber
@@ -57,7 +57,7 @@ func WithSyntaxHighlighter(h Highlighter) ParseOption {
 // StyleSheet.Color contribution renders it - TokenPlain deliberately has
 // no entry: a plain span reuses its enclosing code block's own ASTNode
 // directly rather than getting a child node of its own, inheriting
-// CodeColor the same way untouched code text always has.
+// CodeBlockColor the same way untouched code text always has.
 var tokenClassTags = map[TokenClass]ASTTag{
 	TokenKeyword: TagCodeKeyword,
 	TokenString:  TagCodeString,
@@ -88,6 +88,14 @@ func highlightLines(h Highlighter, blockNode *ASTNode, language string, rawLines
 	flushLine := func() {
 		if lineIndex >= len(lines) {
 			return
+		}
+		if len(current) == 0 {
+			// A blank source line (or a span boundary that happens to
+			// land exactly on one) leaves current empty - LineBox
+			// requires at least one part (it indexes parts[0]
+			// unconditionally), so give it an empty-text placeholder
+			// rather than an empty slice.
+			current = []Inline{&InlineText{text: "", node: blockNode}}
 		}
 		lines[lineIndex] = current
 		current = nil

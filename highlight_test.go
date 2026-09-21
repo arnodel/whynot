@@ -128,6 +128,31 @@ func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 	}
 }
 
+// TestHighlightLinesBlankLineGetsAPart is a regression test: a blank
+// source line inside a highlighted code block (e.g. separating two
+// paragraphs of a comment, or just stylistic spacing) contributes no
+// span text at all, which previously left that line's parts slice empty
+// - LineBox indexes parts[0] unconditionally, so a real Highlighter
+// (chroma) run against a document with a blank line in a fenced block
+// crashed rendering. Every line must end up with at least one part.
+func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
+	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+		return []HighlightSpan{{Text: code, Class: TokenPlain}}
+	}}
+	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	rawLines := []string{"func f() {\n", "\n", "}\n"}
+	lines := highlightLines(h, blockNode, "", rawLines)
+	if len(lines) != len(rawLines) {
+		t.Fatalf("len(lines) = %d, want %d: %#v", len(lines), len(rawLines), lines)
+	}
+	if len(lines[1]) != 1 {
+		t.Fatalf("blank line parts = %#v, want exactly 1 part", lines[1])
+	}
+	if got := lines[1][0].(*InlineText).text; got != "" {
+		t.Errorf("blank line text = %q, want empty", got)
+	}
+}
+
 func TestHighlightLinesMismatchedLineCountFallsBack(t *testing.T) {
 	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
 		// Only reproduces one line's worth of newlines, though rawLines

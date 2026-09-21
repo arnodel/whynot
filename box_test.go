@@ -513,6 +513,27 @@ func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 	}
 }
 
+// TestStackBoxBoundsCountsZeroWidthSlot is a regression test:
+// image.Rectangle.Union treats a zero-width rectangle as empty
+// (Rectangle.Empty() only checks Min.X >= Max.X, ignoring Y) and drops it
+// from the union entirely, so a naive Union-based accumulation of a
+// zero-width-but-nonzero-height slot (e.g. a blank line inside a
+// highlighted code block - see highlightLines' blank-line placeholder)
+// previously discarded that slot's height, under-reporting the stack's
+// total height and causing whatever came after it to overlap the
+// stack's real, drawn content (drawContents advances y unconditionally
+// via childBounds.Max.Y, so it never had this bug - only Bounds() did).
+func TestStackBoxBoundsCountsZeroWidthSlot(t *testing.T) {
+	stack := &StackBox{slots: preResolvedSlots([]BlockLayout{
+		NewEmptyBox(50, 20),
+		NewEmptyBox(0, 20), // zero width, real height - the blank-line case
+		NewEmptyBox(50, 20),
+	})}
+	if got, want := stack.Bounds().Dy(), 60; got != want {
+		t.Errorf("Bounds().Dy() = %d, want %d (3 slots x 20px each)", got, want)
+	}
+}
+
 // TestImageBoxDrawInlineAnimated checks that drawing an ImageBox with
 // anim set actually consults now, not just whatever frame the
 // animation happened to start on - the whole point of threading now
