@@ -18,6 +18,13 @@ type Inline interface {
 type InlineText struct {
 	text string
 	node *ASTNode
+
+	// glued - see InlineLayout.Glued's doc comment. Set by the compiler
+	// (MarkdownCompiler.appendString/pendingSpace) from whether the
+	// source actually had whitespace immediately before this item;
+	// false (the zero value) for every InlineText built directly rather
+	// than through the compiler, matching the old always-space behavior.
+	glued bool
 }
 
 var _ Inline = (*InlineText)(nil)
@@ -37,6 +44,7 @@ func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayo
 		Color:           ctx.ResolvedColor(t.node),
 		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
 		LineHeight:      ctx.StyleSheet.LineHeight(t.node),
+		glued:           t.glued,
 		source:          t,
 	}
 }
@@ -100,6 +108,9 @@ type InlineImage struct {
 	// rather than created on demand here.
 	fallbackNode *ASTNode
 
+	// glued - see InlineLayout.Glued's doc comment and InlineText.glued.
+	glued bool
+
 	// ownCache is lazily created the first time GetInlineLayout runs
 	// with no ImageCache configured (a bare RenderingContext{}, as most
 	// of this package's own tests use) and reused on every later call -
@@ -162,6 +173,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 			img:    result.Image,
 			anim:   result.Animation,
 			bounds: fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
+			glued:  i.glued,
 			source: i,
 		}
 	case ImagePending:
@@ -170,14 +182,17 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 				bounds:           fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 				placeholderColor: ctx.StyleSheet.BorderColor(i.node),
 				pending:          []string{resolved},
+				glued:            i.glued,
 				source:           i,
 			}
 		}
-		box := (&InlineText{text: "(loading image…)", node: i.node}).GetInlineLayout(ctx, width).(*TextBox)
+		box := (&InlineText{text: "(loading image…)", node: i.node, glued: i.glued}).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	default: // ImageFailed
-		box := i.fallback(resolved).GetInlineLayout(ctx, width).(*TextBox)
+		fallback := i.fallback(resolved)
+		fallback.glued = i.glued
+		box := fallback.GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	}

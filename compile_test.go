@@ -274,6 +274,132 @@ func TestSplitBoxesNaturalWidthFits(t *testing.T) {
 	}
 }
 
+// TestParseAdjacentCodeSpanGluedFlags checks that "a(`b`)" - no source
+// whitespace around the code span - marks the code span's word and the
+// trailing ")" as glued to what comes before them (see InlineLayout.
+// Glued and MarkdownCompiler.pendingSpace), so no gap gets rendered and
+// neither boundary can become a line break.
+func TestParseAdjacentCodeSpanGluedFlags(t *testing.T) {
+	doc := Parse([]byte("a(`b`)"))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"a(", "b", ")"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	if para.parts[0].(*InlineText).glued {
+		t.Errorf("parts[0] (%q) glued = true, want false (nothing precedes it)", got[0])
+	}
+	if !para.parts[1].(*InlineText).glued {
+		t.Errorf("parts[1] (%q) glued = false, want true (no source space before the code span)", got[1])
+	}
+	if !para.parts[2].(*InlineText).glued {
+		t.Errorf("parts[2] (%q) glued = false, want true (no source space before it)", got[2])
+	}
+}
+
+// TestParseNoGapAroundAdjacentCodeSpan is the layout-level counterpart of
+// TestParseAdjacentCodeSpanGluedFlags: no source whitespace means no
+// added gap, so "a(`b`)" must measure narrower than "a( `b` )" - contrast
+// TestLineBoxBoundsIncludesInterWordSpacing, which checks the opposite
+// (a real source space DOES add a gap).
+func TestParseNoGapAroundAdjacentCodeSpan(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	widthOf := func(source string) int {
+		t.Helper()
+		doc := Parse([]byte(source))
+		para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+		return para.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx()
+	}
+
+	adjacent := widthOf("a(`b`)")
+	spaced := widthOf("a( `b` )")
+	if adjacent >= spaced {
+		t.Errorf("width(%q) = %d, want < width(%q) = %d (no source whitespace, so no added gap)",
+			"a(`b`)", adjacent, "a( `b` )", spaced)
+	}
+}
+
+// TestParseAdjacentPunctuationStaysOnOneLine checks that "(**bold**)" -
+// open paren directly against Strong, Strong directly against close
+// paren, no source space anywhere - can't be split across a line break,
+// even at a width far too narrow for it to fit.
+func TestParseAdjacentPunctuationStaysOnOneLine(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	doc := Parse([]byte("(**bold**)"))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+
+	box := para.GetBlockLayout(ctx, 1).(*StackBox)
+	if len(box.slots) != 1 {
+		t.Errorf("built at width 1, got %d lines, want 1 (no breakable boundary anywhere in \"(**bold**)\")", len(box.slots))
+	}
+}
+
+// TestParseSpaceBetweenNonTextSiblings checks that a source space
+// between two non-text inline nodes ("**a** *b*") - which goldmark gives
+// its own whitespace-only Text node, producing zero Inline items on its
+// own (confirmed directly against goldmark v2) - still results in a
+// normal, breakable space between "a" and "b". This is what needs
+// MarkdownCompiler.pendingSpace to carry across appendString calls,
+// rather than each call only looking at its own string's edges.
+func TestParseSpaceBetweenNonTextSiblings(t *testing.T) {
+	doc := Parse([]byte("**a** *b*"))
+	para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+	got := textOf(t, para.parts)
+	want := []string{"a", "b"}
+	if !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	if para.parts[1].(*InlineText).glued {
+		t.Errorf("second word glued = true, want false (real source space between them)")
+	}
+}
+
+// TestParseNonBreakingSpace checks that a literal NBSP (U+00A0) or an
+// &nbsp; entity - goldmark normalizes both to the same rune, with no
+// AST-level distinction from an ordinary space - becomes its own atomic
+// item: same rendered width as an ordinary space, but glued on both
+// sides so it can never itself, or its neighbor, end up at a line break.
+func TestParseNonBreakingSpace(t *testing.T) {
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	widthOf := func(source string) int {
+		t.Helper()
+		doc := Parse([]byte(source))
+		para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+		return para.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx()
+	}
+	spaceWidth := widthOf("a b")
+
+	for _, source := range []string{"a\u00a0b", "a&nbsp;b"} {
+		t.Run(source, func(t *testing.T) {
+			doc := Parse([]byte(source))
+			para := unwrap(doc.(*StackBlock).blocks[0]).(*TextBlock)
+			if len(para.parts) != 3 {
+				t.Fatalf("parts = %#v, want 3 (\"a\", nbsp, \"b\")", para.parts)
+			}
+			a, nb, b := para.parts[0].(*InlineText), para.parts[1].(*InlineText), para.parts[2].(*InlineText)
+			if a.text != "a" || nb.text != "\u00a0" || b.text != "b" {
+				t.Fatalf("texts = %q, %q, %q, want \"a\", \"\\u00a0\", \"b\"", a.text, nb.text, b.text)
+			}
+			if !nb.glued {
+				t.Errorf("nbsp glued = false, want true (no break before it)")
+			}
+			if !b.glued {
+				t.Errorf("%q glued = false, want true (no break between it and the nbsp)", b.text)
+			}
+
+			if got := widthOf(source); got != spaceWidth {
+				t.Errorf("width(%q) = %d, want %d (same as an ordinary space, %q)", source, got, spaceWidth, "a b")
+			}
+
+			box := para.GetBlockLayout(ctx, 1).(*StackBox)
+			if len(box.slots) != 1 {
+				t.Errorf("built at width 1, got %d lines, want 1 (nbsp boundaries can't break)", len(box.slots))
+			}
+		})
+	}
+}
+
 func TestResolveColumnWidths(t *testing.T) {
 	cases := []struct {
 		name      string
