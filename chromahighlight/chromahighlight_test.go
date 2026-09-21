@@ -19,6 +19,8 @@ func TestClassify(t *testing.T) {
 		{"keyword subtype", chroma.KeywordReserved, whynot.TokenKeyword},
 		{"keyword type (builtin type)", chroma.KeywordType, whynot.TokenType},
 		{"name class (declared type/class)", chroma.NameClass, whynot.TokenType},
+		{"name function (declared/called function)", chroma.NameFunction, whynot.TokenFunction},
+		{"name function magic (dunder method)", chroma.NameFunctionMagic, whynot.TokenFunction},
 		{"string", chroma.LiteralString, whynot.TokenString},
 		{"string subtype", chroma.LiteralStringDouble, whynot.TokenString},
 		{"number", chroma.LiteralNumber, whynot.TokenNumber},
@@ -26,7 +28,7 @@ func TestClassify(t *testing.T) {
 		{"comment", chroma.Comment, whynot.TokenComment},
 		{"comment preproc", chroma.CommentPreproc, whynot.TokenComment},
 		{"name", chroma.Name, whynot.TokenPlain},
-		{"name builtin (shared with builtin functions, not just types)", chroma.NameBuiltin, whynot.TokenPlain},
+		{"name builtin (shared between builtin functions and, in some lexers, types)", chroma.NameBuiltin, whynot.TokenPlain},
 		{"operator", chroma.Operator, whynot.TokenPlain},
 		{"punctuation", chroma.Punctuation, whynot.TokenPlain},
 		{"text", chroma.Text, whynot.TokenPlain},
@@ -69,12 +71,27 @@ func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
 	}
 }
 
+// TestClassifyDistinguishesFunctionFromPlain is a regression test: a
+// bare chroma.NameFunction has no case anywhere in classify's
+// SubCategory() switch (its bucket, 2300, matches none of them), so
+// without the explicit pre-check it would silently fall through to
+// TokenPlain, losing function highlighting entirely rather than failing
+// loudly.
+func TestClassifyDistinguishesFunctionFromPlain(t *testing.T) {
+	if got := classify(chroma.NameFunction); got != whynot.TokenFunction {
+		t.Errorf("classify(NameFunction) = %v, want TokenFunction", got)
+	}
+	if got := classify(chroma.Name); got != whynot.TokenPlain {
+		t.Errorf("classify(Name) = %v, want TokenPlain", got)
+	}
+}
+
 func TestHighlightGo(t *testing.T) {
 	code := "// comment\nfunc f(n int) string {\n\treturn \"hi\"\n}\n"
 	spans := Highlighter{}.Highlight("go", code)
 
 	var got strings.Builder
-	var sawKeyword, sawType, sawString, sawComment bool
+	var sawKeyword, sawType, sawFunction, sawString, sawComment bool
 	for _, span := range spans {
 		got.WriteString(span.Text)
 		switch span.Class {
@@ -82,6 +99,8 @@ func TestHighlightGo(t *testing.T) {
 			sawKeyword = true
 		case whynot.TokenType:
 			sawType = true
+		case whynot.TokenFunction:
+			sawFunction = true
 		case whynot.TokenString:
 			sawString = true
 		case whynot.TokenComment:
@@ -98,6 +117,11 @@ func TestHighlightGo(t *testing.T) {
 	// builtin types - chroma's Go lexer tags them chroma.KeywordType.
 	if !sawType {
 		t.Errorf("no TokenType span found in %#v", spans)
+	}
+	// f's own declared name - chroma's Go lexer tags it
+	// chroma.NameFunction.
+	if !sawFunction {
+		t.Errorf("no TokenFunction span found in %#v", spans)
 	}
 	if !sawString {
 		t.Errorf("no TokenString span found in %#v", spans)

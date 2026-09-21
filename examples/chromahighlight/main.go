@@ -22,8 +22,8 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Syntax highlighting example\n\n")
 	b.WriteString("Fenced code blocks below are colored token-by-token via\n")
-	b.WriteString("`chromahighlight.Highlighter`, keyword/type/string/number/comment each in\n")
-	b.WriteString("its own color from the active `StyleSheet`'s `SyntaxColors`.\n\n")
+	b.WriteString("`chromahighlight.Highlighter`, keyword/type/function/string/number/comment\n")
+	b.WriteString("each in its own color from the active `StyleSheet`'s `SyntaxColors`.\n\n")
 
 	b.WriteString("## Go\n\n```go\n")
 	b.WriteString("// Sum adds up a slice of ints, logging as it goes.\n")

@@ -45,6 +45,12 @@ const (
 	// chromahighlight.classify's doc comment for the concrete
 	// limitation this hits with chroma specifically.
 	TokenType
+	// TokenFunction is a function/method name - like TokenType, a
+	// Highlighter's lexer can usually recognize a function's
+	// *declaration* this way, but not always its every later *usage*
+	// (same caveat as TokenType's doc comment - see
+	// chromahighlight.classify).
+	TokenFunction
 	TokenString
 	TokenNumber
 	TokenComment
@@ -69,11 +75,12 @@ func WithSyntaxHighlighter(h Highlighter) ParseOption {
 // directly rather than getting a child node of its own, inheriting
 // CodeBlockColor the same way untouched code text always has.
 var tokenClassTags = map[TokenClass]ASTTag{
-	TokenKeyword: TagCodeKeyword,
-	TokenType:    TagCodeType,
-	TokenString:  TagCodeString,
-	TokenNumber:  TagCodeNumber,
-	TokenComment: TagCodeComment,
+	TokenKeyword:  TagCodeKeyword,
+	TokenType:     TagCodeType,
+	TokenFunction: TagCodeFunction,
+	TokenString:   TagCodeString,
+	TokenNumber:   TagCodeNumber,
+	TokenComment:  TagCodeComment,
 }
 
 // highlightLines runs h over rawLines (already tab-expanded, concatenated

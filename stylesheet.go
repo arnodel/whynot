@@ -142,17 +142,20 @@ type ScrollbarColors struct {
 }
 
 // SyntaxColors is the palette a Highlighter's classified tokens draw from
-// (see TagCodeKeyword..TagCodeType) - grouped like BlockquoteGeometry/
+// (see TagCodeKeyword..TagCodeFunction) - grouped like BlockquoteGeometry/
 // TableGeometry/ScrollbarColors, since picking a new palette usually means
 // reconsidering the whole set together, not one color at a time.
 type SyntaxColors struct {
 	Keyword color.Color
 	// Type is shared by a builtin primitive type and a declared
 	// custom type/class name - see TokenType's own doc comment.
-	Type    color.Color
-	String  color.Color
-	Number  color.Color
-	Comment color.Color
+	Type color.Color
+	// Function is a function/method name - see TokenFunction's own doc
+	// comment.
+	Function color.Color
+	String   color.Color
+	Number   color.Color
+	Comment  color.Color
 }
 
 // DefaultStyleSheet is the concrete, configurable StyleSheet implementation
@@ -348,11 +351,12 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		// versa, the same reason TextColor/LinkColor/CodeBlockColor/
 		// CodeSpanColor differ between the two themes.
 		Syntax: SyntaxColors{
-			Keyword: color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
-			Type:    color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
-			String:  color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
-			Number:  color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
-			Comment: color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
+			Keyword:  color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
+			Type:     color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
+			Function: color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}, // soft yellow-tan
+			String:   color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
+			Number:   color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
+			Comment:  color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
 		},
 
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
@@ -406,11 +410,12 @@ func NewLightStyleSheet() *DefaultStyleSheet {
 		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
 	}
 	s.Syntax = SyntaxColors{
-		Keyword: color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
-		Type:    color.RGBA{0x00, 0x7A, 0x6E, 0xFF},
-		String:  color.RGBA{0x1E, 0x7A, 0x2E, 0xFF},
-		Number:  color.RGBA{0xB0, 0x5A, 0x00, 0xFF},
-		Comment: color.RGBA{0x60, 0x60, 0x60, 0xFF},
+		Keyword:  color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
+		Type:     color.RGBA{0x00, 0x7A, 0x6E, 0xFF},
+		Function: color.RGBA{0x7A, 0x66, 0x00, 0xFF},
+		String:   color.RGBA{0x1E, 0x7A, 0x2E, 0xFF},
+		Number:   color.RGBA{0xB0, 0x5A, 0x00, 0xFF},
+		Comment:  color.RGBA{0x60, 0x60, 0x60, 0xFF},
 	}
 	return s
 }
@@ -492,6 +497,8 @@ func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 		return s.Syntax.Keyword
 	case TagCodeType:
 		return s.Syntax.Type
+	case TagCodeFunction:
+		return s.Syntax.Function
 	case TagCodeString:
 		return s.Syntax.String
 	case TagCodeNumber:
