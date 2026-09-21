@@ -513,6 +513,22 @@ func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 	}
 }
 
+// TestStackBoxBoundsCountsZeroWidthSlot is a regression test:
+// image.Rectangle.Union treats a zero-width rectangle as empty (Go only
+// checks Min.X >= Max.X, ignoring Y) and drops it from the union, so a
+// zero-width-but-real-height slot (e.g. a blank highlighted code line)
+// must not silently lose its height contribution.
+func TestStackBoxBoundsCountsZeroWidthSlot(t *testing.T) {
+	stack := &StackBox{slots: preResolvedSlots([]BlockLayout{
+		NewEmptyBox(50, 20),
+		NewEmptyBox(0, 20), // zero width, real height - the blank-line case
+		NewEmptyBox(50, 20),
+	})}
+	if got, want := stack.Bounds().Dy(), 60; got != want {
+		t.Errorf("Bounds().Dy() = %d, want %d (3 slots x 20px each)", got, want)
+	}
+}
+
 // TestImageBoxDrawInlineAnimated checks that drawing an ImageBox with
 // anim set actually consults now, not just whatever frame the
 // animation happened to start on - the whole point of threading now

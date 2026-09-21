@@ -63,6 +63,16 @@ func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int, now time.Duration) {
 type LineBox struct {
 	parts []InlineLayout
 
+	// Glue, when true, abuts parts directly with no inter-part gap -
+	// for a line whose parts are already-contiguous substrings of one
+	// original string (e.g. CodeBlock's classified token spans, each a
+	// verbatim slice of the source line, any whitespace between tokens
+	// already included in a plain-class span's own text) rather than
+	// separately word-split text (TextBlock's parts, built by
+	// appendString's strings.Fields, which discards whitespace and so
+	// needs a real inter-word gap reconstructed from SpaceWidth()).
+	Glue bool
+
 	boundsComputed bool
 	bounds         image.Rectangle
 	advance        int
@@ -97,7 +107,7 @@ func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
 		prevSpace := b.parts[0].SpaceWidth()
 		for _, box := range b.parts[1:] {
 			space := box.SpaceWidth()
-			advance += maxInt(prevSpace, space)
+			advance += b.gap(prevSpace, space)
 			prevSpace = space
 			boxBounds, boxAdvance := box.BoundsAndAdvance()
 			bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
@@ -147,7 +157,7 @@ func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
 	x = next
 	for _, part := range b.parts[1:] {
 		space := part.SpaceWidth()
-		hit, offset, next := part.HitTest(p, x+maxInt(prevSpace, space), y)
+		hit, offset, next := part.HitTest(p, x+b.gap(prevSpace, space), y)
 		if hit != nil {
 			return hit, offset
 		}
@@ -179,9 +189,21 @@ func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	x = b.parts[0].DrawInline(dst, x, y, now)
 	for _, box := range b.parts[1:] {
 		space := box.SpaceWidth()
-		x = box.DrawInline(dst, x+maxInt(prevSpace, space), y, now)
+		x = box.DrawInline(dst, x+b.gap(prevSpace, space), y, now)
 		prevSpace = space
 	}
+}
+
+// gap is the horizontal space LineBox inserts before a part, given the
+// SpaceWidth() of the part before it and of this one - the wider of the
+// two, matching how a real space character's width can differ between
+// two different fonts/sizes on either side of it - unless Glue disables
+// gaps entirely.
+func (b *LineBox) gap(prevSpace, space int) int {
+	if b.Glue {
+		return 0
+	}
+	return maxInt(prevSpace, space)
 }
 
 // stackSlot is a StackBox child that's either already resolved (box set -
@@ -239,10 +261,21 @@ func asStackBox(box BlockLayout) *StackBox {
 func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
+		y := 0
 		for i := range b.slots {
 			box := b.boxAt(i)
-			bounds = bounds.Union(box.Bounds().Add(image.Pt(0, bounds.Max.Y)))
+			boxBounds := box.Bounds()
+			bounds = bounds.Union(boxBounds.Add(image.Pt(0, y)))
+			y += boxBounds.Dy()
 		}
+		// y, not whatever the Union loop above landed on, is the real
+		// total height: image.Rectangle.Union treats a zero-width
+		// rectangle as empty (Go only checks Min.X >= Max.X, ignoring
+		// Y) and drops it, silently discarding a slot's height if it
+		// has zero width but real height (e.g. a blank highlighted
+		// code line - see highlightLines). Direct summation doesn't
+		// have that blind spot.
+		bounds.Max.Y = y
 		b.bounds = bounds
 		b.boundsComputed = true
 	}

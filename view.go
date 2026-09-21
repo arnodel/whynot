@@ -50,6 +50,11 @@ type View struct {
 	// invalidation or rebuild, since a stale per-slot value is a better
 	// estimate than falling back to the document-wide average.
 	slotHeights []float64
+
+	// highlighter is the Highlighter (see WithHighlighter) threaded into
+	// NewView's own Parse call - unrelated to highlightSlot above, which
+	// is about a hovered link, not syntax highlighting.
+	highlighter Highlighter
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -79,11 +84,22 @@ func WithImageSource(s ImageSource) ViewOption {
 	}
 }
 
+// WithHighlighter sets the Highlighter used to color code blocks
+// token-by-token - the NewView-level equivalent of Parse's own
+// WithSyntaxHighlighter (named differently since it's a different option
+// type, ViewOption vs ParseOption; Go has no function overloading). Unset,
+// code blocks render in one flat color, same as before this option
+// existed.
+func WithHighlighter(h Highlighter) ViewOption {
+	return func(v *View) {
+		v.highlighter = h
+	}
+}
+
 // NewView parses source and returns a View ready to render it once Layout
 // has been called at least once to establish a width.
 func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View {
 	v := &View{
-		block: Parse(source),
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
 			StyleSheet:   NewDarkStyleSheet(),
@@ -93,6 +109,11 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 	for _, opt := range opts {
 		opt(v)
 	}
+	var parseOpts []ParseOption
+	if v.highlighter != nil {
+		parseOpts = append(parseOpts, WithSyntaxHighlighter(v.highlighter))
+	}
+	v.block = Parse(source, parseOpts...)
 	return v
 }
 

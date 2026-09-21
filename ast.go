@@ -29,6 +29,17 @@ const (
 	TagStrikethrough
 	TagImage
 	TagUnsupported
+
+	// TagCodeKeyword..TagCodeFunction classify a syntax-highlighted code
+	// token - see Highlighter. Appended after TagUnsupported deliberately:
+	// headingTag() relies on TagHeading1..TagHeading6 staying consecutive,
+	// so nothing may be inserted before them.
+	TagCodeKeyword
+	TagCodeString
+	TagCodeNumber
+	TagCodeComment
+	TagCodeType
+	TagCodeFunction
 )
 
 // ASTPath is a tag ancestry, root-to-leaf.

@@ -9,6 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/chromahighlight"
 )
 
 // setTheme switches between whynot's built-in dark and light
@@ -66,11 +67,12 @@ func (g *game) onLinkHover(dest string) {
 }
 
 // newView builds a View for source, loaded from location - bundling
-// the options every call site needs together: the current StyleSheet,
-// and an ImageSource that resolves an image's src against location the
-// same way resolveLink resolves a link's href, so a relative or
-// http(s) image works regardless of where its document came from. The
-// welcome page is the one exception: its own images (if any) are
+// the options every call site needs together: the current StyleSheet, an
+// ImageSource that resolves an image's src against location the same way
+// resolveLink resolves a link's href (so a relative or http(s) image
+// works regardless of where its document came from), and a
+// chromahighlight.Highlighter for syntax-colored code blocks. The
+// welcome page is the one exception for images: its own (if any) are
 // bundled alongside it in assetsFS, not fetched, so it gets
 // welcomeImageSource instead of the general fetch-based one.
 func (g *game) newView(source []byte, location *url.URL) *whynot.View {
@@ -81,6 +83,7 @@ func (g *game) newView(source []byte, location *url.URL) *whynot.View {
 	return whynot.NewView(source, g.faceSelector,
 		whynot.WithStyleSheet(g.styleSheet),
 		whynot.WithImageSource(imageSource),
+		whynot.WithHighlighter(chromahighlight.Highlighter{}),
 	)
 }
 

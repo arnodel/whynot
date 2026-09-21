@@ -267,7 +267,7 @@ func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
 	if len(cb.lines) == 0 {
 		t.Fatal("no lines rendered for the unsupported HTML block")
 	}
-	if first := cb.lines[0].(*InlineText).text; !strings.Contains(first, "<div>") {
+	if first := cb.lines[0][0].(*InlineText).text; !strings.Contains(first, "<div>") {
 		t.Errorf("first line = %q, want it to contain the raw source", first)
 	}
 }

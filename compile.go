@@ -15,13 +15,16 @@ import (
 // Block.GetBlockLayout. All appearance (fonts, colors, margins, ...) is resolved
 // later, from RenderingContext.StyleSheet against each Block/Inline's own
 // ASTNode - Parse itself only builds structure.
-func Parse(source []byte) Block {
+func Parse(source []byte, opts ...ParseOption) Block {
 	p := parser.New(
 		parser.WithExtensions(extension.TaskListItemParser, extension.StrikethroughParser, extension.TableParser),
 		parser.WithAutoHeadingID(),
 	)
 	node := p.Parse(source)
 	compiler := MarkdownCompiler{source: source}
+	for _, opt := range opts {
+		opt(&compiler)
+	}
 	return compiler.CompileDocument(node)
 }
 
@@ -94,7 +97,7 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		astNode := parent.AddChild(TagCodeBlock)
 		cb := node.(*gmast.CodeBlock)
 		segs := cb.Value.Segments()
-		items := make([]Inline, len(segs))
+		rawLines := make([]string, len(segs))
 		for i, seg := range segs {
 			// A code block's content is verbatim source, tabs included -
 			// unlike indentation elsewhere in the document, this isn't
@@ -102,10 +105,25 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			// for a raw tab, rendering it as a placeholder box instead of
 			// whitespace, so expand it here to keep indentation looking
 			// like indentation.
-			text := strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
-			items[i] = &InlineText{text: text, node: astNode}
+			rawLines[i] = strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
 		}
-		return &MarginBlock{Block: &CodeBlock{lines: items, node: astNode}, node: astNode}
+
+		var lines [][]Inline
+		if c.highlighter != nil {
+			language, _ := cb.Language(c.source)
+			lines = highlightLines(c.highlighter, astNode, language, rawLines)
+		}
+		if lines == nil {
+			// No highlighter configured, or highlightLines bailed out on
+			// a mismatched line count (a misbehaving Highlighter) - both
+			// cases fall back to the same plain, one-InlineText-per-line
+			// rendering.
+			lines = make([][]Inline, len(rawLines))
+			for i, text := range rawLines {
+				lines[i] = []Inline{&InlineText{text: text, node: astNode}}
+			}
+		}
+		return &MarginBlock{Block: &CodeBlock{lines: lines, node: astNode}, node: astNode}
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(TagThematicBreak)
 		return &MarginBlock{
@@ -162,7 +180,11 @@ func (c *MarkdownCompiler) compileUnsupportedBlock(node gmast.Node, parent *ASTN
 	if len(items) == 0 {
 		items = []Inline{&InlineText{text: fmt.Sprintf("(unsupported: %s)", node.Kind()), node: astNode}}
 	}
-	return &MarginBlock{Block: &CodeBlock{lines: items, node: astNode}, node: astNode}
+	lines := make([][]Inline, len(items))
+	for i, item := range items {
+		lines[i] = []Inline{item}
+	}
+	return &MarginBlock{Block: &CodeBlock{lines: lines, node: astNode}, node: astNode}
 }
 
 // headingTag maps a heading level (1-6) to its ASTTag - safe because
