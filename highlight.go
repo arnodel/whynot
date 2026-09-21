@@ -35,6 +35,16 @@ type TokenClass int
 const (
 	TokenPlain TokenClass = iota // no special color - inherits the block's own CodeBlockColor
 	TokenKeyword
+	// TokenType is a type name - a language's builtin primitive types
+	// (e.g. Go's int/string/bool) and a declared custom type/class name
+	// share this one class deliberately, so e.g. a builtin type and a
+	// user-defined struct read as the same kind of thing. A
+	// Highlighter's own lexer may not always be able to tell a custom
+	// type's every *usage* apart from an ordinary identifier (that
+	// needs real type information, not just lexing) - see
+	// chromahighlight.classify's doc comment for the concrete
+	// limitation this hits with chroma specifically.
+	TokenType
 	TokenString
 	TokenNumber
 	TokenComment
@@ -60,6 +70,7 @@ func WithSyntaxHighlighter(h Highlighter) ParseOption {
 // CodeBlockColor the same way untouched code text always has.
 var tokenClassTags = map[TokenClass]ASTTag{
 	TokenKeyword: TagCodeKeyword,
+	TokenType:    TagCodeType,
 	TokenString:  TagCodeString,
 	TokenNumber:  TagCodeNumber,
 	TokenComment: TagCodeComment,

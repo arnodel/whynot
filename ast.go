@@ -30,7 +30,7 @@ const (
 	TagImage
 	TagUnsupported
 
-	// TagCodeKeyword..TagCodeComment classify a syntax-highlighted code
+	// TagCodeKeyword..TagCodeType classify a syntax-highlighted code
 	// token - see Highlighter. Appended after TagUnsupported deliberately:
 	// headingTag() relies on TagHeading1..TagHeading6 staying consecutive,
 	// so nothing may be inserted before them.
@@ -38,6 +38,7 @@ const (
 	TagCodeString
 	TagCodeNumber
 	TagCodeComment
+	TagCodeType
 )
 
 // ASTPath is a tag ancestry, root-to-leaf.

@@ -22,7 +22,7 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Syntax highlighting example\n\n")
 	b.WriteString("Fenced code blocks below are colored token-by-token via\n")
-	b.WriteString("`chromahighlight.Highlighter`, keyword/string/number/comment each in\n")
+	b.WriteString("`chromahighlight.Highlighter`, keyword/type/string/number/comment each in\n")
 	b.WriteString("its own color from the active `StyleSheet`'s `SyntaxColors`.\n\n")
 
 	b.WriteString("## Go\n\n```go\n")
@@ -44,6 +44,17 @@ func exampleDoc() string {
 	b.WriteString("    for n in nums:\n")
 	b.WriteString("        result += n  # running total\n")
 	b.WriteString("    return result\n```\n\n")
+
+	b.WriteString("## Type names\n\n")
+	b.WriteString("A builtin type (Go's `int`) and a declared custom type/class (Python's\n")
+	b.WriteString("`Point`) share one color - see chromahighlight.classify's doc comment for\n")
+	b.WriteString("why a custom type's later *usages*, not just its declaration, aren't\n")
+	b.WriteString("always recognizable this way (a lexer limitation, not whynot's own):\n\n")
+	b.WriteString("```python\n")
+	b.WriteString("class Point:\n")
+	b.WriteString("    def __init__(self, x: int, y: int) -> None:\n")
+	b.WriteString("        self.x = x\n")
+	b.WriteString("        self.y = y\n```\n\n")
 
 	b.WriteString("## Unrecognized language\n\n")
 	b.WriteString("This fence names a made-up language chroma won't recognize, so it\n")

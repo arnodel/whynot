@@ -335,9 +335,13 @@ keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of th
 library's dependency graph) implements `Highlighter` on top of chroma, picking a lexer
 from the fence's own language string (falling back to unhighlighted, flat-color
 rendering for a language it doesn't recognize, or for an indented block, which has no
-fence to name one). Colors come from `StyleSheet`'s own `SyntaxColors` (keyword/
+fence to name one). Colors come from `StyleSheet`'s own `SyntaxColors` (keyword/type/
 string/number/comment), tuned separately for the dark and light themes - not from
-chroma's own named styles.
+chroma's own named styles. A builtin type (e.g. Go's `int`) and a declared custom
+type/class name share the `type` color, deliberately - though a lexer can only ever
+recognize a custom type's *declaration* this way, not necessarily its every later
+*usage*, since that needs real type information a lexer doesn't have (see
+`chromahighlight`'s `classify` for the specifics).
 
 See [`examples/chromahighlight`](examples/chromahighlight) for a runnable version.
 

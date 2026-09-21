@@ -45,7 +45,32 @@ func (Highlighter) Highlight(language, code string) []whynot.HighlightSpan {
 // "Literal" bucket (confirmed from chroma's own source: Category() is the
 // 1000-wide bucket, SubCategory() the 100-wide one LiteralString/
 // LiteralNumber actually differ at).
+//
+// chroma.KeywordType and chroma.NameClass are checked explicitly, ahead
+// of the SubCategory() switch, specifically to pull them out of that
+// bucketing: KeywordType's SubCategory() would otherwise land in the
+// same 1000-wide bucket as a plain chroma.Keyword (KeywordType is 1006,
+// Keyword 1000 - SubCategory() floors both to 1000), merging a builtin
+// type name (Go's int/string/bool) into the ordinary keyword color
+// instead of TokenType. chroma.NameBuiltin is deliberately NOT included
+// here even though some lexers use it for builtin types too (e.g.
+// Python tags an "int" annotation as NameBuiltin, not KeywordType) -
+// NameBuiltin is shared with builtin *functions* (Python's len, print),
+// so including it would mislabel those as types too.
+//
+// This still can't recognize every type usage: a lexer has no real type
+// information, only syntax, so a *declared* custom type/class name
+// (chroma.NameClass - e.g. Python's "class Point") is recognizable, but
+// a plain *usage* of that same name generally isn't - confirmed against
+// chroma's own Go lexer, which tags a custom type's every occurrence
+// (declaration and usage alike) as chroma.NameOther, indistinguishable
+// from any other identifier. That usage-site gap is a limitation of the
+// underlying lexer, not something classify can work around.
 func classify(t chroma.TokenType) whynot.TokenClass {
+	switch t {
+	case chroma.KeywordType, chroma.NameClass:
+		return whynot.TokenType
+	}
 	switch t.SubCategory() {
 	case chroma.Keyword:
 		return whynot.TokenKeyword

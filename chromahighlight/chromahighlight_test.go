@@ -17,6 +17,8 @@ func TestClassify(t *testing.T) {
 	}{
 		{"keyword", chroma.Keyword, whynot.TokenKeyword},
 		{"keyword subtype", chroma.KeywordReserved, whynot.TokenKeyword},
+		{"keyword type (builtin type)", chroma.KeywordType, whynot.TokenType},
+		{"name class (declared type/class)", chroma.NameClass, whynot.TokenType},
 		{"string", chroma.LiteralString, whynot.TokenString},
 		{"string subtype", chroma.LiteralStringDouble, whynot.TokenString},
 		{"number", chroma.LiteralNumber, whynot.TokenNumber},
@@ -24,6 +26,7 @@ func TestClassify(t *testing.T) {
 		{"comment", chroma.Comment, whynot.TokenComment},
 		{"comment preproc", chroma.CommentPreproc, whynot.TokenComment},
 		{"name", chroma.Name, whynot.TokenPlain},
+		{"name builtin (shared with builtin functions, not just types)", chroma.NameBuiltin, whynot.TokenPlain},
 		{"operator", chroma.Operator, whynot.TokenPlain},
 		{"punctuation", chroma.Punctuation, whynot.TokenPlain},
 		{"text", chroma.Text, whynot.TokenPlain},
@@ -50,17 +53,35 @@ func TestClassifyDistinguishesStringFromNumber(t *testing.T) {
 	}
 }
 
+// TestClassifyDistinguishesTypeFromKeyword is the regression this
+// package's design depends on getting right the other way around:
+// chroma.KeywordType's SubCategory() floors to the same 1000-wide
+// bucket as a plain chroma.Keyword, so classify must check it
+// explicitly, ahead of the SubCategory() switch, or a builtin type name
+// (Go's int/string/bool) would render in the ordinary keyword color
+// instead of its own TokenType color.
+func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
+	if got := classify(chroma.KeywordType); got != whynot.TokenType {
+		t.Errorf("classify(KeywordType) = %v, want TokenType", got)
+	}
+	if got := classify(chroma.Keyword); got != whynot.TokenKeyword {
+		t.Errorf("classify(Keyword) = %v, want TokenKeyword", got)
+	}
+}
+
 func TestHighlightGo(t *testing.T) {
 	code := "// comment\nfunc f(n int) string {\n\treturn \"hi\"\n}\n"
 	spans := Highlighter{}.Highlight("go", code)
 
 	var got strings.Builder
-	var sawKeyword, sawString, sawComment bool
+	var sawKeyword, sawType, sawString, sawComment bool
 	for _, span := range spans {
 		got.WriteString(span.Text)
 		switch span.Class {
 		case whynot.TokenKeyword:
 			sawKeyword = true
+		case whynot.TokenType:
+			sawType = true
 		case whynot.TokenString:
 			sawString = true
 		case whynot.TokenComment:
@@ -72,6 +93,11 @@ func TestHighlightGo(t *testing.T) {
 	}
 	if !sawKeyword {
 		t.Errorf("no TokenKeyword span found in %#v", spans)
+	}
+	// n's declared type (int) and f's return type (string) are both
+	// builtin types - chroma's Go lexer tags them chroma.KeywordType.
+	if !sawType {
+		t.Errorf("no TokenType span found in %#v", spans)
 	}
 	if !sawString {
 		t.Errorf("no TokenString span found in %#v", spans)
