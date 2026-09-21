@@ -132,7 +132,11 @@ func (b *BlockquoteBlock) GetBlockLayout(ctx RenderingContext, width int) BlockL
 
 type CodeBlock struct {
 	WithoutMargins
-	lines []Inline
+	// lines is one slice per visual line, each holding that line's spans -
+	// usually a single element (one InlineText for the whole line), but
+	// more than one when a Highlighter has split the line into classified
+	// tokens (see highlightLines).
+	lines [][]Inline
 	node  *ASTNode
 }
 
@@ -144,8 +148,17 @@ func (b *CodeBlock) Node() *ASTNode {
 
 func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	lineBoxes := make([]BlockLayout, len(b.lines))
-	for i, line := range b.lines {
-		lineBoxes[i] = &LineBox{parts: []InlineLayout{line.GetInlineLayout(ctx, width)}}
+	for i, parts := range b.lines {
+		boxes := make([]InlineLayout, len(parts))
+		for j, part := range parts {
+			boxes[j] = part.GetInlineLayout(ctx, width)
+		}
+		// Glue: true - a code line's parts are already-contiguous
+		// substrings of the source line (see highlightLines), any
+		// whitespace between tokens already included verbatim in a
+		// plain-class span, unlike TextBlock's word-split parts which
+		// need LineBox's normal inter-word gap reconstructed.
+		lineBoxes[i] = &LineBox{parts: boxes, Glue: true}
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
 }

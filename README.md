@@ -314,6 +314,30 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   does. See [`examples/systemfont`](examples/systemfont) for a runnable version - with no
   flags at all, it uses `RegisterPreferredFont` for both families.
 
+## Syntax highlighting
+
+By default, a fenced or indented code block renders in one flat color
+(`StyleSheet`'s `CodeColor`). Passing a `whynot.Highlighter` - `Highlight(language,
+code string) []HighlightSpan`, classifying the block's source into consecutive typed
+spans - colors it token-by-token instead, via `whynot.WithHighlighter` (or
+`whynot.WithSyntaxHighlighter` if you call `whynot.Parse` directly rather than
+`NewView`):
+
+```go
+view := whynot.NewView(source, selector, whynot.WithHighlighter(chromahighlight.Highlighter{}))
+```
+
+`chromahighlight` (`github.com/arnodel/whynot/chromahighlight`, a separate package to
+keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of the core
+library's dependency graph) implements `Highlighter` on top of chroma, picking a lexer
+from the fence's own language string (falling back to unhighlighted, flat-color
+rendering for a language it doesn't recognize, or for an indented block, which has no
+fence to name one). Colors come from `StyleSheet`'s own `SyntaxColors` (keyword/
+string/number/comment), tuned separately for the dark and light themes - not from
+chroma's own named styles.
+
+See [`examples/chromahighlight`](examples/chromahighlight) for a runnable version.
+
 ## `cmd/whynot`: a standalone viewer
 
 ```
@@ -396,6 +420,8 @@ by implementation order now that most of the list is done.
 
 **Block structures**
 - [x] Fenced and indented code blocks
+- [x] Syntax highlighting for code blocks (opt-in, via `whynot.Highlighter` -
+      `chromahighlight` provides a `chroma`-backed implementation)
 - [x] Blockquotes, including nested ones
 - [x] Thematic breaks (`---`)
 - [x] Ordered and unordered lists, tight or loose, nested to any depth, including task

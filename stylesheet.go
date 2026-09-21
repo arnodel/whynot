@@ -141,6 +141,17 @@ type ScrollbarColors struct {
 	Idle, Hover, Pressed color.Color
 }
 
+// SyntaxColors is the palette a Highlighter's classified tokens draw from
+// (see TagCodeKeyword..TagCodeComment) - grouped like BlockquoteGeometry/
+// TableGeometry/ScrollbarColors, since picking a new palette usually means
+// reconsidering the whole set together, not one color at a time.
+type SyntaxColors struct {
+	Keyword color.Color
+	String  color.Color
+	Number  color.Color
+	Comment color.Color
+}
+
 // DefaultStyleSheet is the concrete, configurable StyleSheet implementation
 // whynot's built-in themes (NewDarkStyleSheet, NewLightStyleSheet) are both
 // built from - the two differ only in the field values their constructors
@@ -236,6 +247,10 @@ type DefaultStyleSheet struct {
 	// Highlight are.
 	Scrollbar ScrollbarColors
 
+	// Syntax is the palette a Highlighter's classified code tokens draw
+	// from - see SyntaxColors.
+	Syntax SyntaxColors
+
 	// Dimensional constants. Unexported: unlike the fields above, these
 	// aren't the primary customization surface (a game reaches for
 	// colors/margins/fonts, rarely a table's own column-gap width) - a
@@ -316,6 +331,17 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
 		},
 
+		// NewLightStyleSheet overrides this fully (see below) - a palette
+		// tuned for a dark background won't read well on light and vice
+		// versa, the same reason TextColor/LinkColor/CodeColor differ
+		// between the two themes.
+		Syntax: SyntaxColors{
+			Keyword: color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
+			String:  color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
+			Number:  color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
+			Comment: color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
+		},
+
 		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
@@ -364,6 +390,12 @@ func NewLightStyleSheet() *DefaultStyleSheet {
 		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
 		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
 		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
+	}
+	s.Syntax = SyntaxColors{
+		Keyword: color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
+		String:  color.RGBA{0x1E, 0x7A, 0x2E, 0xFF},
+		Number:  color.RGBA{0xB0, 0x5A, 0x00, 0xFF},
+		Comment: color.RGBA{0x60, 0x60, 0x60, 0xFF},
 	}
 	return s
 }
@@ -439,6 +471,14 @@ func (s *DefaultStyleSheet) Color(node *ASTNode) color.Color {
 	switch node.Tag {
 	case TagCodeBlock, TagCodeSpan:
 		return s.CodeColor
+	case TagCodeKeyword:
+		return s.Syntax.Keyword
+	case TagCodeString:
+		return s.Syntax.String
+	case TagCodeNumber:
+		return s.Syntax.Number
+	case TagCodeComment:
+		return s.Syntax.Comment
 	case TagUnsupported:
 		return s.UnsupportedColor
 	case TagLink:

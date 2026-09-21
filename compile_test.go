@@ -422,7 +422,7 @@ func TestParseFencedCodeBlock(t *testing.T) {
 	}
 	want := []string{"line one\n", "line two\n"}
 	for i, line := range code.lines {
-		text, ok := line.(*InlineText)
+		text, ok := line[0].(*InlineText)
 		if !ok || text.text != want[i] {
 			t.Errorf("line %d = %#v, want %q", i, line, want[i])
 		}
@@ -441,7 +441,7 @@ func TestParseIndentedCodeBlock(t *testing.T) {
 		t.Fatalf("got %d lines, want %d: %#v", len(code.lines), len(want), code.lines)
 	}
 	for i, line := range code.lines {
-		text, ok := line.(*InlineText)
+		text, ok := line[0].(*InlineText)
 		if !ok || text.text != want[i] {
 			t.Errorf("line %d = %#v, want %q", i, line, want[i])
 		}
@@ -463,13 +463,51 @@ func TestParseCodeBlockExpandsTabs(t *testing.T) {
 	if len(code.lines) != 1 {
 		t.Fatalf("got %d lines, want 1: %#v", len(code.lines), code.lines)
 	}
-	text, ok := code.lines[0].(*InlineText)
+	text, ok := code.lines[0][0].(*InlineText)
 	if !ok {
 		t.Fatalf("line = %T, want *InlineText", code.lines[0])
 	}
 	want := codeBlockTabExpansion + "indented\n"
 	if text.text != want {
 		t.Errorf("text = %q, want %q", text.text, want)
+	}
+}
+
+// TestParseWithSyntaxHighlighter checks that Parse threads a
+// WithSyntaxHighlighter option into the KindCodeBlock case, producing
+// classified child nodes for spans the Highlighter labels.
+func TestParseWithSyntaxHighlighter(t *testing.T) {
+	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+		if language != "go" {
+			t.Errorf("language = %q, want %q", language, "go")
+		}
+		return []HighlightSpan{
+			{Text: "func", Class: TokenKeyword},
+			{Text: " f()", Class: TokenPlain},
+		}
+	}}
+	doc := Parse([]byte("```go\nfunc f()\n```"), WithSyntaxHighlighter(h))
+	stack := doc.(*StackBlock)
+	code, ok := unwrap(stack.blocks[0]).(*CodeBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *CodeBlock", stack.blocks[0])
+	}
+	if len(code.lines) != 1 || len(code.lines[0]) != 2 {
+		t.Fatalf("lines = %#v, want one line with 2 parts", code.lines)
+	}
+	keyword, ok := code.lines[0][0].(*InlineText)
+	if !ok || keyword.text != "func" {
+		t.Fatalf("lines[0][0] = %#v, want InlineText %q", code.lines[0][0], "func")
+	}
+	if keyword.node.Tag != TagCodeKeyword {
+		t.Errorf("keyword node tag = %v, want TagCodeKeyword", keyword.node.Tag)
+	}
+	plain, ok := code.lines[0][1].(*InlineText)
+	if !ok || plain.text != " f()" {
+		t.Fatalf("lines[0][1] = %#v, want InlineText %q", code.lines[0][1], " f()")
+	}
+	if plain.node != code.node {
+		t.Errorf("plain node = %v, want the block's own node", plain.node)
 	}
 }
 
