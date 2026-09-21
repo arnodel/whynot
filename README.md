@@ -530,3 +530,20 @@ by implementation order now that most of the list is done.
 ## Known issues
 
 See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues).
+
+## Ideas
+
+Floated but not scoped or started:
+
+- A different rendering backend than Ebitengine - `Canvas` (see
+  [above](#embed-a-markdown-viewer-in-your-ebiten-game)) is already the seam for this, the
+  documented boundary between layout and actual drawing, so a second backend wouldn't touch
+  layout or parsing at all
+- Compile to WASM and run in the browser - Ebitengine already targets `GOOS=js GOARCH=wasm`
+- A different Markdown parser, or a different input format entirely (e.g. reStructuredText) -
+  `Parse()` is the only goldmark-specific code in the library; everything downstream just
+  consumes a `Block`/`ASTNode` tree with no idea where it came from
+- Video - a static poster image with a play button, opening an external player rather than
+  playing in-app
+- Image zoom/lightbox - a click-to-open overlay for one image, independent of the document's
+  own zoom level
