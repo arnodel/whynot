@@ -2,24 +2,72 @@ package ebitenrenderer
 
 import (
 	"image"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// momentumDecayPerSecond/momentumMinVelocity tune post-touch scroll
+// momentum (see Update): the fraction of velocity (pixels/second)
+// retained after one second, and the speed below which it stops.
+const (
+	momentumDecayPerSecond = 0.05
+	momentumMinVelocity    = 30
+)
+
 // Update reads this tick's input (touch if active, else mouse) and
-// drives scroll/hover/click - call once per game tick.
+// drives scroll/hover/click - call once per game tick. A touch drag
+// keeps scrolling after release, decaying like native touch scrolling,
+// until a new drag or a mouse wheel/click cancels it.
 func (p *Panel) Update() {
+	now := time.Now()
+	var dt float64
+	if !p.lastTick.IsZero() {
+		dt = now.Sub(p.lastTick).Seconds()
+	}
+	p.lastTick = now
+
 	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
 		p.update(cx, cy, scrollDelta, down, justPressed)
+		switch {
+		case justPressed, p.draggingScrollbar, !image.Pt(cx, cy).In(p.bounds):
+			p.momentum = 0
+		case dt > 0:
+			velocity := scrollDelta / dt
+			p.momentum = p.momentum*0.5 + velocity*0.5
+		}
 		return
 	}
+
 	cx, cy := ebiten.CursorPosition()
 	_, wheelDy := ebiten.Wheel()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+
+	if wheelDy != 0 || justPressed {
+		p.momentum = 0
+	} else if delta := p.decayMomentum(dt); delta != 0 {
+		p.view.Scroll(delta)
+	}
 	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
+}
+
+// decayMomentum advances p.momentum (pixels/second) by dt seconds of
+// friction and returns the distance to scroll this tick, 0 once
+// momentum has died out.
+func (p *Panel) decayMomentum(dt float64) float64 {
+	if p.momentum == 0 || dt <= 0 {
+		return 0
+	}
+	delta := p.momentum * dt
+	p.momentum *= math.Pow(momentumDecayPerSecond, dt)
+	if math.Abs(p.momentum) < momentumMinVelocity {
+		p.momentum = 0
+	}
+	return delta
 }
 
 // update takes this tick's input as parameters rather than reading
