@@ -4,6 +4,8 @@ import (
 	"image"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/arnodel/whynot"
 )
 
@@ -60,6 +62,10 @@ type Panel struct {
 	draggingScrollbar  bool
 	scrollbarGrabRatio float64
 	scrollbarState     buttonState
+
+	// Touch state - see touchInput. At most one touch tracked at a time.
+	trackingTouch bool
+	activeTouch   ebiten.TouchID
 }
 
 // buttonState is the scrollbar thumb's per-frame hover/pressed state,

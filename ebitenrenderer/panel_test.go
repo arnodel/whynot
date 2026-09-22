@@ -216,6 +216,26 @@ func TestUpdateAnchorScrolling(t *testing.T) {
 	}
 }
 
+// TestUpdateScrollDeltaPassesThroughUnscaled checks that update passes
+// scrollDelta straight to View.Scroll with no extra scaling.
+func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
+	p := newTestPanel(t, strings.Repeat(longDoc, 20))
+	viewport := image.Pt(testPanelWidth, testPanelHeight)
+
+	// Scroll deep into the document first (negative moves down, see
+	// ScrollDown) so a small delta afterwards has room to move.
+	p.update(0, 0, -5000, false, false)
+	before := p.view.VisibleViewBounds(viewport).Min.Y
+
+	const delta = 37.0
+	p.update(0, 0, delta, false, false)
+	after := p.view.VisibleViewBounds(viewport).Min.Y
+
+	if got, want := float64(before-after), delta; got != want {
+		t.Errorf("VisibleViewBounds top moved by %v, want exactly %v (scrollDelta unscaled)", got, want)
+	}
+}
+
 // scrollbarStyle is a minimal whynot.ScrollbarStyleSheet for tests,
 // wrapping a StyleSheet with one fixed, distinctive color regardless
 // of hover/pressed state.

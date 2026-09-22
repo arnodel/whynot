@@ -8,30 +8,34 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// Update reads ebiten's own input state (cursor position, wheel,
-// mouse button) directly - call once per game tick.
+// Update reads this tick's input (touch if active, else mouse) and
+// drives scroll/hover/click - call once per game tick.
 func (p *Panel) Update() {
+	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
+		p.update(cx, cy, scrollDelta, down, justPressed)
+		return
+	}
 	cx, cy := ebiten.CursorPosition()
 	_, wheelDy := ebiten.Wheel()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-	p.update(cx, cy, wheelDy, mouseDown, justPressed)
+	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
 }
 
-// update is Update's actual logic, taking this tick's input as
-// parameters rather than reading ebiten itself - so it's reachable
-// from a plain Go test without a live ebiten context.
-func (p *Panel) update(cx, cy int, wheelDy float64, mouseDown, justPressed bool) {
+// update takes this tick's input as parameters rather than reading
+// ebiten itself, so it's testable without a live ebiten context.
+// scrollDelta is in Scroll's own units, ready to pass straight through.
+func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed bool) {
 	cursor := image.Pt(cx, cy)
 
 	// Gated on bounds - a panel embedded in a larger game must not eat
-	// wheel events meant for whatever's around it (cmd/whynot never had
+	// scroll input meant for whatever's around it (cmd/whynot never had
 	// to think about this; its View occupies basically the whole window).
 	if cursor.In(p.bounds) {
-		p.view.Scroll(wheelDy * p.scale * 2)
+		p.view.Scroll(scrollDelta)
 	}
 
-	if p.scrollbarEnabled && p.updateScrollbarDrag(cx, cy, mouseDown, justPressed) {
+	if p.scrollbarEnabled && p.updateScrollbarDrag(cx, cy, pointerDown, justPressed) {
 		// The drag owns this frame - don't also treat it as a document
 		// hover/click underneath it.
 		return
@@ -66,8 +70,38 @@ func (p *Panel) update(cx, cy int, wheelDy float64, mouseDown, justPressed bool)
 	}
 }
 
+// touchInput is Update's touch equivalent of reading mouse state - ok
+// is false when there's no touch, so Update falls back to the mouse.
+// Tracks at most one touch, ignoring any second simultaneous one.
+// scrollDelta follows "content follows your finger": dragging down is
+// positive, reporting 0 on a touch's first tick since there's no
+// previous position yet to diff against.
+func (p *Panel) touchInput() (cx, cy int, scrollDelta float64, down, justPressed bool, ok bool) {
+	if p.trackingTouch {
+		for _, id := range ebiten.AppendTouchIDs(nil) {
+			if id == p.activeTouch {
+				x, y := ebiten.TouchPosition(id)
+				_, py := inpututil.TouchPositionInPreviousTick(id)
+				return x, y, float64(y - py), true, false, true
+			}
+		}
+		// The touch we were tracking ended - fall through to look for a
+		// different one already active this same tick.
+		p.trackingTouch = false
+	}
+
+	ids := ebiten.AppendTouchIDs(nil)
+	if len(ids) == 0 {
+		return 0, 0, 0, false, false, false
+	}
+	p.activeTouch = ids[0]
+	p.trackingTouch = true
+	x, y := ebiten.TouchPosition(p.activeTouch)
+	return x, y, 0, true, true, true
+}
+
 // updateScrollbarDrag handles pressing, dragging, and releasing the
-// scrollbar thumb, reporting whether it consumed this frame's mouse
+// scrollbar thumb, reporting whether it consumed this frame's
 // input. Takes this tick's raw input as parameters for the same
 // testability reason as update. The target ratio is recomputed from
 // the cursor's current position every call, not a value captured once
@@ -76,14 +110,14 @@ func (p *Panel) update(cx, cy int, wheelDy float64, mouseDown, justPressed bool)
 // drifts from it. Likewise, the thumb rect is re-fetched every call
 // (not just at drag start) so scrollbarGrabRatio is always applied to
 // the thumb's *current* height.
-func (p *Panel) updateScrollbarDrag(cx, cy int, mouseDown, justPressed bool) bool {
+func (p *Panel) updateScrollbarDrag(cx, cy int, pointerDown, justPressed bool) bool {
 	r, ok := p.scrollbarThumbRect()
 	hovering := ok && (image.Point{X: cx, Y: cy}).In(r)
 	defer func() {
 		p.scrollbarState = buttonState{hover: hovering || p.draggingScrollbar, pressed: p.draggingScrollbar}
 	}()
 
-	if !mouseDown {
+	if !pointerDown {
 		p.draggingScrollbar = false
 		return false
 	}
