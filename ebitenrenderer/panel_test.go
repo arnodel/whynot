@@ -216,24 +216,18 @@ func TestUpdateAnchorScrolling(t *testing.T) {
 	}
 }
 
-// TestUpdateScrollDeltaPassesThroughUnscaled locks in update's contract
-// (see its own doc comment): scrollDelta goes straight to View.Scroll,
-// with no further *scale multiplication inside update itself - that
-// conversion (wheel notches aren't pixels) is Update's own job for the
-// mouse path, and touchInput's delta is already in the right units.
-// Regression test for the refactor that moved the multiplication out of
-// update - nothing before it exercised a nonzero delta at all.
+// TestUpdateScrollDeltaPassesThroughUnscaled checks that update passes
+// scrollDelta straight to View.Scroll with no extra scaling.
 func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
 	p := newTestPanel(t, strings.Repeat(longDoc, 20))
 	viewport := image.Pt(testPanelWidth, testPanelHeight)
 
-	// Scroll deep into the document first (negative moves forward/down,
-	// same convention as ScrollDown - see panel.go), so a small delta
-	// afterwards has room to move without clamping at the top.
+	// Scroll deep into the document first (negative moves down, see
+	// ScrollDown) so a small delta afterwards has room to move.
 	p.update(0, 0, -5000, false, false)
 	before := p.view.VisibleViewBounds(viewport).Min.Y
 
-	const delta = 37.0 // arbitrary, exact, deliberately not a round multiple of scale
+	const delta = 37.0
 	p.update(0, 0, delta, false, false)
 	after := p.view.VisibleViewBounds(viewport).Min.Y
 

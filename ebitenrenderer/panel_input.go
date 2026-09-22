@@ -8,11 +8,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// Update reads this tick's input and drives scroll/hover/click from
-// it - call once per game tick. A touch takes priority over mouse
-// state when one is active (see touchInput) - not additive with it,
-// since a browser can synthesize compatibility mouse events from a
-// touch and handling both would double up.
+// Update reads this tick's input (touch if active, else mouse) and
+// drives scroll/hover/click - call once per game tick.
 func (p *Panel) Update() {
 	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
 		p.update(cx, cy, scrollDelta, down, justPressed)
@@ -22,20 +19,12 @@ func (p *Panel) Update() {
 	_, wheelDy := ebiten.Wheel()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-	// wheelDy is a small notch count, not a pixel amount - unlike
-	// touchInput's scrollDelta, which is already in the same
-	// device-pixel space Scroll expects (see PageDown/PageUp's own
-	// comment on that space), so only the mouse path needs this
-	// conversion.
 	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
 }
 
-// update is Update's actual logic, taking this tick's input as
-// parameters rather than reading ebiten itself - so it's reachable
-// from a plain Go test without a live ebiten context. scrollDelta is
-// already in Scroll's own device-pixel units, ready to pass straight
-// through - converting from whatever unit the input source (wheel
-// notches, a touch drag) actually reports is the caller's job.
+// update takes this tick's input as parameters rather than reading
+// ebiten itself, so it's testable without a live ebiten context.
+// scrollDelta is in Scroll's own units, ready to pass straight through.
 func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed bool) {
 	cursor := image.Pt(cx, cy)
 
@@ -81,27 +70,12 @@ func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed
 	}
 }
 
-// touchInput computes this tick's (cx, cy, scrollDelta, down,
-// justPressed) from ebiten's touch state, the same five values Update's
-// mouse path reads - so a touch drives the exact same hover/click/
-// scroll logic a mouse would, through one shared update, rather than a
-// separate touch-handling pipeline. ok is false when there's no touch
-// to report (Update falls back to mouse then).
-//
-// Tracks at most one touch (Panel.trackingTouch/activeTouch) -
-// deliberately simple, ignoring any second simultaneous touch rather
-// than trying to support a pinch/multi-touch gesture Panel has no use
-// for yet.
-//
-// scrollDelta is "content follows your finger" (the standard modern
-// touchscreen convention): dragging down feeds a positive scrollDelta,
-// same sign View.Scroll already gives a positive value (move toward
-// the document's start) - matching what a finger physically dragging
-// content down the screen should reveal (earlier content). The very
-// first tick a touch is tracked reports scrollDelta 0 rather than
-// diffing against inpututil.TouchPositionInPreviousTick's zero-value
-// default for a not-yet-tracked ID, which would otherwise read as a
-// spurious jump from (0,0).
+// touchInput is Update's touch equivalent of reading mouse state - ok
+// is false when there's no touch, so Update falls back to the mouse.
+// Tracks at most one touch, ignoring any second simultaneous one.
+// scrollDelta follows "content follows your finger": dragging down is
+// positive, reporting 0 on a touch's first tick since there's no
+// previous position yet to diff against.
 func (p *Panel) touchInput() (cx, cy int, scrollDelta float64, down, justPressed bool, ok bool) {
 	if p.trackingTouch {
 		for _, id := range ebiten.AppendTouchIDs(nil) {
@@ -127,8 +101,7 @@ func (p *Panel) touchInput() (cx, cy int, scrollDelta float64, down, justPressed
 }
 
 // updateScrollbarDrag handles pressing, dragging, and releasing the
-// scrollbar thumb - a mouse button or a touch, either drives it the
-// same way (see update) - reporting whether it consumed this frame's
+// scrollbar thumb, reporting whether it consumed this frame's
 // input. Takes this tick's raw input as parameters for the same
 // testability reason as update. The target ratio is recomputed from
 // the cursor's current position every call, not a value captured once

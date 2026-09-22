@@ -16,11 +16,7 @@ func (g *game) Update() error {
 
 	g.panel.Update()
 
-	// PointerState, not raw ebiten.CursorPosition()/mouse state
-	// directly: a touch (phone/tablet) needs to hit-test these buttons
-	// exactly like a mouse click does, and Panel.Update already applies
-	// this same touch-takes-priority-over-mouse rule to the document
-	// itself - see PointerState's own doc comment for why.
+	// PointerState so these buttons work with a touch too, not just a mouse.
 	var pointerDown, clicked bool
 	g.hoverX, g.hoverY, pointerDown, clicked = ebitenrenderer.PointerState()
 	cursor := image.Pt(g.hoverX, g.hoverY)

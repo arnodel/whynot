@@ -63,10 +63,7 @@ type Panel struct {
 	scrollbarGrabRatio float64
 	scrollbarState     buttonState
 
-	// Touch state - see touchInput. At most one touch tracked at a time
-	// (trackingTouch false means "none"), deliberately simple: no
-	// pinch/multi-touch gesture support, so a second simultaneous touch
-	// is just ignored rather than conflicting with the first.
+	// Touch state - see touchInput. At most one touch tracked at a time.
 	trackingTouch bool
 	activeTouch   ebiten.TouchID
 }
