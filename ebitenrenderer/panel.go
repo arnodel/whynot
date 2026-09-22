@@ -66,6 +66,10 @@ type Panel struct {
 	// Touch state - see touchInput. At most one touch tracked at a time.
 	trackingTouch bool
 	activeTouch   ebiten.TouchID
+
+	// momentum is the coasting scroll velocity (Scroll's own units, per
+	// tick) after a touch drag ends - see Update.
+	momentum float64
 }
 
 // buttonState is the scrollbar thumb's per-frame hover/pressed state,

@@ -2,24 +2,62 @@ package ebitenrenderer
 
 import (
 	"image"
+	"math"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// momentumFriction/momentumMinVelocity tune post-touch scroll momentum
+// (see Update) - decay per tick, and the speed below which it stops.
+// Assumes ebiten's default 60 TPS.
+const (
+	momentumFriction    = 0.93
+	momentumMinVelocity = 0.5
+)
+
 // Update reads this tick's input (touch if active, else mouse) and
-// drives scroll/hover/click - call once per game tick.
+// drives scroll/hover/click - call once per game tick. A touch drag
+// keeps scrolling after release, decaying like native touch scrolling,
+// until a new drag or a mouse wheel/click cancels it.
 func (p *Panel) Update() {
 	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
 		p.update(cx, cy, scrollDelta, down, justPressed)
+		switch {
+		case justPressed, p.draggingScrollbar, !image.Pt(cx, cy).In(p.bounds):
+			p.momentum = 0
+		default:
+			p.momentum = p.momentum*0.5 + scrollDelta*0.5
+		}
 		return
 	}
+
 	cx, cy := ebiten.CursorPosition()
 	_, wheelDy := ebiten.Wheel()
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+
+	if wheelDy != 0 || justPressed {
+		p.momentum = 0
+	} else if delta := p.decayMomentum(); delta != 0 {
+		p.view.Scroll(delta)
+	}
 	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
+}
+
+// decayMomentum applies one tick of friction to p.momentum and returns
+// the (pre-decay) amount to scroll by this tick, 0 once it's died out.
+func (p *Panel) decayMomentum() float64 {
+	if p.momentum == 0 {
+		return 0
+	}
+	delta := p.momentum
+	p.momentum *= momentumFriction
+	if math.Abs(p.momentum) < momentumMinVelocity {
+		p.momentum = 0
+	}
+	return delta
 }
 
 // update takes this tick's input as parameters rather than reading

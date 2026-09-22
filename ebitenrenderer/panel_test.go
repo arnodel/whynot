@@ -236,6 +236,29 @@ func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
 	}
 }
 
+func TestDecayMomentum(t *testing.T) {
+	p := newTestPanel(t, "just one short line")
+
+	if delta := p.decayMomentum(); delta != 0 {
+		t.Errorf("decayMomentum with no momentum = %v, want 0", delta)
+	}
+
+	p.momentum = 10
+	if delta := p.decayMomentum(); delta != 10 {
+		t.Errorf("first decayMomentum delta = %v, want 10 (unchanged this tick)", delta)
+	}
+	if p.momentum != 10*momentumFriction {
+		t.Errorf("momentum after one tick = %v, want %v", p.momentum, 10*momentumFriction)
+	}
+
+	for i := 0; i < 1000 && p.momentum != 0; i++ {
+		p.decayMomentum()
+	}
+	if p.momentum != 0 {
+		t.Error("momentum never decayed to 0")
+	}
+}
+
 // scrollbarStyle is a minimal whynot.ScrollbarStyleSheet for tests,
 // wrapping a StyleSheet with one fixed, distinctive color regardless
 // of hover/pressed state.
