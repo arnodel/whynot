@@ -17,6 +17,13 @@ jobs:
       with:
         go-version: 1.25
 
+    # examples/gio (giorenderer's demo) needs Gio's own native build
+    # deps - giorenderer itself has none of these, only the actual
+    # windowing package (gioui.org/app) does. Exact list per
+    # https://gioui.org/doc/install/linux.
+    - name: Install Gio's Linux build dependencies
+      run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+
     - name: All tests
       run: go test -race -coverprofile="coverage.txt" -covermode=atomic ./...
 
