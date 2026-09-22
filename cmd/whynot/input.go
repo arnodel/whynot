@@ -6,6 +6,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
 func (g *game) Update() error {
@@ -14,17 +16,21 @@ func (g *game) Update() error {
 
 	g.panel.Update()
 
-	g.hoverX, g.hoverY = ebiten.CursorPosition()
+	// PointerState, not raw ebiten.CursorPosition()/mouse state
+	// directly: a touch (phone/tablet) needs to hit-test these buttons
+	// exactly like a mouse click does, and Panel.Update already applies
+	// this same touch-takes-priority-over-mouse rule to the document
+	// itself - see PointerState's own doc comment for why.
+	var pointerDown, clicked bool
+	g.hoverX, g.hoverY, pointerDown, clicked = ebitenrenderer.PointerState()
 	cursor := image.Pt(g.hoverX, g.hoverY)
-	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
-	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: mouseDown && cursor.In(g.backButton)}
-	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: mouseDown && cursor.In(g.forwardButton)}
-	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: mouseDown && cursor.In(g.reloadButton)}
-	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: mouseDown && cursor.In(g.zoomInButton)}
-	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: mouseDown && cursor.In(g.zoomOutButton)}
-	g.themeState = buttonState{hover: cursor.In(g.themeButton), pressed: mouseDown && cursor.In(g.themeButton)}
+	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: pointerDown && cursor.In(g.backButton)}
+	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: pointerDown && cursor.In(g.forwardButton)}
+	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: pointerDown && cursor.In(g.reloadButton)}
+	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: pointerDown && cursor.In(g.zoomInButton)}
+	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: pointerDown && cursor.In(g.zoomOutButton)}
+	g.themeState = buttonState{hover: cursor.In(g.themeButton), pressed: pointerDown && cursor.In(g.themeButton)}
 
-	clicked := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	switch {
 	case clicked && g.backState.hover:
 		g.back()
