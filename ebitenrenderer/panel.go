@@ -53,7 +53,14 @@ type Panel struct {
 	scrollbarEnabled bool
 	anchorScrolling  bool
 	start            time.Time // Panel's own elapsed-time clock, see elapsed()
-	hoverDest        string    // last-reported OnLinkHover value, for edge-triggering
+
+	// interaction is the backend-agnostic scroll/hover/click/momentum
+	// core (see whynot.Interaction) - its View/Bounds/OnLinkClick/
+	// OnLinkHover/AnchorScrolling fields are kept in sync with this
+	// Panel's own at the top of every Update, since those can change
+	// (SetView, SetBounds, or direct assignment to OnLinkClick/
+	// OnLinkHover) between calls.
+	interaction whynot.Interaction
 
 	// Scrollbar drag state, mirroring cmd/whynot's own (grabRatio is a
 	// fraction of thumb height, not an absolute offset, since the
@@ -66,13 +73,6 @@ type Panel struct {
 	// Touch state - see touchInput. At most one touch tracked at a time.
 	trackingTouch bool
 	activeTouch   ebiten.TouchID
-
-	// momentum is the coasting scroll velocity, in pixels/second, after
-	// a touch drag ends - see Update. lastTick is the previous Update
-	// call's timestamp, for computing real elapsed time between ticks
-	// (zero before the first call).
-	momentum float64
-	lastTick time.Time
 }
 
 // buttonState is the scrollbar thumb's per-frame hover/pressed state,
@@ -147,7 +147,7 @@ func (p *Panel) SetView(v *whynot.View) {
 	if p.styleSheet != nil {
 		p.view.SetStyleSheet(p.styleSheet)
 	}
-	p.hoverDest = ""
+	p.interaction.Reset()
 	p.draggingScrollbar = false
 	p.scrollbarState = buttonState{}
 	p.relayout()
