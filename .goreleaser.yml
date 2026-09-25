@@ -27,12 +27,12 @@ builds:
         goarch: arm64
     ldflags:
       # Strip debug info for smaller binaries; embed the release version
-      # (shown on the welcome page - see main.version); suppress the
+      # (shown on the welcome page - see browser.Version); suppress the
       # console window that would otherwise flash open behind the GUI
       # on Windows (ebitengine/hideconsole, already a dependency, also
       # hides it at runtime - this avoids the flash in the first place).
       - -s -w
-      - -X main.version={{ .Version }}
+      - -X github.com/arnodel/whynot/browser.Version={{ .Version }}
       - '{{ if eq .Os "windows" }}-H=windowsgui{{ end }}'
 
 archives:

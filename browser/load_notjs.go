@@ -1,6 +1,6 @@
 //go:build !js
 
-package main
+package browser
 
 import (
 	"fmt"
@@ -22,16 +22,16 @@ func absFileURL(path string) (*url.URL, error) {
 	return &url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}, nil
 }
 
-// resolveLocationArg turns text - a command-line argument, or pasted
-// clipboard content (see game.paste) - into a location to load: the
+// ResolveLocationArg turns text - a command-line argument, or pasted
+// clipboard content (see App.Paste) - into a location to load: the
 // word "welcome" for the built-in welcome page, an http(s) URL parsed
 // as-is, or an existing local file path turned into an absolute file:
 // URL - in that order, so e.g. a URL is never misread as a file path
 // the way absFileURL alone would (filepath.Abs happily "resolves" any
 // string, URLs included, against the working directory).
-func resolveLocationArg(text string) (*url.URL, error) {
+func ResolveLocationArg(text string) (*url.URL, error) {
 	if strings.EqualFold(text, "welcome") {
-		return welcomeURL, nil
+		return WelcomeURL, nil
 	}
 	if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
 		return u, nil
@@ -42,11 +42,11 @@ func resolveLocationArg(text string) (*url.URL, error) {
 	return nil, fmt.Errorf("%q isn't \"welcome\", a URL, or an existing file path", text)
 }
 
-// loadDocument fetches the bytes at location - a local read for a
+// LoadDocument fetches the bytes at location - a local read for a
 // file: URL, an HTTP GET for http(s) (see fetchDocument), the embedded
-// page for welcomeURL. Any other scheme (e.g. a mailto: autolink) is
-// rejected rather than misread as a file path.
-func loadDocument(location *url.URL) ([]byte, error) {
+// welcome page for WelcomeURL. Any other scheme (e.g. a mailto:
+// autolink) is rejected rather than misread as a file path.
+func LoadDocument(location *url.URL) ([]byte, error) {
 	switch location.Scheme {
 	case "whynot":
 		return renderWelcome(), nil
@@ -60,7 +60,7 @@ func loadDocument(location *url.URL) ([]byte, error) {
 }
 
 // openImageLocation fetches the bytes at location - the same file-or-
-// http(s) rule loadDocument uses (see fetchImage).
+// http(s) rule LoadDocument uses (see fetchImage).
 func openImageLocation(location *url.URL) (io.ReadCloser, error) {
 	switch location.Scheme {
 	case "http", "https":

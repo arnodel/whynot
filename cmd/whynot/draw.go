@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"time"
@@ -23,8 +22,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 	canvas := g.renderer.NewCanvas(screen)
 	g.drawToolbar(screen, canvas)
-	g.drawZoomIndicator(canvas)
-	g.drawDebugStats(canvas)
+	if face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14}); err == nil {
+		g.app.DrawZoomIndicator(canvas, face)
+		if g.debugStats {
+			g.app.DrawDebugStats(canvas, face, ebiten.ActualFPS(), ebiten.ActualTPS(), g.updateDuration, g.drawDuration)
+		}
+	}
 
 	if g.debugHit {
 		cursor := image.Pt(g.hoverX, g.hoverY)
@@ -48,13 +51,13 @@ func (g *game) Draw(screen *ebiten.Image) {
 func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
 
-	drawButton(dst, canvas, backIcon, g.backButton, len(g.history) > 0, g.backState)
-	drawButton(dst, canvas, forwardIcon, g.forwardButton, len(g.future) > 0, g.forwardState)
+	drawButton(dst, canvas, backIcon, g.backButton, g.app.CanGoBack(), g.backState)
+	drawButton(dst, canvas, forwardIcon, g.forwardButton, g.app.CanGoForward(), g.forwardState)
 	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
 	drawButton(dst, canvas, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
 	drawButton(dst, canvas, zoomInIcon, g.zoomInButton, true, g.zoomInState)
 	themeIcon := lightModeIcon
-	if g.darkTheme {
+	if g.app.DarkTheme() {
 		themeIcon = darkModeIcon
 	}
 	drawButton(dst, canvas, themeIcon, g.themeButton, true, g.themeState)
@@ -63,9 +66,9 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	if err != nil {
 		return
 	}
-	text, textColor := g.location.String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
-	if g.hoverDest != "" {
-		text, textColor = g.hoverDest, g.styleSheet.HighlightColor()
+	text, textColor := g.app.Location().String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
+	if hoverDest := g.app.HoverDest(); hoverDest != "" {
+		text, textColor = hoverDest, g.app.StyleSheet().HighlightColor()
 	}
 	x := g.reloadButton.Max.X + int(16*g.deviceScale)
 	maxWidth := g.zoomOutButton.Min.X - int(16*g.deviceScale) - x
@@ -104,81 +107,6 @@ func truncateMiddle(face font.Face, s string, maxWidth int) string {
 		}
 	}
 	return ellipsis
-}
-
-// zoomIndicatorDuration is how long the "N%" popup stays up after a
-// zoom change - long enough to read, short enough to get out of the
-// way on its own.
-const zoomIndicatorDuration = 1500 * time.Millisecond
-
-// drawZoomIndicator shows the current zoom level for a little while
-// after it changes (see setZoom), in the content area's top-right
-// corner - not the toolbar's, which will get its own zoom control
-// later and is a fixed size regardless of zoom (see deviceScale);
-// this is explicitly "on top of the document" instead, since zoom is a
-// document-only setting. Uses toolbarFaceSelector, for the same reason
-// drawToolbar does - a size fixed at the display's own scale, not
-// zoomed.
-func (g *game) drawZoomIndicator(canvas whynot.Canvas) {
-	if !time.Now().Before(g.zoomIndicatorUntil) {
-		return
-	}
-	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
-	if err != nil {
-		return
-	}
-	label := fmt.Sprintf("%.0f%%", g.zoom*100)
-	padX, padY := int(10*g.deviceScale), int(6*g.deviceScale)
-	margin := int(12 * g.deviceScale)
-	textW := font.MeasureString(face, label).Ceil()
-	textH := (face.Metrics().Ascent + face.Metrics().Descent).Ceil()
-	w, h := textW+2*padX, textH+2*padY
-
-	x := g.width - margin - w
-	y := g.toolbarHeight + margin
-	r := image.Rect(x, y, x+w, y+h)
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
-	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
-}
-
-// drawDebugStats shows ebiten's own rolling FPS/TPS (ActualFPS/
-// ActualTPS) alongside the most recent Update/Draw call durations -
-// gated behind -debug-stats. Durations lag one frame behind (this
-// frame's own Draw call isn't finished timing itself until after this
-// runs), which is fine for a rough perf readout.
-func (g *game) drawDebugStats(canvas whynot.Canvas) {
-	if !g.debugStats {
-		return
-	}
-	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
-	if err != nil {
-		return
-	}
-	lines := [2]string{
-		fmt.Sprintf("%.0f fps  %.0f tps", ebiten.ActualFPS(), ebiten.ActualTPS()),
-		fmt.Sprintf("upd %.2fms  draw %.2fms", g.updateDuration.Seconds()*1000, g.drawDuration.Seconds()*1000),
-	}
-
-	padX, padY := int(10*g.deviceScale), int(6*g.deviceScale)
-	margin := int(12 * g.deviceScale)
-	lineH := (face.Metrics().Ascent + face.Metrics().Descent).Ceil()
-
-	textW := 0
-	for _, l := range lines {
-		if w := font.MeasureString(face, l).Ceil(); w > textW {
-			textW = w
-		}
-	}
-	w, h := textW+2*padX, lineH*len(lines)+2*padY
-
-	x := margin
-	y := g.toolbarHeight + margin
-	r := image.Rect(x, y, x+w, y+h)
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
-	baseline := r.Min.Y + padY + face.Metrics().Ascent.Ceil()
-	for i, l := range lines {
-		canvas.DrawText(l, face, r.Min.X+padX, baseline+i*lineH, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
-	}
 }
 
 // drawButton draws an icon button, filling the whole of r - no border,

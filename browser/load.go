@@ -1,4 +1,4 @@
-package main
+package browser
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 // loop waiting forever.
 const httpTimeout = 10 * time.Second
 
-// fetchDocument performs the http(s) GET both loadDocument variants
+// fetchDocument performs the http(s) GET both LoadDocument variants
 // (load_notjs.go, load_js.go) use for that scheme - only the URL
 // scheme dispatch around this differs between platforms (a local
 // file: scheme on desktop, nothing on the web). An http(s) response
@@ -68,11 +68,11 @@ func fetchImage(location *url.URL) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-// htmlContentError means loadDocument found an http(s) response whose
+// htmlContentError means LoadDocument found an http(s) response whose
 // Content-Type is HTML, not a fetch failure or a genuinely unreadable
-// one - callers can offer to open url in the system's own browser
-// instead of just reporting an error, since it's presumably a real
-// webpage rather than a broken link.
+// one - App.Follow/Reload/Paste offer to open the URL in the system's
+// own browser instead of just reporting an error, since it's
+// presumably a real webpage rather than a broken link.
 type htmlContentError struct {
 	url string
 }
@@ -95,8 +95,8 @@ func resolveAgainst(base *url.URL, ref string) (*url.URL, error) {
 
 // docImageSource implements whynot.ImageSource by resolving an image's
 // src against base (a document's own location) exactly the way
-// (*game).resolveLink resolves a link's href, then fetching it the same
-// way loadDocument does - so a relative or http(s) image works
+// App.ResolveLink resolves a link's href, then fetching it the same
+// way LoadDocument does - so a relative or http(s) image works
 // regardless of where its document came from. Resolving is kept
 // separate from fetching so whynot.ImageCache can cache by the
 // resolved identifier without re-resolving-and-fetching on every call

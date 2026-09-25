@@ -1,4 +1,4 @@
-package main
+package browser
 
 import (
 	"bytes"
@@ -8,14 +8,22 @@ import (
 	"runtime"
 )
 
-// welcomeURL identifies the embedded welcome page - an opaque, non-file,
+// WelcomeURL identifies the embedded welcome page - an opaque, non-file,
 // non-http(s) URL so it can't collide with a real document location, but
-// still a *url.URL like every other location this program handles (so it
-// flows through history, the address bar, and reload unremarkably). Typed
-// as literally "welcome" (see paste and its own text) rather than
-// something like a query parameter, since it's meant to be memorable
-// enough to paste from memory, not just discovered by clicking a link.
-var welcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
+// still a *url.URL like every other location this package handles (so it
+// flows through App's history, address bar, and reload unremarkably).
+// Typed as literally "welcome" (see App.Paste and the page's own text)
+// rather than something like a query parameter, since it's meant to be
+// memorable enough to paste from memory, not just discovered by clicking
+// a link.
+var WelcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
+
+// Version is set via -X github.com/arnodel/whynot/browser.Version=...
+// at build time (see .goreleaser.yml) - "dev" for an ordinary local
+// build. Shown on the welcome page (see renderWelcome's {{VERSION}}
+// substitution), which puts it in the window title too, since that's
+// the document's own first heading.
+var Version = "dev"
 
 // welcomeShortcut is the platform's own paste shortcut, written the way
 // a person would actually type it - the embedded page can't know at
@@ -30,15 +38,15 @@ func welcomeShortcut() string {
 }
 
 // versionSuffix is what {{VERSION}} in the welcome page expands to -
-// "dev" for an ordinary local build (version is still its zero value),
-// "vX.Y.Z" for a real tagged release (see version, main.go). The
-// page's own heading already has a leading space before {{VERSION}},
-// so this doesn't add one itself.
+// "dev" for an ordinary local build (Version is still its zero value),
+// "vX.Y.Z" for a real tagged release. The page's own heading already
+// has a leading space before {{VERSION}}, so this doesn't add one
+// itself.
 func versionSuffix() string {
-	if version == "dev" {
-		return version
+	if Version == "dev" {
+		return Version
 	}
-	return "v" + version
+	return "v" + Version
 }
 
 // renderWelcome reads the embedded welcome page and fills in its
@@ -61,7 +69,7 @@ func renderWelcome() []byte {
 // relative to assets/ (e.g. an image sitting right next to welcome.md
 // is referenced from it as "screenshot.png", the same as any other
 // relative image reference). Used instead of docImageSource only when
-// the current document's location is welcomeURL - see newView.
+// the current document's location is WelcomeURL - see App.NewView.
 type welcomeImageSource struct{}
 
 func (welcomeImageSource) Resolve(src string) (string, error) {
