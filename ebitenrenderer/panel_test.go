@@ -3,7 +3,6 @@ package ebitenrenderer
 import (
 	"image"
 	"image/color"
-	"math"
 	"strings"
 	"testing"
 
@@ -237,39 +236,6 @@ func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
 	}
 }
 
-func TestDecayMomentum(t *testing.T) {
-	p := newTestPanel(t, "just one short line")
-
-	if delta := p.decayMomentum(1.0 / 60); delta != 0 {
-		t.Errorf("decayMomentum with no momentum = %v, want 0", delta)
-	}
-
-	p.momentum = 1000
-	if delta := p.decayMomentum(0); delta != 0 {
-		t.Errorf("decayMomentum with dt=0 = %v, want 0 (no time passed)", delta)
-	}
-	if p.momentum != 1000 {
-		t.Errorf("momentum after a dt=0 call = %v, want unchanged 1000", p.momentum)
-	}
-
-	const dt = 1.0 / 60
-	if delta := p.decayMomentum(dt); delta != 1000*dt {
-		t.Errorf("first decayMomentum delta = %v, want %v (velocity * dt)", delta, 1000*dt)
-	}
-	if want := 1000 * math.Pow(momentumDecayPerSecond, dt); p.momentum != want {
-		t.Errorf("momentum after one tick = %v, want %v", p.momentum, want)
-	}
-
-	// Real time, not tick count, should drive it to a stop - a handful
-	// of large steps decays it as much as many small ones would.
-	for i := 0; i < 1000 && p.momentum != 0; i++ {
-		p.decayMomentum(0.5)
-	}
-	if p.momentum != 0 {
-		t.Error("momentum never decayed to 0")
-	}
-}
-
 // scrollbarStyle is a minimal whynot.ScrollbarStyleSheet for tests,
 // wrapping a StyleSheet with one fixed, distinctive color regardless
 // of hover/pressed state.
@@ -294,7 +260,6 @@ func TestSetView(t *testing.T) {
 	if !p.draggingScrollbar {
 		t.Fatal("test setup: expected a drag in progress")
 	}
-	p.hoverDest = "leftover"
 
 	v2 := whynot.NewView([]byte(strings.Repeat(longDoc, 20)), whynot.NewGoFontFaceSelector(72))
 	p.SetView(v2)
@@ -308,9 +273,8 @@ func TestSetView(t *testing.T) {
 	if p.scrollbarState != (buttonState{}) {
 		t.Errorf("scrollbarState after SetView = %+v, want zero value", p.scrollbarState)
 	}
-	if p.hoverDest != "" {
-		t.Errorf("hoverDest after SetView = %q, want \"\"", p.hoverDest)
-	}
+	// Hover state (whynot.Interaction.Reset) is covered directly in the
+	// whynot package's own tests now that it's shared with giorenderer.
 	// The remembered StyleSheet should carry over to the new View -
 	// scrollbarColor is the only externally-observable proof available
 	// (View has no public getter for its own current StyleSheet).

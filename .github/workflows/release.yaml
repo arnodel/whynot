@@ -29,6 +29,11 @@ jobs:
         with:
           go-version: 1.25
 
+      # GoReleaser's before.hooks run the full `go test ./...`, which
+      # includes examples/gio - see tests.yaml's identical step for why.
+      - name: Install Gio's Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

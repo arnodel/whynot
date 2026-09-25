@@ -2,20 +2,10 @@ package ebitenrenderer
 
 import (
 	"image"
-	"math"
-	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-)
-
-// momentumDecayPerSecond/momentumMinVelocity tune post-touch scroll
-// momentum (see Update): the fraction of velocity (pixels/second)
-// retained after one second, and the speed below which it stops.
-const (
-	momentumDecayPerSecond = 0.05
-	momentumMinVelocity    = 30
 )
 
 // Update reads this tick's input (touch if active, else mouse) and
@@ -24,20 +14,14 @@ const (
 // until a new drag or a mouse wheel/click cancels it.
 func (p *Panel) Update() {
 	now := time.Now()
-	var dt float64
-	if !p.lastTick.IsZero() {
-		dt = now.Sub(p.lastTick).Seconds()
-	}
-	p.lastTick = now
 
 	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
 		p.update(cx, cy, scrollDelta, down, justPressed)
 		switch {
 		case justPressed, p.draggingScrollbar, !image.Pt(cx, cy).In(p.bounds):
-			p.momentum = 0
-		case dt > 0:
-			velocity := scrollDelta / dt
-			p.momentum = p.momentum*0.5 + velocity*0.5
+			p.interaction.CancelMomentum()
+		default:
+			p.interaction.AccumulateMomentum(scrollDelta, now)
 		}
 		return
 	}
@@ -48,74 +32,34 @@ func (p *Panel) Update() {
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 
 	if wheelDy != 0 || justPressed {
-		p.momentum = 0
-	} else if delta := p.decayMomentum(dt); delta != 0 {
-		p.view.Scroll(delta)
+		p.interaction.CancelMomentum()
+	} else {
+		p.interaction.Momentum(now)
 	}
 	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
-}
-
-// decayMomentum advances p.momentum (pixels/second) by dt seconds of
-// friction and returns the distance to scroll this tick, 0 once
-// momentum has died out.
-func (p *Panel) decayMomentum(dt float64) float64 {
-	if p.momentum == 0 || dt <= 0 {
-		return 0
-	}
-	delta := p.momentum * dt
-	p.momentum *= math.Pow(momentumDecayPerSecond, dt)
-	if math.Abs(p.momentum) < momentumMinVelocity {
-		p.momentum = 0
-	}
-	return delta
 }
 
 // update takes this tick's input as parameters rather than reading
 // ebiten itself, so it's testable without a live ebiten context.
 // scrollDelta is in Scroll's own units, ready to pass straight through.
+// Delegates scroll/hover/click to whynot.Interaction (shared with
+// giorenderer.Panel) - only the scrollbar-drag check stays here, since
+// each backend represents its scrollbar too differently to share.
 func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed bool) {
-	cursor := image.Pt(cx, cy)
+	p.interaction.View = p.view
+	p.interaction.Bounds = p.bounds
+	p.interaction.OnLinkClick = p.OnLinkClick
+	p.interaction.OnLinkHover = p.OnLinkHover
+	p.interaction.AnchorScrolling = p.anchorScrolling
 
-	// Gated on bounds - a panel embedded in a larger game must not eat
-	// scroll input meant for whatever's around it (cmd/whynot never had
-	// to think about this; its View occupies basically the whole window).
-	if cursor.In(p.bounds) {
-		p.view.Scroll(scrollDelta)
-	}
+	p.interaction.Scroll(cx, cy, scrollDelta)
 
 	if p.scrollbarEnabled && p.updateScrollbarDrag(cx, cy, pointerDown, justPressed) {
 		// The drag owns this frame - don't also treat it as a document
 		// hover/click underneath it.
 		return
 	}
-
-	var dest string
-	var hasLink bool
-	if cursor.In(p.bounds) {
-		dest, hasLink = p.view.Hover(cx-p.bounds.Min.X, cy-p.bounds.Min.Y)
-	} else {
-		// (-1, -1) can't land on anything - only ever clears a
-		// highlight left over from moving off a link while still
-		// inside bounds.
-		p.view.Hover(-1, -1)
-	}
-
-	newHoverDest := ""
-	if hasLink {
-		newHoverDest = dest
-	}
-	if p.OnLinkHover != nil && newHoverDest != p.hoverDest {
-		p.OnLinkHover(newHoverDest)
-	}
-	p.hoverDest = newHoverDest
-
-	if hasLink && justPressed {
-		if p.anchorScrolling && strings.HasPrefix(dest, "#") {
-			p.view.ScrollToAnchor(strings.TrimPrefix(dest, "#"))
-		} else if p.OnLinkClick != nil {
-			p.OnLinkClick(dest)
-		}
-	}
+	p.interaction.HoverAndClick(cx, cy, justPressed)
 }
 
 // touchInput is Update's touch equivalent of reading mouse state - ok
