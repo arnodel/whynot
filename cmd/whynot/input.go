@@ -29,35 +29,30 @@ func (g *game) Update() error {
 
 	switch {
 	case clicked && g.backState.hover:
-		g.back()
+		g.app.Back()
 	case clicked && g.forwardState.hover:
-		g.forward()
+		g.app.Forward()
 	case clicked && g.reloadState.hover:
-		g.reload()
+		g.app.Reload()
 	case clicked && g.zoomInState.hover:
-		g.setZoom(g.zoom + zoomStep)
+		g.app.ZoomIn()
 	case clicked && g.zoomOutState.hover:
-		g.setZoom(g.zoom - zoomStep)
+		g.app.ZoomOut()
 	case clicked && g.themeState.hover:
-		g.setTheme(!g.darkTheme)
+		g.app.SetTheme(!g.app.DarkTheme())
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.forward()
+			g.app.Forward()
 		} else {
-			g.back()
+			g.app.Back()
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		// A little overlap with the previous page - not the full
-		// viewport height - so the last line you were reading is still
-		// there as a landmark, same idea as a pager's own page-down.
-		const pageOverlapFrac = 0.1
-		page := float64(g.height-g.toolbarHeight) * (1 - pageOverlapFrac)
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.panel.View().Scroll(page)
+			g.panel.PageUp()
 		} else {
-			g.panel.View().Scroll(-page)
+			g.panel.PageDown()
 		}
 	}
 	// A few lines at a time, repeating while held (see keyRepeat) -
@@ -78,13 +73,13 @@ func (g *game) Update() error {
 		g.debugStats = !g.debugStats
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
-		g.paste()
+		g.app.Paste()
 	}
 	switch {
 	case keyRepeat(ebiten.KeyEqual):
-		g.setZoom(g.zoom + zoomStep)
+		g.app.ZoomIn()
 	case keyRepeat(ebiten.KeyMinus):
-		g.setZoom(g.zoom - zoomStep)
+		g.app.ZoomOut()
 	}
 	return nil
 }

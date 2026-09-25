@@ -4,11 +4,11 @@ import (
 	"flag"
 	"image"
 	"log"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
@@ -19,13 +19,6 @@ import (
 // immediately superseded.
 const initialWindowWidth, initialWindowHeight = 1024, 768
 
-// version is set via -X main.version=... at build time (see
-// .goreleaser.yml) - "dev" for an ordinary local build. Shown on the
-// welcome page (see renderWelcome's {{VERSION}} substitution), which
-// puts it in the window title too, since that's the document's own
-// first heading.
-var version = "dev"
-
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
@@ -35,15 +28,15 @@ func main() {
 	// No file/URL given: land on the welcome page rather than a
 	// hardcoded local file, matching what a person launching whynot
 	// with no arguments should actually see.
-	location := welcomeURL
+	location := browser.WelcomeURL
 	if flag.NArg() != 0 {
 		var err error
-		location, err = resolveLocationArg(flag.Arg(0))
+		location, err = browser.ResolveLocationArg(flag.Arg(0))
 		if err != nil {
 			panic(err)
 		}
 	}
-	source, err := loadDocument(location)
+	source, err := browser.LoadDocument(location)
 	if err != nil {
 		panic(err)
 	}
@@ -58,39 +51,40 @@ func main() {
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := newDocumentFaceSelector(scale)
+	app := browser.NewApp(faceSelector, styleSheet, !*light)
+
 	g := &game{
-		faceSelector:        faceSelector,
+		app:                 app,
 		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
-		styleSheet:          styleSheet,
-		darkTheme:           !*light,
 		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
 		debugStats:          *debugStats,
-		zoom:                1,
 		outsideWidth:        initialWindowWidth,
 		outsideHeight:       initialWindowHeight,
-		start:               time.Now(),
 	}
 	g.applyDeviceScale()
 
-	view := g.newView(source, location)
+	view := app.NewView(source, location)
+	initialHeight := int(float64(initialWindowHeight) * scale)
 	g.panel = ebitenrenderer.NewPanel(view, g.renderer,
-		image.Rect(0, g.toolbarHeight, g.width, g.height),
+		image.Rect(0, g.toolbarHeight, g.width, initialHeight),
 		ebitenrenderer.WithScrollbar(),
 		// Load-bearing, not cosmetic: panel's own scrollbar color reads
 		// its own remembered StyleSheet (only ever set via
 		// SetStyleSheet/WithStyleSheet), not the View's - without this,
 		// the scrollbar would render with panel's flat gray fallback
 		// until the user's first theme toggle, even though the View
-		// itself is already correctly themed via newView above.
-		ebitenrenderer.WithStyleSheet(g.styleSheet),
+		// itself is already correctly themed via app.NewView above.
+		ebitenrenderer.WithStyleSheet(styleSheet),
 	)
-	g.panel.SetScale(g.scale)
-	g.panel.OnLinkClick = g.follow
-	g.panel.OnLinkHover = g.onLinkHover
+	app.Panel = g.panel
+	app.OnTitleChange = ebiten.SetWindowTitle
 
-	g.location = location
-	g.updateWindowTitle()
+	g.relayout()
+	g.panel.OnLinkClick = app.Follow
+	g.panel.OnLinkHover = app.OnLinkHover
+
+	app.Open(location)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}

@@ -14,6 +14,8 @@ import (
 // counterpart to ebitenrenderer.Panel, sharing its scroll/hover/click/
 // momentum logic via whynot.Interaction, but using Gio's own native
 // widget.Scrollbar for the scrollbar rather than a hand-drawn one.
+var _ whynot.Panel = (*Panel)(nil)
+
 type Panel struct {
 	Renderer *Renderer
 

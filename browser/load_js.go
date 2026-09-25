@@ -1,4 +1,4 @@
-package main
+package browser
 
 import (
 	"fmt"
@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// resolveLocationArg is the browser build's counterpart to
+// ResolveLocationArg is the browser build's counterpart to
 // load_notjs.go's: no local file path support, since there's no real
 // filesystem to check in a browser sandbox - just the word "welcome"
 // or an http(s) URL.
-func resolveLocationArg(text string) (*url.URL, error) {
+func ResolveLocationArg(text string) (*url.URL, error) {
 	if strings.EqualFold(text, "welcome") {
-		return welcomeURL, nil
+		return WelcomeURL, nil
 	}
 	if u, err := url.Parse(text); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
 		return u, nil
@@ -21,9 +21,9 @@ func resolveLocationArg(text string) (*url.URL, error) {
 	return nil, fmt.Errorf("%q isn't \"welcome\" or a URL", text)
 }
 
-// loadDocument is load_notjs.go's counterpart, minus the "file"/""
+// LoadDocument is load_notjs.go's counterpart, minus the "file"/""
 // (local path) case - see fetchDocument for the shared http(s) GET.
-func loadDocument(location *url.URL) ([]byte, error) {
+func LoadDocument(location *url.URL) ([]byte, error) {
 	switch location.Scheme {
 	case "whynot":
 		return renderWelcome(), nil

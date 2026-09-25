@@ -24,6 +24,8 @@ import (
 // resetting stale per-view UI state, keeping the scrollbar's remembered
 // StyleSheet in sync), so a plain public field would let a caller
 // bypass that by direct mutation.
+var _ whynot.Panel = (*Panel)(nil)
+
 type Panel struct {
 	Renderer *Renderer
 

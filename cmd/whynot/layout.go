@@ -2,8 +2,6 @@ package main
 
 import (
 	"image"
-	"math"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -15,8 +13,7 @@ const toolbarLogicalHeight = 36
 
 // layoutToolbar recomputes the toolbar's height and button positions
 // for the current device scale - deliberately deviceScale, not scale,
-// so the toolbar's own size stays fixed regardless of zoom (see
-// deviceScale's own doc comment on the game struct).
+// so the toolbar's own size stays fixed regardless of zoom.
 func (g *game) layoutToolbar() {
 	s := g.deviceScale
 	g.toolbarHeight = int(toolbarLogicalHeight * s)
@@ -54,47 +51,26 @@ func (g *game) layoutToolbar() {
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	g.outsideWidth, g.outsideHeight = outsideWidth, outsideHeight
 	g.relayout()
-	return g.width, g.height
+	return g.width, g.panel.Bounds().Max.Y
 }
 
-// applyDeviceScale recomputes physical width/height (from deviceScale
-// alone) and scale (deviceScale*zoom) from the last known logical
-// window size (outsideWidth/outsideHeight), and lays out the toolbar -
-// split out from relayout so main can compute a correct initial
-// Bounds/Scale for NewPanel before panel exists to receive them via
-// SetBounds/SetScale.
+// applyDeviceScale recomputes the toolbar's own physical width
+// (deviceScale alone, no zoom) and lays it out - split out from
+// relayout so main can compute a correct initial toolbarHeight before
+// app.Relayout runs for the first time.
 func (g *game) applyDeviceScale() {
 	g.deviceScale = ebiten.Monitor().DeviceScaleFactor()
-	g.scale = g.deviceScale * g.zoom
 	g.width = int(float64(g.outsideWidth) * g.deviceScale)
-	g.height = int(float64(g.outsideHeight) * g.deviceScale)
 	g.toolbarFaceSelector.SetDPI(g.deviceScale * 72)
 	g.layoutToolbar()
 }
 
-// relayout applies applyDeviceScale's result to panel - shared by the
-// ebiten-driven Layout callback and setZoom, which needs the same
-// recomputation to happen immediately rather than waiting for ebiten's
-// next own Layout call (same reason follow/back/reload/paste each lay
-// out their View immediately instead of leaving it for next frame).
+// relayout applies applyDeviceScale's result to the toolbar, then
+// app.Relayout to the document panel - shared by the ebiten-driven
+// Layout callback and setZoom, which needs the same recomputation to
+// happen immediately rather than waiting for ebiten's next own Layout
+// call.
 func (g *game) relayout() {
 	g.applyDeviceScale()
-	g.panel.SetBounds(image.Rect(0, g.toolbarHeight, g.width, g.height))
-	g.panel.SetScale(g.scale)
-}
-
-// zoomStep is a fixed step of the original (100%) size, not of the
-// current zoom - so +/- (keyboard or button) goes 100%, 110%, 120%,
-// ... rather than steps shrinking as you zoom out or growing as you
-// zoom in.
-const zoomStep = 0.1
-
-// setZoom changes the zoom level (1.0 = 100%), clamped to a sane
-// range, and re-lays-out immediately at the new scale - the same idea
-// as a window resize, just user-triggered instead.
-func (g *game) setZoom(zoom float64) {
-	const minZoom, maxZoom = 0.5, 3.0
-	g.zoom = math.Max(minZoom, math.Min(maxZoom, zoom))
-	g.relayout()
-	g.zoomIndicatorUntil = time.Now().Add(zoomIndicatorDuration)
+	g.app.Relayout(g.outsideWidth, g.outsideHeight, g.deviceScale, g.toolbarHeight)
 }

@@ -1,4 +1,4 @@
-package main
+package browser
 
 import (
 	"fmt"
@@ -9,9 +9,10 @@ import (
 
 // readClipboard returns the clipboard's current text content, via each
 // OS's own command-line paste utility rather than a third-party
-// clipboard package - ebiten has no clipboard API of its own, and this
-// is a small enough need (cmd/whynot's own convenience, not the
-// library's) that it isn't worth a module dependency for.
+// clipboard package - neither ebiten nor Gio has a clipboard API this
+// package wants to depend on, and this is a small enough need (a
+// browser-app convenience, not the core library's) that it isn't worth
+// a module dependency for.
 func readClipboard() (string, error) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
