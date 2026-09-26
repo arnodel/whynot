@@ -50,7 +50,7 @@ func main() {
 	}
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
-	faceSelector := newDocumentFaceSelector(scale)
+	faceSelector := browser.NewDocumentFaceSelector(scale)
 	app := browser.NewApp(faceSelector, styleSheet, !*light)
 
 	g := &game{

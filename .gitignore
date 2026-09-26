@@ -1,6 +1,8 @@
 /whynot
 /gio
+/giowhynot
 /cmd/whynot/whynot
+/cmd/giowhynot/giowhynot
 /dist
 /examples/wasm/whynot.wasm
 /cmd/whynot/web/whynot.wasm
