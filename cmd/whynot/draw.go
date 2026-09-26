@@ -53,7 +53,8 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 
 	drawButton(dst, canvas, backIcon, g.backButton, g.app.CanGoBack(), g.backState)
 	drawButton(dst, canvas, forwardIcon, g.forwardButton, g.app.CanGoForward(), g.forwardState)
-	drawButton(dst, canvas, reloadIcon, g.reloadButton, true, g.reloadState)
+	drawButton(dst, canvas, reloadIcon, g.reloadButton, g.app.CanReload(), g.reloadState)
+	drawButton(dst, canvas, tocIcon, g.tocButton, g.app.CanShowTOC(), g.tocState)
 	drawButton(dst, canvas, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
 	drawButton(dst, canvas, zoomInIcon, g.zoomInButton, true, g.zoomInState)
 	themeIcon := lightModeIcon
@@ -70,7 +71,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	if hoverDest := g.app.HoverDest(); hoverDest != "" {
 		text, textColor = hoverDest, g.app.StyleSheet().HighlightColor()
 	}
-	x := g.reloadButton.Max.X + int(16*g.deviceScale)
+	x := g.tocButton.Max.X + int(16*g.deviceScale)
 	maxWidth := g.zoomOutButton.Min.X - int(16*g.deviceScale) - x
 	text = truncateMiddle(face, text, maxWidth)
 	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)

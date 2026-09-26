@@ -106,6 +106,13 @@ type App struct {
 	// Set via OnLinkHover, wired as Panel's own OnLinkHover field.
 	hoverDest string
 
+	// tocDocView is the real document's View, saved here while a
+	// synthetic table-of-contents View is current in Panel instead - nil
+	// whenever the TOC isn't showing (see ShowTOC/HideTOC in toc.go).
+	// Every method below that reads or replaces a.Panel.View() checks
+	// this first, since that's the TOC, not the document, while it's set.
+	tocDocView *whynot.View
+
 	// start is when the app began, for whynot.RenderingContext.Time
 	// (elapsed time since rendering started - what an animated GIF's
 	// current frame is picked from). Only ever compared to itself via
@@ -142,9 +149,14 @@ func (a *App) Location() *url.URL { return a.location }
 // cursor, or "" if none - see OnLinkHover.
 func (a *App) HoverDest() string { return a.hoverDest }
 
-// CanGoBack/CanGoForward report whether Back/Forward would do anything.
-func (a *App) CanGoBack() bool    { return len(a.history) > 0 }
-func (a *App) CanGoForward() bool { return len(a.future) > 0 }
+// CanGoBack/CanGoForward report whether Back/Forward would do
+// anything. CanGoBack is also true while the TOC is showing, since Back
+// dismisses it (see tocDocView); CanGoForward is false there instead.
+func (a *App) CanGoBack() bool    { return a.tocDocView != nil || len(a.history) > 0 }
+func (a *App) CanGoForward() bool { return a.tocDocView == nil && len(a.future) > 0 }
+
+// CanReload reports whether Reload would do anything.
+func (a *App) CanReload() bool { return a.tocDocView == nil }
 
 // Zoom returns the current zoom multiplier (1.0 = 100%).
 func (a *App) Zoom() float64 { return a.zoom }
@@ -177,14 +189,23 @@ func (a *App) SetTheme(dark bool) {
 // updateWindowTitle fires OnTitleChange with the current document's own
 // title (View.Title(): its first heading, any level), or a generic
 // fallback if it has none - call whenever Panel's View is replaced with
-// a different document's.
+// a different document's. While the TOC is showing, its own "Table of
+// contents" heading is skipped in favor of the real document's title
+// (a.tocDocView) plus a " - TOC" suffix.
 func (a *App) updateWindowTitle() {
 	if a.OnTitleChange == nil {
 		return
 	}
-	title, ok := a.Panel.View().Title()
+	view := a.Panel.View()
+	if a.tocDocView != nil {
+		view = a.tocDocView
+	}
+	title, ok := view.Title()
 	if !ok {
 		title = "Untitled document"
+	}
+	if a.tocDocView != nil {
+		title += " - TOC"
 	}
 	a.OnTitleChange(title)
 }
@@ -237,15 +258,32 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 // Follow resolves dest against the current document's own location -
 // so a relative link works whether the current document came from
 // disk or from an http(s) fetch. A fragment-only link to the current
-// document (e.g. a table-of-contents entry) just scrolls in place,
-// reusing the current View; otherwise the new document is loaded, laid
-// out immediately (so a fragment can be resolved into it right away),
-// and replaces it. Either way, wherever the jump started from is
-// pushed onto history first, so Back can return to it.
+// document just scrolls in place, reusing the current View; otherwise
+// the new document is loaded, laid out immediately (so a fragment can
+// be resolved into it right away), and replaces it. Either way,
+// wherever the jump started from is pushed onto history first, so Back
+// can return to it.
+//
+// While the TOC is showing, dest is always one of its own "#id" links:
+// resolved against a.location as usual, but the jump lands on
+// a.tocDocView, which becomes current again, closing the TOC.
 func (a *App) Follow(dest string) {
 	resolved, err := a.ResolveLink(dest)
 	if err != nil {
 		log.Printf("link destination %q: %v", dest, err)
+		return
+	}
+
+	if a.tocDocView != nil {
+		docView := a.tocDocView
+		a.pushHistoryFor(a.location, docView)
+		a.Panel.SetView(docView)
+		a.tocDocView = nil
+		if resolved.Fragment != "" {
+			docView.ScrollToAnchor(resolved.Fragment)
+		}
+		a.location = resolved
+		a.updateWindowTitle()
 		return
 	}
 
@@ -288,9 +326,15 @@ func (a *App) Follow(dest string) {
 // a browser discards forward history once you navigate anywhere new
 // rather than pressing its forward button.
 func (a *App) pushHistory() {
-	view := a.Panel.View()
+	a.pushHistoryFor(a.location, a.Panel.View())
+}
+
+// pushHistoryFor is pushHistory's real implementation, taking the
+// location/view to save explicitly - needed by Follow's TOC branch,
+// which must push a.tocDocView rather than a.Panel.View().
+func (a *App) pushHistoryFor(loc *url.URL, view *whynot.View) {
 	a.history = append(a.history, historyEntry{
-		document: document{location: a.location, view: view},
+		document: document{location: loc, view: view},
 		scroll:   view.ScrollPosition(),
 	})
 	a.future = nil
@@ -307,8 +351,14 @@ func samePage(x, y *url.URL) bool {
 }
 
 // Back pops the most recently visited place, if any - a no-op at the
-// start of history.
+// start of history. While the TOC is showing, Back dismisses it instead
+// - the most recently visited "place" from the user's perspective -
+// without consuming a history entry.
 func (a *App) Back() {
+	if a.tocDocView != nil {
+		a.HideTOC()
+		return
+	}
 	if len(a.history) == 0 {
 		return
 	}
@@ -319,9 +369,10 @@ func (a *App) Back() {
 
 // Forward undoes the last Back, if any - a no-op with nothing to redo,
 // and cleared by any new navigation (see pushHistory), same as a
-// browser's own forward button.
+// browser's own forward button. Also a no-op while the TOC is showing,
+// unlike Back - disabled rather than dismissing it too.
 func (a *App) Forward() {
-	if len(a.future) == 0 {
+	if a.tocDocView != nil || len(a.future) == 0 {
 		return
 	}
 	entry := a.future[len(a.future)-1]
@@ -352,8 +403,12 @@ func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 // Reload re-fetches the current document's own location and replaces
 // its View in place - not pushed onto history, since it's still the
 // same place, just re-read. Scroll position is carried over to the new
-// View the same way it already is across a resize or theme change.
+// View the same way it already is across a resize or theme change. A
+// no-op while the TOC is showing (see CanReload).
 func (a *App) Reload() {
+	if a.tocDocView != nil {
+		return
+	}
 	source, err := LoadDocument(a.location)
 	if err != nil {
 		var htmlErr *htmlContentError
@@ -396,8 +451,11 @@ func (a *App) Paste() {
 // show it (e.g. an editable address bar) can - an HTML response is
 // still handled the same as Follow (opened in the system browser) and
 // reported as no error, since that's not a mistake for the caller to
-// show.
+// show. A no-op (nil error) while the TOC is showing, same as Reload.
 func (a *App) Navigate(text string) error {
+	if a.tocDocView != nil {
+		return nil
+	}
 	resolved, err := ResolveLocationArg(text)
 	if err != nil {
 		log.Printf("navigating to %q: %v", text, err)

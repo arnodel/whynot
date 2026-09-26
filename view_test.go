@@ -700,6 +700,64 @@ func TestViewTitleNoHeading(t *testing.T) {
 	}
 }
 
+// TestViewTOCEntries checks that every top-level heading is reported,
+// in document order, with its level and auto-assigned id.
+func TestViewTOCEntries(t *testing.T) {
+	source := []byte("# One\n\nText.\n\n## Two\n\nText.\n\n### Three\n\nText.\n")
+	v := NewView(source, NewGoFontFaceSelector(72))
+	entries := v.TOCEntries()
+
+	want := []TOCEntry{
+		{ID: "one", Level: 1, Text: "One"},
+		{ID: "two", Level: 2, Text: "Two"},
+		{ID: "three", Level: 3, Text: "Three"},
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("TOCEntries() = %+v, want %+v", entries, want)
+	}
+	for i, e := range entries {
+		if e != want[i] {
+			t.Errorf("TOCEntries()[%d] = %+v, want %+v", i, e, want[i])
+		}
+	}
+}
+
+// TestViewTOCEntriesNoHeadings checks that a document with no headings
+// reports no entries, rather than e.g. a single bogus one.
+func TestViewTOCEntriesNoHeadings(t *testing.T) {
+	v := NewView([]byte("Just a paragraph, no heading anywhere.\n"), NewGoFontFaceSelector(72))
+	if entries := v.TOCEntries(); len(entries) != 0 {
+		t.Errorf("TOCEntries() = %+v, want none", entries)
+	}
+}
+
+// TestViewCurrentHeadingID checks that CurrentHeadingID reports
+// whichever heading the current scroll position has scrolled past, and
+// ok=false before the first one.
+func TestViewCurrentHeadingID(t *testing.T) {
+	source := []byte("Intro text, before any heading.\n\n# First\n\nMore text.\n\n# Second\n\nMore text.\n")
+	v := NewView(source, NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v.Layout(300, 1000, 1, 0)
+
+	if _, ok := v.CurrentHeadingID(); ok {
+		t.Error("CurrentHeadingID() before any heading = ok, want false")
+	}
+
+	if ok := v.ScrollToAnchor("first"); !ok {
+		t.Fatal(`ScrollToAnchor("first") = false, want true`)
+	}
+	if id, ok := v.CurrentHeadingID(); !ok || id != "first" {
+		t.Errorf("CurrentHeadingID() = %q, %v, want %q, true", id, ok, "first")
+	}
+
+	if ok := v.ScrollToAnchor("second"); !ok {
+		t.Fatal(`ScrollToAnchor("second") = false, want true`)
+	}
+	if id, ok := v.CurrentHeadingID(); !ok || id != "second" {
+		t.Errorf("CurrentHeadingID() = %q, %v, want %q, true", id, ok, "second")
+	}
+}
+
 // TestViewHoverNoOpWhenUnchanged checks that Hover only invalidates a
 // slot on an actual highlight transition - calling it again at the
 // same position must not pay for rebuilding that slot again. v.box

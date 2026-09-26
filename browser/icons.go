@@ -25,7 +25,7 @@ func decodeIcon(name string) image.Image {
 }
 
 // BackIcon/ForwardIcon/ReloadIcon/ZoomInIcon/ZoomOutIcon/DarkModeIcon/
-// LightModeIcon are the toolbar buttons' icons - light, mostly-white
+// LightModeIcon/TOCIcon are the toolbar buttons' icons - light, mostly-white
 // silhouettes on a transparent background, so a backend can tint them
 // to match a button's current state. Zoom uses plain +/- (add.png/
 // remove.png), not the magnifying-glass-with-+/- alternative also on
@@ -44,4 +44,5 @@ var (
 	ZoomOutIcon   = decodeIcon("remove.png")
 	DarkModeIcon  = decodeIcon("dark_mode.png")
 	LightModeIcon = decodeIcon("light_mode.png")
+	TOCIcon       = decodeIcon("toc.png")
 )

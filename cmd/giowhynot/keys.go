@@ -25,6 +25,7 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *giorenderer.Panel, de
 			key.Filter{Name: key.NameSpace},
 			key.Filter{Name: key.NameUpArrow},
 			key.Filter{Name: key.NameDownArrow},
+			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: "V", Required: key.ModShortcut},
 			key.Filter{Name: "="},
 			key.Filter{Name: "-"},
@@ -57,6 +58,10 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *giorenderer.Panel, de
 			panel.View().Scroll(arrowScrollLines * deviceScale)
 		case key.NameDownArrow:
 			panel.View().Scroll(-arrowScrollLines * deviceScale)
+		case key.NameEscape:
+			if app.TOCShowing() {
+				app.HideTOC()
+			}
 		case "V":
 			app.Paste()
 		case "=":
