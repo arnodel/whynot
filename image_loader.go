@@ -11,26 +11,26 @@ import (
 	"time"
 )
 
-// ImageSource resolves and fetches an image's raw bytes - the
-// embedder-supplied policy for wherever an InlineImage's src actually
-// points (relative to a document's own location, over http(s), from
-// an archive, whatever it needs). Kept out of the library's own hands
-// the same way document loading and link resolution already are (see
+// ImageSource turns an image's src (an InlineImage's literal Markdown
+// destination) into a fetchable AsyncImage - the embedder-supplied
+// policy for wherever that src actually points (relative to a
+// document's own location, over http(s), from an archive, whatever it
+// needs). Kept out of the library's own hands the same way document
+// loading and link resolution already are (see
 // cmd/whynot/main.go's loadDocument/resolveLink) - only the seam lives
 // here. Always used through an ImageCache (see NewImageCache), never
-// called directly by GetInlineLayout, so resolving and fetching an
-// image only ever happens once no matter how many times it's asked
-// for - and always from a background goroutine, since Open can block
-// (a slow disk, a slow or hanging server) and ImageCache.Load must
-// never block its caller.
+// called directly by GetInlineLayout.
+//
+// One ImageSource is configured once per View and asked about however
+// many different, not-yet-seen src strings that document's images turn
+// out to contain - unlike an AsyncImage, which already describes one
+// specific image and needs no src parameter to say so. Image itself
+// should be cheap/pure (no I/O, just interpreting src against whatever
+// base the ImageSource knows about) - the real, possibly slow work
+// belongs in the returned AsyncImage's own Fetch, called at most once
+// per distinct key.
 type ImageSource interface {
-	// Resolve turns src into a stable, absolute identifier - the cache
-	// key, and what a missing- or broken-image's fallback message
-	// names. Pure and cheap: no I/O, just interpreting src against
-	// whatever base the ImageSource knows about.
-	Resolve(src string) (string, error)
-	// Open fetches the bytes at a value Resolve returned.
-	Open(resolved string) (io.ReadCloser, error)
+	Image(src string) (AsyncImage, error)
 }
 
 // FileImageSource is the default ImageSource: src is opened exactly as
@@ -39,28 +39,32 @@ type ImageSource interface {
 // unless an embedder opts into WithImageSource.
 type FileImageSource struct{}
 
-func (FileImageSource) Resolve(src string) (string, error) { return src, nil }
-
-func (FileImageSource) Open(resolved string) (io.ReadCloser, error) {
-	return os.Open(resolved)
+func (FileImageSource) Image(src string) (AsyncImage, error) {
+	return AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) { return os.Open(src) }}, nil
 }
 
 // AsyncImage is the shape ImageCache actually loads (see LoadImage): a
-// slow-to-produce, cacheable-by-key image. An ordinary Markdown ![]()
-// image gets one internally (imageSourceAsync, wrapping the View's
-// ImageSource) - a CodeBlockPlugin wanting more control than a GET
-// against an already-resolved src (e.g. an HTTP POST, as kroki.Renderer
-// uses) constructs its own directly, for use with NewDiagramBlock.
-type AsyncImage interface {
+// slow-to-produce, cacheable-by-key image, already fully self-contained
+// - unlike ImageSource, it describes one specific image, not a family of
+// them reached via some later src parameter. A plain struct rather than
+// an interface: Fetch is already a closure, which can capture whatever
+// state a producer needs (a resolved URL, a diagram's own type and
+// source text, ...) - there's no real polymorphism an interface would
+// add here that a closure doesn't already give for free. An ordinary
+// Markdown ![]() image gets one from the View's own ImageSource; a
+// CodeBlockPlugin wanting more control than a GET against a resolved src
+// (e.g. an HTTP POST, as kroki.Renderer uses) builds one directly, for
+// use with NewDiagramBlock.
+type AsyncImage struct {
 	// Key uniquely identifies this image for ImageCache's own
 	// dedup/caching - e.g. the diagram's type and source text
 	// concatenated, so recompiling identical source (a resize, a
 	// reload) reuses the cached result instead of re-fetching.
-	Key() string
+	Key string
 	// Fetch performs the actual (possibly slow) work, returning encoded
 	// image bytes in any format image.Decode already registers. Called
 	// at most once per Key, on a background goroutine.
-	Fetch() (io.ReadCloser, error)
+	Fetch func() (io.ReadCloser, error)
 }
 
 // ImageStatus is an image's state within an ImageCache.
@@ -166,42 +170,32 @@ func NewImageCache(source ImageSource) *ImageCache {
 	}
 }
 
-// Load resolves src and returns its current state, starting a fetch in
-// the background on a genuine miss, or on a failed entry old enough to
-// retry - never blocking on the fetch itself. resolved is still
-// returned when Resolve itself failed - InlineImage's fallback text
-// names it in a missing- or broken-image message.
+// Load resolves src via the configured ImageSource and returns its
+// current state, starting a fetch in the background on a genuine miss,
+// or on a failed entry old enough to retry - never blocking on the
+// fetch itself. resolved is still returned as src itself when
+// c.source.Image failed - InlineImage's fallback text names it in a
+// missing- or broken-image message.
 //
-// Implemented as a thin wrapper around LoadImage: an ordinary
-// ![]() image is itself just one particular kind of AsyncImage, whose
-// Key is the resolved src and whose Fetch calls the configured
-// ImageSource's Open.
+// Implemented as a thin wrapper around LoadImage: an ordinary ![]()
+// image is itself just one particular AsyncImage, the one the View's
+// own ImageSource produces for a given src.
 func (c *ImageCache) Load(src string) (resolved string, result ImageResult) {
-	resolved, err := c.source.Resolve(src)
+	img, err := c.source.Image(src)
 	if err != nil {
-		return resolved, ImageResult{Status: ImageFailed, Err: err}
+		return src, ImageResult{Status: ImageFailed, Err: err}
 	}
-	return resolved, c.LoadImage(imageSourceAsync{c.source, resolved})
+	return img.Key, c.LoadImage(img)
 }
-
-// imageSourceAsync adapts an already-resolved ImageSource src into an
-// AsyncImage - see Load.
-type imageSourceAsync struct {
-	source   ImageSource
-	resolved string
-}
-
-func (a imageSourceAsync) Key() string                   { return a.resolved }
-func (a imageSourceAsync) Fetch() (io.ReadCloser, error) { return a.source.Open(a.resolved) }
 
 // LoadImage is what Load itself is built on: look up or create a
-// pending entry for img.Key(), starting img.Fetch() in the background
-// on a genuine miss or a failed entry old enough to retry - never
-// blocking on the fetch itself. For a caller with no ImageSource to
-// resolve a bare src through - e.g. a CodeBlockPlugin's own AsyncImage
-// (see NewDiagramBlock), whose fetch might be a POST rather than a GET.
+// pending entry for img.Key, starting img.Fetch in the background on a
+// genuine miss or a failed entry old enough to retry - never blocking
+// on the fetch itself. For a caller with no ImageSource to resolve a
+// bare src through - e.g. a CodeBlockPlugin's own AsyncImage (see
+// NewDiagramBlock), whose fetch might be a POST rather than a GET.
 func (c *ImageCache) LoadImage(img AsyncImage) ImageResult {
-	key := img.Key()
+	key := img.Key
 	c.mu.Lock()
 	entry, ok := c.cache[key]
 	start := !ok || (entry.status == ImageFailed && time.Since(entry.lastAttempt) > c.retryDelay)
@@ -238,18 +232,18 @@ func (c *ImageCache) ChangedSince(mark uint64) (changed []ImageChange, newMark u
 }
 
 // fetchAndDecode does the actual (potentially slow) work, entirely off
-// the caller's goroutine, via fetch (Load's own ImageSource.Open call,
-// or LoadAsync's caller-supplied closure). It probes dimensions via
-// image.DecodeConfig first, through a TeeReader that mirrors whatever
-// bytes it reads into header - PNG/GIF/JPEG all put their size near the
-// front of the file, so this is normally a small prefix of the stream,
-// not the whole body - and reports them immediately (setBounds),
-// before the rest of the fetch/decode completes. The full decode then
-// continues from exactly where the header-peek left off (header's
-// buffered bytes, then whatever's left of rc), so nothing is
-// re-fetched or re-read from the start. A GIF (DecodeConfig's own
-// format name, already read to get here) decodes every frame via
-// decodeAnimatedGIF instead of image.Decode's single-frame result.
+// the caller's goroutine, via fetch (LoadImage's own img.Fetch). It
+// probes dimensions via image.DecodeConfig first, through a TeeReader
+// that mirrors whatever bytes it reads into header - PNG/GIF/JPEG all
+// put their size near the front of the file, so this is normally a
+// small prefix of the stream, not the whole body - and reports them
+// immediately (setBounds), before the rest of the fetch/decode
+// completes. The full decode then continues from exactly where the
+// header-peek left off (header's buffered bytes, then whatever's left
+// of rc), so nothing is re-fetched or re-read from the start. A GIF
+// (DecodeConfig's own format name, already read to get here) decodes
+// every frame via decodeAnimatedGIF instead of image.Decode's
+// single-frame result.
 func (c *ImageCache) fetchAndDecode(key string, fetch func() (io.ReadCloser, error)) {
 	rc, err := fetch()
 	if err != nil {

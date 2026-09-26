@@ -689,7 +689,7 @@ func (p fakeCodeBlockPlugin) Image(language, code string) AsyncImage {
 // that's exactly what today's highlighter/plain-text rendering would
 // have produced.
 func TestParseWithCodeBlockPlugin(t *testing.T) {
-	wantImg := fakeAsyncImage{key: "diagram-key"}
+	wantImg := AsyncImage{Key: "diagram-key"}
 	plugin := fakeCodeBlockPlugin{
 		handles: map[string]bool{"mermaid": true},
 		image: func(language, code string) AsyncImage {
@@ -705,8 +705,8 @@ func TestParseWithCodeBlockPlugin(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *diagramBlock", unwrap(stack.blocks[0]))
 	}
-	if diagram.img.Key() != wantImg.Key() {
-		t.Errorf("img.Key() = %q, want the plugin's own %q", diagram.img.Key(), wantImg.Key())
+	if diagram.img.Key != wantImg.Key {
+		t.Errorf("img.Key = %q, want the plugin's own %q", diagram.img.Key, wantImg.Key)
 	}
 	fallback, ok := diagram.fallback.(*CodeBlock)
 	if !ok {
@@ -746,7 +746,7 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 	second := fakeCodeBlockPlugin{
 		handles:        map[string]bool{"mermaid": true},
 		canHandleCalls: &secondCalls,
-		image:          func(language, code string) AsyncImage { return fakeAsyncImage{key: "k"} },
+		image:          func(language, code string) AsyncImage { return AsyncImage{Key: "k"} },
 	}
 	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
 	doc := Parse(source, WithCodeBlockPlugin(first), WithCodeBlockPlugin(second))

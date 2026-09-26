@@ -57,7 +57,7 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
 		// later Pending/Ready, per ImageCache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
-		return &diagramBox{inner: b.fallback.GetBlockLayout(ctx, width), pendingKey: b.img.Key()}
+		return &diagramBox{inner: b.fallback.GetBlockLayout(ctx, width), pendingKey: b.img.Key}
 	}
 
 	frameThickness := int(ctx.ScaledThematicBreakThickness(b.imageNode))

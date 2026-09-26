@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"path"
 	"runtime"
+
+	"github.com/arnodel/whynot"
 )
 
 // WelcomeURL identifies the embedded welcome page - an opaque, non-file,
@@ -93,14 +95,12 @@ func addressBarTip() string {
 // the current document's location is WelcomeURL - see App.NewView.
 type welcomeImageSource struct{}
 
-func (welcomeImageSource) Resolve(src string) (string, error) {
-	return src, nil
-}
-
-func (welcomeImageSource) Open(src string) (io.ReadCloser, error) {
-	data, err := assetsFS.ReadFile(path.Join("assets", src))
-	if err != nil {
-		return nil, err
-	}
-	return io.NopCloser(bytes.NewReader(data)), nil
+func (welcomeImageSource) Image(src string) (whynot.AsyncImage, error) {
+	return whynot.AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) {
+		data, err := assetsFS.ReadFile(path.Join("assets", src))
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}}, nil
 }

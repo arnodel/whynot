@@ -85,9 +85,9 @@ func waitForDiagramSettled(t *testing.T, block Block, ctx RenderingContext, widt
 // settles even though the fallback itself knows nothing about it.
 func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 	release := make(chan struct{})
-	img := fakeAsyncImage{
-		key: "diagram-key",
-		fetch: func() (io.ReadCloser, error) {
+	img := AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
 			<-release
 			return io.NopCloser(bytes.NewReader(onePixelPNG(t))), nil
 		},
@@ -118,9 +118,9 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 // still reported so a later retry (see ImageCache's own retry delay)
 // still gets picked up by View.invalidateChangedImages.
 func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
-	img := fakeAsyncImage{
-		key:   "diagram-key",
-		fetch: func() (io.ReadCloser, error) { return nil, errors.New("boom") },
+	img := AsyncImage{
+		Key:   "diagram-key",
+		Fetch: func() (io.ReadCloser, error) { return nil, errors.New("boom") },
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
@@ -164,9 +164,9 @@ func waitForDiagramFailed(t *testing.T, block Block, img AsyncImage, ctx Renderi
 // fallback, and PendingImages() is empty - nothing left to wait on.
 func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	pixel := onePixelPNG(t)
-	img := fakeAsyncImage{
-		key:   "diagram-key",
-		fetch: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(pixel)), nil },
+	img := AsyncImage{
+		Key:   "diagram-key",
+		Fetch: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(pixel)), nil },
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)

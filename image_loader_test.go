@@ -13,10 +13,12 @@ import (
 )
 
 // countingImageSource wraps a fixed image (or a fixed error) behind an
-// ImageSource that counts how many times Resolve/Open were actually
-// called. open, if set, is called instead of the default (returning
-// data/openErr directly) - for tests that need to control exactly when
-// Open returns.
+// ImageSource that counts how many times Image was called (resolveCalls
+// - Image itself plays Resolve's old role: cheap, called on every Load)
+// and how many times the AsyncImage it returned was actually fetched
+// (openCalls - only on a genuine cache miss). open, if set, is called
+// instead of the default (returning data/openErr directly) - for tests
+// that need to control exactly when the fetch returns.
 type countingImageSource struct {
 	resolved     string
 	resolveErr   error
@@ -27,23 +29,21 @@ type countingImageSource struct {
 	openCalls    int
 }
 
-func (s *countingImageSource) Resolve(src string) (string, error) {
+func (s *countingImageSource) Image(src string) (AsyncImage, error) {
 	s.resolveCalls++
 	if s.resolveErr != nil {
-		return src, s.resolveErr
+		return AsyncImage{}, s.resolveErr
 	}
-	return s.resolved, nil
-}
-
-func (s *countingImageSource) Open(resolved string) (io.ReadCloser, error) {
-	s.openCalls++
-	if s.open != nil {
-		return s.open()
-	}
-	if s.openErr != nil {
-		return nil, s.openErr
-	}
-	return io.NopCloser(bytes.NewReader(s.data)), nil
+	return AsyncImage{Key: s.resolved, Fetch: func() (io.ReadCloser, error) {
+		s.openCalls++
+		if s.open != nil {
+			return s.open()
+		}
+		if s.openErr != nil {
+			return nil, s.openErr
+		}
+		return io.NopCloser(bytes.NewReader(s.data)), nil
+	}}, nil
 }
 
 func onePixelPNG(t *testing.T) []byte {
@@ -271,8 +271,9 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 
 	resultA := waitForSettled(t, cache, "a.png")
 	resultB := waitForSettled(t, cache, "b.png")
-	resolvedA, _ := source.Resolve("a.png")
-	resolvedB, _ := source.Resolve("b.png")
+	imgA, _ := source.Image("a.png")
+	imgB, _ := source.Image("b.png")
+	resolvedA, resolvedB := imgA.Key, imgB.Key
 	if resolvedA == resolvedB {
 		t.Fatalf("both resolved to %q, want distinct identifiers", resolvedA)
 	}
@@ -284,17 +285,6 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 	}
 }
 
-// fakeAsyncImage is a minimal AsyncImage for LoadImage tests - a
-// CodeBlockPlugin's own AsyncImage (see kroki.Renderer) is shaped like
-// this: a fixed key, and a fetch closure the test controls directly.
-type fakeAsyncImage struct {
-	key   string
-	fetch func() (io.ReadCloser, error)
-}
-
-func (f fakeAsyncImage) Key() string                   { return f.key }
-func (f fakeAsyncImage) Fetch() (io.ReadCloser, error) { return f.fetch() }
-
 // waitForSettledImage is waitForSettled's LoadImage counterpart.
 func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageResult {
 	t.Helper()
@@ -305,7 +295,7 @@ func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageR
 			return result
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("LoadImage(%q) still pending after 2s", img.Key())
+			t.Fatalf("LoadImage(%q) still pending after 2s", img.Key)
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -318,9 +308,9 @@ func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageR
 func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
 	pixel := onePixelPNG(t)
 	var fetchCalls int
-	img := fakeAsyncImage{
-		key: "diagram-key",
-		fetch: func() (io.ReadCloser, error) {
+	img := AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
 			fetchCalls++
 			return io.NopCloser(bytes.NewReader(pixel)), nil
 		},
@@ -354,9 +344,9 @@ func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
 	cache := NewImageCache(FileImageSource{})
 
 	_, mark := cache.ChangedSince(0)
-	waitForSettledImage(t, cache, fakeAsyncImage{
-		key: "diagram-key",
-		fetch: func() (io.ReadCloser, error) {
+	waitForSettledImage(t, cache, AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(pixel)), nil
 		},
 	})
@@ -427,11 +417,10 @@ type stubMultiImageSource struct {
 	openCalls int
 }
 
-func (s *stubMultiImageSource) Resolve(src string) (string, error) {
-	return s.byLiteral[src], nil
-}
-
-func (s *stubMultiImageSource) Open(resolved string) (io.ReadCloser, error) {
-	s.openCalls++
-	return io.NopCloser(bytes.NewReader(s.data)), nil
+func (s *stubMultiImageSource) Image(src string) (AsyncImage, error) {
+	resolved := s.byLiteral[src]
+	return AsyncImage{Key: resolved, Fetch: func() (io.ReadCloser, error) {
+		s.openCalls++
+		return io.NopCloser(bytes.NewReader(s.data)), nil
+	}}, nil
 }

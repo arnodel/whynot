@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/arnodel/whynot"
 )
 
 // httpTimeout bounds every document/image fetch - shared by
@@ -115,26 +117,26 @@ func looksLikeHost(s string) bool {
 // src against base (a document's own location) exactly the way
 // App.ResolveLink resolves a link's href, then fetching it the same
 // way LoadDocument does - so a relative or http(s) image works
-// regardless of where its document came from. Resolving is kept
-// separate from fetching so whynot.ImageCache can cache by the
-// resolved identifier without re-resolving-and-fetching on every call
-// - only a genuine cache miss ever reaches Open.
+// regardless of where its document came from. Resolving (cheap, no I/O)
+// is kept separate from the actual fetch (the returned AsyncImage's own
+// Fetch) so whynot.ImageCache can cache by the resolved identifier
+// without re-resolving-and-fetching on every call - only a genuine
+// cache miss ever calls Fetch.
 type docImageSource struct {
 	base *url.URL
 }
 
-func (s docImageSource) Resolve(src string) (string, error) {
+func (s docImageSource) Image(src string) (whynot.AsyncImage, error) {
 	resolved, err := resolveAgainst(s.base, src)
 	if err != nil {
-		return src, err
+		return whynot.AsyncImage{}, err
 	}
-	return resolved.String(), nil
-}
-
-func (s docImageSource) Open(resolved string) (io.ReadCloser, error) {
-	location, err := url.Parse(resolved)
-	if err != nil {
-		return nil, err
-	}
-	return openImageLocation(location)
+	location := resolved.String()
+	return whynot.AsyncImage{Key: location, Fetch: func() (io.ReadCloser, error) {
+		u, err := url.Parse(location)
+		if err != nil {
+			return nil, err
+		}
+		return openImageLocation(u)
+	}}, nil
 }

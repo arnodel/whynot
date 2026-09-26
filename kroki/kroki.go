@@ -45,8 +45,39 @@ func (r Renderer) CanHandle(language string) bool {
 	return ok
 }
 
+// Image builds an AsyncImage directly - no type of kroki's own needed,
+// since a closure already captures everything Fetch needs (baseURL,
+// diagramType, code).
 func (r Renderer) Image(language, code string) whynot.AsyncImage {
-	return &diagramImage{baseURL: r.baseURL(), diagramType: diagramTypes[language], code: code}
+	diagramType := diagramTypes[language]
+	baseURL := r.baseURL()
+	return whynot.AsyncImage{
+		// Diagram type and exact source text, so recompiling identical
+		// source (a resize, a reload) reuses the cached result instead
+		// of re-fetching.
+		Key: "kroki:" + diagramType + ":" + code,
+		// Fetch POSTs the diagram source to Kroki's own JSON API (rather
+		// than its GET form, which embeds a zlib+base64 encoding of the
+		// source in the URL path and has a practical length limit) and
+		// returns the response body - a PNG on success.
+		Fetch: func() (io.ReadCloser, error) {
+			body, err := json.Marshal(struct {
+				DiagramSource string `json:"diagram_source"`
+			}{code})
+			if err != nil {
+				return nil, err
+			}
+			resp, err := http.Post(baseURL+"/"+diagramType+"/png", "application/json", bytes.NewReader(body))
+			if err != nil {
+				return nil, err
+			}
+			if resp.StatusCode != http.StatusOK {
+				defer resp.Body.Close()
+				return nil, fmt.Errorf("kroki: %s", resp.Status)
+			}
+			return resp.Body, nil
+		},
+	}
 }
 
 func (r Renderer) baseURL() string {
@@ -54,39 +85,4 @@ func (r Renderer) baseURL() string {
 		return r.BaseURL
 	}
 	return defaultBaseURL
-}
-
-// diagramImage implements whynot.AsyncImage for one fenced code block's
-// diagram source.
-type diagramImage struct {
-	baseURL, diagramType, code string
-}
-
-// Key identifies this image by its diagram type and exact source text,
-// so recompiling identical source (a resize, a reload) reuses the
-// cached result instead of re-fetching.
-func (d *diagramImage) Key() string {
-	return "kroki:" + d.diagramType + ":" + d.code
-}
-
-// Fetch POSTs the diagram source to Kroki's own JSON API (rather than
-// its GET form, which embeds a zlib+base64 encoding of the source in
-// the URL path and has a practical length limit) and returns the
-// response body - a PNG on success.
-func (d *diagramImage) Fetch() (io.ReadCloser, error) {
-	body, err := json.Marshal(struct {
-		DiagramSource string `json:"diagram_source"`
-	}{d.code})
-	if err != nil {
-		return nil, err
-	}
-	resp, err := http.Post(d.baseURL+"/"+d.diagramType+"/png", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		return nil, fmt.Errorf("kroki: %s", resp.Status)
-	}
-	return resp.Body, nil
 }

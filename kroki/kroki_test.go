@@ -18,18 +18,18 @@ func TestRendererCanHandle(t *testing.T) {
 	}
 }
 
-// TestDiagramImageKeyDistinguishesCodeAndType checks Key() differs for
+// TestDiagramImageKeyDistinguishesCodeAndType checks Key differs for
 // different source text or diagram type - ImageCache's own caching
 // relies on this to tell distinct diagrams apart.
 func TestDiagramImageKeyDistinguishesCodeAndType(t *testing.T) {
 	r := Renderer{}
 	a := r.Image("mermaid", "graph TD; A-->B;")
 	b := r.Image("mermaid", "graph TD; A-->C;")
-	if a.Key() == b.Key() {
-		t.Errorf("Key() for different source text matched: %q", a.Key())
+	if a.Key == b.Key {
+		t.Errorf("Key for different source text matched: %q", a.Key)
 	}
-	if a.Key() != r.Image("mermaid", "graph TD; A-->B;").Key() {
-		t.Error("Key() differed for identical (language, code) - want a stable cache key")
+	if a.Key != r.Image("mermaid", "graph TD; A-->B;").Key {
+		t.Error("Key differed for identical (language, code) - want a stable cache key")
 	}
 }
 
