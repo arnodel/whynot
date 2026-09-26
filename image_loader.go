@@ -45,6 +45,24 @@ func (FileImageSource) Open(resolved string) (io.ReadCloser, error) {
 	return os.Open(resolved)
 }
 
+// AsyncImage is the shape ImageCache actually loads (see LoadImage): a
+// slow-to-produce, cacheable-by-key image. An ordinary Markdown ![]()
+// image gets one internally (imageSourceAsync, wrapping the View's
+// ImageSource) - a CodeBlockPlugin wanting more control than a GET
+// against an already-resolved src (e.g. an HTTP POST, as kroki.Renderer
+// uses) constructs its own directly, for use with NewDiagramBlock.
+type AsyncImage interface {
+	// Key uniquely identifies this image for ImageCache's own
+	// dedup/caching - e.g. the diagram's type and source text
+	// concatenated, so recompiling identical source (a resize, a
+	// reload) reuses the cached result instead of re-fetching.
+	Key() string
+	// Fetch performs the actual (possibly slow) work, returning encoded
+	// image bytes in any format image.Decode already registers. Called
+	// at most once per Key, on a background goroutine.
+	Fetch() (io.ReadCloser, error)
+}
+
 // ImageStatus is an image's state within an ImageCache.
 type ImageStatus int
 
@@ -153,26 +171,51 @@ func NewImageCache(source ImageSource) *ImageCache {
 // retry - never blocking on the fetch itself. resolved is still
 // returned when Resolve itself failed - InlineImage's fallback text
 // names it in a missing- or broken-image message.
+//
+// Implemented as a thin wrapper around LoadImage: an ordinary
+// ![]() image is itself just one particular kind of AsyncImage, whose
+// Key is the resolved src and whose Fetch calls the configured
+// ImageSource's Open.
 func (c *ImageCache) Load(src string) (resolved string, result ImageResult) {
 	resolved, err := c.source.Resolve(src)
 	if err != nil {
 		return resolved, ImageResult{Status: ImageFailed, Err: err}
 	}
+	return resolved, c.LoadImage(imageSourceAsync{c.source, resolved})
+}
 
+// imageSourceAsync adapts an already-resolved ImageSource src into an
+// AsyncImage - see Load.
+type imageSourceAsync struct {
+	source   ImageSource
+	resolved string
+}
+
+func (a imageSourceAsync) Key() string                   { return a.resolved }
+func (a imageSourceAsync) Fetch() (io.ReadCloser, error) { return a.source.Open(a.resolved) }
+
+// LoadImage is what Load itself is built on: look up or create a
+// pending entry for img.Key(), starting img.Fetch() in the background
+// on a genuine miss or a failed entry old enough to retry - never
+// blocking on the fetch itself. For a caller with no ImageSource to
+// resolve a bare src through - e.g. a CodeBlockPlugin's own AsyncImage
+// (see NewDiagramBlock), whose fetch might be a POST rather than a GET.
+func (c *ImageCache) LoadImage(img AsyncImage) ImageResult {
+	key := img.Key()
 	c.mu.Lock()
-	entry, ok := c.cache[resolved]
+	entry, ok := c.cache[key]
 	start := !ok || (entry.status == ImageFailed && time.Since(entry.lastAttempt) > c.retryDelay)
 	if start {
 		entry = &imageCacheEntry{status: ImagePending, lastAttempt: time.Now()}
-		c.cache[resolved] = entry
+		c.cache[key] = entry
 	}
-	result = ImageResult{Status: entry.status, Bounds: entry.bounds, Image: entry.img, Animation: entry.anim, Err: entry.err}
+	result := ImageResult{Status: entry.status, Bounds: entry.bounds, Image: entry.img, Animation: entry.anim, Err: entry.err}
 	c.mu.Unlock()
 
 	if start {
-		go c.fetchAndDecode(resolved)
+		go c.fetchAndDecode(key, img.Fetch)
 	}
-	return resolved, result
+	return result
 }
 
 // ChangedSince returns every change since a previous ChangedSince (or
@@ -195,21 +238,22 @@ func (c *ImageCache) ChangedSince(mark uint64) (changed []ImageChange, newMark u
 }
 
 // fetchAndDecode does the actual (potentially slow) work, entirely off
-// the caller's goroutine. It probes dimensions via image.DecodeConfig
-// first, through a TeeReader that mirrors whatever bytes it reads into
-// header - PNG/GIF/JPEG all put their size near the front of the file,
-// so this is normally a small prefix of the stream, not the whole
-// body - and reports them immediately (setBounds), before the rest of
-// the fetch/decode completes. The full decode then continues from
-// exactly where the header-peek left off (header's buffered bytes,
-// then whatever's left of rc), so nothing is re-fetched or re-read
-// from the start. A GIF (DecodeConfig's own format name, already read
-// to get here) decodes every frame via decodeAnimatedGIF instead of
-// image.Decode's single-frame result.
-func (c *ImageCache) fetchAndDecode(resolved string) {
-	rc, err := c.source.Open(resolved)
+// the caller's goroutine, via fetch (Load's own ImageSource.Open call,
+// or LoadAsync's caller-supplied closure). It probes dimensions via
+// image.DecodeConfig first, through a TeeReader that mirrors whatever
+// bytes it reads into header - PNG/GIF/JPEG all put their size near the
+// front of the file, so this is normally a small prefix of the stream,
+// not the whole body - and reports them immediately (setBounds),
+// before the rest of the fetch/decode completes. The full decode then
+// continues from exactly where the header-peek left off (header's
+// buffered bytes, then whatever's left of rc), so nothing is
+// re-fetched or re-read from the start. A GIF (DecodeConfig's own
+// format name, already read to get here) decodes every frame via
+// decodeAnimatedGIF instead of image.Decode's single-frame result.
+func (c *ImageCache) fetchAndDecode(key string, fetch func() (io.ReadCloser, error)) {
+	rc, err := fetch()
 	if err != nil {
-		c.setFailed(resolved, err)
+		c.setFailed(key, err)
 		return
 	}
 	defer rc.Close()
@@ -218,25 +262,25 @@ func (c *ImageCache) fetchAndDecode(resolved string) {
 	format := ""
 	if cfg, fmt, cfgErr := image.DecodeConfig(io.TeeReader(rc, &header)); cfgErr == nil {
 		format = fmt
-		c.setBounds(resolved, image.Rectangle{Max: image.Pt(cfg.Width, cfg.Height)})
+		c.setBounds(key, image.Rectangle{Max: image.Pt(cfg.Width, cfg.Height)})
 	}
 
 	full := io.MultiReader(bytes.NewReader(header.Bytes()), rc)
 	if format == "gif" {
 		anim, decErr := decodeAnimatedGIF(full)
 		if decErr != nil {
-			c.setFailed(resolved, decErr)
+			c.setFailed(key, decErr)
 			return
 		}
-		c.setReady(resolved, nil, anim)
+		c.setReady(key, nil, anim)
 		return
 	}
 	img, _, decErr := image.Decode(full)
 	if decErr != nil {
-		c.setFailed(resolved, decErr)
+		c.setFailed(key, decErr)
 		return
 	}
-	c.setReady(resolved, img, nil)
+	c.setReady(key, img, nil)
 }
 
 func (c *ImageCache) setBounds(resolved string, bounds image.Rectangle) {

@@ -124,20 +124,15 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 			rawLines[i] = strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
 		}
 
-		var lines [][]Inline
-		if c.highlighter != nil {
-			language, _ := cb.Language(c.source)
-			lines = highlightLines(c.highlighter, astNode, language, rawLines)
-		}
-		if lines == nil {
-			// No highlighter configured, or highlightLines bailed out on
-			// a mismatched line count (a misbehaving Highlighter) - both
-			// cases fall back to the same plain, one-InlineText-per-line
-			// rendering.
-			lines = make([][]Inline, len(rawLines))
-			for i, text := range rawLines {
-				lines[i] = []Inline{&InlineText{text: text, node: astNode}}
-			}
+		language, _ := cb.Language(c.source)
+		lines := c.codeBlockLines(astNode, language, rawLines)
+		if plugin := c.pluginFor(language); plugin != nil {
+			// rawLines already carry their own trailing newlines (see
+			// highlightLines' identical join) - joining with "" avoids
+			// doubling them up.
+			code := strings.Join(rawLines, "")
+			fallback := &CodeBlock{lines: lines, node: astNode}
+			return &MarginBlock{Block: NewDiagramBlock(astNode, plugin.Image(language, code), fallback), node: astNode}
 		}
 		return &MarginBlock{Block: &CodeBlock{lines: lines, node: astNode}, node: astNode}
 	case gmast.KindThematicBreak:

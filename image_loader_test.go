@@ -284,6 +284,92 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 	}
 }
 
+// fakeAsyncImage is a minimal AsyncImage for LoadImage tests - a
+// CodeBlockPlugin's own AsyncImage (see kroki.Renderer) is shaped like
+// this: a fixed key, and a fetch closure the test controls directly.
+type fakeAsyncImage struct {
+	key   string
+	fetch func() (io.ReadCloser, error)
+}
+
+func (f fakeAsyncImage) Key() string                   { return f.key }
+func (f fakeAsyncImage) Fetch() (io.ReadCloser, error) { return f.fetch() }
+
+// waitForSettledImage is waitForSettled's LoadImage counterpart.
+func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageResult {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		result := cache.LoadImage(img)
+		if result.Status != ImagePending {
+			return result
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("LoadImage(%q) still pending after 2s", img.Key())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestImageCacheLoadImageFetchesOnce mirrors TestImageCacheLoadFetchesOnce
+// for LoadImage - the path a CodeBlockPlugin's AsyncImage drives (see
+// NewDiagramBlock), which has no ImageSource to resolve/dedupe through,
+// only whatever Key its AsyncImage reports.
+func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
+	pixel := onePixelPNG(t)
+	var fetchCalls int
+	img := fakeAsyncImage{
+		key: "diagram-key",
+		fetch: func() (io.ReadCloser, error) {
+			fetchCalls++
+			return io.NopCloser(bytes.NewReader(pixel)), nil
+		},
+	}
+	cache := NewImageCache(FileImageSource{})
+
+	first := waitForSettledImage(t, cache, img)
+	if first.Status != ImageReady || first.Image == nil {
+		t.Fatalf("first LoadImage settled to %+v, want ImageReady with an image", first)
+	}
+
+	for i := 0; i < 4; i++ {
+		result := cache.LoadImage(img)
+		if result.Status != ImageReady || result.Image == nil {
+			t.Errorf("LoadImage #%d: result = %+v, want the cached ImageReady result", i, result)
+		}
+	}
+	if fetchCalls != 1 {
+		t.Errorf("fetchCalls = %d, want 1 (fetch should happen only on the first LoadImage)", fetchCalls)
+	}
+}
+
+// TestImageCacheLoadImageParticipatesInChangedSince checks that a
+// LoadImage-driven entry reports through ChangedSince exactly like a
+// Load-driven one - the mechanism View.invalidateChangedImages already
+// polls to redraw a slot once its pending content settles, reused
+// unmodified for a diagram block since both paths write into the same
+// cache keyed by string.
+func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
+	pixel := onePixelPNG(t)
+	cache := NewImageCache(FileImageSource{})
+
+	_, mark := cache.ChangedSince(0)
+	waitForSettledImage(t, cache, fakeAsyncImage{
+		key: "diagram-key",
+		fetch: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(pixel)), nil
+		},
+	})
+
+	changes, _ := cache.ChangedSince(mark)
+	if len(changes) != 1 || changes[0].Src != "diagram-key" {
+		t.Fatalf("changes = %+v, want one change for \"diagram-key\"", changes)
+	}
+	if !changes[0].BoundsRevealed {
+		t.Error("BoundsRevealed = false, want true (bounds became known for the first time)")
+	}
+}
+
 // twoFrameGIF returns the encoded bytes of a minimal 2-frame animated
 // GIF, for tests that just need "a real animated GIF", not specific
 // pixel content (see animated_image_test.go for compositing
