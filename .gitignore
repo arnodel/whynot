@@ -6,3 +6,6 @@
 /dist
 /examples/wasm/whynot.wasm
 /cmd/whynot/web/whynot.wasm
+/cmd/whynot/web/giowhynot
+/cmd/giowhynot/web/giowhynot.wasm
+/cmd/giowhynot/web/wasm_exec.js

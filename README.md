@@ -1,11 +1,12 @@
 # Why Not?
 
-A Markdown document viewer for [ebiten](https://ebitengine.org/) games,
-written in Go - for anything that needs to show real formatted text (patch
-notes, an in-game journal, help screens, a credits scroll) without pulling
-in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
-and draws the document straight onto an `ebiten.Image`, using
-[goldmark](https://github.com/yuin/goldmark) to parse.
+A Markdown document viewer for Go games and GUI apps - for anything that needs to show
+real formatted text (patch notes, an in-game journal, help screens, a credits scroll)
+without pulling in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
+the document onto a `whynot.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
+to parse. The core library has no rendering backend dependency of its own - two ship with
+it, [Ebitengine](https://ebitengine.org/) (`ebitenrenderer`) and [Gio](https://gioui.org/)
+(`giorenderer`).
 
 - **Broad Markdown coverage** - tables, nested lists, images (including
   animated GIFs), links, blockquotes, code blocks, and more - degrading
@@ -16,40 +17,37 @@ and draws the document straight onto an `ebiten.Image`, using
 - **Fully customizable styling** - colors, margins, and text styles all
   resolve through one `StyleSheet` interface (dark and light themes built
   in), swappable at runtime
-- **Drop-in embedding** - `ebitenrenderer.Panel` adds a scrollable,
-  zoomable Markdown view to part of a larger game window in a few lines,
-  with resizing, hover/click, and an optional scrollbar all handled for
-  you
+- **Drop-in embedding** - `ebitenrenderer.Panel`/`giorenderer.Panel` add a
+  scrollable, zoomable Markdown view to part of a larger window in a few
+  lines, with resizing, hover/click, and an optional scrollbar all
+  handled for you
 
 ## Try the standalone viewer
 
-`cmd/whynot` is a small standalone app built entirely on the library - the
-easiest way to see what whynot can do.
+Two small standalone apps, built entirely on the library, are the easiest way to see what
+whynot can do - identical document viewer, history, zoom, and theming; the difference is
+the rendering engine underneath (and, for now, that `cmd/giowhynot` isn't packaged in a
+release, so `go install` is its only native option).
 
-**[Try it right now in your browser](https://arnodel.github.io/whynot/)** - no install,
-running entirely client-side via Ebitengine's own `js`/`wasm` backend (see
-[`cmd/whynot/web`](cmd/whynot/web)). Local file opening, paste-to-open, and following a
-link to a real webpage aren't wired up there yet - everything else, including opening a
-Markdown document by URL (`?doc=<url>`, or just follow a link), works the same as
-installed.
+| Engine | Platforms | Install | Web demo |
+|---|---|---|---|
+| [Ebitengine](https://ebitengine.org/) ([`cmd/whynot`](cmd/whynot)) | macOS, Linux, Windows | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
+| [Gio](https://gioui.org/) ([`cmd/giowhynot`](cmd/giowhynot)) | macOS, Linux, Windows | `go install github.com/arnodel/whynot/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
 
-Otherwise, on macOS or Linux:
+Both web demos run entirely client-side (see [`cmd/whynot/web`](cmd/whynot/web)/
+[`cmd/giowhynot/web`](cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local
+file opening, paste-to-open, and following a link to a real webpage aren't wired up in
+either (there's no real filesystem, clipboard, or system browser access in a browser
+sandbox) - everything else, including opening a Markdown document by URL (`?doc=<url>`, or
+just follow a link), works the same as installed.
 
-```bash
-brew install arnodel/tap/whynot
-```
+`cmd/giowhynot` has one feature `cmd/whynot` doesn't: the address bar is editable - click
+it, type a path/URL/"welcome", Enter to go there. `-debug-hit`/`-debug-stats` aren't
+implemented there yet, otherwise the two are the same feature set.
 
-Otherwise, grab a binary for your platform from the
-[latest release](https://github.com/arnodel/whynot/releases/latest), or build
-it yourself:
-
-```bash
-go install github.com/arnodel/whynot/cmd/whynot@latest
-```
-
-Run it with no argument and it opens a built-in welcome page explaining how
-to use it. Pass a Markdown file path (or URL) as an argument to view that file.
-Here is a screenshot from:
+Run either with no argument and it opens a built-in welcome page explaining how to use it.
+Pass a Markdown file path (or URL) as an argument to view that file. Here is a screenshot
+from:
 
 ```bash
 whynot https://raw.githubusercontent.com/arnodel/whynot/refs/heads/main/README.md
@@ -64,12 +62,16 @@ what's implemented. Architecture, internal layout model, and the
 reasoning behind some of the trickier bits (lazy layout, scroll
 anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Embed a Markdown viewer in your ebiten game
+## Embed a Markdown viewer in your game
 
 The library (root package `whynot`) has no rendering backend dependency -
-it only depends on `goldmark` for parsing. `ebitenrenderer` implements
-`whynot.Canvas` on top of `ebiten`. Two ways to wire the two together,
-depending on how much control you want.
+it only depends on `goldmark` for parsing. Two backends implement
+`whynot.Canvas`: `ebitenrenderer` (on top of `ebiten`) and `giorenderer`
+(on top of [Gio](https://gioui.org/)). The examples below use
+`ebitenrenderer` - `giorenderer`'s own `Panel`/`Canvas` mirror its shape
+closely (see [`cmd/giowhynot`](cmd/giowhynot) and
+[`examples/gio`](examples/gio) for the Gio-backed equivalents). Either
+way, two levels of control to pick from.
 
 ### The turnkey way: `ebitenrenderer.Panel`
 
@@ -156,6 +158,11 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 ```
 
 Run it yourself: `go run ./examples/panel`.
+
+`giorenderer.Panel` is the Gio equivalent, same shape (`NewPanel`,
+`WithScrollbar`, `OnLinkClick`/`OnLinkHover`) - see
+[`examples/gio`](examples/gio) for a runnable version, or
+[`cmd/giowhynot`](cmd/giowhynot) for a full app built on it.
 
 ### Finer control: `whynot.View` directly
 
@@ -353,17 +360,18 @@ that needs real type/binding information a lexer doesn't have (see `chromahighli
 
 See [`examples/chromahighlight`](examples/chromahighlight) for a runnable version.
 
-## `cmd/whynot`: a standalone viewer
+## `cmd/whynot`/`cmd/giowhynot`: standalone viewers
 
 ```
 go run ./cmd/whynot path/to/some.md
 ```
 
-Run with no argument and it opens a built-in welcome page (embedded in the
-binary, `cmd/whynot/assets/welcome.md`) explaining how to use it - including
-pasting a file path or `http(s)` URL (Cmd/Ctrl+V) to open it, and pasting
-the word "welcome" to come back. Beyond scrolling and resizing, it
-demonstrates what a caller can build on top of the library:
+Run with no argument and it opens a built-in welcome page (embedded in the binary,
+`browser/assets/welcome.md`) explaining how to use it - including pasting a file path or
+`http(s)` URL (Cmd/Ctrl+V) to open it, and pasting the word "welcome" to come back. Beyond
+scrolling and resizing, it demonstrates what a caller can build on top of the library -
+this section is about `cmd/whynot` specifically, but everything except the toolbar itself
+(see [above](#try-the-standalone-viewer)) is shared with `cmd/giowhynot` via `browser.App`:
 
 - **Document text uses this platform's own fonts** (`systemfont.SystemFontFaceSelector`,
   via `RegisterPreferredFont` - see [above](#fonts)) when it can find them, falling back
@@ -406,13 +414,17 @@ demonstrates what a caller can build on top of the library:
 None of the link-following/history logic lives in the library itself -
 `whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
-files, fetching URLs, and keeping a history stack are all `cmd/whynot`'s
-own (`load.go`, `navigate.go`). Image loading follows
+files, fetching URLs, and keeping a history stack all live in
+`browser` (`github.com/arnodel/whynot/browser`, `browser.App`) - the
+backend-agnostic app layer [`cmd/giowhynot`](cmd/giowhynot) is built on
+too, sharing this exact behavior rather than reimplementing it (its own
+toolbar and input handling are Gio-native instead - see
+[above](#embed-a-markdown-viewer-in-your-game)). Image loading follows
 the same split, one layer further in: the library defines `ImageSource`
 (defaulting to a plain local file open) and owns caching the result
 (`ImageCache` - an image is resolved, fetched, and decoded at most once,
 however many times it's asked for, however many rendering backends ask
-for it); `cmd/whynot` supplies the file-or-`http(s)`,
+for it); `browser` supplies the file-or-`http(s)`,
 resolved-against-the-document's-location `ImageSource`, via
 `WithImageSource`.
 
@@ -496,11 +508,11 @@ by implementation order now that most of the list is done.
       rather than unsupported, since no Markdown renderer ever shows them either
 
 **Embedding**
-- [x] `ebitenrenderer.Panel` embeds a scrollable document into part of a larger
-      `ebiten.Game`'s own window - coordinate translation, hover/click, wheel
-      scroll gated on its own bounds, and an optional draggable scrollbar
-      (`WithScrollbar`), all bounds-aware so a panel never affects anything
-      outside its own rectangle. See [above](#embed-a-markdown-viewer-in-your-ebiten-game)
+- [x] `ebitenrenderer.Panel`/`giorenderer.Panel` embed a scrollable document into part of
+      a larger window - coordinate translation, hover/click, wheel scroll gated on its own
+      bounds, and an optional draggable scrollbar, all bounds-aware so a panel never
+      affects anything outside its own rectangle. See
+      [above](#embed-a-markdown-viewer-in-your-game)
 
 **Styling**
 - [x] Fully customizable via the `StyleSheet` interface (see [above](#styling)) -
@@ -542,10 +554,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues).
 
 Floated but not scoped or started:
 
-- A different rendering backend than Ebitengine - `Canvas` (see
-  [above](#embed-a-markdown-viewer-in-your-ebiten-game)) is already the seam for this, the
-  documented boundary between layout and actual drawing, so a second backend wouldn't touch
-  layout or parsing at all
 - A different Markdown parser, or a different input format entirely (e.g. reStructuredText) -
   `Parse()` is the only goldmark-specific code in the library; everything downstream just
   consumes a `Block`/`ASTNode` tree with no idea where it came from

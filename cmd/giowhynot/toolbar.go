@@ -5,11 +5,13 @@ import (
 	"image/color"
 	"strings"
 
+	"gioui.org/font/gofont"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -59,6 +61,16 @@ func newToolbar(faceSelector whynot.FaceSelector, renderer *giorenderer.Renderer
 		renderer:     renderer,
 		editTheme:    material.NewTheme(),
 	}
+	// material.NewTheme()'s own Shaper is a bare zero-value text.Shaper,
+	// no font collection registered - it happened to render addressEditor's
+	// text fine on desktop (some platform-specific fallback, never fully
+	// tracked down), but rendered nothing at all in the browser sandbox
+	// (confirmed: a blinking caret, but no text, pre-filled or typed) -
+	// there's no OS font access there for any such fallback to draw on.
+	// gofont.Collection() is the same bundled-font source
+	// whynot.NewGoFontFaceSelector itself draws from, just in Gio's own
+	// font.FontFace shape rather than golang.org/x/image/font.Face.
+	tb.editTheme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 	tb.addressEditor.SingleLine = true
 	tb.addressEditor.Submit = true
 	return tb
@@ -153,6 +165,15 @@ func (tb *toolbar) updateAddressBar(gtx layout.Context, app *browser.App) {
 		tb.addressEditor.SetCaret(tb.addressEditor.Len(), tb.addressEditor.Len())
 		tb.editing = true
 		gtx.Execute(key.FocusCmd{Tag: &tb.addressEditor})
+		// Editor's own internal click-to-focus issues both of these
+		// together (confirmed against widget/editor.go) - FocusCmd
+		// alone is enough on desktop (real keyboard events go straight
+		// to the OS window regardless), but Gio's js/wasm backend
+		// captures actual keystrokes through a hidden <textarea> that
+		// only gets real browser DOM focus in response to this second
+		// command (see app/os_js.go's ShowTextInput) - without it,
+		// clicking in visibly enters edit mode but typing does nothing.
+		gtx.Execute(key.SoftKeyboardCmd{Show: true})
 	}
 }
 
