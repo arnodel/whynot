@@ -1,4 +1,4 @@
-name: Deploy WASM demo to Pages
+name: Deploy WASM demos to Pages
 
 on:
   push:
@@ -28,13 +28,23 @@ jobs:
         with:
           go-version: 1.25
 
-      # cmd/whynot/web is the whole site: index.html + wasm_exec.js
-      # already live there (see that directory's own README), this
-      # step just adds the compiled binary alongside them - the same
-      # build a local `GOOS=js GOARCH=wasm go build` from that
-      # directory would produce.
-      - name: Build whynot.wasm
-        run: GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
+      # cmd/whynot/web is the site root, unchanged: index.html +
+      # wasm_exec.js already live there (see that directory's own
+      # README), this step just adds the compiled binary alongside
+      # them - the same build a local `GOOS=js GOARCH=wasm go build`
+      # from that directory would produce. giowhynot gets a subpath
+      # (cmd/whynot/web/giowhynot/) rather than its own top-level
+      # site: cmd/giowhynot/web/index.html is still the canonical
+      # source for that page, just copied into place here alongside a
+      # fresh giowhynot.wasm and the same wasm_exec.js (Go's own wasm
+      # runtime glue, not specific to either backend, so not built or
+      # committed a second time - see cmd/giowhynot/web/README.md).
+      - name: Build whynot.wasm and giowhynot.wasm
+        run: |
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
+          mkdir -p cmd/whynot/web/giowhynot
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/giowhynot/giowhynot.wasm ./cmd/giowhynot
+          cp cmd/giowhynot/web/index.html cmd/whynot/web/wasm_exec.js cmd/whynot/web/giowhynot/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

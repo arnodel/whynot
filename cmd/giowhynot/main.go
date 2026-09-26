@@ -22,6 +22,10 @@ import (
 const initialWindowWidth, initialWindowHeight = 1024, 768
 
 func main() {
+	// Before any LoadDocument(WelcomeURL, ...) call - see its own doc
+	// comment on why this needs setting explicitly.
+	browser.AddressBarEditable = true
+
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	flag.Parse()
 
