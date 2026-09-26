@@ -8,13 +8,11 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"strings"
 
 	"gioui.org/app"
 	"gioui.org/op"
-	"gioui.org/widget/material"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/giorenderer"
@@ -50,14 +48,7 @@ func main() {
 
 func run() error {
 	view := whynot.NewView([]byte(exampleDoc()), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
-
-	// material.NewTheme()'s default Palette.Fg (the scrollbar indicator's
-	// color) is black - invisible against this document's dark
-	// background, so brighten it here rather than in giorenderer itself.
-	theme := material.NewTheme()
-	theme.Palette.Fg = color.NRGBA{R: 0xe0, G: 0xe0, B: 0xe0, A: 0xff}
-
-	panel := giorenderer.NewPanel(view, giorenderer.New(), image.Rectangle{}, giorenderer.WithScrollbar(), giorenderer.WithTheme(theme))
+	panel := giorenderer.NewPanel(view, giorenderer.New(), image.Rectangle{}, giorenderer.WithScrollbar())
 	panel.OnLinkClick = func(dest string) { log.Printf("clicked: %s", dest) }
 	panel.OnLinkHover = func(dest string) {
 		if dest != "" {

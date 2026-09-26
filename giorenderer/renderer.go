@@ -95,7 +95,12 @@ func (r *Renderer) glyphFor(face font.Face, ru rune, clr color.Color) (glyph, bo
 		return g, true
 	}
 	dr, mask, maskp, advance, ok := face.Glyph(fixed.P(0, 0), ru)
-	if !ok {
+	if !ok || dr.Empty() {
+		// dr.Empty() - e.g. a space - means no ink to paint, not just a
+		// small one: painting a zero-sized paint.ImageOp still produced
+		// visible garbage (the previous glyph, redrawn small) rather
+		// than nothing, so this is treated the same as !ok - just
+		// advance the pen, no image op at all.
 		return glyph{}, false
 	}
 	// face.Glyph's own doc: the mask's contents may change after the
