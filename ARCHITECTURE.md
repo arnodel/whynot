@@ -1,24 +1,31 @@
 # Architecture
 
 Why Not is a library for rendering a Markdown document onto a `Canvas` -
-an interface, not a specific rendering backend - plus `ebitenrenderer`, a
-package implementing that interface on top of `ebiten`, and a thin CLI that
-demonstrates the two together. The library lives at the repo root (package
-`whynot`, `github.com/arnodel/whynot`); `cmd/whynot` is a small
-`ebiten.Game` wrapper around it, and `cmd/test` is an unrelated scratch
-program.
+an interface, not a specific rendering backend - plus two packages
+implementing that interface, `ebitenrenderer` (on top of `ebiten`) and
+`giorenderer` (on top of [Gio](https://gioui.org/)), and a standalone CLI
+built on each. The library lives at the repo root (package `whynot`,
+`github.com/arnodel/whynot`); `cmd/whynot`/`cmd/giowhynot` are thin
+window-and-input wrappers around it, sharing their navigation/history/
+theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
 ## Package layout
 
 | Path | What it is |
 |---|---|
-| repo root | the library (package `whynot`) - parsing, layout, and the `Canvas` interface; no rendering backend dependency |
+| repo root | the library (package `whynot`) - parsing, layout, and the `Canvas`/`Panel`/`Interaction` interfaces/types; no rendering backend dependency |
 | `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
+| `giorenderer/` | implements `whynot.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
+| `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
 | `systemfont/` | implements a third `whynot.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `CustomFontFaceSelector.AddFontCollection` |
-| `cmd/whynot/` | the one real tool: a standalone viewer, window setup + input plumbing only, all rendering behavior lives in the library |
-| `cmd/test/` | unrelated scratch program, not part of this project |
+| `chromahighlight/` | implements `whynot.Highlighter` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
+| `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
+| `cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
 | `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |
 | `examples/view/` | runnable example of `whynot.View` wired up by hand (`go run ./examples/view`) |
+| `examples/gio/` | runnable example of `giorenderer.Canvas`/`Panel` (`go run ./examples/gio`) |
+| `examples/wasm/` | minimal browser demo via Ebitengine's own `js`/`wasm` backend, independent of `cmd/whynot`'s own (larger) browser build |
+| `examples/chromahighlight/`, `examples/customfont/`, `examples/systemfont/` | runnable examples of syntax highlighting and custom/system font selection |
 | `testdata/` | fixture Markdown/images used by the library's own tests (`go test` ignores this directory as a package) |
 
 ## The four-layer rendering pipeline
@@ -131,7 +138,7 @@ mutated, which is what makes the memoization described next safe.
 
 `Canvas` ([canvas.go](canvas.go)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
-`DrawImage`. `DrawImage` takes an already-decoded `image.Image`, not a
+`DrawImage`, `DrawRect`. `DrawImage` takes an already-decoded `image.Image`, not a
 source path — resolving, fetching, and decoding an image is entirely
 the library's own concern (`ImageCache`, see "Image loading" below), so
 a `Canvas` implementation never fetches or decodes anything itself; its
@@ -149,13 +156,21 @@ also breaks out of its child loop once a child starts past the viewport's
 bottom edge — safe because children are laid out top-to-bottom with no
 overlap, so nothing further down can be visible either.
 
-`ebitenrenderer.Renderer`/`Canvas` is the one implementation today. A
-`Renderer` owns caches (each decoded `image.Image`'s uploaded
-`ebiten.Image`, keyed by the `image.Image`'s own identity; per-`font.Face`
-glyph caches from `text/v2`) that should persist across frames;
-`NewCanvas(dst)` returns a cheap per-frame `Canvas` sharing those caches,
-so multiple `View`s drawn through one `Renderer` share GPU uploads and
-glyph caches instead of duplicating them.
+`ebitenrenderer.Renderer`/`Canvas` and `giorenderer.Renderer`/`Canvas` are
+the two implementations today. Both follow the same shape: a `Renderer`
+owns caches (each decoded `image.Image`'s uploaded texture, keyed by the
+`image.Image`'s own identity; per-`font.Face` glyph caches) that should
+persist across frames; `NewCanvas(...)` returns a cheap per-frame
+`Canvas` sharing those caches, so multiple `View`s drawn through one
+`Renderer` share GPU uploads and glyph caches instead of duplicating
+them. `giorenderer`'s own glyph cache exists for a different reason than
+`ebitenrenderer`'s, though: Gio has no equivalent of a `font.Face`-
+consuming text drawer (its own `text.Shaper` owns the whole shaping
+pipeline from raw font bytes, with no public per-glyph API), so
+`giorenderer.Canvas.DrawText` rasterizes each rune itself via
+`font.Face.Glyph` and paints the resulting bitmap through Gio's own
+`op`/`paint` primitives - the cache is what keeps that from
+re-rasterizing the same glyph every frame.
 
 ## `View`: tying the layers together with the right lifecycle
 
@@ -207,12 +222,19 @@ advancing for animated images even when nothing else did — see "Image
 loading" below; the layout tree itself still only rebuilds when width
 or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
 example of wiring this up by hand; `ebitenrenderer.Panel`
-([panel.go](ebitenrenderer/panel.go)) packages the same wiring (plus
-hover/click/wheel/scrollbar-drag input handling, all gated on its own
-bounds) into a reusable type for embedding a `View` into part of a
-larger `ebiten.Game`'s window - deliberately ebiten-only, unlike `View`
-itself, since a game embedding it is never going to swap engines out
-from under it.
+([panel.go](ebitenrenderer/panel.go)) and its Gio counterpart
+`giorenderer.Panel` package the same wiring (plus hover/click/wheel/
+scrollbar-drag input handling, all gated on its own bounds) into a
+reusable type for embedding a `View` into part of a larger window -
+deliberately backend-specific, unlike `View` itself, since a caller
+embedding one is never going to swap engines out from under it. The
+scroll-gating/hover-click/momentum logic the two `Panel`s share is
+factored into `whynot.Interaction` ([interaction.go](interaction.go)),
+in the root package (so both backends can depend on it without
+depending on each other) - deliberately *not* including scrollbar-drag,
+which each backend represents too differently to share: `ebitenrenderer`
+hand-draws its own thumb, `giorenderer` drives Gio's native
+`widget.Scrollbar` instead.
 
 `DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
 scales the ratio between them to whatever real pixel track it's drawing a
@@ -232,8 +254,9 @@ nothing carries over between frames for it to drift from.
 An image's `src` never blocks layout or drawing. `ImageCache`
 ([image_loader.go](image_loader.go)) wraps an embedder-supplied
 `ImageSource` (resolve + fetch bytes; `FileImageSource` by default,
-`cmd/whynot`'s `docImageSource` resolves relative to the document's own
-location and fetches over `http(s)` too) and does the actual resolving,
+`browser`'s `docImageSource` resolves relative to the document's own
+location and fetches over `http(s)` too, shared by `cmd/whynot` and
+`cmd/giowhynot`) and does the actual resolving,
 fetching, and decoding on a background goroutine — `Load` always
 returns immediately with whatever's currently known (`ImagePending`,
 `ImageReady`, or `ImageFailed`), never waiting on I/O itself. A cache
@@ -279,8 +302,8 @@ cursor reaches it, is exactly the scenario that can make a
 `DocumentBounds`-based scrollbar visibly jump backward even though the
 user only ever scrolled forward (the ratio's denominator grows more
 than its numerator does in the same frame - see `ebitenrenderer.Panel`'s
-`scrollbarThumbRect`, the one thing actually building a scrollbar from
-these numbers today). Getting a slot's real size known *before* the
+`scrollbarThumbRect`/`giorenderer.Panel`'s `drawScrollbar`, what actually
+builds a scrollbar from these numbers). Getting a slot's real size known *before* the
 cursor arrives, not right as it does, avoids the surprise instead of
 smoothing over it after the fact:
 
@@ -407,7 +430,7 @@ children (`CompileDocument`, a blockquote's children,
 `CompileListItem`'s trailing blocks) filters `nil` out rather than
 assuming every child produces a real `Block`.
 
-`cmd/whynot` additionally rejects an `http(s)` fetch whose
+`browser` additionally rejects an `http(s)` fetch whose
 `Content-Type` isn't Markdown/plain-text-ish before handing it to
 `Parse` - otherwise following a link to a real webpage would feed its
 HTML straight into the Markdown parser, which has no way to tell HTML
