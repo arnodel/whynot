@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/arnodel/whynot"
@@ -130,6 +131,42 @@ func TestResolveLocationArg(t *testing.T) {
 	if _, err := ResolveLocationArg(filepath.Join(dir, "does-not-exist.md")); err == nil {
 		t.Error("ResolveLocationArg(nonexistent path) = nil error, want an error")
 	}
+
+	// A file: URL (e.g. from editing an address bar pre-filled with
+	// Location().String()) must round-trip, not just a bare path.
+	fileURL, err := absFileURL(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, err := ResolveLocationArg(fileURL.String()); err != nil || u.Path != fileURL.Path {
+		t.Errorf("ResolveLocationArg(%q) = %v, %v, want Path %q, nil", fileURL, u, err, fileURL.Path)
+	}
+	if _, err := ResolveLocationArg("file:///no/such/file.md"); err == nil {
+		t.Error("ResolveLocationArg(a file: URL to a nonexistent path) = nil error, want an error")
+	}
+
+	// A bare domain (no scheme) is guessed as https://.
+	if u, err := ResolveLocationArg("example.com/x.md"); err != nil || u.String() != "https://example.com/x.md" {
+		t.Errorf("ResolveLocationArg(%q) = %v, %v, want https://example.com/x.md, nil", "example.com/x.md", u, err)
+	}
+
+	// A single-letter "scheme" (a Windows drive letter, not a real
+	// protocol) must not be mistaken for one, or a Windows absolute
+	// path could never resolve as a file - checked by the error
+	// message: on this (non-Windows) test machine the path can't
+	// actually exist, so some error is expected either way, but it must
+	// be the not-a-valid-location one, not "unsupported link scheme
+	// \"c\"" (which is what treating "C:" as a real scheme would give).
+	_, err = ResolveLocationArg(`C:\nonexistent\path.md`)
+	if err == nil {
+		t.Error(`ResolveLocationArg("C:\nonexistent\path.md") = nil error, want one`)
+	} else if strings.Contains(err.Error(), "unsupported") {
+		t.Errorf(`ResolveLocationArg("C:\nonexistent\path.md") = %v, want a plain not-found error, not "unsupported" - "C:" must not be treated as a real scheme`, err)
+	}
+
+	if _, err := ResolveLocationArg("not a real location"); err == nil {
+		t.Error("ResolveLocationArg(garbage) = nil error, want an error")
+	}
 }
 
 func TestAppFollowSamePageFragmentScrolls(t *testing.T) {
@@ -182,6 +219,44 @@ func TestAppFollowCrossDocumentLoadsAndPushesHistory(t *testing.T) {
 	}
 	if title, _ := app.Panel.View().Title(); title != "Doc B" {
 		t.Errorf("current View's Title() = %q, want \"Doc B\"", title)
+	}
+}
+
+func TestAppNavigateLoadsDocumentAndPushesHistory(t *testing.T) {
+	dir := t.TempDir()
+	locA := writeTempMD(t, dir, "a.md", "# Doc A")
+	writeTempMD(t, dir, "b.md", "# Doc B")
+	app := newTestApp(t, dir, locA, "# Doc A")
+
+	// Navigate takes typed/pasted text (a bare path, URL, or "welcome" -
+	// see ResolveLocationArg), not an already-resolved location URL.
+	pathB := filepath.Join(dir, "b.md")
+	if err := app.Navigate(pathB); err != nil {
+		t.Fatalf("Navigate(%q) = %v, want nil", pathB, err)
+	}
+
+	if title, _ := app.Panel.View().Title(); title != "Doc B" {
+		t.Errorf("Title() after Navigate = %q, want \"Doc B\"", title)
+	}
+	if !app.CanGoBack() {
+		t.Error("CanGoBack() = false after Navigate, want true - it should push history like Follow/Paste")
+	}
+}
+
+func TestAppNavigateInvalidLeavesCurrentDocumentAlone(t *testing.T) {
+	dir := t.TempDir()
+	locA := writeTempMD(t, dir, "a.md", "# Doc A")
+	app := newTestApp(t, dir, locA, "# Doc A")
+
+	err := app.Navigate(filepath.Join(dir, "does-not-exist.md"))
+	if err == nil {
+		t.Fatal("Navigate to a nonexistent path returned nil error, want one")
+	}
+	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+		t.Errorf("Title() after a failed Navigate = %q, want unchanged \"Doc A\"", title)
+	}
+	if app.CanGoBack() {
+		t.Error("CanGoBack() = true after a failed Navigate, want false - nothing should be pushed")
 	}
 }
 

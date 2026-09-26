@@ -60,10 +60,8 @@ func main() {
 	panel.OnLinkClick = browserApp.Follow
 	panel.OnLinkHover = browserApp.OnLinkHover
 
-	tb := &toolbar{
-		faceSelector: whynot.NewGoFontFaceSelector(72),
-		renderer:     renderer,
-	}
+	tb := newToolbar(whynot.NewGoFontFaceSelector(72), renderer)
+	panel.OnPress = tb.cancelEdit
 
 	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
@@ -100,7 +98,12 @@ func run(win *app.Window, browserApp *browser.App, panel *giorenderer.Panel, tb 
 			tb.faceSelector.SetDPI(deviceScale * 72)
 
 			tb.update(gtx, browserApp)
-			pollKeys(gtx, browserApp, panel, deviceScale)
+			// Suspended while editing the address bar - pollKeys's
+			// filters match regardless of focus, so e.g. typing "-" or
+			// space into it would otherwise also fire ZoomOut/PageDown.
+			if !tb.editing {
+				pollKeys(gtx, browserApp, panel, deviceScale)
+			}
 			panel.Update(gtx)
 
 			panel.Draw(gtx)

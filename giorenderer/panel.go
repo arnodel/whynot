@@ -24,6 +24,16 @@ type Panel struct {
 	OnLinkClick func(destination string)
 	OnLinkHover func(destination string)
 
+	// OnPress, if set, is called whenever a press lands within Bounds -
+	// link or not, unlike OnLinkClick. Not part of ebitenrenderer.Panel
+	// (nothing there needs it yet): a host embedding this Panel alongside
+	// its own focusable UI (e.g. an editable address bar) can use it to
+	// know "the user just interacted with the document," since Gio's own
+	// key-focus model is independent of pointer clicks - clicking a
+	// widget that doesn't itself claim key focus never blurs whatever
+	// does have it.
+	OnPress func()
+
 	view   *whynot.View
 	bounds image.Rectangle
 	scale  float64

@@ -372,24 +372,36 @@ func (a *App) Reload() {
 	a.updateWindowTitle()
 }
 
-// Paste navigates to the clipboard's current text content, if it's the
-// word "welcome" (see WelcomeURL), an http(s) URL, or an existing local
-// file path - unlike Follow, this is always treated as an absolute
-// destination, never resolved relative to the current document, since
-// pasting is a user-initiated "go here," not a link inside whatever's
-// currently on screen.
+// Paste navigates to the clipboard's current text content - see
+// Navigate for what "navigates to" means and why this is unlike Follow.
 func (a *App) Paste() {
 	text, err := readClipboard()
 	if err != nil {
 		log.Printf("reading clipboard: %v", err)
 		return
 	}
-	text = strings.TrimSpace(text)
+	a.Navigate(strings.TrimSpace(text))
+}
 
+// Navigate resolves text - the word "welcome" (see WelcomeURL), an
+// http(s) URL, or an existing local file path, the same as
+// ResolveLocationArg - loads it, and replaces the current document,
+// pushing history first same as Follow. Unlike Follow, text is always
+// treated as an absolute destination, never resolved relative to the
+// current document, since this is a user-initiated "go here" (typed
+// into an address bar, or pasted - see Paste), not a link inside
+// whatever's currently on screen.
+//
+// Returns the resolve/load error, if any, so a caller with somewhere to
+// show it (e.g. an editable address bar) can - an HTML response is
+// still handled the same as Follow (opened in the system browser) and
+// reported as no error, since that's not a mistake for the caller to
+// show.
+func (a *App) Navigate(text string) error {
 	resolved, err := ResolveLocationArg(text)
 	if err != nil {
-		log.Printf("clipboard content: %v", err)
-		return
+		log.Printf("navigating to %q: %v", text, err)
+		return err
 	}
 
 	source, err := LoadDocument(resolved)
@@ -397,10 +409,10 @@ func (a *App) Paste() {
 		var htmlErr *htmlContentError
 		if errors.As(err, &htmlErr) {
 			openInBrowser(resolved.String())
-			return
+			return nil
 		}
 		log.Printf("loading %s: %v", resolved, err)
-		return
+		return err
 	}
 	view := a.NewView(source, resolved)
 	view.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
@@ -408,6 +420,7 @@ func (a *App) Paste() {
 	a.Panel.SetView(view)
 	a.location = resolved
 	a.updateWindowTitle()
+	return nil
 }
 
 // zoomStep is a fixed step of the original (100%) size, not of the

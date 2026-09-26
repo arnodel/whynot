@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -91,6 +92,23 @@ func resolveAgainst(base *url.URL, ref string) (*url.URL, error) {
 		return nil, err
 	}
 	return base.ResolveReference(target), nil
+}
+
+// looksLikeHost reports whether s (up to its first '/', if any) looks
+// like a hostname a browser's address bar would recognize without an
+// explicit scheme - contains a '.' (e.g. "example.com"), or is
+// "localhost" (with an optional ":port") - the same simple heuristic a
+// browser's own address bar uses to tell a bare domain apart from a
+// relative path or a search query.
+func looksLikeHost(s string) bool {
+	host := s
+	if i := strings.IndexByte(s, '/'); i >= 0 {
+		host = s[:i]
+	}
+	if h, _, ok := strings.Cut(host, ":"); ok {
+		host = h
+	}
+	return host == "localhost" || strings.Contains(host, ".")
 }
 
 // docImageSource implements whynot.ImageSource by resolving an image's

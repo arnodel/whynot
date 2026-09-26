@@ -3,12 +3,16 @@ package main
 import (
 	"image"
 	"image/color"
+	"strings"
 
+	"gioui.org/io/key"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
+	"gioui.org/widget/material"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
@@ -31,8 +35,33 @@ type toolbar struct {
 	back, forward, reload  widget.Clickable
 	zoomOut, zoomIn, theme widget.Clickable
 
+	// addressClick wraps the read-only address bar display (only laid
+	// out while !editing) purely to detect a click-to-edit, the same
+	// way an icon button's own Clickable does.
+	addressClick widget.Clickable
+	// addressEditor is laid out instead of the read-only display while
+	// editing is true - see updateAddressBar.
+	addressEditor widget.Editor
+	editing       bool
+	// editTheme is only for addressEditor's own chrome (cursor,
+	// selection, font/shaper) - Gio's own text stack, not whynot's
+	// font.Face, and unrelated to giorenderer.Panel's own theme (used
+	// only for its scrollbar).
+	editTheme *material.Theme
+
 	faceSelector whynot.FaceSelector
 	renderer     *giorenderer.Renderer
+}
+
+func newToolbar(faceSelector whynot.FaceSelector, renderer *giorenderer.Renderer) *toolbar {
+	tb := &toolbar{
+		faceSelector: faceSelector,
+		renderer:     renderer,
+		editTheme:    material.NewTheme(),
+	}
+	tb.addressEditor.SingleLine = true
+	tb.addressEditor.Submit = true
+	return tb
 }
 
 // update checks each button for a click and dispatches the
@@ -40,23 +69,90 @@ type toolbar struct {
 // widget.Clickable.Layout drains the same click event queue Clicked
 // reads from, so calling Clicked after Layout would always see nothing.
 func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
-	if tb.back.Clicked(gtx) {
+	backClicked := tb.back.Clicked(gtx)
+	forwardClicked := tb.forward.Clicked(gtx)
+	reloadClicked := tb.reload.Clicked(gtx)
+	zoomOutClicked := tb.zoomOut.Clicked(gtx)
+	zoomInClicked := tb.zoomIn.Clicked(gtx)
+	themeClicked := tb.theme.Clicked(gtx)
+
+	// Gio's key-focus model is independent of pointer clicks (clicking
+	// a widget that doesn't itself claim key focus never blurs whatever
+	// does) - so clicking any of these while editing the address bar
+	// needs an explicit cancel, same reason as Panel.OnPress below.
+	if backClicked || forwardClicked || reloadClicked || zoomOutClicked || zoomInClicked || themeClicked {
+		tb.cancelEdit()
+	}
+
+	if backClicked {
 		app.Back()
 	}
-	if tb.forward.Clicked(gtx) {
+	if forwardClicked {
 		app.Forward()
 	}
-	if tb.reload.Clicked(gtx) {
+	if reloadClicked {
 		app.Reload()
 	}
-	if tb.zoomOut.Clicked(gtx) {
+	if zoomOutClicked {
 		app.ZoomOut()
 	}
-	if tb.zoomIn.Clicked(gtx) {
+	if zoomInClicked {
 		app.ZoomIn()
 	}
-	if tb.theme.Clicked(gtx) {
+	if themeClicked {
 		app.SetTheme(!app.DarkTheme())
+	}
+	tb.updateAddressBar(gtx, app)
+}
+
+// cancelEdit reverts the address bar to its read-only display without
+// navigating anywhere. Gio's key-focus model is independent of pointer
+// clicks (confirmed against io/input/pointer.go having no focus logic
+// at all): a click on something that doesn't itself claim key focus -
+// which is everything else in this app - never blurs addressEditor, so
+// gtx.Focused(&tb.addressEditor) alone can't detect "clicked away"; this
+// is called explicitly instead, from Escape, and from anything else
+// that itself represents "the user clicked away" (toolbar buttons in
+// update, giorenderer.Panel.OnPress for the document).
+func (tb *toolbar) cancelEdit() {
+	tb.editing = false
+}
+
+// updateAddressBar drives the click-to-edit / submit / cancel state
+// machine - see cancelEdit's own doc comment for why blur can't just be
+// read off gtx.Focused. Also note: cancelEdit must never run on the
+// same frame editing turns true (the click-to-edit branch below runs
+// after this one specifically so a same-frame cancelEdit call earlier
+// in this same Update pass - e.g. from a stale click - can't undo it).
+func (tb *toolbar) updateAddressBar(gtx layout.Context, app *browser.App) {
+	if tb.editing {
+		for {
+			e, ok := tb.addressEditor.Update(gtx)
+			if !ok {
+				break
+			}
+			if submit, ok := e.(widget.SubmitEvent); ok {
+				if err := app.Navigate(strings.TrimSpace(submit.Text)); err == nil {
+					tb.cancelEdit()
+				}
+			}
+		}
+		for {
+			e, ok := gtx.Event(key.Filter{Focus: &tb.addressEditor, Name: key.NameEscape})
+			if !ok {
+				break
+			}
+			if ke, ok := e.(key.Event); ok && ke.State == key.Press {
+				tb.cancelEdit()
+			}
+		}
+	}
+
+	if tb.addressClick.Clicked(gtx) {
+		tb.addressEditor.SetText(app.Location().String())
+		tb.addressEditor.SetCaret(tb.addressEditor.Len(), tb.addressEditor.Len())
+		tb.editing = true
+		gtx.Execute(key.FocusCmd{Tag: &tb.addressEditor})
 	}
 }
 
@@ -95,28 +191,85 @@ func (tb *toolbar) layout(gtx layout.Context, app *browser.App) layout.Dimension
 	)
 }
 
-// addressBar returns a layout.Widget showing app's current document
-// location, or - while hovering a link - that link's destination
-// instead, in StyleSheet.HighlightColor to match the hovered link's
-// own color in the document.
+// addressBar returns a layout.Widget showing - while not editing -
+// app's current document location, or - while hovering a link - that
+// link's destination instead, in StyleSheet.HighlightColor to match
+// the hovered link's own color in the document. Clicking it (via
+// addressClick) or the whole widget while editing is true switches to
+// a real text field (see updateAddressBar) - typed text is committed
+// as a navigation on Enter, discarded on Escape or clicking away.
 func (tb *toolbar) addressBar(app *browser.App) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			size := gtx.Constraints.Max
-			face, err := tb.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
-			if err != nil {
-				return layout.Dimensions{Size: size}
+			if tb.editing {
+				return tb.layoutEditor(gtx)
 			}
-			text, textColor := app.Location().String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
-			if hoverDest := app.HoverDest(); hoverDest != "" {
-				text, textColor = hoverDest, app.StyleSheet().HighlightColor()
-			}
-			text = truncateMiddle(face, text, size.X)
-			canvas := tb.renderer.NewCanvas(gtx.Ops, image.Rectangle{Max: size})
-			canvas.DrawText(text, face, 0, baselineIn(face, image.Rectangle{Max: size}), textColor)
-			return layout.Dimensions{Size: size}
+			return tb.addressClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return tb.layoutLocation(gtx, app)
+			})
 		})
 	}
+}
+
+// layoutEditor draws addressEditor in Gio's own font/shaper (see this
+// package's own doc notes on the font-stack mismatch) - a minor,
+// transient visual difference from the read-only display's whynot-face
+// text, only visible while actually typing. Its own natural height
+// (line-height plus internal padding) doesn't match the address bar's
+// fixed row height, so it's vertically centered within it by hand
+// (recording its draw ops, then replaying them at a Y offset) rather
+// than left at Editor's own default top alignment - not via
+// layout.Center, which centers *both* axes: Editor reports its own
+// natural (text-content) width rather than filling the available
+// width the way a real address bar needs to, so centering
+// horizontally too visibly shrank and centered the whole field.
+func (tb *toolbar) layoutEditor(gtx layout.Context) layout.Dimensions {
+	e := material.Editor(tb.editTheme, &tb.addressEditor, "")
+	e.Color = color.NRGBA{R: 0xCC, G: 0xCC, B: 0xCC, A: 0xFF}
+	e.TextSize = unit.Sp(14)
+
+	size := gtx.Constraints.Max
+	// Min.X = size.X forces full width, left-aligned (Editor's own
+	// natural width is just its text content). Min.Y = 0 (relaxed from
+	// whatever exact/forced constraint this widget inherited from the
+	// Flex row - Min == Max there, which is why Editor reported its
+	// height as the *whole* row and rendered top-aligned within it) so
+	// Editor instead reports its own smaller natural single-line
+	// height, which offY below then centers.
+	gtx.Constraints.Min = image.Pt(size.X, 0)
+
+	macro := op.Record(gtx.Ops)
+	dims := e.Layout(gtx)
+	call := macro.Stop()
+
+	offY := (size.Y - dims.Size.Y) / 2
+	if offY < 0 {
+		offY = 0
+	}
+	stack := op.Offset(image.Pt(0, offY)).Push(gtx.Ops)
+	call.Add(gtx.Ops)
+	stack.Pop()
+
+	return layout.Dimensions{Size: size}
+}
+
+// layoutLocation draws the read-only address bar text via giorenderer,
+// matching cmd/whynot's own address bar exactly (same face, same
+// middle-truncation for a long path/URL).
+func (tb *toolbar) layoutLocation(gtx layout.Context, app *browser.App) layout.Dimensions {
+	size := gtx.Constraints.Max
+	face, err := tb.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	if err != nil {
+		return layout.Dimensions{Size: size}
+	}
+	text, textColor := app.Location().String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
+	if hoverDest := app.HoverDest(); hoverDest != "" {
+		text, textColor = hoverDest, app.StyleSheet().HighlightColor()
+	}
+	text = truncateMiddle(face, text, size.X)
+	canvas := tb.renderer.NewCanvas(gtx.Ops, image.Rectangle{Max: size})
+	canvas.DrawText(text, face, 0, baselineIn(face, image.Rectangle{Max: size}), textColor)
+	return layout.Dimensions{Size: size}
 }
 
 // iconButton returns a layout.Widget drawing an icon button filling a

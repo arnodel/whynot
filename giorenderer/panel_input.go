@@ -87,6 +87,10 @@ func (p *Panel) Update(gtx layout.Context) {
 		}
 	}
 
+	if justPressed && p.OnPress != nil {
+		p.OnPress()
+	}
+
 	if gotEvent {
 		p.interaction.HoverAndClick(pos.X, pos.Y, justPressed)
 	}
