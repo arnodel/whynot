@@ -31,8 +31,8 @@ release, so `go install` is its only native option).
 
 | Engine | Platforms | Install | Web demo |
 |---|---|---|---|
-| [Ebitengine](https://ebitengine.org/) ([`cmd/whynot`](cmd/whynot)) | macOS, Linux, Windows | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
-| [Gio](https://gioui.org/) ([`cmd/giowhynot`](cmd/giowhynot)) | macOS, Linux, Windows | `go install github.com/arnodel/whynot/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
+| [Ebitengine](https://ebitengine.org/) ([`cmd/whynot`](cmd/whynot)) | macOS, Linux, Windows, wasm | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
+| [Gio](https://gioui.org/) ([`cmd/giowhynot`](cmd/giowhynot)) | macOS, Linux, Windows, wasm | `go install github.com/arnodel/whynot/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
 
 Both web demos run entirely client-side (see [`cmd/whynot/web`](cmd/whynot/web)/
 [`cmd/giowhynot/web`](cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local

@@ -25,6 +25,16 @@ var WelcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
 // the document's own first heading.
 var Version = "dev"
 
+// AddressBarEditable adds a bullet to the welcome page's "Open a
+// document" section mentioning the address bar can be clicked and
+// typed into - false by default, since the welcome page is shared
+// between
+// cmd/whynot (read-only address bar) and cmd/giowhynot (editable); set
+// this to true before the first call to LoadDocument(WelcomeURL, ...)
+// (i.e. at the very start of main) in a host whose address bar
+// actually is editable.
+var AddressBarEditable bool
+
 // welcomeShortcut is the platform's own paste shortcut, written the way
 // a person would actually type it - the embedded page can't know at
 // build time which OS it'll run on. Spelled out as "Cmd+V" rather than
@@ -60,7 +70,18 @@ func renderWelcome() []byte {
 	}
 	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
 	md = bytes.ReplaceAll(md, []byte("{{VERSION}}"), []byte(versionSuffix()))
+	// Replaces the whole placeholder line, trailing newline included, so
+	// a false AddressBarEditable removes the line entirely rather than
+	// leaving a blank one in the middle of the bullet list.
+	md = bytes.ReplaceAll(md, []byte("{{ADDRESS_BAR_TIP}}\n"), []byte(addressBarTip()))
 	return md
+}
+
+func addressBarTip() string {
+	if !AddressBarEditable {
+		return ""
+	}
+	return "- Click the address bar, type a path, URL, or \"welcome\", then press Enter.\n"
 }
 
 // welcomeImageSource implements whynot.ImageSource for images the
