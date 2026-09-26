@@ -34,8 +34,8 @@ const toolbarLogicalHeight = 36
 // extracting a second shared implementation - see the browser package's
 // own doc comment.
 type toolbar struct {
-	back, forward, reload  widget.Clickable
-	zoomOut, zoomIn, theme widget.Clickable
+	back, forward, reload, toc widget.Clickable
+	zoomOut, zoomIn, theme     widget.Clickable
 
 	// addressClick wraps the read-only address bar display (only laid
 	// out while !editing) purely to detect a click-to-edit, the same
@@ -84,6 +84,7 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 	backClicked := tb.back.Clicked(gtx)
 	forwardClicked := tb.forward.Clicked(gtx)
 	reloadClicked := tb.reload.Clicked(gtx)
+	tocClicked := tb.toc.Clicked(gtx)
 	zoomOutClicked := tb.zoomOut.Clicked(gtx)
 	zoomInClicked := tb.zoomIn.Clicked(gtx)
 	themeClicked := tb.theme.Clicked(gtx)
@@ -92,7 +93,7 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 	// a widget that doesn't itself claim key focus never blurs whatever
 	// does) - so clicking any of these while editing the address bar
 	// needs an explicit cancel, same reason as Panel.OnPress below.
-	if backClicked || forwardClicked || reloadClicked || zoomOutClicked || zoomInClicked || themeClicked {
+	if backClicked || forwardClicked || reloadClicked || tocClicked || zoomOutClicked || zoomInClicked || themeClicked {
 		tb.cancelEdit()
 	}
 
@@ -104,6 +105,13 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 	}
 	if reloadClicked {
 		app.Reload()
+	}
+	if tocClicked {
+		if app.TOCShowing() {
+			app.HideTOC()
+		} else {
+			app.ShowTOC()
+		}
 	}
 	if zoomOutClicked {
 		app.ZoomOut()
@@ -197,17 +205,19 @@ func (tb *toolbar) layout(gtx layout.Context, app *browser.App) layout.Dimension
 	gtx.Constraints = layout.Exact(image.Pt(width, height))
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.back, browser.BackIcon, btn, app.CanGoBack())),
+		layout.Rigid(iconButton(&tb.back, browser.BackIcon, btn, app.CanGoBack(), false)),
 		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.forward, browser.ForwardIcon, btn, app.CanGoForward())),
+		layout.Rigid(iconButton(&tb.forward, browser.ForwardIcon, btn, app.CanGoForward(), false)),
 		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.reload, browser.ReloadIcon, btn, true)),
+		layout.Rigid(iconButton(&tb.reload, browser.ReloadIcon, btn, app.CanReload(), false)),
+		layout.Rigid(hspace(pad)),
+		layout.Rigid(iconButton(&tb.toc, browser.TOCIcon, btn, app.CanShowTOC(), app.TOCShowing())),
 		layout.Flexed(1, tb.addressBar(app)),
-		layout.Rigid(iconButton(&tb.zoomOut, browser.ZoomOutIcon, btn, true)),
+		layout.Rigid(iconButton(&tb.zoomOut, browser.ZoomOutIcon, btn, true, false)),
 		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.zoomIn, browser.ZoomInIcon, btn, true)),
+		layout.Rigid(iconButton(&tb.zoomIn, browser.ZoomInIcon, btn, true, false)),
 		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.theme, themeIcon, btn, true)),
+		layout.Rigid(iconButton(&tb.theme, themeIcon, btn, true, false)),
 		layout.Rigid(hspace(pad)),
 	)
 }
@@ -298,12 +308,14 @@ func (tb *toolbar) layoutLocation(gtx layout.Context, app *browser.App) layout.D
 // background fill (for hover/pressed feedback) showing through
 // wherever the icon's own transparency lets it. enabled only affects
 // appearance; Back is still harmless to click with no history, so
-// nothing needs disabling functionally (see buttonColors).
-func iconButton(click *widget.Clickable, icon image.Image, size int, enabled bool) layout.Widget {
+// nothing needs disabling functionally (see buttonColors). active forces
+// the same fill/tint as a physical press, for the TOC button to read as
+// "ON" while showing; every other button passes false.
+func iconButton(click *widget.Clickable, icon image.Image, size int, enabled, active bool) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints = layout.Exact(image.Pt(size, size))
 		return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			fill, tint := buttonColors(enabled, click.Hovered(), click.Pressed())
+			fill, tint := buttonColors(enabled, click.Hovered(), click.Pressed() || active)
 			if fill != nil {
 				paint.FillShape(gtx.Ops, toNRGBA(fill), clip.Rect(image.Rect(0, 0, size, size)).Op())
 			}

@@ -28,6 +28,7 @@ func (g *game) layoutToolbar() {
 	g.backButton = nextButton()
 	g.forwardButton = nextButton()
 	g.reloadButton = nextButton()
+	g.tocButton = nextButton()
 
 	// zoomOut/zoomIn/theme sit on the toolbar's right edge instead,
 	// grouped apart from back/forward/reload since they're not

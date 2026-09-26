@@ -64,13 +64,13 @@ type game struct {
 	// panel.Bounds() rather than this field directly). zoomIn/zoomOut
 	// sit on the toolbar's right edge, apart from back/forward/reload
 	// on the left - they're not navigation.
-	toolbarHeight                           int
-	backButton, forwardButton, reloadButton image.Rectangle
-	backState, forwardState, reloadState    buttonState
-	zoomInButton, zoomOutButton             image.Rectangle
-	zoomInState, zoomOutState               buttonState
-	themeButton                             image.Rectangle
-	themeState                              buttonState
+	toolbarHeight                                      int
+	backButton, forwardButton, reloadButton, tocButton image.Rectangle
+	backState, forwardState, reloadState, tocState     buttonState
+	zoomInButton, zoomOutButton                        image.Rectangle
+	zoomInState, zoomOutState                          buttonState
+	themeButton                                        image.Rectangle
+	themeState                                         buttonState
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its

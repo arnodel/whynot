@@ -122,8 +122,8 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 // for a window/tab title) decides its own fallback; a document with no
 // heading at all is a normal, unremarkable case, not an error.
 //
-// Only a top-level heading is found, the same limitation
-// ScrollToAnchor has and for the same reason: one nested inside a
+// Only a top-level heading is found, the same limitation TOCEntries/
+// ScrollToAnchor have and for the same reason: one nested inside a
 // blockquote or list isn't reachable this way.
 func (v *View) Title() (string, bool) {
 	stack, ok := v.block.(*StackBlock)
@@ -131,19 +131,88 @@ func (v *View) Title() (string, bool) {
 		return "", false
 	}
 	for _, block := range stack.blocks {
-		node := block.Node()
-		if node == nil || node.Tag < TagHeading1 || node.Tag > TagHeading6 {
+		if entry, ok := headingEntryOf(block); ok {
+			return entry.Text, true
+		}
+	}
+	return "", false
+}
+
+// TOCEntry is one heading found by TOCEntries - enough to build a table
+// of contents entry (a nested list item linking to ID) without exposing
+// this package's own AST/Block types to a caller like the browser
+// package.
+type TOCEntry struct {
+	ID    string // ASTNode.ID - what ScrollToAnchor takes
+	Level int    // 1-6, from TagHeading1..TagHeading6
+	Text  string
+}
+
+// TOCEntries returns every top-level heading in the document, in
+// document order - the raw material for a caller building a table of
+// contents (e.g. browser.App's ShowTOC). Same only-top-level-headings
+// limitation as Title/ScrollToAnchor. Unlike Title, which stops at the
+// first heading it finds, this always walks the whole document.
+func (v *View) TOCEntries() []TOCEntry {
+	stack, ok := v.block.(*StackBlock)
+	if !ok {
+		return nil
+	}
+	var entries []TOCEntry
+	for _, block := range stack.blocks {
+		if entry, ok := headingEntryOf(block); ok {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
+}
+
+// headingEntryOf describes block as a TOCEntry, if it's a heading -
+// the per-block half shared by Title's walk and TOCEntries', so only
+// the walking itself differs between them (Title stops at the first
+// heading; TOCEntries collects all of them).
+func headingEntryOf(block Block) (TOCEntry, bool) {
+	node := block.Node()
+	if node == nil || node.Tag < TagHeading1 || node.Tag > TagHeading6 {
+		return TOCEntry{}, false
+	}
+	mb, ok := block.(*MarginBlock)
+	if !ok {
+		return TOCEntry{}, false
+	}
+	tb, ok := mb.Block.(*TextBlock)
+	if !ok {
+		return TOCEntry{}, false
+	}
+	return TOCEntry{
+		ID:    node.ID,
+		Level: int(node.Tag-TagHeading1) + 1,
+		Text:  plainTextOf(tb),
+	}, true
+}
+
+// CurrentHeadingID returns the id of the top-level heading at or just
+// above the top of the viewport - the section currently on screen - or
+// ok=false if the document has no heading before the current scroll
+// position, or nothing has been laid out yet. Like ScrollToAnchor, this
+// only reads each slot's own Node(), never resolving it into a box, so
+// it's cheap regardless of how far back the nearest heading is.
+func (v *View) CurrentHeadingID() (id string, ok bool) {
+	if v.box == nil {
+		return "", false
+	}
+	start := v.cursor.index
+	if start >= len(v.box.slots) {
+		start = len(v.box.slots) - 1
+	}
+	for i := start; i >= 0; i-- {
+		slot := v.box.slots[i]
+		if slot.block == nil {
 			continue
 		}
-		mb, ok := block.(*MarginBlock)
-		if !ok {
-			continue
+		if n := slot.block.Node(); n != nil && n.Tag >= TagHeading1 && n.Tag <= TagHeading6 {
+			return n.ID, true
 		}
-		tb, ok := mb.Block.(*TextBlock)
-		if !ok {
-			continue
-		}
-		return plainTextOf(tb), true
 	}
 	return "", false
 }

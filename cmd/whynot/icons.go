@@ -22,4 +22,5 @@ var (
 	zoomOutIcon   = toEbitenIcon(browser.ZoomOutIcon)
 	darkModeIcon  = toEbitenIcon(browser.DarkModeIcon)
 	lightModeIcon = toEbitenIcon(browser.LightModeIcon)
+	tocIcon       = toEbitenIcon(browser.TOCIcon)
 )

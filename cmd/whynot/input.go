@@ -23,6 +23,9 @@ func (g *game) Update() error {
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: pointerDown && cursor.In(g.backButton)}
 	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: pointerDown && cursor.In(g.forwardButton)}
 	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: pointerDown && cursor.In(g.reloadButton)}
+	// pressed also stays true while the TOC is showing, so the button
+	// reads as "ON" the whole time, not just while physically held down.
+	g.tocState = buttonState{hover: cursor.In(g.tocButton), pressed: (pointerDown && cursor.In(g.tocButton)) || g.app.TOCShowing()}
 	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: pointerDown && cursor.In(g.zoomInButton)}
 	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: pointerDown && cursor.In(g.zoomOutButton)}
 	g.themeState = buttonState{hover: cursor.In(g.themeButton), pressed: pointerDown && cursor.In(g.themeButton)}
@@ -34,6 +37,12 @@ func (g *game) Update() error {
 		g.app.Forward()
 	case clicked && g.reloadState.hover:
 		g.app.Reload()
+	case clicked && g.tocState.hover:
+		if g.app.TOCShowing() {
+			g.app.HideTOC()
+		} else {
+			g.app.ShowTOC()
+		}
 	case clicked && g.zoomInState.hover:
 		g.app.ZoomIn()
 	case clicked && g.zoomOutState.hover:
@@ -47,6 +56,9 @@ func (g *game) Update() error {
 		} else {
 			g.app.Back()
 		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.app.TOCShowing() {
+		g.app.HideTOC()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {

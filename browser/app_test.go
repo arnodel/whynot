@@ -435,6 +435,157 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 	}
 }
 
+func TestAppShowHideTOC(t *testing.T) {
+	dir := t.TempDir()
+	loc := writeTempMD(t, dir, "a.md", "# Doc A\n\n# One\n\ntext\n\n# Two\n\ntext")
+	app := newTestApp(t, dir, loc, "# Doc A\n\n# One\n\ntext\n\n# Two\n\ntext")
+
+	var windowTitle string
+	app.OnTitleChange = func(title string) { windowTitle = title }
+
+	if !app.CanShowTOC() {
+		t.Fatal("CanShowTOC() = false for a document with headings, want true")
+	}
+	if app.TOCShowing() {
+		t.Fatal("TOCShowing() = true before ShowTOC, want false")
+	}
+
+	app.ShowTOC()
+	if !app.TOCShowing() {
+		t.Fatal("TOCShowing() = false after ShowTOC, want true")
+	}
+	if title, _ := app.Panel.View().Title(); title != "Table of contents" {
+		t.Errorf("Title() while TOC is showing = %q, want \"Table of contents\"", title)
+	}
+	// The window title stays the document's own, not the TOC view's -
+	// see updateWindowTitle's own doc comment.
+	if windowTitle != "Doc A - TOC" {
+		t.Errorf("window title while TOC is showing = %q, want \"Doc A - TOC\"", windowTitle)
+	}
+
+	app.HideTOC()
+	if app.TOCShowing() {
+		t.Error("TOCShowing() = true after HideTOC, want false")
+	}
+	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+		t.Errorf("Title() after HideTOC = %q, want \"Doc A\"", title)
+	}
+	if windowTitle != "Doc A" {
+		t.Errorf("window title after HideTOC = %q, want \"Doc A\"", windowTitle)
+	}
+}
+
+func TestAppShowTOCNoOpWithoutHeadings(t *testing.T) {
+	dir := t.TempDir()
+	loc := writeTempMD(t, dir, "a.md", "Just a paragraph, no heading anywhere.")
+	app := newTestApp(t, dir, loc, "Just a paragraph, no heading anywhere.")
+
+	if app.CanShowTOC() {
+		t.Fatal("CanShowTOC() = true for a document with no headings, want false")
+	}
+	app.ShowTOC()
+	if app.TOCShowing() {
+		t.Error("TOCShowing() = true after ShowTOC on a heading-less document, want false")
+	}
+}
+
+func TestAppFollowInTOCJumpsAndCloses(t *testing.T) {
+	dir := t.TempDir()
+	source := "# Doc A\n\nintro\n\n" + repeatLines(40) + "\n\n# Target\n\nend"
+	loc := writeTempMD(t, dir, "a.md", source)
+	app := newTestApp(t, dir, loc, source)
+
+	beforeShow := app.Panel.View().ScrollPosition()
+	app.ShowTOC()
+
+	// Simulate clicking the "Target" entry - the TOC view's own links
+	// are always "#id" destinations into the real document.
+	app.Follow("#target")
+
+	if app.TOCShowing() {
+		t.Error("TOCShowing() = true after following a TOC entry, want false")
+	}
+	if got := app.Panel.View().ScrollPosition(); got == beforeShow {
+		t.Error("ScrollPosition after following a TOC entry is unchanged, want it to have jumped to the target heading")
+	}
+	if !app.CanGoBack() {
+		t.Error("CanGoBack() = false after following a TOC entry, want true")
+	}
+	if app.Location().Fragment != "target" {
+		t.Errorf("Location().Fragment after following a TOC entry = %q, want \"target\"", app.Location().Fragment)
+	}
+}
+
+func TestAppBackDismissesTOC(t *testing.T) {
+	dir := t.TempDir()
+	loc := writeTempMD(t, dir, "a.md", "# Doc A\n\n# One")
+	app := newTestApp(t, dir, loc, "# Doc A\n\n# One")
+
+	beforeShow := app.Panel.View().ScrollPosition()
+	app.ShowTOC()
+
+	if !app.CanGoBack() {
+		t.Error("CanGoBack() = false while the TOC is showing, want true (Back should dismiss it)")
+	}
+
+	app.Back()
+
+	if app.TOCShowing() {
+		t.Error("TOCShowing() = true after Back, want false")
+	}
+	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+		t.Errorf("Title() after Back dismissed the TOC = %q, want \"Doc A\"", title)
+	}
+	if got := app.Panel.View().ScrollPosition(); got != beforeShow {
+		t.Error("ScrollPosition after Back dismissed the TOC changed, want it left exactly where it was before ShowTOC")
+	}
+	// Back shouldn't have consumed a real history entry - there was
+	// none to begin with.
+	if app.CanGoBack() {
+		t.Error("CanGoBack() = true after Back dismissed the TOC with otherwise-empty history, want false")
+	}
+}
+
+func TestAppForwardReloadNavigateDisabledDuringTOC(t *testing.T) {
+	dir := t.TempDir()
+	locA := writeTempMD(t, dir, "a.md", "# Doc A\n\n# One")
+	writeTempMD(t, dir, "b.md", "# Doc B")
+	app := newTestApp(t, dir, locA, "# Doc A\n\n# One")
+
+	// Build up real forward history before opening the TOC.
+	app.Follow("b.md")
+	app.Back()
+	if !app.CanGoForward() {
+		t.Fatal("test setup: CanGoForward() = false, want true")
+	}
+
+	app.ShowTOC()
+
+	if app.CanGoForward() {
+		t.Error("CanGoForward() = true while the TOC is showing, want false")
+	}
+	if app.CanReload() {
+		t.Error("CanReload() = true while the TOC is showing, want false")
+	}
+
+	app.Forward()
+	if !app.TOCShowing() {
+		t.Error("Forward() while the TOC was showing left it, want it to have stayed a no-op")
+	}
+
+	app.Reload()
+	if !app.TOCShowing() {
+		t.Error("Reload() while the TOC was showing left it, want it to have stayed a no-op")
+	}
+
+	if err := app.Navigate(filepath.Join(dir, "b.md")); err != nil {
+		t.Errorf("Navigate() while the TOC was showing = %v, want nil (a no-op)", err)
+	}
+	if !app.TOCShowing() {
+		t.Error("Navigate() while the TOC was showing left it, want it to have stayed a no-op")
+	}
+}
+
 func TestAppOpenFallsBackToUntitled(t *testing.T) {
 	dir := t.TempDir()
 	loc := writeTempMD(t, dir, "a.md", "no heading here")
