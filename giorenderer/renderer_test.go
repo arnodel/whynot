@@ -27,6 +27,26 @@ func TestImageOpCachedByIdentity(t *testing.T) {
 	}
 }
 
+// TestGlyphForSpaceIsSkipped pins a real bug: face.Glyph(' ') returns
+// ok=true with an empty (0x0) dr, not ok=false - painting a zero-sized
+// paint.ImageOp for it produced visible garbage (the previous glyph,
+// redrawn small) rather than nothing. glyphFor must treat an empty dr
+// the same as !ok, so DrawText only advances the pen for a space
+// instead of adding a paint op at all.
+func TestGlyphForSpaceIsSkipped(t *testing.T) {
+	face, err := whynot.NewGoFontFaceSelector(72).SelectFace(whynot.TextStyle{Size: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := New()
+	if _, ok := r.glyphFor(face, ' ', color.White); ok {
+		t.Error("glyphFor(' ') ok = true, want false (nothing to paint)")
+	}
+	if len(r.glyphCache) != 0 {
+		t.Errorf("glyphCache len = %d after glyphFor(' '), want 0 (not cached)", len(r.glyphCache))
+	}
+}
+
 func TestGlyphCachedByFaceRuneColor(t *testing.T) {
 	face, err := whynot.NewGoFontFaceSelector(72).SelectFace(whynot.TextStyle{Size: 16})
 	if err != nil {
