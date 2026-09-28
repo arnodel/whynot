@@ -180,20 +180,30 @@ re-rasterizing the same glyph every frame.
 
 ## `View`: tying the layers together with the right lifecycle
 
-[view.go](view.go)'s `View` is what a caller actually uses. It owns:
+[view.go](view.go)'s `View` is what a caller actually uses. It holds the
+`Document` it renders, the `RenderingContext`, and interaction state (the
+hovered link), and decides *when* to lay out again: only in `Layout` when
+`width` or `scale` actually change, or on `SetStyleSheet` — not on every
+`Draw` call.
 
-- the `Document` it renders (see `Parse`)
-- the current `BlockLayout` tree, **cached** and only rebuilt in `Layout` when
-  `width` or `scale` actually change — not on every `Draw` call
+The laid-out document itself is a `documentStack`
+([document_stack.go](document_stack.go)), which outlives any one layout
+tree and owns:
+
+- the top-level `StackBox`, replaced wholesale on each rebuild. Its `ctx`
+  points at the `View`'s own context, so a change that affects only
+  appearance of slots laid out from then on (the hovered link) needs no
+  rebuild, just `StackBox.invalidate` on the affected slots
 - the scroll position, as a `stackCursor{index, offset}` ([block_layout.go](block_layout.go)):
   which top-level entry is at the top of the viewport, and how far
   (in pixels) into it — and viewport culling via `DrawFrom` in `Draw`
-- **resize anchoring**: when `Layout` rebuilds the tree at a new width,
-  reflow changes every block's height, so the old pixel scroll offset
-  would point at different content. `Layout` converts the cursor to a
-  ratio through its slot's old height, then re-derives a cursor at the
-  same ratio through that slot's new height, so the same content stays at
-  the top across a resize.
+- **resize anchoring**: when a rebuild changes every block's height, the
+  old pixel scroll offset would point at different content. `setBox`
+  converts the cursor to a ratio through its slot's old height, then
+  re-derives a cursor at the same ratio through that slot's new height, so
+  the same content stays at the top across a resize
+- a height estimate per slot (see `DocumentBounds` below), kept across
+  rebuilds as a seed.
 
 Both the `BlockLayout` tree and drawing are **lazy**, anchored at the scroll
 cursor rather than the top of the document:
@@ -290,9 +300,9 @@ image's bounds for the first time: since that's the one transition
 that can change a slot's height unpredictably (every other transition
 happens at an already-known, already-laid-out size), it's handled
 surgically rather than through a full rebuild — only that one slot is
-invalidated (`invalidateSlot`), and only if the scroll cursor is
+invalidated (`StackBox.invalidate`), and only if the scroll cursor is
 anchored inside it does its offset get re-derived by ratio through the
-new height (`reanchorCursor`). A changed slot *before* the cursor -
+new height (`documentStack.reanchor`). A changed slot *before* the cursor -
 already scrolled past - is invalidated the same way but re-resolved
 immediately, right there, rather than left lazy: nothing ever walks
 backward over an earlier slot again on its own, so a lazily-invalidated
@@ -301,7 +311,7 @@ forever.
 
 `View.Layout` also does two kinds of prefetching every call, both
 scoped to a margin around the current scroll cursor rather than the
-whole document (`preLayoutNearby`/`prefetchImageSources`, `view.go`) -
+whole document (`documentStack.preLayout`, [document_stack.go](document_stack.go), and `View.prefetchImageSources`) -
 this exists because an image resolving to a much bigger real size than
 the small placeholder that was estimating it, right as the scroll
 cursor reaches it, is exactly the scenario that can make a
@@ -313,7 +323,7 @@ builds a scrollbar from these numbers). Getting a slot's real size known *before
 cursor arrives, not right as it does, avoids the surprise instead of
 smoothing over it after the fact:
 
-- `preLayoutNearby` fully resolves slots (`StackBox.boxAt`) within a
+- `documentStack.preLayout` fully resolves slots (`StackBox.boxAt`) within a
   few thousand pixels of the visible viewport, in both directions,
   time-budgeted (a couple of milliseconds per `Layout` call) rather
   than all at once - a big jump (`ScrollToRatio`, `ScrollToAnchor`, a
@@ -324,7 +334,7 @@ smoothing over it after the fact:
   slot's `Block` up in the `Document`'s record of standalone images
   (no `GetBlockLayout` call) and kicks off
   `ImageCache.Load` early, giving a slow network fetch a head start
-  cheaply, deliberately not sharing `preLayoutNearby`'s smaller,
+  cheaply, deliberately not sharing `documentStack.preLayout`'s smaller,
   CPU-time-budgeted radius.
 
 Neither guarantees the jump is impossible - a pathologically slow fetch
@@ -454,7 +464,7 @@ These are real, understood, and not yet fixed:
   `linesFromInline(ctx, parts, width) []BlockLayout` helper would remove the
   copy-paste.
 - **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
-  jump, including while sitting still.** `preLayoutNearby` (see "Image
+  jump, including while sitting still.** `documentStack.preLayout` (see "Image
   loading" above) resolves real slots beyond the visible viewport in the
   background, on every `Layout` call, regardless of whether the user is
   scrolling - and `DocumentBounds`' total, so a scrollbar's own size and

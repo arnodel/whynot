@@ -126,7 +126,7 @@ func TestViewDrawFillsBackground(t *testing.T) {
 
 // TestViewDrawFillsBackgroundBeforeLayout checks that the background fill
 // doesn't depend on Layout having been called yet - Draw shouldn't panic
-// or skip the fill just because v.box is still nil.
+// or skip the fill just because v.stack.box is still nil.
 func TestViewDrawFillsBackgroundBeforeLayout(t *testing.T) {
 	v := newTestView(&fixedHeightBlock{height: 10})
 
@@ -163,10 +163,10 @@ func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
 
 	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
 	v.Layout(200, 1000, 1, 0)
-	smallHeight := v.box.Bounds().Dy()
+	smallHeight := v.stack.box.Bounds().Dy()
 
 	v.SetStyleSheet(big)
-	bigHeight := v.box.Bounds().Dy()
+	bigHeight := v.stack.box.Bounds().Dy()
 
 	if bigHeight <= smallHeight {
 		t.Fatalf("height after SetStyleSheet = %d, want > %d (a 40pt paragraph should be taller than a 10pt one)", bigHeight, smallHeight)
@@ -182,7 +182,7 @@ func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
 	v := newTestView(&fixedHeightBlock{height: 10})
 
 	v.SetStyleSheet(custom)
-	if v.box != nil {
+	if v.stack.box != nil {
 		t.Fatalf("box built before Layout was ever called")
 	}
 
@@ -212,22 +212,22 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	// Slot 1 is the margin gap StackBlock.GetBlockLayout inserts between the two
 	// paragraphs, not content - the second paragraph is slot 2. Anchor
 	// halfway through it.
-	if len(v.box.slots) != 3 {
-		t.Fatalf("got %d slots, want 3 (paragraph, gap, paragraph): %#v", len(v.box.slots), v.box.slots)
+	if len(v.stack.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (paragraph, gap, paragraph): %#v", len(v.stack.box.slots), v.stack.box.slots)
 	}
-	oldHeight := v.box.boxAt(2).Bounds().Dy()
-	v.cursor = stackCursor{index: 2, offset: float64(oldHeight) / 2}
+	oldHeight := v.stack.box.boxAt(2).Bounds().Dy()
+	v.stack.cursor = stackCursor{index: 2, offset: float64(oldHeight) / 2}
 
 	v.SetStyleSheet(big)
 
-	newHeight := v.box.boxAt(2).Bounds().Dy()
+	newHeight := v.stack.box.boxAt(2).Bounds().Dy()
 	if newHeight <= oldHeight {
 		t.Fatalf("height at slot 2 after SetStyleSheet = %d, want > %d", newHeight, oldHeight)
 	}
-	if v.cursor.index != 2 {
-		t.Fatalf("cursor index after SetStyleSheet = %d, want 2", v.cursor.index)
+	if v.stack.cursor.index != 2 {
+		t.Fatalf("cursor index after SetStyleSheet = %d, want 2", v.stack.cursor.index)
 	}
-	if gotRatio := v.cursor.offset / float64(newHeight); math.Abs(gotRatio-0.5) > 0.02 {
+	if gotRatio := v.stack.cursor.offset / float64(newHeight); math.Abs(gotRatio-0.5) > 0.02 {
 		t.Errorf("cursor ratio through slot 2 after SetStyleSheet = %.3f, want ~0.5 (preserved through the rebuild)", gotRatio)
 	}
 }
@@ -244,17 +244,17 @@ func TestViewRebuildInsertsMarginSlots(t *testing.T) {
 	}
 	v.Layout(100, 1000, 1, 0)
 
-	if len(v.box.slots) != 3 {
-		t.Fatalf("got %d slots, want 3 (top margin, content, bottom margin): %#v", len(v.box.slots), v.box.slots)
+	if len(v.stack.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (top margin, content, bottom margin): %#v", len(v.stack.box.slots), v.stack.box.slots)
 	}
-	if got := v.box.Bounds().Dy(); got != 10+30+15 {
+	if got := v.stack.box.Bounds().Dy(); got != 10+30+15 {
 		t.Errorf("total height = %d, want 55 (10 top + 30 content + 15 bottom)", got)
 	}
 
 	noMargin := newTestView(&fixedHeightBlock{height: 30})
 	noMargin.Layout(100, 1000, 1, 0)
-	if len(noMargin.box.slots) != 1 {
-		t.Errorf("got %d slots with a zero margin, want 1 (no phantom margin slots)", len(noMargin.box.slots))
+	if len(noMargin.stack.box.slots) != 1 {
+		t.Errorf("got %d slots with a zero margin, want 1 (no phantom margin slots)", len(noMargin.stack.box.slots))
 	}
 }
 
@@ -272,9 +272,9 @@ func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 	v.Layout(100, 1000, 1, 0)
 
 	v.Scroll(-1000)
-	wantIndex := len(v.box.slots) - 1
-	if v.cursor != (stackCursor{wantIndex, 15}) {
-		t.Errorf("after scrolling past the end = %+v, want {%d, 15} (clamped inside the bottom margin)", v.cursor, wantIndex)
+	wantIndex := len(v.stack.box.slots) - 1
+	if v.stack.cursor != (stackCursor{wantIndex, 15}) {
+		t.Errorf("after scrolling past the end = %+v, want {%d, 15} (clamped inside the bottom margin)", v.stack.cursor, wantIndex)
 	}
 }
 
@@ -288,10 +288,10 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
 
-	if len(v.box.slots) != 3 {
-		t.Fatalf("got %d slots, want 3 (top margin, paragraph, bottom margin): %#v", len(v.box.slots), v.box.slots)
+	if len(v.stack.box.slots) != 3 {
+		t.Fatalf("got %d slots, want 3 (top margin, paragraph, bottom margin): %#v", len(v.stack.box.slots), v.stack.box.slots)
 	}
-	content := v.box.boxAt(1).Bounds()
+	content := v.stack.box.boxAt(1).Bounds()
 
 	// The content's own top-left corner, shifted into the View's
 	// coordinate space by the margin, should land on real content.
@@ -342,25 +342,25 @@ func TestViewScroll(t *testing.T) {
 	)
 	v.Layout(100, 1000, 1, 0)
 
-	if v.cursor != (stackCursor{0, 0}) {
-		t.Fatalf("initial position = %+v, want {0, 0}", v.cursor)
+	if v.stack.cursor != (stackCursor{0, 0}) {
+		t.Fatalf("initial position = %+v, want {0, 0}", v.stack.cursor)
 	}
 
 	v.Scroll(-15)
-	if v.cursor != (stackCursor{1, 5}) {
-		t.Errorf("after Scroll(-15) = %+v, want {1, 5}", v.cursor)
+	if v.stack.cursor != (stackCursor{1, 5}) {
+		t.Errorf("after Scroll(-15) = %+v, want {1, 5}", v.stack.cursor)
 	}
 
 	v.Scroll(15)
-	if v.cursor != (stackCursor{0, 0}) {
-		t.Errorf("after Scroll(15) = %+v, want {0, 0}", v.cursor)
+	if v.stack.cursor != (stackCursor{0, 0}) {
+		t.Errorf("after Scroll(15) = %+v, want {0, 0}", v.stack.cursor)
 	}
 
 	// Scrolling further than the document is long clamps to the end
 	// rather than going out of range.
 	v.Scroll(-1000)
-	if v.cursor != (stackCursor{2, 30}) {
-		t.Errorf("after Scroll(-1000) = %+v, want {2, 30} (clamped to the end)", v.cursor)
+	if v.stack.cursor != (stackCursor{2, 30}) {
+		t.Errorf("after Scroll(-1000) = %+v, want {2, 30} (clamped to the end)", v.stack.cursor)
 	}
 }
 
@@ -380,8 +380,8 @@ func TestViewScrollSubPixel(t *testing.T) {
 
 	v.Scroll(-7.5)
 	v.Scroll(-7.5)
-	if v.cursor != (stackCursor{1, 5}) {
-		t.Errorf("after Scroll(-7.5) twice = %+v, want {1, 5}", v.cursor)
+	if v.stack.cursor != (stackCursor{1, 5}) {
+		t.Errorf("after Scroll(-7.5) twice = %+v, want {1, 5}", v.stack.cursor)
 	}
 }
 
@@ -397,12 +397,12 @@ func TestViewLayoutReanchor(t *testing.T) {
 	v.Layout(100, 1000, 1, 0) // heights: [100, 200]
 
 	// Anchor halfway through the second block.
-	v.cursor = stackCursor{index: 1, offset: 100}
+	v.stack.cursor = stackCursor{index: 1, offset: 100}
 
 	v.Layout(50, 1000, 1, 0) // heights become [50, 100]; same ratio should give offset 50
 
-	if v.cursor != (stackCursor{1, 50}) {
-		t.Errorf("cursor after resize = %+v, want {1, 50} (50%% of the new height 100)", v.cursor)
+	if v.stack.cursor != (stackCursor{1, 50}) {
+		t.Errorf("cursor after resize = %+v, want {1, 50} (50%% of the new height 100)", v.stack.cursor)
 	}
 }
 
@@ -437,7 +437,7 @@ code line
 	const width = 300
 	v.Layout(width, 1000, 1, 0)
 
-	height := v.box.Bounds().Dy()
+	height := v.stack.box.Bounds().Dy()
 	found := map[ASTTag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
@@ -470,9 +470,9 @@ code line
 // specific content without hardcoding pixel positions (exact positions
 // depend on font metrics/wrapping, which this sidesteps).
 func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
-	height := v.box.Bounds().Dy()
+	height := v.stack.box.Bounds().Dy()
 	for y := 0; y < height; y += 2 {
-		for x := 0; x < v.boxWidth; x += 2 {
+		for x := 0; x < v.width; x += 2 {
 			if hit, _ := v.HitTest(x, y); hit != nil {
 				if n := hit.Source().Node(); n != nil && n.Tag == tag {
 					return x, y, true
@@ -485,7 +485,7 @@ func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
 
 // TestViewHoverHighlightsLink checks that hovering a link recolors its
 // text to the StyleSheet's HighlightColor - via surgical per-slot
-// invalidation (see invalidateSlot), not a full rebuild: v.box itself
+// invalidation (see StackBox.invalidate), not a full rebuild: v.stack.box itself
 // stays the same object throughout.
 func TestViewHoverHighlightsLink(t *testing.T) {
 	style := NewDarkStyleSheet()
@@ -497,9 +497,9 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 		t.Fatal("no point in the document resolved to TagLink")
 	}
 
-	beforeBox := v.box
+	beforeBox := v.stack.box
 	dest, ok := v.Hover(x, y)
-	if v.box != beforeBox {
+	if v.stack.box != beforeBox {
 		t.Error("Hover onto a link rebuilt the whole box, want surgical per-slot invalidation")
 	}
 	if v.ctx.HighlightNode == nil {
@@ -586,17 +586,17 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 	v.Layout(300, 1000, 1, 0)
 
 	v.Scroll(-500)
-	want := v.cursor
+	want := v.stack.cursor
 	pos := v.ScrollPosition()
 
 	v.Scroll(-1000)
-	if v.cursor == want {
+	if v.stack.cursor == want {
 		t.Fatal("test setup: further scrolling didn't change the cursor")
 	}
 
 	v.RestoreScrollPosition(pos)
-	if v.cursor != want {
-		t.Errorf("cursor after RestoreScrollPosition = %+v, want %+v", v.cursor, want)
+	if v.stack.cursor != want {
+		t.Errorf("cursor after RestoreScrollPosition = %+v, want %+v", v.stack.cursor, want)
 	}
 }
 
@@ -605,13 +605,13 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 // per-slot heights (100, 100, 100, 100 - total 400).
 func TestViewScrollToRatio(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 100)},
 			{box: NewEmptyBox(300, 100)},
 			{box: NewEmptyBox(300, 100)},
 			{box: NewEmptyBox(300, 100)},
-		}},
+		}}},
 	}
 
 	cases := []struct {
@@ -626,8 +626,8 @@ func TestViewScrollToRatio(t *testing.T) {
 	}
 	for _, c := range cases {
 		v.ScrollToRatio(c.ratio)
-		if v.cursor != c.want {
-			t.Errorf("ScrollToRatio(%v) cursor = %+v, want %+v", c.ratio, v.cursor, c.want)
+		if v.stack.cursor != c.want {
+			t.Errorf("ScrollToRatio(%v) cursor = %+v, want %+v", c.ratio, v.stack.cursor, c.want)
 		}
 	}
 }
@@ -637,21 +637,21 @@ func TestViewScrollToRatio(t *testing.T) {
 // rather than landing outside the document.
 func TestViewScrollToRatioClampsOutOfRange(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 100)},
 			{box: NewEmptyBox(300, 100)},
-		}},
+		}}},
 	}
 
 	v.ScrollToRatio(-1)
-	if want := (stackCursor{index: 0, offset: 0}); v.cursor != want {
-		t.Errorf("ScrollToRatio(-1) cursor = %+v, want %+v", v.cursor, want)
+	if want := (stackCursor{index: 0, offset: 0}); v.stack.cursor != want {
+		t.Errorf("ScrollToRatio(-1) cursor = %+v, want %+v", v.stack.cursor, want)
 	}
 
 	v.ScrollToRatio(2)
-	if want := (stackCursor{index: 1, offset: 100}); v.cursor != want {
-		t.Errorf("ScrollToRatio(2) cursor = %+v, want %+v", v.cursor, want)
+	if want := (stackCursor{index: 1, offset: 100}); v.stack.cursor != want {
+		t.Errorf("ScrollToRatio(2) cursor = %+v, want %+v", v.stack.cursor, want)
 	}
 }
 
@@ -665,7 +665,7 @@ func TestViewScrollToRatioNilBox(t *testing.T) {
 // TestViewScrollToRatioSelfConsistent checks the property the whole
 // design leans on for drag-to-scroll: within one call, the ratio
 // ScrollToRatio is given and the ratio VisibleViewBounds reports back
-// afterward agree - both read the same heightEstimate snapshot, so a
+// afterward agree - both read the same documentStack's height estimate snapshot, so a
 // caller re-deriving its target from the current mouse position every
 // frame can only ever correct toward that position, never drift from
 // it (see project_scrollbar_hover_rebuild_tension).
@@ -714,7 +714,7 @@ func TestViewCurrentHeadingID(t *testing.T) {
 
 // TestViewHoverNoOpWhenUnchanged checks that Hover only invalidates a
 // slot on an actual highlight transition - calling it again at the
-// same position must not pay for rebuilding that slot again. v.box
+// same position must not pay for rebuilding that slot again. v.stack.box
 // itself never changes now (see TestViewHoverHighlightsLink), so the
 // slot's own memoized box is what has to stay identical instead.
 func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
@@ -728,9 +728,9 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 
 	v.Hover(x, y)
 	_, slot := v.linkNodeAt(x, y)
-	slotBox := v.box.slots[slot].box
+	slotBox := v.stack.box.slots[slot].box
 	v.Hover(x, y)
-	if v.box.slots[slot].box != slotBox {
+	if v.stack.box.slots[slot].box != slotBox {
 		t.Error("Hover at an unchanged position invalidated the slot again, want a no-op")
 	}
 }
@@ -761,11 +761,11 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 // nodes, for tests that need to hover between distinct links.
 func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 	t.Helper()
-	height := v.box.Bounds().Dy()
+	height := v.stack.box.Bounds().Dy()
 	var firstNode *ASTNode
 	found := 0
 	for y := 0; y < height && found < 2; y += 2 {
-		for x := 0; x < v.boxWidth && found < 2; x += 2 {
+		for x := 0; x < v.width && found < 2; x += 2 {
 			hit, _ := v.HitTest(x, y)
 			if hit == nil {
 				continue
@@ -797,7 +797,7 @@ const twoLinkDoc = "first paragraph\n\n[link one](url1)\n\nsecond paragraph\n\n[
 
 // TestViewHoverSurgicalInvalidation checks that hovering from one link
 // to a different one, in a different slot, invalidates exactly those
-// two slots' memoized boxes - v.box itself is untouched (no full
+// two slots' memoized boxes - v.stack.box itself is untouched (no full
 // rebuild), and so is every other already-resolved slot.
 func TestViewHoverSurgicalInvalidation(t *testing.T) {
 	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72))
@@ -810,20 +810,20 @@ func TestViewHoverSurgicalInvalidation(t *testing.T) {
 		t.Fatal("both links resolved to the same slot, test needs links in different slots")
 	}
 
-	before := make([]BlockLayout, len(v.box.slots))
-	for i := range v.box.slots {
-		before[i] = v.box.boxAt(i)
+	before := make([]BlockLayout, len(v.stack.box.slots))
+	for i := range v.stack.box.slots {
+		before[i] = v.stack.box.boxAt(i)
 	}
-	beforeBox := v.box
+	beforeBox := v.stack.box
 
 	v.Hover(x1, y1)
 	v.Hover(x2, y2)
 
-	if v.box != beforeBox {
+	if v.stack.box != beforeBox {
 		t.Fatal("Hover rebuilt the whole box, want surgical per-slot invalidation")
 	}
-	for i := range v.box.slots {
-		got := v.box.boxAt(i)
+	for i := range v.stack.box.slots {
+		got := v.stack.box.boxAt(i)
 		switch i {
 		case slot1, slot2:
 			if got == before[i] {
@@ -876,7 +876,7 @@ func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
 }
 
 // BenchmarkViewHover measures the cost of a hover transition - surgical
-// per-slot invalidation (see invalidateSlot), restyling only the slot
+// per-slot invalidation (see StackBox.invalidate), restyling only the slot
 // being left and the slot being entered rather than rebuilding the
 // whole document. Alternates between the link and a point off it so
 // every call is an actual transition, never short-circuited as a no-op.
@@ -924,9 +924,9 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.StopTimer()
 		v := &View{doc: block, ctx: ctx}
 		v.Layout(width, 1000, 1, 0)
-		if len(v.box.slots) > 0 {
-			v.cursor.index = len(v.box.slots) - 1
-			v.cursor.offset = 0
+		if len(v.stack.box.slots) > 0 {
+			v.stack.cursor.index = len(v.stack.box.slots) - 1
+			v.stack.cursor.offset = 0
 		}
 		b.StartTimer()
 
@@ -939,12 +939,12 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 // last-known Layout width.
 func TestViewDocumentBounds(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 10)},
 			{box: NewEmptyBox(300, 20)},
 			{box: NewEmptyBox(300, 30)},
-		}},
+		}}},
 	}
 	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 60); got != want {
 		t.Errorf("DocumentBounds() = %v, want %v", got, want)
@@ -964,14 +964,13 @@ func TestViewDocumentBoundsNilBox(t *testing.T) {
 // document's total.
 func TestViewVisibleViewBounds(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 50)},
 			{box: NewEmptyBox(300, 50)},
 			{box: NewEmptyBox(300, 50)},
 			{box: NewEmptyBox(300, 50)},
-		}},
-		cursor: stackCursor{index: 1, offset: 10},
+		}}, cursor: stackCursor{index: 1, offset: 10}},
 	}
 	// Slot 0 is 50px, so the view's top is at 50+10 = 60px. An 80px-tall
 	// viewport bottoms out at exactly 60+80 = 140px - not 150px (slot
@@ -988,12 +987,11 @@ func TestViewVisibleViewBounds(t *testing.T) {
 // taller than the remaining document doesn't walk past the last slot.
 func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 50)},
 			{box: NewEmptyBox(300, 50)},
-		}},
-		cursor: stackCursor{index: 1, offset: 0},
+		}}, cursor: stackCursor{index: 1, offset: 0}},
 	}
 	got := v.VisibleViewBounds(image.Pt(300, 1000))
 	if want := (image.Rect(0, 50, 300, 100)); got != want {
@@ -1003,24 +1001,24 @@ func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 
 // TestViewVisibleViewBoundsResolvesRealHeights checks that the forward
 // walk computing the bottom edge resolves each slot for real (the same
-// way DrawFrom itself would), not from heightEstimate's extrapolated
+// way DrawFrom itself would), not from documentStack's height estimate's extrapolated
 // average - using the average here was the actual bug behind the
 // thumb's size visibly jumping while scrolling: the average is a
 // moving target as more of the document gets visited, a real height
 // isn't.
 func TestViewVisibleViewBoundsResolvesRealHeights(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 10)},                         // resolved; average would be 10
 			{block: &fixedHeightBlock{height: 500}, width: 300}, // NOT resolved yet - real height 500, far from that average
-		}},
+		}}},
 	}
 	got := v.VisibleViewBounds(image.Pt(300, 1000))
 	if want := (image.Rect(0, 0, 300, 510)); got != want {
 		t.Errorf("VisibleViewBounds() = %v, want %v (slot 1 resolved for real, not estimated from the average)", got, want)
 	}
-	if v.box.slots[1].box == nil {
+	if v.stack.box.slots[1].box == nil {
 		t.Error("VisibleViewBounds didn't actually resolve slot 1 - want it forced, the way DrawFrom would")
 	}
 }
@@ -1038,12 +1036,12 @@ func TestViewVisibleViewBoundsNilBox(t *testing.T) {
 // with its real height, even when that's far from the average.
 func TestViewHeightEstimateExtrapolates(t *testing.T) {
 	v := &View{
-		boxWidth: 300,
-		box: &StackBox{slots: []stackSlot{
+		width: 300,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: NewEmptyBox(300, 100)},
 			{box: NewEmptyBox(300, 300)},
 			{}, // unresolved
-		}},
+		}}},
 	}
 	// avg of the two resolved slots (100, 300) is 200, extrapolated for
 	// the third -> total 100 + 300 + 200 = 600.
@@ -1053,7 +1051,7 @@ func TestViewHeightEstimateExtrapolates(t *testing.T) {
 
 	// Resolve slot 2 to a real height well below the average - the
 	// estimate must track the real value, not the stale extrapolation.
-	v.box.slots[2].box = NewEmptyBox(300, 50)
+	v.stack.box.slots[2].box = NewEmptyBox(300, 50)
 	if got, want := v.DocumentBounds(), image.Rect(0, 0, 300, 450); got != want {
 		t.Errorf("DocumentBounds() after resolving slot 2 = %v, want %v", got, want)
 	}
@@ -1062,14 +1060,14 @@ func TestViewHeightEstimateExtrapolates(t *testing.T) {
 // TestViewHeightEstimatePersistsAcrossHoverInvalidation checks that
 // invalidating a slot (Hover's surgical invalidation, or any other)
 // doesn't regress its contribution to the estimate back to "unknown" -
-// the last real height it had stays in slotHeights and keeps being
+// the last real height it had stays in stack.heights and keeps being
 // used until the slot is naturally re-resolved.
 func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph")
 	v := NewView(Parse(source), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
-	for i := range v.box.slots {
-		v.box.boxAt(i) // resolve every slot once
+	for i := range v.stack.box.slots {
+		v.stack.box.boxAt(i) // resolve every slot once
 	}
 	before := v.DocumentBounds()
 
@@ -1082,11 +1080,11 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	v.Hover(x, y)
 	v.Hover(-1, -1)
 
-	if v.box.slots[slot].box != nil {
+	if v.stack.box.slots[slot].box != nil {
 		t.Fatal("test setup: slot wasn't actually invalidated by Hover")
 	}
-	if got := v.slotHeights[slot]; got < 0 {
-		t.Fatalf("slotHeights[%d] = %v after invalidation, want the last-known real height preserved", slot, got)
+	if got := v.stack.heights[slot]; got < 0 {
+		t.Fatalf("stack.heights[%d] = %v after invalidation, want the last-known real height preserved", slot, got)
 	}
 	if got := v.DocumentBounds(); got != before {
 		t.Errorf("DocumentBounds() after hover invalidation = %v, want unchanged %v", got, before)
@@ -1106,17 +1104,17 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()},
 	}
 	v.Layout(100, 1000, 1, 0)
-	v.box.boxAt(1)         // resolve slot 1 too, not just the cursor's own slot 0
-	_ = v.DocumentBounds() // populate slotHeights from both slots before the resize
+	v.stack.box.boxAt(1)   // resolve slot 1 too, not just the cursor's own slot 0
+	_ = v.DocumentBounds() // populate stack.heights from both slots before the resize
 
 	// Resize - slot 1's real height is now 200px, but nothing has asked
 	// boxAt(1) again yet at the new width. rebuild() directly, not
-	// Layout(200, ...): Layout now also runs preLayoutNearby, which
+	// Layout(200, ...): Layout now also runs documentStack.preLayout, which
 	// would eagerly resolve slot 1 anyway (it's a two-slot document,
 	// trivially within preLayoutHeightRadius) - this test is about
 	// rebuild's own seed-preservation behavior for a slot nothing has
 	// asked for yet, not about whether pre-layout got to it first.
-	v.boxWidth = 200
+	v.width = 200
 	v.rebuild()
 
 	// Slot 0 is resolved fresh (200px, real - rebuild's own cursor
@@ -1128,7 +1126,7 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 
 	// Once slot 1 is actually re-resolved at the new width, its real
 	// (200px) height replaces the stale seed.
-	v.box.boxAt(1)
+	v.stack.box.boxAt(1)
 	if got, want := v.DocumentBounds(), image.Rect(0, 0, 200, 400); got != want {
 		t.Errorf("DocumentBounds() after resolving slot 1 = %v, want %v (stale seed replaced by the real height)", got, want)
 	}
@@ -1138,8 +1136,8 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 // the bug the parked scrollbar attempt originally hit: at the time,
 // Hover triggered a full rebuild on every highlight change, which
 // could reset a naive height estimate back to "just the current slot."
-// Hover is surgical now (see invalidateSlot) and never touches
-// slotHeights, so this passes not because DocumentBounds/
+// Hover is surgical now (see StackBox.invalidate) and never touches
+// stack.heights, so this passes not because DocumentBounds/
 // VisibleViewBounds are insulated from Hover's effects, but because
 // there's genuinely nothing for a hover-only change to invalidate -
 // the persisted per-slot estimates for whatever Hover nils out (the
@@ -1211,14 +1209,14 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	settledC := NewEmptyBox(100, 10)
 
 	view := &View{
-		ctx:      RenderingContext{ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72)},
-		boxWidth: 100,
-		boxScale: 1,
-		box: &StackBox{slots: []stackSlot{
+		ctx:   RenderingContext{ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72)},
+		width: 100,
+		scale: 1,
+		stack: documentStack{box: &StackBox{ctx: &RenderingContext{}, slots: []stackSlot{
 			{box: settledA},
 			{box: pendingSlot},
 			{box: settledC},
-		}},
+		}}},
 	}
 	// The bounds-reveal above already happened - mark it seen without
 	// going through Layout/rebuild (this hand-built View has no real
@@ -1230,7 +1228,7 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	waitForSettled(t, cache, "b.png")
 
 	// invalidateChangedImages directly, not Layout: this hand-built View
-	// has no real block for any slot (see above), so preLayoutNearby -
+	// has no real block for any slot (see above), so documentStack.preLayout -
 	// which Layout also runs, and which would immediately try to
 	// re-resolve slot 1 once invalidateChangedImages nils it out, per
 	// its own already-passed-slot fix if slot 1 were before the cursor,
@@ -1238,13 +1236,13 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	// - would panic calling GetBlockLayout on a nil Block. This test is
 	// about invalidateChangedImages's own narrow contract in isolation.
 	view.invalidateChangedImages()
-	if view.box.slots[0].box != settledA {
+	if view.stack.box.slots[0].box != settledA {
 		t.Error("unrelated settled slot 0 was touched")
 	}
-	if view.box.slots[1].box != nil {
+	if view.stack.box.slots[1].box != nil {
 		t.Error("slot 1 (pending on b.png) was not invalidated")
 	}
-	if view.box.slots[2].box != settledC {
+	if view.stack.box.slots[2].box != settledC {
 		t.Error("unrelated settled slot 2 was touched")
 	}
 }
@@ -1269,11 +1267,11 @@ func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
 	view := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), WithImageSource(source))
 	view.Layout(300, 1000, 1, 0)
-	view.box.Bounds() // force every slot to resolve once, including the image's
+	view.stack.box.Bounds() // force every slot to resolve once, including the image's
 
-	firstSlotBefore := view.box.slots[0].box
-	thirdSlotBefore := view.box.slots[2].box
-	cursorBefore := view.cursor
+	firstSlotBefore := view.stack.box.slots[0].box
+	thirdSlotBefore := view.stack.box.slots[2].box
+	cursorBefore := view.stack.cursor
 
 	close(release)
 	deadline := time.Now().Add(2 * time.Second)
@@ -1288,16 +1286,16 @@ func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	}
 
 	view.Layout(300, 1000, 1, 0) // same width/scale -> invalidateChangedImages
-	view.box.Bounds()
+	view.stack.box.Bounds()
 
-	if view.box.slots[0].box != firstSlotBefore {
+	if view.stack.box.slots[0].box != firstSlotBefore {
 		t.Error("unrelated slot 0 was touched - want only the image's own slot invalidated")
 	}
-	if view.box.slots[2].box != thirdSlotBefore {
+	if view.stack.box.slots[2].box != thirdSlotBefore {
 		t.Error("unrelated slot 2 was touched - want only the image's own slot invalidated")
 	}
-	if view.cursor != cursorBefore {
-		t.Errorf("cursor = %+v, want unchanged %+v (the cursor isn't anchored in the changed slot, so nothing needs reanchoring)", view.cursor, cursorBefore)
+	if view.stack.cursor != cursorBefore {
+		t.Errorf("cursor = %+v, want unchanged %+v (the cursor isn't anchored in the changed slot, so nothing needs reanchoring)", view.stack.cursor, cursorBefore)
 	}
 }
 
@@ -1325,11 +1323,11 @@ func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 	// inserts a margin-gap slot between each pair of top-level blocks -
 	// see TestViewSetStyleSheetReanchorsScroll).
 	const imageSlot = 3
-	oldHeight := view.box.boxAt(imageSlot).Bounds().Dy() // the placeholder's height
-	firstParaBefore := view.box.slots[1].box
+	oldHeight := view.stack.box.boxAt(imageSlot).Bounds().Dy() // the placeholder's height
+	firstParaBefore := view.stack.box.slots[1].box
 
 	// Scroll the cursor to be halfway down the image's own placeholder.
-	view.cursor = stackCursor{index: imageSlot, offset: float64(oldHeight) / 2}
+	view.stack.cursor = stackCursor{index: imageSlot, offset: float64(oldHeight) / 2}
 
 	close(release)
 	deadline := time.Now().Add(2 * time.Second)
@@ -1345,28 +1343,28 @@ func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 
 	view.Layout(300, 1000, 1, 0) // same width/scale -> invalidateChangedImages
 
-	if view.box.slots[1].box != firstParaBefore {
+	if view.stack.box.slots[1].box != firstParaBefore {
 		t.Error("unrelated slot 1 was touched")
 	}
-	if view.cursor.index != imageSlot {
-		t.Fatalf("cursor.index = %d, want still %d (the image's own slot)", view.cursor.index, imageSlot)
+	if view.stack.cursor.index != imageSlot {
+		t.Fatalf("cursor.index = %d, want still %d (the image's own slot)", view.stack.cursor.index, imageSlot)
 	}
-	newHeight := view.box.boxAt(imageSlot).Bounds().Dy()
+	newHeight := view.stack.box.boxAt(imageSlot).Bounds().Dy()
 	wantOffset := float64(newHeight) / 2
-	if got := view.cursor.offset; got < wantOffset-0.001 || got > wantOffset+0.001 {
+	if got := view.stack.cursor.offset; got < wantOffset-0.001 || got > wantOffset+0.001 {
 		t.Errorf("cursor.offset = %v, want %v (half of the new height %d, same ratio as before)", got, wantOffset, newHeight)
 	}
 }
 
 // TestViewPreLayoutNearbyResolvesBothDirectionsBeyondViewport checks
-// preLayoutNearby's actual reach: slots within viewportHeight+
+// documentStack.preLayout's actual reach: slots within viewportHeight+
 // preLayoutHeightRadius forward, and preLayoutHeightRadius backward,
 // of the cursor get resolved without ever being drawn or queried
 // directly - and slots further out, in either direction, are left
 // lazy. 20 slots x 1000px each, cursor at 10, viewport 2000px: forward
 // reach is 2 "free" (already-visible) slots plus 3 genuinely-ahead
 // ones (10-14), backward reach is 3 slots (7-9) - see the height math
-// in preLayoutDirection's own doc comment.
+// in documentStack.preLayoutDirection's own doc comment.
 func TestViewPreLayoutNearbyResolvesBothDirectionsBeyondViewport(t *testing.T) {
 	const n, slotHeight, viewportHeight = 20, 1000, 2000
 	blocks := make([]Block, n)
@@ -1374,16 +1372,16 @@ func TestViewPreLayoutNearbyResolvesBothDirectionsBeyondViewport(t *testing.T) {
 		blocks[i] = &fixedHeightBlock{height: slotHeight}
 	}
 	v := newTestView(blocks...)
-	v.cursor = stackCursor{index: 10}
+	v.stack.cursor = stackCursor{index: 10}
 	v.Layout(300, viewportHeight, 1, 0)
 
 	for i := 7; i <= 14; i++ {
-		if v.box.slots[i].box == nil {
+		if v.stack.box.slots[i].box == nil {
 			t.Errorf("slot %d (within reach) not resolved", i)
 		}
 	}
 	for _, i := range []int{0, 6, 15, n - 1} {
-		if v.box.slots[i].box != nil {
+		if v.stack.box.slots[i].box != nil {
 			t.Errorf("slot %d (outside reach) was resolved, want left lazy", i)
 		}
 	}
@@ -1405,7 +1403,7 @@ func (b *slowBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 func (b *slowBlock) Margins(ctx RenderingContext) Margins { return Margins{} }
 func (b *slowBlock) Node() *ASTNode                       { return nil }
 
-// TestViewPreLayoutNearbyRespectsTimeBudget checks that preLayoutNearby
+// TestViewPreLayoutNearbyRespectsTimeBudget checks that documentStack.preLayout
 // stops resolving once preLayoutTimeBudget is spent, rather than
 // working through everything within preLayoutHeightRadius regardless
 // of cost, and that it picks up where it left off on the next Layout
@@ -1423,8 +1421,8 @@ func TestViewPreLayoutNearbyRespectsTimeBudget(t *testing.T) {
 
 	countResolved := func() int {
 		n := 0
-		for i := range v.box.slots {
-			if v.box.slots[i].box != nil {
+		for i := range v.stack.box.slots {
+			if v.stack.box.slots[i].box != nil {
 				n++
 			}
 		}
@@ -1439,7 +1437,7 @@ func TestViewPreLayoutNearbyRespectsTimeBudget(t *testing.T) {
 		t.Fatalf("first Layout call resolved all %d slots - budget didn't cut it off", n)
 	}
 
-	v.Layout(300, 0, 1, 0) // same width/scale -> preLayoutNearby continues
+	v.Layout(300, 0, 1, 0) // same width/scale -> documentStack.preLayout continues
 	afterSecond := countResolved()
 	if afterSecond <= afterFirst {
 		t.Errorf("second Layout call resolved %d slots, want more than the first call's %d (progress should continue)", afterSecond, afterFirst)
@@ -1448,7 +1446,7 @@ func TestViewPreLayoutNearbyRespectsTimeBudget(t *testing.T) {
 
 // TestViewPrefetchImageSourcesStartsLoadWithoutLayout checks that
 // prefetchImageSources reaches an image slot well beyond
-// preLayoutHeightRadius (so preLayoutNearby itself can't have resolved
+// preLayoutHeightRadius (so documentStack.preLayout itself can't have resolved
 // it) and starts loading it - via ImageCache.Load, observed here as
 // Resolve being called synchronously, since the actual fetch runs on
 // its own goroutine (see ImageCache.Load) - without laying that slot
@@ -1481,15 +1479,15 @@ func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
 	if source.resolveCalls == 0 {
 		t.Fatal("prefetchImageSources never started loading the far-ahead image")
 	}
-	if v.box.slots[imageSlotIndex].box != nil {
+	if v.stack.box.slots[imageSlotIndex].box != nil {
 		t.Error("image slot got fully resolved - want prefetchImageSources to only kick off the load, not lay anything out")
 	}
 }
 
 // TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot checks
 // invalidateChangedImages's own guarantee in isolation from
-// preLayoutNearby's broader one: a slot well beyond preLayoutHeightRadius
-// behind the cursor - so preLayoutNearby's own backward walk can't
+// documentStack.preLayout's broader one: a slot well beyond preLayoutHeightRadius
+// behind the cursor - so documentStack.preLayout's own backward walk can't
 // reach it either - still gets re-resolved immediately once its
 // pending image settles, rather than freezing DocumentBounds' estimate
 // at a stale placeholder value forever.
@@ -1527,16 +1525,16 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 
 	ctx := RenderingContext{Scale: 1, ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()}
 	view := &View{
-		doc:      &Document{},
-		ctx:      ctx,
-		boxWidth: 100,
-		boxScale: 1,
-		box:      &StackBox{slots: slots, ctx: ctx, width: 100},
-		cursor:   stackCursor{index: cursorSlotIndex},
+		doc:   &Document{},
+		ctx:   ctx,
+		width: 100,
+		scale: 1,
+		stack: documentStack{box: &StackBox{slots: slots, width: 100}, cursor: stackCursor{index: cursorSlotIndex}},
 	}
+	view.stack.box.ctx = &view.ctx // as rebuild wires it
 
-	placeholderHeight := view.box.boxAt(imageSlotIndex).Bounds().Dy() // still pending, no bounds known yet - "(loading image…)" text height
-	view.box.boxAt(cursorSlotIndex)                                   // resolve the cursor's own slot too, seeding a real estimate
+	placeholderHeight := view.stack.box.boxAt(imageSlotIndex).Bounds().Dy() // still pending, no bounds known yet - "(loading image…)" text height
+	view.stack.box.boxAt(cursorSlotIndex)                                   // resolve the cursor's own slot too, seeding a real estimate
 	docBefore := view.DocumentBounds()
 
 	close(release)
@@ -1544,10 +1542,10 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 
 	view.Layout(100, 0, 1, 0)
 
-	if view.box.slots[imageSlotIndex].box == nil {
+	if view.stack.box.slots[imageSlotIndex].box == nil {
 		t.Fatal("already-passed slot left invalidated/nil - nothing will ever re-resolve it now")
 	}
-	if got := view.box.slots[imageSlotIndex].box.Bounds().Dy(); got == placeholderHeight {
+	if got := view.stack.box.slots[imageSlotIndex].box.Bounds().Dy(); got == placeholderHeight {
 		t.Errorf("slot %d's height is still the stale placeholder %d after the real image settled", imageSlotIndex, placeholderHeight)
 	}
 	if docAfter := view.DocumentBounds(); docAfter == docBefore {
@@ -1572,8 +1570,8 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	v.Layout(300, viewportHeight, 1, 0)
 
 	imgSlot := -1
-	for i := range v.box.slots {
-		if _, ok := v.doc.soleImages[v.box.slots[i].block]; ok {
+	for i := range v.stack.box.slots {
+		if _, ok := v.doc.soleImages[v.stack.box.slots[i].block]; ok {
 			imgSlot = i
 			break
 		}
@@ -1588,12 +1586,12 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	// earlier content, just deterministic here instead of a fixed sleep.
 	waitForSettled(t, v.ctx.ImageCache, "testdata/cat.jpeg")
 
-	for v.cursor.index < imgSlot {
+	for v.stack.cursor.index < imgSlot {
 		v.Scroll(-50)
 		v.Layout(300, viewportHeight, 1, 0)
 	}
 
-	if pending := v.box.slots[imgSlot].box.PendingImages(); len(pending) != 0 {
+	if pending := v.stack.box.slots[imgSlot].box.PendingImages(); len(pending) != 0 {
 		t.Errorf("image slot still pending on %v once the cursor reached it - prefetch didn't get there first", pending)
 	}
 }

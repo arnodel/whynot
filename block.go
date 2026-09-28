@@ -470,11 +470,12 @@ func (b *StackBlock) Margins(ctx RenderingContext) Margins {
 // laying out each block's content) only happens for slots something later
 // asks for, e.g. those near a scroll anchor.
 func (b *StackBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	return b.stackLayout(ctx, width)
+	return b.stackLayout(&ctx, width)
 }
 
-// stackLayout is GetBlockLayout with its concrete result type.
-func (b *StackBlock) stackLayout(ctx RenderingContext, width int) *StackBox {
+// stackLayout is GetBlockLayout with its concrete result type, laying out
+// slots against *ctx when they're first needed (see StackBox.ctx).
+func (b *StackBlock) stackLayout(ctx *RenderingContext, width int) *StackBox {
 	slots := make([]stackSlot, 0, len(b.blocks))
 	bottomMargin := 0
 	for i, block := range b.blocks {
