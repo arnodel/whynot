@@ -470,7 +470,7 @@ by implementation order now that most of the list is done.
       undecodable image falls back to alt text, then title, then a generic message
 - [x] Prefetch images ahead of the scroll position - a standalone image's own load
       starts well before its containing slot is actually resolved, in both scroll
-      directions (`View.Layout`'s `preLayoutNearby`/`prefetchImageSources`), not only
+      directions (`View.Layout` lays out and prefetches ahead), not only
       once it's scrolled right up to it
 
 **Links and navigation**

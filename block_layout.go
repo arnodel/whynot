@@ -223,7 +223,12 @@ type stackSlot struct {
 
 type StackBox struct {
 	slots []stackSlot
-	ctx   RenderingContext
+
+	// ctx is what unresolved slots are laid out with, when first needed.
+	// For a View's top-level StackBox this is the View's own live context,
+	// so a change that only affects slots laid out from then on (e.g. the
+	// hovered link) needs no rebuild, just invalidating the affected slots.
+	ctx   *RenderingContext
 	width int
 
 	// source is the single Block this StackBox's slots were all built
@@ -284,8 +289,8 @@ func (b *StackBox) Source() Source {
 // doc comment) - in particular, the top-level document StackBox's own
 // slots keep resolving lazily over time, so caching this would go
 // stale; View.invalidateChangedImages only ever calls this on
-// individual already-resolved slots' boxes, never on that top-level
-// aggregate itself.
+// individual already-resolved slots' boxes (via documentStack), never on
+// that top-level aggregate itself.
 func (b *StackBox) PendingImages() []string {
 	var pending []string
 	for i := range b.slots {
@@ -304,7 +309,7 @@ func (b *StackBox) PendingImages() []string {
 func (b *StackBox) boxAt(i int) BlockLayout {
 	slot := &b.slots[i]
 	if slot.box == nil {
-		inner := slot.block.GetBlockLayout(b.ctx, slot.width)
+		inner := slot.block.GetBlockLayout(*b.ctx, slot.width)
 		if slot.wrap {
 			slot.box = NewContainerBox(inner, b.width, inner.Bounds().Dy(), slot.leftMargin, 0)
 		} else {
@@ -312,6 +317,27 @@ func (b *StackBox) boxAt(i int) BlockLayout {
 		}
 	}
 	return slot.box
+}
+
+// invalidate discards slot i's layout; boxAt rebuilds it when next needed.
+func (b *StackBox) invalidate(i int) {
+	if i < 0 || i >= len(b.slots) {
+		return
+	}
+	b.slots[i].box = nil
+	b.boundsComputed = false
+}
+
+// addSpacers surrounds b's slots with empty slots of the given heights,
+// omitting a zero-height one.
+func (b *StackBox) addSpacers(top, bottom int) {
+	if top > 0 {
+		b.slots = append([]stackSlot{{box: NewEmptyBox(b.width, top)}}, b.slots...)
+	}
+	if bottom > 0 {
+		b.slots = append(b.slots, stackSlot{box: NewEmptyBox(b.width, bottom)})
+	}
+	b.boundsComputed = false
 }
 
 // HitTest walks slots from the start looking for the one p.Y falls in -
