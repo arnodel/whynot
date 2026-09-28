@@ -110,7 +110,13 @@ its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
 correctly with the outermost child instead of stacking on top of it.
 
 Built once per document, by `Parse` ([compile.go](compile.go)), and never
-rebuilt — `Block`s are immutable for the life of the program.
+rebuilt — `Block`s are immutable for the life of the program. `Parse`
+returns a `Document` ([document.go](document.go)): the root `StackBlock`
+plus what the compiler recorded about top-level blocks while building it
+- the headings (`Title`, `TOCEntries`) and which paragraphs are a single
+image (for prefetching, see below) - so nothing downstream has to
+rediscover them by inspecting the `Block` tree's shape. Any number of
+`View`s can render the same `Document`.
 
 ### Layer 2 — Layout tree (`BlockLayout` / `InlineLayout`)
 
@@ -176,7 +182,7 @@ re-rasterizing the same glyph every frame.
 
 [view.go](view.go)'s `View` is what a caller actually uses. It owns:
 
-- the `Block` tree (built once, in `NewView`)
+- the `Document` it renders (see `Parse`)
 - the current `BlockLayout` tree, **cached** and only rebuilt in `Layout` when
   `width` or `scale` actually change — not on every `Draw` call
 - the scroll position, as a `stackCursor{index, offset}` ([block_layout.go](block_layout.go)):
@@ -314,9 +320,9 @@ smoothing over it after the fact:
   resize) can leave a lot of newly-close ground, so catching up is
   spread over however many frames it takes.
 - `prefetchImageSources` reaches much further (tens of thousands of
-  pixels), since it never lays anything out - it only inspects each
-  slot's already-parsed `Block` (no `GetBlockLayout` call) for one
-  that's *just* a standalone image (`soleImageSrc`) and kicks off
+  pixels), since it never lays anything out - it only looks each
+  slot's `Block` up in the `Document`'s record of standalone images
+  (no `GetBlockLayout` call) and kicks off
   `ImageCache.Load` early, giving a slow network fetch a head start
   cheaply, deliberately not sharing `preLayoutNearby`'s smaller,
   CPU-time-budgeted radius.

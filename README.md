@@ -127,7 +127,7 @@ func exampleDoc() string {
 }
 
 func main() {
-	view := whynot.NewView([]byte(exampleDoc()), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 
@@ -230,7 +230,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	g := &game{
-		view:     whynot.NewView([]byte(exampleDoc()), whynot.NewGoFontFaceSelector(72)),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72)),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
@@ -282,7 +282,7 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   ```go
   selector := whynot.NewCustomFontFaceSelector(72)
   selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
-  view := whynot.NewView(source, selector)
+  view := whynot.NewView(whynot.Parse(source), selector)
   ```
 
   `AddFontCollection`/`AddFontCollectionFile` register every subfont a `.ttc`/`.otc`
@@ -300,7 +300,7 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   ```go
   selector := systemfont.NewSystemFontFaceSelector(72)
   selector.RegisterSystemFont(whynot.Proportional, "Arial")
-  view := whynot.NewView(source, selector)
+  view := whynot.NewView(whynot.Parse(source), selector)
   ```
 
   `RegisterSystemFont` finds the best-matching installed font, then uses
@@ -318,7 +318,7 @@ gets, `FaceSelector` decides what font file actually renders that combination.
   selector := systemfont.NewSystemFontFaceSelector(72)
   selector.RegisterPreferredFont(whynot.Proportional)
   selector.RegisterPreferredFont(whynot.Monospace)
-  view := whynot.NewView(source, selector)
+  view := whynot.NewView(whynot.Parse(source), selector)
   ```
 
   There's no portable way to ask the OS directly for its actual configured UI font
@@ -336,12 +336,12 @@ eye-catching accent color instead (`CodeSpanColor`), since a small isolated word
 prose reads fine as an accent while a whole block of it would fight with any
 syntax-highlighted spans inside it. Passing a `whynot.Highlighter` - `Highlight(language,
 code string) []HighlightSpan`, classifying the block's source into consecutive typed
-spans - colors it token-by-token instead, via `whynot.WithHighlighter` (or
-`whynot.WithSyntaxHighlighter` if you call `whynot.Parse` directly rather than
-`NewView`):
+spans - colors it token-by-token instead, via `whynot.Parse`'s
+`whynot.WithSyntaxHighlighter` option:
 
 ```go
-view := whynot.NewView(source, selector, whynot.WithHighlighter(chromahighlight.Highlighter{}))
+doc := whynot.Parse(source, whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}))
+view := whynot.NewView(doc, selector)
 ```
 
 `chromahighlight` (`github.com/arnodel/whynot/chromahighlight`, a separate package to

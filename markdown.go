@@ -21,6 +21,11 @@ type MarkdownCompiler struct {
 	// inline content (a paragraph, heading, list item head, or table
 	// cell), since there's nothing for the first item there to glue to.
 	pendingSpace bool
+
+	// headings and soleImages accumulate the Document fields of the same
+	// names as top-level blocks are compiled.
+	headings   []TOCEntry
+	soleImages map[Block]string
 }
 
 // pluginFor returns the first registered CodeBlockPlugin that handles

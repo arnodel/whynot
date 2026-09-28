@@ -4,7 +4,7 @@ import "strings"
 
 // Highlighter classifies a code block's source into consecutive typed
 // spans, used to color it token-by-token instead of as one flat run.
-// Parse/NewView have no highlighter by default - every code block then
+// Parse has no highlighter by default - every code block then
 // renders in one flat color (StyleSheet's existing TagCodeBlock case),
 // exactly as before this existed.
 type Highlighter interface {
@@ -55,7 +55,7 @@ type ParseOption func(*MarkdownCompiler)
 
 // WithSyntaxHighlighter sets the Highlighter Parse uses to color code
 // blocks token-by-token. Unset, code blocks render in one flat color,
-// exactly as before this option existed. See WithHighlighter for the
+// exactly as before this option existed.
 // equivalent NewView option.
 func WithSyntaxHighlighter(h Highlighter) ParseOption {
 	return func(c *MarkdownCompiler) {
@@ -81,8 +81,7 @@ type CodeBlockPlugin interface {
 // WithCodeBlockPlugin registers one CodeBlockPlugin - callable more
 // than once to register several; a fenced code block's language is
 // matched against them in registration order (see
-// MarkdownCompiler.pluginFor). See WithCodeBlockPlugins for the
-// equivalent NewView option.
+// MarkdownCompiler.pluginFor).
 func WithCodeBlockPlugin(p CodeBlockPlugin) ParseOption {
 	return func(c *MarkdownCompiler) {
 		c.codeBlockPlugins = append(c.codeBlockPlugins, p)

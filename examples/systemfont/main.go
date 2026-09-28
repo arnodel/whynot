@@ -83,7 +83,7 @@ func main() {
 	}
 
 	g := &game{
-		view:     whynot.NewView([]byte(exampleDoc()), selector),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), selector),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}

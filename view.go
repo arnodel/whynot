@@ -3,7 +3,6 @@ package whynot
 import (
 	"image"
 	"math"
-	"strings"
 	"time"
 )
 
@@ -19,8 +18,8 @@ import (
 // whenever the available width or the display scale changes (typically
 // from the embedding game's own layout/resize callback).
 type View struct {
-	block Block
-	ctx   RenderingContext
+	doc *Document
+	ctx RenderingContext
 
 	// cursor is the scroll position: which slot is at the top of the
 	// viewport, and how far into it. This is what stays meaningful across
@@ -50,15 +49,6 @@ type View struct {
 	// invalidation or rebuild, since a stale per-slot value is a better
 	// estimate than falling back to the document-wide average.
 	slotHeights []float64
-
-	// highlighter is the Highlighter (see WithHighlighter) threaded into
-	// NewView's own Parse call - unrelated to highlightSlot above, which
-	// is about a hovered link, not syntax highlighting.
-	highlighter Highlighter
-
-	// codeBlockPlugins (see WithCodeBlockPlugins) is threaded into
-	// NewView's own Parse call the same way highlighter is.
-	codeBlockPlugins []CodeBlockPlugin
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -66,7 +56,7 @@ type View struct {
 type ViewOption func(*View)
 
 // WithStyleSheet overrides the StyleSheet NewView otherwise defaults to
-// (NewDarkStyleSheet) - e.g. NewView(source, faceSelector,
+// (NewDarkStyleSheet) - e.g. NewView(doc, faceSelector,
 // WithStyleSheet(NewLightStyleSheet())).
 func WithStyleSheet(s StyleSheet) ViewOption {
 	return func(v *View) {
@@ -88,34 +78,11 @@ func WithImageSource(s ImageSource) ViewOption {
 	}
 }
 
-// WithHighlighter sets the Highlighter used to color code blocks
-// token-by-token - the NewView-level equivalent of Parse's own
-// WithSyntaxHighlighter (named differently since it's a different option
-// type, ViewOption vs ParseOption; Go has no function overloading). Unset,
-// code blocks render in one flat color, same as before this option
-// existed.
-func WithHighlighter(h Highlighter) ViewOption {
-	return func(v *View) {
-		v.highlighter = h
-	}
-}
-
-// WithCodeBlockPlugins registers CodeBlockPlugins for Parse to use - the
-// NewView-level equivalent of Parse's own (singular, appendable)
-// WithCodeBlockPlugin, named and shaped differently for the same reason
-// WithHighlighter/WithSyntaxHighlighter are: a View is normally built
-// with its full option set in one NewView call, so registering every
-// plugin in one variadic option reads naturally.
-func WithCodeBlockPlugins(plugins ...CodeBlockPlugin) ViewOption {
-	return func(v *View) {
-		v.codeBlockPlugins = append(v.codeBlockPlugins, plugins...)
-	}
-}
-
-// NewView parses source and returns a View ready to render it once Layout
+// NewView returns a View of doc (see Parse), ready to render it once Layout
 // has been called at least once to establish a width.
-func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View {
+func NewView(doc *Document, faceSelector FaceSelector, opts ...ViewOption) *View {
 	v := &View{
+		doc: doc,
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
 			StyleSheet:   NewDarkStyleSheet(),
@@ -125,89 +92,12 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 	for _, opt := range opts {
 		opt(v)
 	}
-	var parseOpts []ParseOption
-	if v.highlighter != nil {
-		parseOpts = append(parseOpts, WithSyntaxHighlighter(v.highlighter))
-	}
-	for _, p := range v.codeBlockPlugins {
-		parseOpts = append(parseOpts, WithCodeBlockPlugin(p))
-	}
-	v.block = Parse(source, parseOpts...)
 	return v
 }
 
-// Title returns the document's own title - the text of its first
-// heading, at any level - or ok=false if it has none. A caller (e.g.
-// for a window/tab title) decides its own fallback; a document with no
-// heading at all is a normal, unremarkable case, not an error.
-//
-// Only a top-level heading is found, the same limitation TOCEntries/
-// ScrollToAnchor have and for the same reason: one nested inside a
-// blockquote or list isn't reachable this way.
-func (v *View) Title() (string, bool) {
-	stack, ok := v.block.(*StackBlock)
-	if !ok {
-		return "", false
-	}
-	for _, block := range stack.blocks {
-		if entry, ok := headingEntryOf(block); ok {
-			return entry.Text, true
-		}
-	}
-	return "", false
-}
-
-// TOCEntry is one heading found by TOCEntries - enough to build a table
-// of contents entry (a nested list item linking to ID) without exposing
-// this package's own AST/Block types to a caller like the browser
-// package.
-type TOCEntry struct {
-	ID    string // ASTNode.ID - what ScrollToAnchor takes
-	Level int    // 1-6, from TagHeading1..TagHeading6
-	Text  string
-}
-
-// TOCEntries returns every top-level heading in the document, in
-// document order - the raw material for a caller building a table of
-// contents (e.g. browser.App's ShowTOC). Same only-top-level-headings
-// limitation as Title/ScrollToAnchor. Unlike Title, which stops at the
-// first heading it finds, this always walks the whole document.
-func (v *View) TOCEntries() []TOCEntry {
-	stack, ok := v.block.(*StackBlock)
-	if !ok {
-		return nil
-	}
-	var entries []TOCEntry
-	for _, block := range stack.blocks {
-		if entry, ok := headingEntryOf(block); ok {
-			entries = append(entries, entry)
-		}
-	}
-	return entries
-}
-
-// headingEntryOf describes block as a TOCEntry, if it's a heading -
-// the per-block half shared by Title's walk and TOCEntries', so only
-// the walking itself differs between them (Title stops at the first
-// heading; TOCEntries collects all of them).
-func headingEntryOf(block Block) (TOCEntry, bool) {
-	node := block.Node()
-	if node == nil || node.Tag < TagHeading1 || node.Tag > TagHeading6 {
-		return TOCEntry{}, false
-	}
-	mb, ok := block.(*MarginBlock)
-	if !ok {
-		return TOCEntry{}, false
-	}
-	tb, ok := mb.Block.(*TextBlock)
-	if !ok {
-		return TOCEntry{}, false
-	}
-	return TOCEntry{
-		ID:    node.ID,
-		Level: int(node.Tag-TagHeading1) + 1,
-		Text:  plainTextOf(tb),
-	}, true
+// Document returns the Document this View renders.
+func (v *View) Document() *Document {
+	return v.doc
 }
 
 // CurrentHeadingID returns the id of the top-level heading at or just
@@ -234,21 +124,6 @@ func (v *View) CurrentHeadingID() (id string, ok bool) {
 		}
 	}
 	return "", false
-}
-
-// plainTextOf reconstructs a TextBlock's plain text - its parts are
-// mostly *InlineText, one per word (see appendString), rejoined with
-// single spaces; anything else (e.g. an *InlineImage, if a heading
-// contained one) contributes nothing rather than failing the whole
-// result.
-func plainTextOf(tb *TextBlock) string {
-	var words []string
-	for _, part := range tb.parts {
-		if it, ok := part.(*InlineText); ok {
-			words = append(words, it.text)
-		}
-	}
-	return strings.Join(words, " ")
 }
 
 // Scroll adjusts the vertical scroll position by dy pixels: negative dy
@@ -766,43 +641,12 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 func (v *View) prefetchImageSourcesDirection(i, dir int, skipHeight, avg float64) {
 	height := -skipHeight
 	for i >= 0 && i < len(v.box.slots) && height < prefetchImageSourceHeightRadius {
-		if src, ok := soleImageSrc(v.box.slots[i].block); ok {
+		if src, ok := v.doc.soleImages[v.box.slots[i].block]; ok {
 			v.ctx.ImageCache.Load(src)
 		}
 		height += v.estimatedHeight(i, avg)
 		i += dir
 	}
-}
-
-// soleImageSrc reports the src of block's one InlineImage, if block is
-// a TextBlock or ListItemHeadBlock whose only content is a single
-// image - unwrapping MarginBlock first, since every real top-level
-// paragraph is wrapped in one (see compile.go).
-func soleImageSrc(block Block) (string, bool) {
-	for {
-		mb, ok := block.(*MarginBlock)
-		if !ok {
-			break
-		}
-		block = mb.Block
-	}
-	var parts []Inline
-	switch b := block.(type) {
-	case *TextBlock:
-		parts = b.parts
-	case *ListItemHeadBlock:
-		parts = b.parts
-	default:
-		return "", false
-	}
-	if len(parts) != 1 {
-		return "", false
-	}
-	img, ok := parts[0].(*InlineImage)
-	if !ok {
-		return "", false
-	}
-	return img.src, true
 }
 
 // SetStyleSheet swaps the View's StyleSheet and takes effect immediately -
@@ -849,7 +693,7 @@ func (v *View) rebuild() {
 		contentWidth = 0
 	}
 
-	v.box = asStackBox(v.block.GetBlockLayout(v.ctx, contentWidth))
+	v.box = v.doc.root.stackLayout(v.ctx, contentWidth)
 	if top := int(margin.Top); top > 0 {
 		v.box.slots = append([]stackSlot{{box: NewEmptyBox(contentWidth, top)}}, v.box.slots...)
 	}
