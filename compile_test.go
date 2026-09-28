@@ -661,6 +661,109 @@ func TestParseWithSyntaxHighlighter(t *testing.T) {
 	}
 }
 
+// fakeCodeBlockPlugin is a CodeBlockPlugin test double - handles is the
+// set of languages CanHandle accepts; canHandleCalls counts how many
+// times CanHandle actually ran, for tests checking MarkdownCompiler's
+// per-language caching (see pluginFor).
+type fakeCodeBlockPlugin struct {
+	name           string
+	handles        map[string]bool
+	canHandleCalls *int
+	image          func(language, code string) AsyncImage
+}
+
+func (p fakeCodeBlockPlugin) CanHandle(language string) bool {
+	if p.canHandleCalls != nil {
+		*p.canHandleCalls++
+	}
+	return p.handles[language]
+}
+
+func (p fakeCodeBlockPlugin) Image(language, code string) AsyncImage {
+	return p.image(language, code)
+}
+
+// TestParseWithCodeBlockPlugin checks that a fenced code block in a
+// language the plugin handles compiles via NewDiagramBlock instead of a
+// plain CodeBlock - with the plugin's own AsyncImage, and a fallback
+// that's exactly what today's highlighter/plain-text rendering would
+// have produced.
+func TestParseWithCodeBlockPlugin(t *testing.T) {
+	wantImg := AsyncImage{Key: "diagram-key"}
+	plugin := fakeCodeBlockPlugin{
+		handles: map[string]bool{"mermaid": true},
+		image: func(language, code string) AsyncImage {
+			if language != "mermaid" || code != "graph TD; A-->B;\n" {
+				t.Errorf("Image(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
+			}
+			return wantImg
+		},
+	}
+	doc := Parse([]byte("```mermaid\ngraph TD; A-->B;\n```"), WithCodeBlockPlugin(plugin))
+	stack := doc.(*StackBlock)
+	diagram, ok := unwrap(stack.blocks[0]).(*diagramBlock)
+	if !ok {
+		t.Fatalf("block = %T, want *diagramBlock", unwrap(stack.blocks[0]))
+	}
+	if diagram.img.Key != wantImg.Key {
+		t.Errorf("img.Key = %q, want the plugin's own %q", diagram.img.Key, wantImg.Key)
+	}
+	fallback, ok := diagram.fallback.(*CodeBlock)
+	if !ok {
+		t.Fatalf("fallback = %T, want *CodeBlock", diagram.fallback)
+	}
+	if len(fallback.lines) != 1 {
+		t.Fatalf("fallback lines = %#v, want 1 line", fallback.lines)
+	}
+	text, ok := fallback.lines[0][0].(*InlineText)
+	if !ok || text.text != "graph TD; A-->B;\n" {
+		t.Errorf("fallback line = %#v, want the raw source text", fallback.lines[0])
+	}
+}
+
+// TestParseCodeBlockPluginFallsThroughForUnrecognizedLanguage checks
+// that a language no registered plugin handles compiles exactly as it
+// would with no plugin configured at all.
+func TestParseCodeBlockPluginFallsThroughForUnrecognizedLanguage(t *testing.T) {
+	plugin := fakeCodeBlockPlugin{handles: map[string]bool{"mermaid": true}}
+	doc := Parse([]byte("```go\nfunc f()\n```"), WithCodeBlockPlugin(plugin))
+	stack := doc.(*StackBlock)
+	if _, ok := unwrap(stack.blocks[0]).(*CodeBlock); !ok {
+		t.Fatalf("block = %T, want *CodeBlock (plugin shouldn't have handled \"go\")", unwrap(stack.blocks[0]))
+	}
+}
+
+// TestParseCodeBlockPluginRegistrationOrderAndCaching checks that with
+// several plugins registered, the first (in registration order) whose
+// CanHandle matches wins, and that CanHandle is called at most once per
+// plugin per distinct language, however many fences share that language.
+func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
+	var firstCalls, secondCalls int
+	first := fakeCodeBlockPlugin{
+		handles:        map[string]bool{"mermaid": false},
+		canHandleCalls: &firstCalls,
+	}
+	second := fakeCodeBlockPlugin{
+		handles:        map[string]bool{"mermaid": true},
+		canHandleCalls: &secondCalls,
+		image:          func(language, code string) AsyncImage { return AsyncImage{Key: "k"} },
+	}
+	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
+	doc := Parse(source, WithCodeBlockPlugin(first), WithCodeBlockPlugin(second))
+	stack := doc.(*StackBlock)
+	if len(stack.blocks) != 3 {
+		t.Fatalf("got %d top-level blocks, want 3", len(stack.blocks))
+	}
+	for i, b := range stack.blocks {
+		if _, ok := unwrap(b).(*diagramBlock); !ok {
+			t.Errorf("block %d = %T, want *diagramBlock (second plugin should have handled it)", i, unwrap(b))
+		}
+	}
+	if firstCalls != 1 || secondCalls != 1 {
+		t.Errorf("CanHandle calls = first:%d second:%d, want 1 each (cached after the first \"mermaid\" fence)", firstCalls, secondCalls)
+	}
+}
+
 func TestParseThematicBreak(t *testing.T) {
 	doc := Parse([]byte("---"))
 	stack := doc.(*StackBlock)

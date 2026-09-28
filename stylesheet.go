@@ -275,6 +275,7 @@ type DefaultStyleSheet struct {
 	blockquoteGeometry     BlockquoteGeometry
 	tableGeometry          TableGeometry
 	lineHeight             float64
+	diagramPadding         float64
 }
 
 var _ StyleSheet = (*DefaultStyleSheet)(nil)
@@ -377,6 +378,7 @@ func NewDarkStyleSheet() *DefaultStyleSheet {
 		strikeThickness:        1,
 		thematicBreakThickness: 2,
 		lineHeight:             1.2,
+		diagramPadding:         12,
 		blockquoteGeometry:     BlockquoteGeometry{Indent: 16, BarWidth: 3},
 		tableGeometry: TableGeometry{
 			FrameThickness:      2,
@@ -569,6 +571,14 @@ func (s *DefaultStyleSheet) StrikeThickness(node *ASTNode) float64 {
 func (s *DefaultStyleSheet) ThematicBreakThickness(node *ASTNode) float64 {
 	return s.thematicBreakThickness
 }
+
+// DiagramPadding implements DiagramStyleSheet (diagram.go) - see its own
+// doc comment for why this lives outside the core StyleSheet interface.
+func (s *DefaultStyleSheet) DiagramPadding(node *ASTNode) float64 {
+	return s.diagramPadding
+}
+
+var _ DiagramStyleSheet = (*DefaultStyleSheet)(nil)
 
 func (s *DefaultStyleSheet) BlockquoteGeometry(node *ASTNode) BlockquoteGeometry {
 	return s.blockquoteGeometry

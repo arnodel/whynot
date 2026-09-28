@@ -13,10 +13,12 @@ import (
 )
 
 // countingImageSource wraps a fixed image (or a fixed error) behind an
-// ImageSource that counts how many times Resolve/Open were actually
-// called. open, if set, is called instead of the default (returning
-// data/openErr directly) - for tests that need to control exactly when
-// Open returns.
+// ImageSource that counts how many times Image was called (resolveCalls
+// - Image itself plays Resolve's old role: cheap, called on every Load)
+// and how many times the AsyncImage it returned was actually fetched
+// (openCalls - only on a genuine cache miss). open, if set, is called
+// instead of the default (returning data/openErr directly) - for tests
+// that need to control exactly when the fetch returns.
 type countingImageSource struct {
 	resolved     string
 	resolveErr   error
@@ -27,23 +29,21 @@ type countingImageSource struct {
 	openCalls    int
 }
 
-func (s *countingImageSource) Resolve(src string) (string, error) {
+func (s *countingImageSource) Image(src string) (AsyncImage, error) {
 	s.resolveCalls++
 	if s.resolveErr != nil {
-		return src, s.resolveErr
+		return AsyncImage{}, s.resolveErr
 	}
-	return s.resolved, nil
-}
-
-func (s *countingImageSource) Open(resolved string) (io.ReadCloser, error) {
-	s.openCalls++
-	if s.open != nil {
-		return s.open()
-	}
-	if s.openErr != nil {
-		return nil, s.openErr
-	}
-	return io.NopCloser(bytes.NewReader(s.data)), nil
+	return AsyncImage{Key: s.resolved, Fetch: func() (io.ReadCloser, error) {
+		s.openCalls++
+		if s.open != nil {
+			return s.open()
+		}
+		if s.openErr != nil {
+			return nil, s.openErr
+		}
+		return io.NopCloser(bytes.NewReader(s.data)), nil
+	}}, nil
 }
 
 func onePixelPNG(t *testing.T) []byte {
@@ -271,8 +271,9 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 
 	resultA := waitForSettled(t, cache, "a.png")
 	resultB := waitForSettled(t, cache, "b.png")
-	resolvedA, _ := source.Resolve("a.png")
-	resolvedB, _ := source.Resolve("b.png")
+	imgA, _ := source.Image("a.png")
+	imgB, _ := source.Image("b.png")
+	resolvedA, resolvedB := imgA.Key, imgB.Key
 	if resolvedA == resolvedB {
 		t.Fatalf("both resolved to %q, want distinct identifiers", resolvedA)
 	}
@@ -281,6 +282,81 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 	}
 	if source.openCalls != 2 {
 		t.Errorf("openCalls = %d, want 2 (one per distinct resolved src)", source.openCalls)
+	}
+}
+
+// waitForSettledImage is waitForSettled's LoadImage counterpart.
+func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageResult {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		result := cache.LoadImage(img)
+		if result.Status != ImagePending {
+			return result
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("LoadImage(%q) still pending after 2s", img.Key)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestImageCacheLoadImageFetchesOnce mirrors TestImageCacheLoadFetchesOnce
+// for LoadImage - the path a CodeBlockPlugin's AsyncImage drives (see
+// NewDiagramBlock), which has no ImageSource to resolve/dedupe through,
+// only whatever Key its AsyncImage reports.
+func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
+	pixel := onePixelPNG(t)
+	var fetchCalls int
+	img := AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
+			fetchCalls++
+			return io.NopCloser(bytes.NewReader(pixel)), nil
+		},
+	}
+	cache := NewImageCache(FileImageSource{})
+
+	first := waitForSettledImage(t, cache, img)
+	if first.Status != ImageReady || first.Image == nil {
+		t.Fatalf("first LoadImage settled to %+v, want ImageReady with an image", first)
+	}
+
+	for i := 0; i < 4; i++ {
+		result := cache.LoadImage(img)
+		if result.Status != ImageReady || result.Image == nil {
+			t.Errorf("LoadImage #%d: result = %+v, want the cached ImageReady result", i, result)
+		}
+	}
+	if fetchCalls != 1 {
+		t.Errorf("fetchCalls = %d, want 1 (fetch should happen only on the first LoadImage)", fetchCalls)
+	}
+}
+
+// TestImageCacheLoadImageParticipatesInChangedSince checks that a
+// LoadImage-driven entry reports through ChangedSince exactly like a
+// Load-driven one - the mechanism View.invalidateChangedImages already
+// polls to redraw a slot once its pending content settles, reused
+// unmodified for a diagram block since both paths write into the same
+// cache keyed by string.
+func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
+	pixel := onePixelPNG(t)
+	cache := NewImageCache(FileImageSource{})
+
+	_, mark := cache.ChangedSince(0)
+	waitForSettledImage(t, cache, AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(pixel)), nil
+		},
+	})
+
+	changes, _ := cache.ChangedSince(mark)
+	if len(changes) != 1 || changes[0].Src != "diagram-key" {
+		t.Fatalf("changes = %+v, want one change for \"diagram-key\"", changes)
+	}
+	if !changes[0].BoundsRevealed {
+		t.Error("BoundsRevealed = false, want true (bounds became known for the first time)")
 	}
 }
 
@@ -341,11 +417,10 @@ type stubMultiImageSource struct {
 	openCalls int
 }
 
-func (s *stubMultiImageSource) Resolve(src string) (string, error) {
-	return s.byLiteral[src], nil
-}
-
-func (s *stubMultiImageSource) Open(resolved string) (io.ReadCloser, error) {
-	s.openCalls++
-	return io.NopCloser(bytes.NewReader(s.data)), nil
+func (s *stubMultiImageSource) Image(src string) (AsyncImage, error) {
+	resolved := s.byLiteral[src]
+	return AsyncImage{Key: resolved, Fetch: func() (io.ReadCloser, error) {
+		s.openCalls++
+		return io.NopCloser(bytes.NewReader(s.data)), nil
+	}}, nil
 }

@@ -55,6 +55,10 @@ type View struct {
 	// NewView's own Parse call - unrelated to highlightSlot above, which
 	// is about a hovered link, not syntax highlighting.
 	highlighter Highlighter
+
+	// codeBlockPlugins (see WithCodeBlockPlugins) is threaded into
+	// NewView's own Parse call the same way highlighter is.
+	codeBlockPlugins []CodeBlockPlugin
 }
 
 // ViewOption customizes a View at construction, via NewView's opts
@@ -96,6 +100,18 @@ func WithHighlighter(h Highlighter) ViewOption {
 	}
 }
 
+// WithCodeBlockPlugins registers CodeBlockPlugins for Parse to use - the
+// NewView-level equivalent of Parse's own (singular, appendable)
+// WithCodeBlockPlugin, named and shaped differently for the same reason
+// WithHighlighter/WithSyntaxHighlighter are: a View is normally built
+// with its full option set in one NewView call, so registering every
+// plugin in one variadic option reads naturally.
+func WithCodeBlockPlugins(plugins ...CodeBlockPlugin) ViewOption {
+	return func(v *View) {
+		v.codeBlockPlugins = append(v.codeBlockPlugins, plugins...)
+	}
+}
+
 // NewView parses source and returns a View ready to render it once Layout
 // has been called at least once to establish a width.
 func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View {
@@ -112,6 +128,9 @@ func NewView(source []byte, faceSelector FaceSelector, opts ...ViewOption) *View
 	var parseOpts []ParseOption
 	if v.highlighter != nil {
 		parseOpts = append(parseOpts, WithSyntaxHighlighter(v.highlighter))
+	}
+	for _, p := range v.codeBlockPlugins {
+		parseOpts = append(parseOpts, WithCodeBlockPlugin(p))
 	}
 	v.block = Parse(source, parseOpts...)
 	return v

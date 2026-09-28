@@ -80,9 +80,10 @@ type drawnRect struct {
 // calls - enough to check View.Draw's background fill without a real
 // rendering backend.
 type recordingCanvas struct {
-	bounds image.Rectangle
-	rects  []drawnRect
-	images []image.Image
+	bounds     image.Rectangle
+	rects      []drawnRect
+	images     []image.Image
+	imageRects []image.Rectangle // one per DrawImage call, parallel to images
 }
 
 var _ Canvas = (*recordingCanvas)(nil)
@@ -91,6 +92,7 @@ func (c *recordingCanvas) Bounds() image.Rectangle                              
 func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {}
 func (c *recordingCanvas) DrawImage(img image.Image, x, y, width, height int) {
 	c.images = append(c.images, img)
+	c.imageRects = append(c.imageRects, image.Rect(x, y, x+width, y+height))
 }
 func (c *recordingCanvas) DrawRect(x, y, w, h int, clr color.Color) {
 	c.rects = append(c.rects, drawnRect{x, y, w, h, clr})

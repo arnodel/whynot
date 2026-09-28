@@ -63,6 +63,32 @@ func WithSyntaxHighlighter(h Highlighter) ParseOption {
 	}
 }
 
+// CodeBlockPlugin lets a caller replace how a fenced code block in a
+// recognized language renders - e.g. a ```mermaid fence as a diagram
+// (see the kroki package) instead of its raw/highlighted
+// diagram-definition text. Checked before Highlighter, and only for a
+// language CanHandle recognizes - it knows nothing about Block/ASTNode,
+// compile.go owns all of that uniformly for every plugin.
+type CodeBlockPlugin interface {
+	// CanHandle reports whether this plugin handles fenced code blocks
+	// written in language.
+	CanHandle(language string) bool
+	// Image starts rendering a fenced code block CanHandle has already
+	// approved, returning an AsyncImage that resolves once it's ready.
+	Image(language, code string) AsyncImage
+}
+
+// WithCodeBlockPlugin registers one CodeBlockPlugin - callable more
+// than once to register several; a fenced code block's language is
+// matched against them in registration order (see
+// MarkdownCompiler.pluginFor). See WithCodeBlockPlugins for the
+// equivalent NewView option.
+func WithCodeBlockPlugin(p CodeBlockPlugin) ParseOption {
+	return func(c *MarkdownCompiler) {
+		c.codeBlockPlugins = append(c.codeBlockPlugins, p)
+	}
+}
+
 // tokenClassTags maps a Highlighter's TokenClass to the ASTTag whose
 // StyleSheet.Color contribution renders it - TokenPlain deliberately has
 // no entry: a plain span reuses its enclosing code block's own ASTNode
@@ -75,6 +101,31 @@ var tokenClassTags = map[TokenClass]ASTTag{
 	TokenString:   TagCodeString,
 	TokenNumber:   TagCodeNumber,
 	TokenComment:  TagCodeComment,
+}
+
+// codeBlockLines returns the per-visual-line Inline spans for a fenced
+// or indented code block's rawLines - highlighted via c.highlighter if
+// one's configured and it behaves (see highlightLines), else one plain
+// InlineText per line. Used both for an ordinary CodeBlock and as a
+// CodeBlockPlugin's fallback content (see compile.go's KindCodeBlock
+// case) - identical either way, since a plugin's fallback is exactly
+// what today's non-plugin rendering already is.
+func (c *MarkdownCompiler) codeBlockLines(astNode *ASTNode, language string, rawLines []string) [][]Inline {
+	var lines [][]Inline
+	if c.highlighter != nil {
+		lines = highlightLines(c.highlighter, astNode, language, rawLines)
+	}
+	if lines == nil {
+		// No highlighter configured, or highlightLines bailed out on a
+		// mismatched line count (a misbehaving Highlighter) - both cases
+		// fall back to the same plain, one-InlineText-per-line
+		// rendering.
+		lines = make([][]Inline, len(rawLines))
+		for i, text := range rawLines {
+			lines[i] = []Inline{&InlineText{text: text, node: astNode}}
+		}
+	}
+	return lines
 }
 
 // highlightLines runs h over rawLines joined into one string (giving a
