@@ -110,14 +110,6 @@ type InlineImage struct {
 
 	// glued - see InlineLayout.Glued's doc comment and InlineText.glued.
 	glued bool
-
-	// ownCache is lazily created the first time GetInlineLayout runs
-	// with no ImageCache configured (a bare RenderingContext{}, as most
-	// of this package's own tests use) and reused on every later call -
-	// loading is asynchronous, so a fresh cache created on every call
-	// would restart the fetch from scratch each time and could never be
-	// observed settling.
-	ownCache *ImageCache
 }
 
 var _ Inline = (*InlineImage)(nil)
@@ -129,13 +121,9 @@ func (i *InlineImage) Node() *ASTNode {
 // GetInlineLayout resolves, fetches, and decodes src via ctx.ImageCache
 // (letting the embedder decide the resolution/fetch policy - relative
 // to a document's location, over http(s), from an archive, whatever it
-// needs; falls back to i.ownCache, lazily created from
-// FileImageSource, if ctx was built as a bare RenderingContext{} with
-// no ImageCache set, the same default NewView itself uses - so direct
-// RenderingContext callers that never touch an image, like most of
-// this package's own tests, don't need to know ImageCache exists) -
-// never blocking, since ImageCache.Load never does. There are three
-// outcomes:
+// needs) - never blocking, since ImageCache.Load never does. With no
+// ImageCache, the image isn't loaded and its fallback text is shown.
+// Otherwise there are three outcomes:
 //
 //   - Ready: the decoded image, scaled by ctx.Scale like every other
 //     sized quantity in the layout system (RenderingContext.ScaledMargins
@@ -161,10 +149,7 @@ func (i *InlineImage) Node() *ASTNode {
 func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
 	cache := ctx.ImageCache
 	if cache == nil {
-		if i.ownCache == nil {
-			i.ownCache = NewImageCache(FileImageSource{})
-		}
-		cache = i.ownCache
+		return i.fallback(fmt.Sprintf("(image not loaded: %s)", i.src)).GetInlineLayout(ctx, width)
 	}
 	resolved, result := cache.Load(i.src)
 	switch result.Status {
@@ -190,27 +175,23 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 		box.pending = []string{resolved}
 		return box
 	default: // ImageFailed
-		fallback := i.fallback(resolved)
-		fallback.glued = i.glued
-		box := fallback.GetInlineLayout(ctx, width).(*TextBox)
+		box := i.fallback(fmt.Sprintf("(image not found: %s)", resolved)).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	}
 }
 
-// fallback is what's shown in place of an image that's missing,
-// unreadable, or undecodable - alt text if the Markdown gave any, else
-// title, else a generic message naming resolved (the image's own
-// destination if src couldn't even be resolved).
-func (i *InlineImage) fallback(resolved string) *InlineText {
+// fallback is what's shown in place of an image that isn't displayed -
+// alt text if the Markdown gave any, else title, else message.
+func (i *InlineImage) fallback(message string) *InlineText {
 	text := i.alt
 	if text == "" {
 		text = i.title
 	}
 	if text == "" {
-		text = fmt.Sprintf("(image not found: %s)", resolved)
+		text = message
 	}
-	return &InlineText{text: text, node: i.fallbackNode}
+	return &InlineText{text: text, node: i.fallbackNode, glued: i.glued}
 }
 
 // scaleRect scales r (typically an image's native pixel bounds) by

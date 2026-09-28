@@ -15,10 +15,11 @@ type RenderingContext struct {
 	// rebuilds the layout tree when it changes.
 	HighlightNode *ASTNode
 
-	// ImageCache resolves, fetches, and decodes an InlineImage's src,
-	// caching the result - see ImageCache's own doc comment. Defaults
-	// to NewImageCache(FileImageSource{}) (NewView), overridable via
-	// WithImageSource.
+	// ImageCache resolves, fetches, and decodes images, caching the
+	// result - see ImageCache. NewView always sets one (FileImageSource
+	// unless overridden via WithImageSource). If nil, images aren't
+	// loaded at all: an image renders as its alt text, and a diagram as
+	// its source code block.
 	ImageCache *ImageCache
 
 	// Time is elapsed time since the embedder started rendering (its

@@ -136,6 +136,28 @@ func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 	}
 }
 
+// TestDiagramBlockWithoutImageCacheShowsFallback checks that with no
+// ImageCache the diagram isn't rendered at all: the fallback is shown,
+// with nothing pending to revisit.
+func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
+	img := AsyncImage{
+		Key: "diagram-key",
+		Fetch: func() (io.ReadCloser, error) {
+			t.Error("Fetch called without an ImageCache")
+			return nil, errors.New("unused")
+		},
+	}
+	fallback := &fixedHeightBlock{height: 42}
+	box := NewDiagramBlock(nil, img, fallback).GetBlockLayout(RenderingContext{}, 300)
+
+	if want := fallback.GetBlockLayout(RenderingContext{}, 300).Bounds(); box.Bounds() != want {
+		t.Errorf("Bounds() = %v, want fallback's own %v", box.Bounds(), want)
+	}
+	if pending := box.PendingImages(); len(pending) != 0 {
+		t.Errorf("PendingImages() = %v, want none", pending)
+	}
+}
+
 // waitForDiagramFailed is waitForDiagramSettled's counterpart for a
 // fetch that's expected to fail rather than settle - a failed
 // diagramBlock still reports its key as pending (see

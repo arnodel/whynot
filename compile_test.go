@@ -1072,32 +1072,22 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 	}
 }
 
-// TestImageGetInlineLayoutDefaultsImageLoaderWhenNil checks a bare
-// RenderingContext{} with no ImageCache set - the pattern most of this
-// package's own tests use, none of which care about images - falls
-// back to a fresh FileImageSource-backed cache instead of a nil-pointer
-// panic (caught via a benchmark that does this: layout_bench_test.go
-// builds RenderingContext literals directly, with no reason to know
-// ImageCache exists).
-func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
-	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
-	// FaceSelector/StyleSheet are needed here even though this test is
-	// only about ImageCache defaulting: the fetch is asynchronous, so
-	// the very first call sees it still pending and falls back to
-	// ordinary text ("(loading image…)") until it settles - the same
-	// path a real document's very first layout pass would exercise.
+// TestImageGetInlineLayoutWithoutImageCache checks that with no
+// ImageCache the image isn't loaded at all: it renders as its alt text,
+// with nothing pending to revisit.
+func TestImageGetInlineLayoutWithoutImageCache(t *testing.T) {
+	img := &InlineImage{src: "testdata/cat.jpeg", alt: "a cat"}
 	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
 
-	img.GetInlineLayout(ctx, naturalWidthMeasure)
-	waitForSettled(t, img.ownCache, img.src)
-
-	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*ImageBox)
+	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
+		t.Fatalf("GetInlineLayout returned %T, want *TextBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
-	want := image.Rect(0, 0, 400, 600)
-	if box.bounds != want {
-		t.Errorf("bounds = %v, want %v", box.bounds, want)
+	if box.Text != "a cat" {
+		t.Errorf("Text = %q, want the alt text %q", box.Text, "a cat")
+	}
+	if pending := box.PendingImages(); len(pending) != 0 {
+		t.Errorf("PendingImages() = %v, want none", pending)
 	}
 }
 
@@ -1108,7 +1098,8 @@ func TestImageGetInlineLayoutDefaultsImageLoaderWhenNil(t *testing.T) {
 // leave images pixel-locked against zoom/DPI scale.
 func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
-	// FaceSelector/StyleSheet: see TestImageGetInlineLayoutDefaultsImageLoaderWhenNil.
+	// FaceSelector/StyleSheet: the first call sees the fetch still pending
+	// and falls back to text ("(loading image…)"), which needs both.
 	ctx := RenderingContext{
 		Scale:        2,
 		ImageCache:   NewImageCache(FileImageSource{}),

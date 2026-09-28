@@ -100,7 +100,7 @@ type drawnText struct {
 
 var _ Canvas = (*recordingCanvas)(nil)
 
-func (c *recordingCanvas) Bounds() image.Rectangle                                      { return c.bounds }
+func (c *recordingCanvas) Bounds() image.Rectangle { return c.bounds }
 func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 	c.texts = append(c.texts, drawnText{s, x, y})
 }
@@ -926,7 +926,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet(), ImageCache: NewImageCache(FileImageSource{})}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {
