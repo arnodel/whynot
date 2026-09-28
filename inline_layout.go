@@ -9,11 +9,12 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// InlineLayout's HitTest mirrors DrawInline's own calling convention exactly
-// - same (x, y), same "next x" return - so LineBox.HitTest can drive the
-// identical accumulation loop drawContents does, just calling HitTest
-// instead of DrawInline at each step.
+// InlineLayout is one part of a line of inline content, placed by
+// lineBuilder. DrawInline and HitTest take the pen position LineBox
+// placed it at: x the start of its advance, y the baseline.
 type InlineLayout interface {
+	// BoundsAndAdvance returns the part's ink bounds relative to its pen
+	// position, and how far it moves the pen.
 	BoundsAndAdvance() (image.Rectangle, int)
 	Bounds() image.Rectangle
 	Source() Source
@@ -21,15 +22,14 @@ type InlineLayout interface {
 	// Glued reports whether this item directly abuts the previous one in
 	// its line with no source whitespace between them - e.g. a word right
 	// next to a code span, or a non-breaking space's own neighbors. A
-	// glued boundary gets no rendered gap (splitBoxes, LineBox's
-	// BoundsAndAdvance/HitTest/drawContents) and is never a line-break
-	// point (splitBoxes). Meaningless for an item that's never anything
-	// but a line's first part (ListItemMarkerBox, CheckboxBox) - never
-	// queried there.
+	// glued boundary gets no gap and is never a line-break point (see
+	// lineBuilder.gap and wrapLines). Meaningless for an item that's
+	// never anything but a line's first part (ListItemMarkerBox,
+	// CheckboxBox) - never queried there.
 	Glued() bool
 	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
-	DrawInline(dst Canvas, x, y int, now time.Duration) int
-	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point, nextX int)
+	DrawInline(dst Canvas, x, y int, now time.Duration)
+	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point)
 	// PendingImages - see BlockLayout's identical method.
 	PendingImages() []string
 }
@@ -139,7 +139,7 @@ func (b *TextBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
-func (b *TextBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
+func (b *TextBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
 	_, advance := b.BoundsAndAdvance()
 	dst.DrawText(b.Text, b.Face, x, y, b.Color)
 	if b.StrikeThickness > 0 {
@@ -151,30 +151,30 @@ func (b *TextBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 		xHeight := b.Face.Metrics().XHeight.Ceil()
 		dst.DrawRect(x, y-xHeight/2-b.StrikeThickness/2, advance, b.StrikeThickness, b.Color)
 	}
-	return x + advance
 }
 
-func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	bounds, advance := b.BoundsAndAdvance()
-	if p.In(bounds.Add(image.Pt(x, y))) {
-		return b, image.Pt(x, y), x + advance
-	}
-	return nil, image.Point{}, x + advance
+func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+	return hitIfInside(b, p, x, y)
 }
 
 func (b *TextBox) PendingImages() []string {
 	return b.pending
 }
 
+// ListItemMarkerBox hangs a list item's marker to the left of the line's
+// start, so the item's text starts at the line's own x=0.
 type ListItemMarkerBox struct {
 	Marker InlineLayout
 }
 
 var _ InlineLayout = (*ListItemMarkerBox)(nil)
 
+// BoundsAndAdvance reports no width, and an advance of minus the space
+// width: that cancels the gap lineBuilder inserts before the next part,
+// so the text after the marker starts exactly where the marker box is.
 func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
 	bounds, _ := b.Marker.BoundsAndAdvance()
-	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), 0
+	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), -b.Marker.SpaceWidth()
 }
 
 func (b *ListItemMarkerBox) Bounds() image.Rectangle {
@@ -197,24 +197,21 @@ func (b *ListItemMarkerBox) Glued() bool {
 	return false
 }
 
-func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
-	_, advance := b.Marker.BoundsAndAdvance()
-	space := b.Marker.SpaceWidth()
-	b.Marker.DrawInline(dst, x-advance-space, y, now)
-	return x - space
+func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
+	b.Marker.DrawInline(dst, b.markerX(x), y, now)
 }
 
-// HitTest mirrors DrawInline exactly: the marker is drawn hanging off to
-// the left of x (DrawInline's x-advance-space), not at x itself, so a
-// naive check against BoundsAndAdvance's own (zero-width) bounds would
-// never match a click on the visible marker glyph.
-func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
+// HitTest checks the marker where DrawInline draws it, hanging to the left
+// of x - not against this box's own zero-width bounds.
+func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+	return b.Marker.HitTest(p, b.markerX(x), y)
+}
+
+// markerX is where the marker is drawn for a box at x: one space width to
+// the left of x, ending there.
+func (b *ListItemMarkerBox) markerX(x int) int {
 	_, advance := b.Marker.BoundsAndAdvance()
-	space := b.Marker.SpaceWidth()
-	if hit, offset, _ := b.Marker.HitTest(p, x-advance-space, y); hit != nil {
-		return hit, offset, x - space
-	}
-	return nil, image.Point{}, x - space
+	return x - advance - b.Marker.SpaceWidth()
 }
 
 func (b *ListItemMarkerBox) PendingImages() []string {
@@ -296,7 +293,7 @@ func (b *CheckboxBox) Glued() bool {
 	return false
 }
 
-func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
+func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
 	top := y - b.size
 	t := b.thickness
 	dst.DrawRect(x, top, b.size, t, b.color)          // top edge
@@ -309,15 +306,10 @@ func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 			dst.DrawRect(x+pad, top+pad, inner, inner, b.color)
 		}
 	}
-	return x + b.size
 }
 
-func (b *CheckboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	bounds, advance := b.BoundsAndAdvance()
-	if p.In(bounds.Add(image.Pt(x, y))) {
-		return b, image.Pt(x, y), x + advance
-	}
-	return nil, image.Point{}, x + advance
+func (b *CheckboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+	return hitIfInside(b, p, x, y)
 }
 
 func (b *CheckboxBox) PendingImages() []string {
@@ -372,7 +364,7 @@ func (b *ImageBox) Glued() bool {
 	return b.glued
 }
 
-func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
+func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
 	switch {
 	case b.anim != nil:
 		dst.DrawImage(b.anim.CurrentFrame(now), x, y, b.bounds.Dx(), b.bounds.Dy())
@@ -381,59 +373,21 @@ func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) int {
 	default:
 		dst.DrawRect(x, y, b.bounds.Dx(), b.bounds.Dy(), b.placeholderColor)
 	}
-	return x + b.bounds.Dx()
 }
 
-func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point, int) {
-	if p.In(b.bounds.Add(image.Pt(x, y))) {
-		return b, image.Pt(x, y), x + b.bounds.Dx()
-	}
-	return nil, image.Point{}, x + b.bounds.Dx()
+func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+	return hitIfInside(b, p, x, y)
 }
 
 func (b *ImageBox) PendingImages() []string {
 	return b.pending
 }
 
-// splitBoxes finds how many of boxes fit on one line within width,
-// returning that count and the resulting line's bounds. A box that's
-// Glued() to the one before it can never be its own break point - like a
-// single oversized word, a glued run stays together on this line no
-// matter what (possibly overflowing width), deferring the wrap decision
-// to the next non-glued boundary after it.
-func splitBoxes(boxes []InlineLayout, width int) (int, image.Rectangle) {
-	if len(boxes) == 0 {
-		return 0, image.Rectangle{}
+// hitIfInside is the HitTest of a leaf InlineLayout: a hit on the box
+// itself if p falls within its bounds at pen position (x, y).
+func hitIfInside(b InlineLayout, p image.Point, x, y int) (Hit, image.Point) {
+	if p.In(b.Bounds().Add(image.Pt(x, y))) {
+		return b, image.Pt(x, y)
 	}
-	bounds, advance := boxes[0].BoundsAndAdvance()
-	left := bounds.Min.X
-	if left < 0 {
-		bounds = bounds.Add(image.Pt(-left, 0))
-		advance -= left
-	}
-	prevSpace := boxes[0].SpaceWidth()
-	for i, box := range boxes[1:] {
-		boxBounds, boxAdvance := box.BoundsAndAdvance()
-
-		space := box.SpaceWidth()
-		nextAdvance := advance
-		if !box.Glued() {
-			nextAdvance += maxInt(space, prevSpace)
-		}
-		prevSpace = space
-
-		movedBoxBounds := boxBounds.Add(image.Pt(nextAdvance, 0))
-		nextBounds := bounds.Union(movedBoxBounds)
-		// bounds.Dx(), not Max.X: a later word's own bounds can pull
-		// Min.X away from 0 (e.g. left-side bearing), so Max.X alone
-		// isn't the line's true width - comparing it directly against
-		// width makes the wrap constraint tighter than intended, by
-		// however far Min.X has drifted.
-		if nextBounds.Dx() > width && !box.Glued() {
-			return i + 1, bounds
-		}
-		bounds = nextBounds
-		advance = nextAdvance + boxAdvance
-	}
-	return len(boxes), bounds
+	return nil, image.Point{}
 }

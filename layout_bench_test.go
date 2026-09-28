@@ -196,14 +196,11 @@ func BenchmarkStackBoxDrawUnculledLarge(b *testing.B) {
 }
 
 // benchmarkStackBoxDrawCold measures a single Draw() call on a freshly built
-// (cold) tree: TextBlock/ListItemHeadBlock content is pre-warmed by
-// splitBoxes during GetBlockLayout(), but CodeBlock content isn't (no line-splitting
-// needed), so it stays genuinely cold until something calls Bounds()/Draw()
-// on it.
-// The culling scan calls Bounds() on every preceding sibling to check
-// overlap, even skipped ones, so this checks whether scanning past
-// off-screen code blocks on the way to a scrolled-down viewport re-triggers
-// real font.BoundString measurement that a warm scan wouldn't pay for.
+// (cold) tree: the top-level slots are laid out lazily, so every one the
+// Draw touches is built and measured for the first time inside the timed
+// call. The culling scan calls Bounds() on every preceding sibling, even
+// skipped ones, so scrolled down this includes laying out everything above
+// the viewport.
 func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64) {
 	source, err := os.ReadFile(path)
 	if err != nil {
@@ -230,7 +227,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		box := rawBlock.GetBlockLayout(ctx, width) // fresh tree: cold CodeBlock caches
+		box := rawBlock.GetBlockLayout(ctx, width) // fresh tree: no slot laid out yet
 		b.StartTimer()
 
 		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)

@@ -133,7 +133,7 @@ margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 `.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
 dimensional constants, scaled by DPI in one step) - all read against each
 `Block`/`Inline`'s own `*ASTNode`. Line-wrapping happens here
-(`splitBoxes`), as does font selection (`ctx.SelectFace`, given the
+(`wrapLines`, [line_layout.go](line_layout.go)), as does font selection (`ctx.SelectFace`, given the
 resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
 Rebuilt only when `width` or DPI scale change (see `View.Layout` below) —
@@ -385,9 +385,11 @@ It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
   `StackBox`) report a `nil` `Source`, the same as `StackBlock.Node()`.
 
 `BlockLayout.HitTest(p) (Hit, image.Point)` and `InlineLayout.HitTest(p,
-x, y) (Hit, image.Point, nextX int)` mirror `drawContents`/`DrawInline`'s
-own walk exactly - same recursion shape, same accumulated `(x, y)` for
-inline flow - so the query path can't silently drift from the draw path.
+x, y) (Hit, image.Point)` mirror `drawContents`/`DrawInline` exactly - same
+recursion shape, and for inline flow the same per-part x, placed once by
+`lineBuilder` and stored on the `LineBox` - so the query path can't
+silently drift from the draw path. Wrapping (`wrapLines`) and measuring
+use the same `lineBuilder`, so what's measured is what's drawn.
 `offset` is where the returned `Hit`'s own `Bounds()` should be placed to
 land in the caller's coordinate space (`hit.Bounds().Add(offset)`),
 rather than a pre-shifted rectangle computed once and threaded through
@@ -458,11 +460,6 @@ or misreport `Content-Type` for a perfectly good Markdown file.
 
 These are real, understood, and not yet fixed:
 
-- **Duplication across `TextBlock`/`ListItemHeadBlock`/`CodeBlock`.** All three
-  repeat the same "turn `Inline`s into `InlineLayout`s, then `splitBoxes`-loop
-  or one-box-per-line" shape in [block.go](block.go). A shared
-  `linesFromInline(ctx, parts, width) []BlockLayout` helper would remove the
-  copy-paste.
 - **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
   jump, including while sitting still.** `documentStack.preLayout` (see "Image
   loading" above) resolves real slots beyond the visible viewport in the

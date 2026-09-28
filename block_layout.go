@@ -60,154 +60,6 @@ func DrawBlockLayout(box BlockLayout, dst Canvas, x, y int, now time.Duration) {
 	box.drawContents(dst, x, y, now)
 }
 
-type LineBox struct {
-	parts []InlineLayout
-
-	// Glue, when true, abuts parts directly with no inter-part gap -
-	// for a line whose parts are already-contiguous substrings of one
-	// original string (e.g. CodeBlock's classified token spans, each a
-	// verbatim slice of the source line, any whitespace between tokens
-	// already included in a plain-class span's own text) rather than
-	// separately word-split text (TextBlock's parts, built by
-	// appendString's strings.Fields, which discards whitespace and so
-	// needs a real inter-word gap reconstructed from SpaceWidth()).
-	Glue bool
-
-	boundsComputed bool
-	bounds         image.Rectangle
-	advance        int
-}
-
-var _ BlockLayout = (*LineBox)(nil)
-
-// Source is always nil: a line can mix parts with different identities
-// (e.g. plain text next to emphasized text), so there's no single node
-// to report at the line level - HitTest already returns the specific
-// part that matched instead.
-func (b *LineBox) Source() Source {
-	return nil
-}
-
-// Same reasoning as TextBox: parts are fixed at construction and a
-// LineBox is never reused across a re-layout, so this is safe to compute
-// once and reuse for the instance's whole life. Inter-word spacing here
-// must match drawContents/splitBoxes exactly (each word's own
-// SpaceWidth(), not a fixed value) - this is what a caller measures via
-// Bounds() to decide how much room the line actually needs, so any
-// mismatch with what actually gets drawn silently under- or
-// over-reports it.
-func (b *LineBox) BoundsAndAdvance() (image.Rectangle, int) {
-	if !b.boundsComputed {
-		bounds, advance := b.parts[0].BoundsAndAdvance()
-		left := bounds.Min.X
-		if left < 0 {
-			bounds = bounds.Add(image.Pt(-left, 0))
-			advance -= left
-		}
-		prevSpace := b.parts[0].SpaceWidth()
-		for _, box := range b.parts[1:] {
-			space := box.SpaceWidth()
-			advance += b.gap(prevSpace, space, box.Glued())
-			prevSpace = space
-			boxBounds, boxAdvance := box.BoundsAndAdvance()
-			bounds = bounds.Union(boxBounds.Add(image.Pt(advance, 0)))
-			advance += boxAdvance
-		}
-		b.bounds = bounds
-		b.advance = advance
-		b.boundsComputed = true
-	}
-	return b.bounds, b.advance
-}
-
-// Bounds only compensates for a negative bounds.Min.X (an overshooting
-// left bearing), not a positive one: a code line's leading indentation
-// has real advance but no ink, so it's occupied space starting at this
-// box's own x=0, not excess to crop away. Cropping it under-reported
-// indented lines' width and broke hit-testing on their right-hand side.
-func (b *LineBox) Bounds() image.Rectangle {
-	bounds, _ := b.BoundsAndAdvance()
-	left := bounds.Min.X
-	if left > 0 {
-		left = 0
-	}
-	return image.Rect(0, 0, bounds.Max.X-left, bounds.Dy())
-}
-
-// HitTest mirrors drawContents' own accumulation loop, calling each
-// part's HitTest instead of DrawInline at each step, so the two can't
-// drift apart. p needs no shift: y is the same internal y drawContents
-// computes for external y=0, which already lands a part's footprint in
-// Bounds()'s frame - the same frame p arrives in.
-func (b *LineBox) HitTest(p image.Point) (Hit, image.Point) {
-	lineBounds, _ := b.BoundsAndAdvance()
-	y := -lineBounds.Min.Y
-
-	bounds, _ := b.parts[0].BoundsAndAdvance()
-	x := 0
-	if left := bounds.Min.X; left < 0 {
-		x -= left
-	}
-	prevSpace := b.parts[0].SpaceWidth()
-
-	hit, offset, next := b.parts[0].HitTest(p, x, y)
-	if hit != nil {
-		return hit, offset
-	}
-	x = next
-	for _, part := range b.parts[1:] {
-		space := part.SpaceWidth()
-		hit, offset, next := part.HitTest(p, x+b.gap(prevSpace, space, part.Glued()), y)
-		if hit != nil {
-			return hit, offset
-		}
-		x = next
-		prevSpace = space
-	}
-	return nil, image.Point{}
-}
-
-func (b *LineBox) PendingImages() []string {
-	var pending []string
-	for _, part := range b.parts {
-		pending = append(pending, part.PendingImages()...)
-	}
-	return pending
-}
-
-func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
-	lineBounds, _ := b.BoundsAndAdvance()
-	y -= lineBounds.Min.Y
-
-	bounds, _ := b.parts[0].BoundsAndAdvance()
-	left := bounds.Min.X
-	if left < 0 {
-		x -= left
-	}
-	prevSpace := b.parts[0].SpaceWidth()
-
-	x = b.parts[0].DrawInline(dst, x, y, now)
-	for _, box := range b.parts[1:] {
-		space := box.SpaceWidth()
-		x = box.DrawInline(dst, x+b.gap(prevSpace, space, box.Glued()), y, now)
-		prevSpace = space
-	}
-}
-
-// gap is the horizontal space LineBox inserts before a part, given the
-// SpaceWidth() of the part before it and of this one - the wider of the
-// two, matching how a real space character's width can differ between
-// two different fonts/sizes on either side of it - unless Glue disables
-// gaps entirely (a whole-line bypass, for CodeBlock's verbatim lines), or
-// glued is true (a single part's own boundary has no source whitespace -
-// see InlineLayout.Glued).
-func (b *LineBox) gap(prevSpace, space int, glued bool) int {
-	if b.Glue || glued {
-		return 0
-	}
-	return maxInt(prevSpace, space)
-}
-
 // stackSlot is a StackBox child that's either already resolved (box set -
 // true of gap spacers, which are cheap enough to build eagerly) or needs
 // building from a Block on first access (block set). A content slot's
@@ -443,18 +295,7 @@ func (b *StackBox) moveCursor(c stackCursor, dy float64) stackCursor {
 }
 
 func (b *StackBox) drawContents(dst Canvas, x, y int, now time.Duration) {
-	viewport := dst.Bounds()
-	for i := range b.slots {
-		box := b.boxAt(i)
-		childBounds := box.Bounds()
-		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
-			// This child, and every one after it, starts below the
-			// viewport: nothing further down can be visible.
-			break
-		}
-		DrawBlockLayout(box, dst, x, y, now)
-		y += childBounds.Max.Y
-	}
+	b.DrawFrom(dst, stackCursor{}, x, y, now)
 }
 
 // DrawFrom draws starting at c, so that c's position lands at (x, y) on
@@ -471,6 +312,8 @@ func (b *StackBox) DrawFrom(dst Canvas, c stackCursor, x, y int, now time.Durati
 		box := b.boxAt(i)
 		childBounds := box.Bounds()
 		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
+			// This child, and every one after it, starts below the
+			// viewport: nothing further down can be visible.
 			break
 		}
 		DrawBlockLayout(box, dst, x, y, now)
@@ -746,11 +589,4 @@ func (b *RuleBox) HitTest(p image.Point) (Hit, image.Point) {
 
 func (b *RuleBox) PendingImages() []string {
 	return nil
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

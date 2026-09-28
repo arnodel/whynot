@@ -227,11 +227,9 @@ func TestListItemTrailingGap(t *testing.T) {
 }
 
 // TestLineBoxBoundsIncludesInterWordSpacing pins down a real bug found
-// while building tables: LineBox.BoundsAndAdvance used to advance by its
-// own always-zero space field between words, instead of each word's real
-// SpaceWidth() (which drawContents and splitBoxes both correctly use) -
-// so Bounds() silently under-reported a multi-word line's true width by
-// one space-width per gap. Invisible for ordinary paragraphs (nothing
+// while building tables: a line's measured width used to leave out the
+// inter-word gaps its drawing inserted, so Bounds() under-reported a
+// multi-word line's true width by one space-width per gap. Invisible for ordinary paragraphs (nothing
 // else sits flush against their measured edge), but exactly what caused
 // table cells to overlap the next column once their measured width was
 // used to position it.
@@ -254,15 +252,15 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 	}
 }
 
-// TestSplitBoxesNaturalWidthFits pins down a second bug found while
-// building tables, alongside the inter-word-spacing one: splitBoxes'
-// wrap check compared bounds.Max.X directly against width, but a later
+// TestWrapLinesNaturalWidthFits pins down a second bug found while
+// building tables, alongside the inter-word-spacing one: the line-wrapping
+// check compared bounds.Max.X directly against width, but a later
 // word's own bounds can pull bounds.Min.X away from 0 (e.g. a small
 // left-side bearing), making Max.X alone wider than the line's true span
 // (Dx()). So a line built at exactly its own measured natural width -
 // which should always fit on one line, by definition - would still wrap
 // its last word. This specific sentence reliably drifts Min.X to 1.
-func TestSplitBoxesNaturalWidthFits(t *testing.T) {
+func TestWrapLinesNaturalWidthFits(t *testing.T) {
 	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
 	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
 	para := unwrap(doc.root.blocks[0]).(*TextBlock)
