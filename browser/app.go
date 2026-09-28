@@ -60,7 +60,7 @@ type App struct {
 	Panel whynot.Panel
 
 	// OnTitleChange is called with the current document's own title
-	// (View.Title(), or a generic fallback) whenever it changes -
+	// (Document.Title(), or a generic fallback) whenever it changes -
 	// wired to whichever backend-specific window-title API is
 	// available (e.g. ebiten.SetWindowTitle).
 	OnTitleChange func(title string)
@@ -136,7 +136,7 @@ func NewApp(faceSelector whynot.FaceSelector, styleSheet whynot.StyleSheet, dark
 
 // Open makes location the current document - for the very first
 // document only, after Panel has been assigned (it reads
-// Panel.View().Title()); every later navigation goes through Follow/
+// Panel.View().Document().Title()); every later navigation goes through Follow/
 // Reload/Paste/Back/Forward instead, which also push history.
 func (a *App) Open(location *url.URL) {
 	a.location = location
@@ -188,7 +188,7 @@ func (a *App) SetTheme(dark bool) {
 }
 
 // updateWindowTitle fires OnTitleChange with the current document's own
-// title (View.Title(): its first heading, any level), or a generic
+// title (Document.Title(): its first heading, any level), or a generic
 // fallback if it has none - call whenever Panel's View is replaced with
 // a different document's. While the TOC is showing, its own "Table of
 // contents" heading is skipped in favor of the real document's title
@@ -201,7 +201,7 @@ func (a *App) updateWindowTitle() {
 	if a.tocDocView != nil {
 		view = a.tocDocView
 	}
-	title, ok := view.Title()
+	title, ok := view.Document().Title()
 	if !ok {
 		title = "Untitled document"
 	}
@@ -235,7 +235,7 @@ func (a *App) OnLinkHover(dest string) {
 	}
 }
 
-// NewView builds a View for source, loaded from location - bundling
+// NewView parses source, loaded from location, into a View - bundling
 // the options every call site needs together: the current StyleSheet,
 // an ImageSource that resolves an image's src against location the
 // same way ResolveLink resolves a link's href (so a relative or
@@ -250,11 +250,13 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 	if location.Scheme == "whynot" {
 		imageSource = welcomeImageSource{}
 	}
-	return whynot.NewView(source, a.faceSelector,
+	doc := whynot.Parse(source,
+		whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}),
+		whynot.WithCodeBlockPlugin(kroki.Renderer{}),
+	)
+	return whynot.NewView(doc, a.faceSelector,
 		whynot.WithStyleSheet(a.styleSheet),
 		whynot.WithImageSource(imageSource),
-		whynot.WithHighlighter(chromahighlight.Highlighter{}),
-		whynot.WithCodeBlockPlugins(kroki.Renderer{}),
 	)
 }
 

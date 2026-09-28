@@ -11,7 +11,7 @@ import (
 func (a *App) TOCShowing() bool { return a.tocDocView != nil }
 
 // CanShowTOC reports whether ShowTOC would do anything - false for a
-// document with no headings (see whynot.View.TOCEntries). Checks
+// document with no headings (see whynot.Document.TOCEntries). Checks
 // whichever View is the real document right now: a.tocDocView while
 // the TOC is already showing, a.Panel.View() otherwise.
 func (a *App) CanShowTOC() bool {
@@ -19,7 +19,7 @@ func (a *App) CanShowTOC() bool {
 	if a.tocDocView != nil {
 		view = a.tocDocView
 	}
-	return len(view.TOCEntries()) > 0
+	return len(view.Document().TOCEntries()) > 0
 }
 
 // ShowTOC replaces the current document in Panel with a synthetic
@@ -37,10 +37,10 @@ func (a *App) ShowTOC() {
 		return
 	}
 	docView := a.Panel.View()
-	entries := docView.TOCEntries()
+	entries := docView.Document().TOCEntries()
 	currentID, _ := docView.CurrentHeadingID()
 
-	tocView := whynot.NewView(buildTOCSource(entries, currentID), a.faceSelector,
+	tocView := whynot.NewView(whynot.Parse(buildTOCSource(entries, currentID)), a.faceSelector,
 		whynot.WithStyleSheet(a.styleSheet))
 	tocView.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
 	if currentID != "" {

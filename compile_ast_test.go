@@ -16,7 +16,7 @@ func wantPath(t *testing.T, got ASTPath, want ASTPath) {
 
 func TestASTParagraphPath(t *testing.T) {
 	doc := Parse([]byte("Hello"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	wrapper, ok := stack.blocks[0].(*MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
@@ -30,7 +30,7 @@ func TestASTParagraphPath(t *testing.T) {
 // distinct ids.
 func TestASTHeadingID(t *testing.T) {
 	doc := Parse([]byte("# Hello World\n\n## Hello World\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 
 	first := stack.blocks[0].(*MarginBlock).node
 	second := stack.blocks[1].(*MarginBlock).node
@@ -54,7 +54,7 @@ func TestASTHeadingPath(t *testing.T) {
 	for _, tc := range cases {
 		source := []byte(headingMarkdown(tc.level) + " Title")
 		doc := Parse(source)
-		stack := doc.(*StackBlock)
+		stack := doc.root
 		wrapper, ok := stack.blocks[0].(*MarginBlock)
 		if !ok {
 			t.Fatalf("level %d: block = %T, want *MarginBlock", tc.level, stack.blocks[0])
@@ -76,7 +76,7 @@ func headingMarkdown(level int) string {
 // List/ListItem chain down to it, not just its immediate parent.
 func TestASTNestedListItemPath(t *testing.T) {
 	doc := Parse([]byte("- one\n  - nested"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	list := unwrap(stack.blocks[0]).(*StackBlock)
 
 	outerItemWrapper, ok := list.blocks[0].(*MarginBlock)
@@ -96,7 +96,7 @@ func TestASTNestedListItemPath(t *testing.T) {
 
 func TestASTBlockquotePath(t *testing.T) {
 	doc := Parse([]byte("> quoted text"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	bqWrapper, ok := stack.blocks[0].(*MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
@@ -117,7 +117,7 @@ func TestASTBlockquotePath(t *testing.T) {
 
 func TestASTTableCellPath(t *testing.T) {
 	doc := Parse([]byte("| A | B |\n|---|---|\n| x | y |\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	wrapper, ok := stack.blocks[0].(*MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
@@ -134,7 +134,7 @@ func TestASTTableCellPath(t *testing.T) {
 
 func TestASTThematicBreakPath(t *testing.T) {
 	doc := Parse([]byte("---"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	wrapper, ok := stack.blocks[0].(*MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
@@ -152,7 +152,7 @@ func TestASTThematicBreakPath(t *testing.T) {
 // plain text at the same level doesn't pick up a sibling span's tag.
 func TestASTInlineNestingPath(t *testing.T) {
 	doc := Parse([]byte("plain **bold *and italic*** [a link](https://example.com) `code`"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	wrapper := stack.blocks[0].(*MarginBlock)
 	para := wrapper.Block.(*TextBlock)
 
@@ -186,7 +186,7 @@ func TestASTInlineNestingPath(t *testing.T) {
 
 func TestASTStrikethroughPath(t *testing.T) {
 	doc := Parse([]byte("~~gone~~"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	wrapper := stack.blocks[0].(*MarginBlock)
 	para := wrapper.Block.(*TextBlock)
 	text := para.parts[0].(*InlineText)
@@ -200,7 +200,7 @@ func TestASTStrikethroughPath(t *testing.T) {
 // its own.
 func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
 	doc := Parse([]byte("[a link][ref]\n\n[ref]: https://example.com \"title\"\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	if len(stack.blocks) != 1 {
 		t.Fatalf("len(blocks) = %d, want 1 (the reference definition should produce no block)", len(stack.blocks))
 	}
@@ -221,7 +221,7 @@ func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
 // TagUnsupported.
 func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 	doc := Parse([]byte("Before.\n\n<!-- ignore -->\n\nAfter.\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	if len(stack.blocks) != 2 {
 		t.Fatalf("len(blocks) = %d, want 2 (the comment should produce no block)", len(stack.blocks))
 	}
@@ -243,7 +243,7 @@ func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 // TagUnsupported text.
 func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
 	doc := Parse([]byte("before <!-- ignore --> after\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
 
 	for _, part := range para.parts {
@@ -259,7 +259,7 @@ func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
 // panicking and taking down the whole document.
 func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
 	doc := Parse([]byte("<div>\n  <p>raw</p>\n</div>\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	if len(stack.blocks) != 1 {
 		t.Fatalf("len(blocks) = %d, want 1", len(stack.blocks))
 	}
@@ -286,7 +286,7 @@ func TestASTUnsupportedInlineHTMLShowsSource(t *testing.T) {
 	// doesn't pair inline HTML tags - so two separate TagUnsupported
 	// runs are expected, one per tag.
 	doc := Parse([]byte("before <span>x</span> after\n"))
-	stack := doc.(*StackBlock)
+	stack := doc.root
 	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
 
 	var unsupported []string

@@ -1,4 +1,4 @@
-// Command chromahighlight is a runnable example of whynot.WithHighlighter
+// Command chromahighlight is a runnable example of whynot.WithSyntaxHighlighter
 // backed by chromahighlight.Highlighter (github.com/alecthomas/chroma/v2).
 // Fenced code blocks in a recognized language render token-by-token in the
 // active StyleSheet's SyntaxColors palette; an unrecognized language (or a
@@ -95,9 +95,8 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func main() {
 	g := &game{
 		view: whynot.NewView(
-			[]byte(exampleDoc()),
+			whynot.Parse([]byte(exampleDoc()), whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{})),
 			whynot.NewGoFontFaceSelector(72),
-			whynot.WithHighlighter(chromahighlight.Highlighter{}),
 		),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),

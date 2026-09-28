@@ -12,11 +12,11 @@ import (
 	"github.com/yuin/goldmark/v2/parser"
 )
 
-// Parse compiles Markdown source into a Block tree ready for layout via
-// Block.GetBlockLayout. All appearance (fonts, colors, margins, ...) is resolved
-// later, from RenderingContext.StyleSheet against each Block/Inline's own
+// Parse compiles Markdown source into a Document ready to render with a
+// View. All appearance (fonts, colors, margins, ...) is resolved later,
+// from RenderingContext.StyleSheet against each Block/Inline's own
 // ASTNode - Parse itself only builds structure.
-func Parse(source []byte, opts ...ParseOption) Block {
+func Parse(source []byte, opts ...ParseOption) *Document {
 	p := parser.New(
 		parser.WithExtensions(
 			extension.TaskListItemParser,
@@ -43,9 +43,6 @@ func Parse(source []byte, opts ...ParseOption) Block {
 }
 
 func (c *MarkdownCompiler) CompileNode(node gmast.Node, parent *ASTNode) Block {
-	if node.Kind() == gmast.KindDocument {
-		return c.CompileDocument(node)
-	}
 	if _, ok := node.(gmast.BlockNode); ok {
 		return c.CompileBlock(node, parent)
 	}
@@ -54,8 +51,9 @@ func (c *MarkdownCompiler) CompileNode(node gmast.Node, parent *ASTNode) Block {
 
 // CompileDocument compiles the document root. Always the top of the tree -
 // gmast.KindDocument is never nested - so unlike CompileBlock/CompileListItem
-// it needs no parent *ASTNode to thread through.
-func (c *MarkdownCompiler) CompileDocument(node gmast.Node) Block {
+// it needs no parent *ASTNode to thread through: a nil parent is what marks
+// a block as top-level.
+func (c *MarkdownCompiler) CompileDocument(node gmast.Node) *Document {
 	var blocks []Block
 	child := node.FirstChild()
 	for child != nil {
@@ -64,7 +62,11 @@ func (c *MarkdownCompiler) CompileDocument(node gmast.Node) Block {
 		}
 		child = child.NextSibling()
 	}
-	return &StackBlock{blocks: blocks}
+	return &Document{
+		root:       &StackBlock{blocks: blocks},
+		headings:   c.headings,
+		soleImages: c.soleImages,
+	}
 }
 
 // codeBlockTabExpansion is what a literal tab in a code block's source is
@@ -74,29 +76,13 @@ const codeBlockTabExpansion = "    "
 func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block {
 	switch node.Kind() {
 	case gmast.KindParagraph:
-		astNode := parent.AddChild(TagParagraph)
-		var items []Inline
-		c.pendingSpace = true
-		child := node.FirstChild()
-		for child != nil {
-			items = c.AppendInlineNode(items, child, astNode)
-			child = child.NextSibling()
-		}
-		return &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
+		return c.compileTextBlock(node, parent.AddChild(TagParagraph), parent == nil)
 	case gmast.KindHeading:
-		level := node.(*gmast.Heading).Level
-		astNode := parent.AddChild(headingTag(level))
+		astNode := parent.AddChild(headingTag(node.(*gmast.Heading).Level))
 		if attr, ok := node.Attribute("id"); ok {
 			astNode.ID = attr.Value(c.source)
 		}
-		var items []Inline
-		c.pendingSpace = true
-		child := node.FirstChild()
-		for child != nil {
-			items = c.AppendInlineNode(items, child, astNode)
-			child = child.NextSibling()
-		}
-		return &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
+		return c.compileTextBlock(node, astNode, parent == nil)
 	case gmast.KindList:
 		list := node.(*gmast.List)
 		astNode := parent.AddChild(TagList)
@@ -171,6 +157,51 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		}
 	}
 	return c.compileUnsupportedBlock(node, parent)
+}
+
+// compileTextBlock compiles a paragraph or heading, whose ASTNode the
+// caller has already created. A top-level one is also recorded in the
+// Document: a heading as a TOCEntry, and one whose only content is an
+// image as a soleImages entry.
+func (c *MarkdownCompiler) compileTextBlock(node gmast.Node, astNode *ASTNode, topLevel bool) Block {
+	var items []Inline
+	c.pendingSpace = true
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		items = c.AppendInlineNode(items, child, astNode)
+	}
+	block := &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
+
+	if !topLevel {
+		return block
+	}
+	if astNode.Tag >= TagHeading1 && astNode.Tag <= TagHeading6 {
+		c.headings = append(c.headings, TOCEntry{
+			ID:    astNode.ID,
+			Level: int(astNode.Tag-TagHeading1) + 1,
+			Text:  plainText(items),
+		})
+	}
+	if len(items) == 1 {
+		if img, ok := items[0].(*InlineImage); ok {
+			if c.soleImages == nil {
+				c.soleImages = make(map[Block]string)
+			}
+			c.soleImages[block] = img.src
+		}
+	}
+	return block
+}
+
+// plainText joins items' words with single spaces; anything but an
+// *InlineText (e.g. an image) contributes nothing.
+func plainText(items []Inline) string {
+	var words []string
+	for _, item := range items {
+		if it, ok := item.(*InlineText); ok {
+			words = append(words, it.text)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // compileUnsupportedBlock handles any block-level Markdown construct

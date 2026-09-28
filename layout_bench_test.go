@@ -18,7 +18,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source)
+	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
@@ -53,7 +53,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source)
+	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
@@ -85,7 +85,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source)
+	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
@@ -126,7 +126,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source)
+	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
@@ -167,7 +167,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source)
+	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
@@ -209,7 +209,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	if err != nil {
 		b.Fatal(err)
 	}
-	rawBlock := whynot.Parse(source)
+	rawBlock := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),

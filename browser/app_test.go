@@ -217,7 +217,7 @@ func TestAppFollowCrossDocumentLoadsAndPushesHistory(t *testing.T) {
 	if !app.CanGoBack() {
 		t.Error("CanGoBack() = false after a cross-document Follow, want true")
 	}
-	if title, _ := app.Panel.View().Title(); title != "Doc B" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc B" {
 		t.Errorf("current View's Title() = %q, want \"Doc B\"", title)
 	}
 }
@@ -235,7 +235,7 @@ func TestAppNavigateLoadsDocumentAndPushesHistory(t *testing.T) {
 		t.Fatalf("Navigate(%q) = %v, want nil", pathB, err)
 	}
 
-	if title, _ := app.Panel.View().Title(); title != "Doc B" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc B" {
 		t.Errorf("Title() after Navigate = %q, want \"Doc B\"", title)
 	}
 	if !app.CanGoBack() {
@@ -252,7 +252,7 @@ func TestAppNavigateInvalidLeavesCurrentDocumentAlone(t *testing.T) {
 	if err == nil {
 		t.Fatal("Navigate to a nonexistent path returned nil error, want one")
 	}
-	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc A" {
 		t.Errorf("Title() after a failed Navigate = %q, want unchanged \"Doc A\"", title)
 	}
 	if app.CanGoBack() {
@@ -267,12 +267,12 @@ func TestAppBackForward(t *testing.T) {
 	app := newTestApp(t, dir, locA, "# Doc A\n\n[to b](b.md)")
 
 	app.Follow("b.md")
-	if title, _ := app.Panel.View().Title(); title != "Doc B" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc B" {
 		t.Fatalf("Title() after Follow = %q, want \"Doc B\"", title)
 	}
 
 	app.Back()
-	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc A" {
 		t.Errorf("Title() after Back = %q, want \"Doc A\"", title)
 	}
 	if app.CanGoBack() {
@@ -283,7 +283,7 @@ func TestAppBackForward(t *testing.T) {
 	}
 
 	app.Forward()
-	if title, _ := app.Panel.View().Title(); title != "Doc B" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc B" {
 		t.Errorf("Title() after Forward = %q, want \"Doc B\"", title)
 	}
 	if app.CanGoForward() {
@@ -293,7 +293,7 @@ func TestAppBackForward(t *testing.T) {
 	// Back with a genuinely empty history (a fresh App) is a no-op.
 	fresh := newTestApp(t, dir, locA, "# Doc A")
 	fresh.Back()
-	if title, _ := fresh.Panel.View().Title(); title != "Doc A" {
+	if title, _ := fresh.Panel.View().Document().Title(); title != "Doc A" {
 		t.Error("Back() with empty history changed the current document, want a no-op")
 	}
 }
@@ -329,7 +329,7 @@ func TestAppReloadDoesNotPushHistory(t *testing.T) {
 	}
 	app.Reload()
 
-	if title, _ := app.Panel.View().Title(); title != "Version 2" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Version 2" {
 		t.Errorf("Title() after Reload = %q, want \"Version 2\"", title)
 	}
 	if app.CanGoBack() {
@@ -454,7 +454,7 @@ func TestAppShowHideTOC(t *testing.T) {
 	if !app.TOCShowing() {
 		t.Fatal("TOCShowing() = false after ShowTOC, want true")
 	}
-	if title, _ := app.Panel.View().Title(); title != "Table of contents" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Table of contents" {
 		t.Errorf("Title() while TOC is showing = %q, want \"Table of contents\"", title)
 	}
 	// The window title stays the document's own, not the TOC view's -
@@ -467,7 +467,7 @@ func TestAppShowHideTOC(t *testing.T) {
 	if app.TOCShowing() {
 		t.Error("TOCShowing() = true after HideTOC, want false")
 	}
-	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc A" {
 		t.Errorf("Title() after HideTOC = %q, want \"Doc A\"", title)
 	}
 	if windowTitle != "Doc A" {
@@ -533,7 +533,7 @@ func TestAppBackDismissesTOC(t *testing.T) {
 	if app.TOCShowing() {
 		t.Error("TOCShowing() = true after Back, want false")
 	}
-	if title, _ := app.Panel.View().Title(); title != "Doc A" {
+	if title, _ := app.Panel.View().Document().Title(); title != "Doc A" {
 		t.Errorf("Title() after Back dismissed the TOC = %q, want \"Doc A\"", title)
 	}
 	if got := app.Panel.View().ScrollPosition(); got != beforeShow {

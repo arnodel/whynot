@@ -81,7 +81,7 @@ func main() {
 	flag.Parse()
 
 	g := &game{
-		view:     whynot.NewView([]byte(exampleDoc()), buildFaceSelector(*fontPath)),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), buildFaceSelector(*fontPath)),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
