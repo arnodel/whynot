@@ -23,6 +23,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	const width = 1024
 
@@ -58,6 +59,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	box := block.GetBlockLayout(ctx, 1024)
 
@@ -90,6 +92,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -131,6 +134,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -172,6 +176,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	const width = 1024
 
@@ -211,6 +216,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		Scale:        1,
 		FaceSelector: whynot.NewGoFontFaceSelector(72),
 		StyleSheet:   whynot.NewDarkStyleSheet(),
+		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768

@@ -27,12 +27,6 @@ type diagramBlock struct {
 	imageNode *ASTNode
 	img       AsyncImage
 	fallback  Block
-
-	// ownCache is lazily created the first time GetBlockLayout runs with
-	// no ImageCache configured - mirrors InlineImage.ownCache, and for
-	// the same reason: loading is asynchronous, so a fresh cache created
-	// on every call would restart the fetch from scratch each time.
-	ownCache *ImageCache
 }
 
 var _ Block = (*diagramBlock)(nil)
@@ -42,14 +36,10 @@ func (b *diagramBlock) Node() *ASTNode {
 }
 
 func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	cache := ctx.ImageCache
-	if cache == nil {
-		if b.ownCache == nil {
-			b.ownCache = NewImageCache(FileImageSource{})
-		}
-		cache = b.ownCache
+	if ctx.ImageCache == nil {
+		return b.fallback.GetBlockLayout(ctx, width)
 	}
-	result := cache.LoadImage(b.img)
+	result := ctx.ImageCache.LoadImage(b.img)
 	if result.Status != ImageReady {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
