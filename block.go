@@ -149,12 +149,7 @@ func (b *CodeBlock) Node() *ASTNode {
 func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	lineBoxes := make([]BlockLayout, len(b.lines))
 	for i, parts := range b.lines {
-		boxes := make([]InlineLayout, len(parts))
-		for j, part := range parts {
-			boxes[j] = part.GetInlineLayout(ctx, width)
-		}
-		// Glue: true - see LineBox.Glue's own doc comment.
-		lineBoxes[i] = &LineBox{parts: boxes, Glue: true}
+		lineBoxes[i] = newLineBox(inlineLayouts(ctx, width, parts), true)
 	}
 	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
 }
@@ -172,17 +167,16 @@ func (b *TextBlock) Node() *ASTNode {
 }
 
 func (b *TextBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	lines := []BlockLayout{}
-	boxes := make([]InlineLayout, len(b.parts))
-	for i, part := range b.parts {
+	return &StackBox{slots: preResolvedSlots(wrapLines(inlineLayouts(ctx, width, b.parts), width)), source: b}
+}
+
+// inlineLayouts lays out each of parts at wrap width width.
+func inlineLayouts(ctx RenderingContext, width int, parts []Inline) []InlineLayout {
+	boxes := make([]InlineLayout, len(parts))
+	for i, part := range parts {
 		boxes[i] = part.GetInlineLayout(ctx, width)
 	}
-	for len(boxes) > 0 {
-		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{parts: boxes[:i]})
-		boxes = boxes[i:]
-	}
-	return &StackBox{slots: preResolvedSlots(lines), source: b}
+	return boxes
 }
 
 // ListItemHeadBlock is a list item's own paragraph text, flowed with the
@@ -205,21 +199,9 @@ func (b *ListItemHeadBlock) Node() *ASTNode {
 }
 
 func (b *ListItemHeadBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	lines := []BlockLayout{}
-	boxes := make([]InlineLayout, len(b.parts)+1)
-
-	boxes[0] = &ListItemMarkerBox{
-		Marker: b.marker.GetInlineLayout(ctx, width),
-	}
-	for i, part := range b.parts {
-		boxes[i+1] = part.GetInlineLayout(ctx, width)
-	}
-	for len(boxes) > 0 {
-		i, _ := splitBoxes(boxes, width)
-		lines = append(lines, &LineBox{parts: boxes[:i]})
-		boxes = boxes[i:]
-	}
-	return &StackBox{slots: preResolvedSlots(lines), source: b}
+	marker := &ListItemMarkerBox{Marker: b.marker.GetInlineLayout(ctx, width)}
+	boxes := append([]InlineLayout{marker}, inlineLayouts(ctx, width, b.parts)...)
+	return &StackBox{slots: preResolvedSlots(wrapLines(boxes, width)), source: b}
 }
 
 type cellAlignment int
@@ -321,7 +303,7 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 	columnGap := int(geom.ColumnGap)
 	rowGap := int(geom.RowGap)
 	headerGap := int(geom.HeaderGap)
-	columnRuleThickness := maxInt(1, int(geom.ColumnRuleThickness))
+	columnRuleThickness := max(1, int(geom.ColumnRuleThickness))
 
 	numCols := len(b.header)
 	rows := append([][]tableCell{b.header}, b.rows...)
@@ -481,7 +463,7 @@ func (b *StackBlock) stackLayout(ctx *RenderingContext, width int) *StackBox {
 	for i, block := range b.blocks {
 		margins := ctx.ScaledMargins(block)
 		if i > 0 {
-			gap := maxInt(bottomMargin, int(margins.Top))
+			gap := max(bottomMargin, int(margins.Top))
 			if gap > 0 {
 				slots = append(slots, stackSlot{box: NewEmptyBox(width, gap)})
 			}

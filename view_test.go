@@ -89,12 +89,21 @@ type recordingCanvas struct {
 	rects      []drawnRect
 	images     []image.Image
 	imageRects []image.Rectangle // one per DrawImage call, parallel to images
+	texts      []drawnText
+}
+
+// drawnText records one Canvas.DrawText call.
+type drawnText struct {
+	s    string
+	x, y int
 }
 
 var _ Canvas = (*recordingCanvas)(nil)
 
 func (c *recordingCanvas) Bounds() image.Rectangle                                      { return c.bounds }
-func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {}
+func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
+	c.texts = append(c.texts, drawnText{s, x, y})
+}
 func (c *recordingCanvas) DrawImage(img image.Image, x, y, width, height int) {
 	c.images = append(c.images, img)
 	c.imageRects = append(c.imageRects, image.Rect(x, y, x+width, y+height))
@@ -1205,7 +1214,7 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 
 	settledA := NewEmptyBox(100, 10)
 	pendingImg := &ImageBox{bounds: image.Rect(0, 0, 20, 20), pending: []string{"b.png"}}
-	pendingSlot := &LineBox{parts: []InlineLayout{pendingImg}}
+	pendingSlot := newLineBox([]InlineLayout{pendingImg}, false)
 	settledC := NewEmptyBox(100, 10)
 
 	view := &View{

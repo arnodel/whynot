@@ -138,8 +138,8 @@ func TestTextBoxHitTest(t *testing.T) {
 	src := &InlineText{text: "hi", node: &ASTNode{Tag: TagParagraph}}
 	b := &TextBox{Text: "hi", Face: face, source: src}
 
-	bounds, advance := b.BoundsAndAdvance()
-	hit, offset, next := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
+	bounds, _ := b.BoundsAndAdvance()
+	hit, offset := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
 	if hit == nil {
 		t.Fatal("HitTest inside glyph bounds = nil hit, want a match")
 	}
@@ -149,11 +149,8 @@ func TestTextBoxHitTest(t *testing.T) {
 	if got := hit.Bounds().Add(offset); got != bounds {
 		t.Errorf("bounds = %v, want %v (the glyph's own bounds, at x=y=0)", got, bounds)
 	}
-	if next != advance {
-		t.Errorf("next = %d, want %d (the advance)", next, advance)
-	}
 
-	if hit, _, _ := b.HitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); hit != nil {
+	if hit, _ := b.HitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); hit != nil {
 		t.Error("HitTest far below the glyph = a match, want a miss")
 	}
 }
@@ -207,7 +204,7 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	markerX := x - advance - space
 
 	p := image.Pt(markerX+markerBounds.Min.X, y+markerBounds.Min.Y)
-	hit, offset, next := marker.HitTest(p, x, y)
+	hit, offset := marker.HitTest(p, x, y)
 	if hit == nil {
 		t.Fatal("HitTest at the marker's actual drawn position = nil hit, want a match")
 	}
@@ -217,11 +214,11 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	if want := markerBounds.Add(image.Pt(markerX, y)); hit.Bounds().Add(offset) != want {
 		t.Errorf("bounds = %v, want %v (marker's own bounds at its real, offset position)", hit.Bounds().Add(offset), want)
 	}
-	if next != x-space {
-		t.Errorf("next = %d, want %d (x - space, matching DrawInline's own return)", next, x-space)
+	if _, markerAdvance := marker.BoundsAndAdvance(); markerAdvance != -space {
+		t.Errorf("marker advance = %d, want %d (cancelling the gap before the text)", markerAdvance, -space)
 	}
 
-	if hit, _, _ := marker.HitTest(image.Pt(x, y), x, y); hit != nil {
+	if hit, _ := marker.HitTest(image.Pt(x, y), x, y); hit != nil {
 		t.Error("HitTest at x itself (not the marker's real, offset position) = a match, want a miss")
 	}
 }
@@ -240,7 +237,7 @@ func TestLineBoxHitTest(t *testing.T) {
 	src2 := &InlineText{text: "bb", node: &ASTNode{Tag: TagStrong}}
 	b1 := &TextBox{Text: "aa", Face: face, source: src1}
 	b2 := &TextBox{Text: "bb", Face: face, source: src2}
-	line := &LineBox{parts: []InlineLayout{b1, b2}}
+	line := newLineBox([]InlineLayout{b1, b2}, false)
 
 	bounds := line.Bounds()
 	midY := (bounds.Min.Y + bounds.Max.Y) / 2
@@ -278,9 +275,9 @@ func TestLineBoxBoundsIndentedText(t *testing.T) {
 	}
 	// Long enough that the gap can't be mistaken for rounding noise.
 	text := "                                        return 42"
-	line := &LineBox{parts: []InlineLayout{&TextBox{Text: text, Face: face}}}
+	line := newLineBox([]InlineLayout{&TextBox{Text: text, Face: face}}, false)
 
-	raw, _ := line.BoundsAndAdvance()
+	raw := line.bounds
 	if got, want := line.Bounds().Dx(), raw.Max.X; got != want {
 		t.Errorf("Bounds().Dx() = %d, want %d (raw.Max.X, not the ink-only span)", got, want)
 	}
@@ -300,26 +297,23 @@ func TestLineBoxGluedNoGap(t *testing.T) {
 	a := &TextBox{Text: "a(", Face: face}
 	_, aAdvance := a.BoundsAndAdvance()
 	b := &TextBox{Text: "b", Face: face}
-	_, bAdvance := b.BoundsAndAdvance()
 
-	glued := &LineBox{parts: []InlineLayout{a, &TextBox{Text: "b", Face: face, glued: true}}}
-	_, gluedAdvance := glued.BoundsAndAdvance()
-	if want := aAdvance + bAdvance; gluedAdvance != want {
-		t.Errorf("glued advance = %d, want %d (aAdvance+bAdvance, no gap)", gluedAdvance, want)
+	glued := newLineBox([]InlineLayout{a, &TextBox{Text: "b", Face: face, glued: true}}, false)
+	if got := glued.xs[1]; got != aAdvance {
+		t.Errorf("glued part at x=%d, want %d (right after a's advance, no gap)", got, aAdvance)
 	}
 
-	spaced := &LineBox{parts: []InlineLayout{a, b}}
-	_, spacedAdvance := spaced.BoundsAndAdvance()
-	if spacedAdvance <= gluedAdvance {
-		t.Errorf("spaced advance = %d, want > glued advance %d (an ordinary gap should be added)", spacedAdvance, gluedAdvance)
+	spaced := newLineBox([]InlineLayout{a, b}, false)
+	if got := spaced.xs[1]; got <= aAdvance {
+		t.Errorf("spaced part at x=%d, want > %d (an ordinary gap should be added)", got, aAdvance)
 	}
 }
 
-// TestSplitBoxesGluedBoundaryUnbreakable checks that splitBoxes never
+// TestWrapLinesGluedBoundaryUnbreakable checks that wrapLines never
 // cuts a line between two Glued items, even when doing so would
 // otherwise be the natural wrap point - mirroring how a single oversized
 // word already overflows the line today rather than being split.
-func TestSplitBoxesGluedBoundaryUnbreakable(t *testing.T) {
+func TestWrapLinesGluedBoundaryUnbreakable(t *testing.T) {
 	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
 	face, err := ctx.SelectFace(TextStyle{Size: 16})
 	if err != nil {
@@ -339,9 +333,9 @@ func TestSplitBoxesGluedBoundaryUnbreakable(t *testing.T) {
 	// boundary) instead, even though a+b together overflow width.
 	width := aAdvance + bAdvance/2
 
-	n, _ := splitBoxes(boxes, width)
-	if n != 2 {
-		t.Fatalf("splitBoxes returned %d boxes, want 2 (a+b glued together, c deferred to the next line)", n)
+	lines := wrapLines(boxes, width)
+	if len(lines) != 2 || len(lines[0].(*LineBox).parts) != 2 {
+		t.Fatalf("wrapLines = %d lines, want 2 with a+b glued together on the first and c deferred to the next", len(lines))
 	}
 }
 
@@ -357,12 +351,12 @@ func TestStackBoxHitTestIndentedLine(t *testing.T) {
 	}
 	text := "                                        return 42"
 	src := &InlineText{text: text, node: &ASTNode{Tag: TagCodeBlock}}
-	line := &LineBox{parts: []InlineLayout{&TextBox{Text: text, Face: face, source: src}}}
+	line := newLineBox([]InlineLayout{&TextBox{Text: text, Face: face, source: src}}, false)
 	stack := stackOf(line)
 
 	// Derived from the raw bounds, not line.Bounds() itself - a point
 	// derived from the value under test can't catch a wrong answer.
-	raw, _ := line.BoundsAndAdvance()
+	raw := line.bounds
 	midY := line.Bounds().Dy() / 2
 	p := image.Pt(raw.Max.X-1, midY)
 	hit, _ := stack.HitTest(p)
@@ -541,9 +535,9 @@ func TestImageBoxPendingImages(t *testing.T) {
 // "something in here is pending" - a settled TextBox contributes
 // nothing.
 func TestLineBoxPendingImagesAggregates(t *testing.T) {
-	settled := &TextBox{}
+	settled := &TextBox{Face: goRegularFace(t)}
 	pending := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
-	line := &LineBox{parts: []InlineLayout{settled, pending}}
+	line := newLineBox([]InlineLayout{settled, pending}, false)
 
 	got := line.PendingImages()
 	if len(got) != 1 || got[0] != "x.png" {
@@ -559,7 +553,7 @@ func TestLineBoxPendingImagesAggregates(t *testing.T) {
 func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 	settled := &EmptyBox{}
 	pendingImage := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
-	pending := &LineBox{parts: []InlineLayout{pendingImage}} // slots hold BlockLayout, not InlineLayout
+	pending := newLineBox([]InlineLayout{pendingImage}, false) // slots hold BlockLayout, not InlineLayout
 	stack := &StackBox{slots: []stackSlot{
 		{box: settled},
 		{box: pending},
@@ -740,20 +734,43 @@ func TestCheckboxBoxDrawInline(t *testing.T) {
 // TestCheckboxBoxHitTest checks hit-testing against the box's own footprint.
 func TestCheckboxBoxHitTest(t *testing.T) {
 	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
-	bounds, advance := b.BoundsAndAdvance()
+	bounds, _ := b.BoundsAndAdvance()
 
-	hit, offset, next := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
+	hit, offset := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
 	if hit == nil {
 		t.Fatal("HitTest inside the box = nil hit, want a match")
 	}
 	if got := hit.Bounds().Add(offset); got != bounds {
 		t.Errorf("bounds = %v, want %v", got, bounds)
 	}
-	if next != advance {
-		t.Errorf("next = %d, want %d", next, advance)
-	}
 
-	if hit, _, _ := b.HitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); hit != nil {
+	if hit, _ := b.HitTest(image.Pt(bounds.Min.X, bounds.Max.Y+100), 0, 0); hit != nil {
 		t.Error("HitTest far below the box = a match, want a miss")
+	}
+}
+
+// TestLineBoxListMarkerBoundsMatchDrawing checks that a list item line's
+// Bounds end exactly where its drawn text ends: the marker hangs to the
+// left of the line, so it must not push the text's measured position
+// right of where it's actually drawn.
+func TestLineBoxListMarkerBoundsMatchDrawing(t *testing.T) {
+	face := goRegularFace(t)
+	word := &TextBox{Text: "word", Face: face}
+	line := newLineBox([]InlineLayout{
+		&ListItemMarkerBox{Marker: &TextBox{Text: "-", Face: face}},
+		word,
+	}, false)
+	dst := &recordingCanvas{bounds: image.Rect(-100, -100, 1000, 1000)}
+	DrawBlockLayout(line, dst, 0, 0, 0)
+
+	var wordX = -1
+	for _, dt := range dst.texts {
+		if dt.s == "word" {
+			wordX = dt.x
+		}
+	}
+	wordBounds, _ := word.BoundsAndAdvance()
+	if got, want := line.Bounds().Max.X, wordX+wordBounds.Max.X; got != want {
+		t.Errorf("line Bounds().Max.X = %d, want %d (the word's ink, drawn at x=%d)", got, want, wordX)
 	}
 }
