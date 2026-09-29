@@ -116,6 +116,22 @@ type Canvas struct {
 	ops      *op.Ops
 	bounds   image.Rectangle
 	renderer *Renderer
+	// clipped is set on a Canvas from Clip: every draw is then wrapped in
+	// a clip to bounds. Gio has no sub-image to draw into instead.
+	clipped bool
+}
+
+// Clip returns a Canvas whose draws are clipped to r within c's bounds.
+func (c *Canvas) Clip(r image.Rectangle) whynot.Canvas {
+	return &Canvas{ops: c.ops, bounds: r.Intersect(c.bounds), renderer: c.renderer, clipped: true}
+}
+
+// pushClip applies c's clip, if any, until the returned func is called.
+func (c *Canvas) pushClip() func() {
+	if !c.clipped {
+		return func() {}
+	}
+	return clip.Rect(c.bounds).Push(c.ops).Pop
 }
 
 var _ whynot.Canvas = (*Canvas)(nil)
@@ -125,6 +141,7 @@ func (c *Canvas) Bounds() image.Rectangle {
 }
 
 func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
+	defer c.pushClip()()
 	pen := x
 	for _, ru := range s {
 		g, ok := c.renderer.glyphFor(face, ru, clr)
@@ -143,6 +160,7 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 }
 
 func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
+	defer c.pushClip()()
 	stack := op.Offset(image.Pt(x, y)).Push(c.ops)
 	paint.FillShape(c.ops, toNRGBA(clr), clip.Rect(image.Rect(0, 0, w, h)).Op())
 	stack.Pop()
@@ -152,6 +170,7 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 // width/height (usually not the same size - see whynot.Canvas's own doc
 // comment).
 func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
+	defer c.pushClip()()
 	imgOp := c.renderer.imageOp(img)
 	b := img.Bounds()
 	sx, sy := float32(1), float32(1)

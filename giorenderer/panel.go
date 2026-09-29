@@ -51,6 +51,10 @@ type Panel struct {
 	dragging    bool
 	lastDragPos image.Point
 
+	// mouseDown is whether the mouse button is pressed - for dragging a
+	// sideways-scrolling block's scrollbar (see whynot.Interaction).
+	mouseDown bool
+
 	start time.Time
 }
 

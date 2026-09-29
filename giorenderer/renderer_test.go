@@ -5,6 +5,8 @@ import (
 	"image/color"
 	"testing"
 
+	"gioui.org/op"
+
 	"github.com/arnodel/whynot"
 )
 
@@ -74,5 +76,17 @@ func TestGlyphCachedByFaceRuneColor(t *testing.T) {
 	r.glyphFor(face, 'A', color.Black)
 	if len(r.glyphCache) != 3 {
 		t.Errorf("glyphCache len = %d after the same rune in a different color, want 3", len(r.glyphCache))
+	}
+}
+
+func TestCanvasClipBounds(t *testing.T) {
+	var ops op.Ops
+	c := New().NewCanvas(&ops, image.Rect(0, 0, 100, 100))
+	clipped := c.Clip(image.Rect(50, -10, 200, 40))
+	if want := image.Rect(50, 0, 100, 40); clipped.Bounds() != want {
+		t.Errorf("Clip bounds = %v, want %v (intersected with the canvas)", clipped.Bounds(), want)
+	}
+	if again := clipped.Clip(image.Rect(0, 0, 60, 60)).Bounds(); again != image.Rect(50, 0, 60, 40) {
+		t.Errorf("nested Clip bounds = %v, want %v", again, image.Rect(50, 0, 60, 40))
 	}
 }

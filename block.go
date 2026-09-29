@@ -151,7 +151,8 @@ func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 	for i, parts := range b.lines {
 		lineBoxes[i] = newLineBox(inlineLayouts(ctx, width, parts), true)
 	}
-	return &StackBox{slots: preResolvedSlots(lineBoxes), source: b}
+	// Lines never wrap, so a long one scrolls sideways instead.
+	return scrollIfWider(ctx, b, &StackBox{slots: preResolvedSlots(lineBoxes), source: b}, width)
 }
 
 type TextBlock struct {
@@ -404,7 +405,9 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 		}
 	}
 
-	return &TableBox{
+	// Columns shrink to fit width, but a cell holding a word too long to
+	// wrap can still make the table wider: it scrolls sideways then.
+	return scrollIfWider(ctx, b, &TableBox{
 		columnOffsets:       columnOffsets,
 		rowOffsets:          rowOffsets,
 		frameThickness:      frameThickness,
@@ -413,7 +416,7 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 		frameColor:          ctx.StyleSheet.BorderColor(b.node),
 		cells:               cells,
 		source:              b,
-	}
+	}, width)
 }
 
 type StackBlock struct {

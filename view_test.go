@@ -81,15 +81,18 @@ type drawnRect struct {
 	color      color.Color
 }
 
-// recordingCanvas is a minimal Canvas fake that only records DrawRect
-// calls - enough to check View.Draw's background fill without a real
-// rendering backend.
+// recordingCanvas is a minimal Canvas fake that records draw calls -
+// enough to check what gets drawn where without a real rendering backend.
+// A Canvas from Clip records into the same one it was clipped from.
 type recordingCanvas struct {
 	bounds     image.Rectangle
 	rects      []drawnRect
 	images     []image.Image
 	imageRects []image.Rectangle // one per DrawImage call, parallel to images
 	texts      []drawnText
+	clips      []image.Rectangle // one per Clip call
+
+	root *recordingCanvas // set on a Canvas from Clip
 }
 
 // drawnText records one Canvas.DrawText call.
@@ -100,16 +103,33 @@ type drawnText struct {
 
 var _ Canvas = (*recordingCanvas)(nil)
 
+// out is where c's draw calls are recorded.
+func (c *recordingCanvas) out() *recordingCanvas {
+	if c.root != nil {
+		return c.root
+	}
+	return c
+}
+
 func (c *recordingCanvas) Bounds() image.Rectangle { return c.bounds }
 func (c *recordingCanvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
-	c.texts = append(c.texts, drawnText{s, x, y})
+	out := c.out()
+	out.texts = append(out.texts, drawnText{s, x, y})
 }
 func (c *recordingCanvas) DrawImage(img image.Image, x, y, width, height int) {
-	c.images = append(c.images, img)
-	c.imageRects = append(c.imageRects, image.Rect(x, y, x+width, y+height))
+	out := c.out()
+	out.images = append(out.images, img)
+	out.imageRects = append(out.imageRects, image.Rect(x, y, x+width, y+height))
 }
 func (c *recordingCanvas) DrawRect(x, y, w, h int, clr color.Color) {
-	c.rects = append(c.rects, drawnRect{x, y, w, h, clr})
+	out := c.out()
+	out.rects = append(out.rects, drawnRect{x, y, w, h, clr})
+}
+func (c *recordingCanvas) Clip(r image.Rectangle) Canvas {
+	out := c.out()
+	clipped := r.Intersect(c.bounds)
+	out.clips = append(out.clips, clipped)
+	return &recordingCanvas{bounds: clipped, root: out}
 }
 
 // TestViewDrawFillsBackground checks that Draw fills dst's whole bounds

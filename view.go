@@ -69,6 +69,7 @@ func NewView(doc *Document, faceSelector FaceSelector, opts ...ViewOption) *View
 			FaceSelector: faceSelector,
 			StyleSheet:   NewDarkStyleSheet(),
 			ImageCache:   NewImageCache(FileImageSource{}),
+			hscroll:      newHScrollState(),
 		},
 	}
 	for _, opt := range opts {
@@ -217,6 +218,9 @@ func (v *View) Draw(dst Canvas, x, y int) {
 	if !v.stack.laidOut() {
 		return
 	}
+	if v.ctx.hscroll != nil {
+		v.ctx.hscroll.beginFrame(image.Pt(x, y))
+	}
 	// The top/bottom ViewMargins are spacer slots in the stack (see
 	// rebuild); only Left needs applying here.
 	v.stack.box.DrawFrom(dst, v.stack.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
@@ -283,6 +287,9 @@ func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
 // Hover also reports the link under (x, y), same as LinkAt, so a caller
 // handling a click at the same position doesn't need a second HitTest.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
+	if v.ctx.hscroll != nil {
+		v.ctx.hscroll.hover(image.Pt(x, y))
+	}
 	node, slot := v.linkNodeAt(x, y)
 	if node != v.ctx.HighlightNode {
 		if v.ctx.HighlightNode != nil && v.stack.laidOut() {
@@ -298,6 +305,15 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 	}
 	v.highlightSlot = slot
 	return node.Destination, true
+}
+
+// ScrollHorizontal scrolls the block at (x, y) - the same coordinate
+// space HitTest/Hover use - sideways by dx pixels, if it's wider than the
+// View and so scrolls: positive dx moves its content right, toward its
+// start, matching Scroll's convention for dy. Reports whether there was
+// such a block. Works from what the last Draw drew.
+func (v *View) ScrollHorizontal(x, y int, dx float64) bool {
+	return v.ctx.hscroll != nil && v.ctx.hscroll.scrollAt(image.Pt(x, y), dx)
 }
 
 // LinkAt reports the destination URL of the link at document position

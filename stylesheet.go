@@ -117,14 +117,10 @@ type StyleSheet interface {
 }
 
 // ScrollbarStyleSheet is an optional StyleSheet capability: a StyleSheet
-// that also knows how to color a scrollbar thumb. It's optional, not
-// part of StyleSheet itself, because a scrollbar is drawn by whatever
-// embeds a View (cmd/whynot today, a future ebitenrenderer.Panel later)
-// - View itself never draws one - so a StyleSheet that's never paired
-// with a scrollbar (e.g. a test StyleSheet) isn't forced to implement
-// it. A caller that wants a scrollbar type-asserts its StyleSheet
-// against this interface and falls back to a reasonable default color
-// when it isn't implemented.
+// that also knows how to color a scrollbar thumb - both the document's
+// vertical one, drawn by whatever embeds a View (e.g. ebitenrenderer.
+// Panel), and the horizontal ones of blocks that scroll sideways (see
+// ScrollBox). Without it, scrollbars use a neutral default color.
 type ScrollbarStyleSheet interface {
 	// ScrollbarColor returns the color to draw the scrollbar thumb in.
 	// hover is true whenever the thumb is highlighted (including while

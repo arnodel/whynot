@@ -155,3 +155,37 @@ func (in *Interaction) HoverAndClick(cx, cy int, justPressed bool) {
 		}
 	}
 }
+
+// ScrollHorizontal scrolls the block at cx, cy sideways by dx, if it's
+// wider than the View - see View.ScrollHorizontal.
+func (in *Interaction) ScrollHorizontal(cx, cy int, dx float64) {
+	if dx != 0 && image.Pt(cx, cy).In(in.Bounds) {
+		in.View.ScrollHorizontal(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y, dx)
+	}
+}
+
+// DragHorizontalScrollbar handles pressing, dragging and releasing the
+// scrollbar of a block that scrolls sideways, reporting whether the
+// pointer event is part of such a drag - in which case the caller
+// shouldn't also treat it as a hover or click on the document. down is
+// whether the pointer is pressed; justPressed whether it was pressed
+// this frame.
+func (in *Interaction) DragHorizontalScrollbar(cx, cy int, down, justPressed bool) bool {
+	s := in.View.ctx.hscroll
+	if s == nil {
+		return false
+	}
+	p := image.Pt(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
+	switch {
+	case s.dragging != nil && !down:
+		s.endDrag()
+		s.hover(p)
+		return true
+	case s.dragging != nil:
+		s.dragTo(p.X)
+		return true
+	case justPressed && image.Pt(cx, cy).In(in.Bounds):
+		return s.beginDrag(p)
+	}
+	return false
+}

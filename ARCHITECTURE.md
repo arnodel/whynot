@@ -143,7 +143,9 @@ mutated, which is what makes the memoization described next safe.
 
 `Canvas` ([canvas.go](canvas.go)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
-`DrawImage`, `DrawRect`. `DrawImage` takes an already-decoded `image.Image`, not a
+`DrawImage`, `DrawRect`, and `Clip`, which returns a `Canvas` restricted to a
+rectangle (used by `ScrollBox`, [hscroll.go](hscroll.go), for blocks that
+scroll sideways). `DrawImage` takes an already-decoded `image.Image`, not a
 source path — resolving, fetching, and decoding an image is entirely
 the library's own concern (`ImageCache`, see "Image loading" below), so
 a `Canvas` implementation never fetches or decodes anything itself; its
