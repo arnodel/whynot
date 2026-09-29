@@ -307,12 +307,9 @@ func (a *App) Follow(dest string) {
 
 	source, err := LoadDocument(resolved)
 	if err != nil {
-		var htmlErr *htmlContentError
-		if errors.As(err, &htmlErr) {
-			openInBrowser(resolved.String())
-			return
+		if !openIfWebPage(err, resolved) {
+			log.Printf("loading %s: %v", resolved, err)
 		}
-		log.Printf("loading %s: %v", resolved, err)
 		return
 	}
 	view := a.NewView(source, resolved)
@@ -324,6 +321,17 @@ func (a *App) Follow(dest string) {
 	a.Panel.SetView(view)
 	a.location = resolved
 	a.updateWindowTitle()
+}
+
+// openIfWebPage opens location in a web browser if err says it's a web
+// page rather than Markdown (see webPageError), reporting whether it did.
+func openIfWebPage(err error, location *url.URL) bool {
+	var pageErr *webPageError
+	if !errors.As(err, &pageErr) {
+		return false
+	}
+	openInBrowser(location.String())
+	return true
 }
 
 // pushHistory saves the current document and scroll position onto
@@ -416,12 +424,9 @@ func (a *App) Reload() {
 	}
 	source, err := LoadDocument(a.location)
 	if err != nil {
-		var htmlErr *htmlContentError
-		if errors.As(err, &htmlErr) {
-			openInBrowser(a.location.String())
-			return
+		if !openIfWebPage(err, a.location) {
+			log.Printf("reloading %s: %v", a.location, err)
 		}
-		log.Printf("reloading %s: %v", a.location, err)
 		return
 	}
 	scroll := a.Panel.View().ScrollPosition()
@@ -454,7 +459,7 @@ func (a *App) Paste() {
 //
 // Returns the resolve/load error, if any, so a caller with somewhere to
 // show it (e.g. an editable address bar) can - an HTML response is
-// still handled the same as Follow (opened in the system browser) and
+// still handled the same as Follow (opened in a web browser) and
 // reported as no error, since that's not a mistake for the caller to
 // show. A no-op (nil error) while the TOC is showing, same as Reload.
 func (a *App) Navigate(text string) error {
@@ -469,9 +474,7 @@ func (a *App) Navigate(text string) error {
 
 	source, err := LoadDocument(resolved)
 	if err != nil {
-		var htmlErr *htmlContentError
-		if errors.As(err, &htmlErr) {
-			openInBrowser(resolved.String())
+		if openIfWebPage(err, resolved) {
 			return nil
 		}
 		log.Printf("loading %s: %v", resolved, err)

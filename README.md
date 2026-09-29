@@ -36,10 +36,10 @@ release, so `go install` is its only native option).
 
 Both web demos run entirely client-side (see [`cmd/whynot/web`](cmd/whynot/web)/
 [`cmd/giowhynot/web`](cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local
-file opening, paste-to-open, and following a link to a real webpage aren't wired up in
-either (there's no real filesystem, clipboard, or system browser access in a browser
-sandbox) - everything else, including opening a Markdown document by URL (`?doc=<url>`, or
-just follow a link), works the same as installed.
+file opening and paste-to-open aren't wired up in either (there's no real filesystem or
+clipboard access in a browser sandbox), and a link to a webpage opens in a new tab rather
+than the system browser - everything else, including opening a Markdown document by URL
+(`?doc=<url>`, or just follow a link), works the same as installed.
 
 `cmd/giowhynot` has one feature `cmd/whynot` doesn't: the address bar is editable - click
 it, type a path/URL/"welcome", Enter to go there. `-debug-hit`/`-debug-stats` aren't
@@ -532,8 +532,8 @@ by implementation order now that most of the list is done.
 **`cmd/whynot`, the standalone viewer**
 - [x] Built-in welcome page, shown by default, explaining how to use the app
 - [x] Paste a file path or `http(s)` URL to open it; paste "welcome" to return here
-- [x] A link to a webpage opens in the system browser instead of failing; a link to
-      Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
+- [x] A link to a webpage opens in the system browser (a new tab, on the web) instead of
+      failing; a link to Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
 - [x] Back/forward history, light/dark theme, zoom
 - [x] Renders document text in this platform's own fonts when it can find them
       (`systemfont.RegisterPreferredFont`), falling back to the bundled Go fonts
