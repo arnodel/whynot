@@ -182,7 +182,7 @@ func inlineLayouts(ctx RenderingContext, width int, parts []Inline) []InlineLayo
 // ListItemHeadBlock is a list item's own paragraph text, flowed with the
 // marker hanging off the first line - see GetBlockLayout. It always reports zero
 // margins: a list item's indentation and item-to-item spacing belong to
-// the StackBlock CompileListItem wraps it in (along with any trailing
+// the StackBlock compileListItem wraps it in (along with any trailing
 // content, e.g. a nested list), not to the head on its own - it has no
 // business claiming indentation whether or not there's a trailing part.
 type ListItemHeadBlock struct {

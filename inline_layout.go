@@ -55,8 +55,8 @@ type TextBox struct {
 
 	// glued - see InlineLayout.Glued's doc comment. Set once at
 	// construction (InlineText.GetInlineLayout), from the source
-	// whitespace tracked at compile time (see MarkdownCompiler.
-	// pendingSpace) - never mutated after.
+	// whitespace tracked at compile time (see compiler.pendingSpace) -
+	// never mutated after.
 	glued bool
 
 	// pending is set only when this TextBox is standing in for an image

@@ -50,19 +50,6 @@ const (
 	TokenComment
 )
 
-// ParseOption customizes Parse - see WithSyntaxHighlighter.
-type ParseOption func(*MarkdownCompiler)
-
-// WithSyntaxHighlighter sets the Highlighter Parse uses to color code
-// blocks token-by-token. Unset, code blocks render in one flat color,
-// exactly as before this option existed.
-// equivalent NewView option.
-func WithSyntaxHighlighter(h Highlighter) ParseOption {
-	return func(c *MarkdownCompiler) {
-		c.highlighter = h
-	}
-}
-
 // CodeBlockPlugin lets a caller replace how a fenced code block in a
 // recognized language renders - e.g. a ```mermaid fence as a diagram
 // (see the kroki package) instead of its raw/highlighted
@@ -76,16 +63,6 @@ type CodeBlockPlugin interface {
 	// Image starts rendering a fenced code block CanHandle has already
 	// approved, returning an AsyncImage that resolves once it's ready.
 	Image(language, code string) AsyncImage
-}
-
-// WithCodeBlockPlugin registers one CodeBlockPlugin - callable more
-// than once to register several; a fenced code block's language is
-// matched against them in registration order (see
-// MarkdownCompiler.pluginFor).
-func WithCodeBlockPlugin(p CodeBlockPlugin) ParseOption {
-	return func(c *MarkdownCompiler) {
-		c.codeBlockPlugins = append(c.codeBlockPlugins, p)
-	}
 }
 
 // tokenClassTags maps a Highlighter's TokenClass to the ASTTag whose
@@ -109,7 +86,7 @@ var tokenClassTags = map[TokenClass]ASTTag{
 // CodeBlockPlugin's fallback content (see compile.go's KindCodeBlock
 // case) - identical either way, since a plugin's fallback is exactly
 // what today's non-plugin rendering already is.
-func (c *MarkdownCompiler) codeBlockLines(astNode *ASTNode, language string, rawLines []string) [][]Inline {
+func (c *compiler) codeBlockLines(astNode *ASTNode, language string, rawLines []string) [][]Inline {
 	var lines [][]Inline
 	if c.highlighter != nil {
 		lines = highlightLines(c.highlighter, astNode, language, rawLines)

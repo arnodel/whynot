@@ -35,45 +35,45 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 		parser.WithAutoHeadingID(),
 	)
 	node := p.Parse(source)
-	compiler := MarkdownCompiler{source: source}
+	c := compiler{source: source}
 	for _, opt := range opts {
-		opt(&compiler)
+		opt(&c)
 	}
-	return compiler.CompileDocument(node)
-}
-
-func (c *MarkdownCompiler) CompileNode(node gmast.Node, parent *ASTNode) Block {
-	if _, ok := node.(gmast.BlockNode); ok {
-		return c.CompileBlock(node, parent)
-	}
-	return nil
-}
-
-// CompileDocument compiles the document root. Always the top of the tree -
-// gmast.KindDocument is never nested - so unlike CompileBlock/CompileListItem
-// it needs no parent *ASTNode to thread through: a nil parent is what marks
-// a block as top-level.
-func (c *MarkdownCompiler) CompileDocument(node gmast.Node) *Document {
-	var blocks []Block
-	child := node.FirstChild()
-	for child != nil {
-		if block := c.CompileNode(child, nil); block != nil {
-			blocks = append(blocks, block)
-		}
-		child = child.NextSibling()
-	}
+	// A nil parent ASTNode is what marks a block as top-level.
 	return &Document{
-		root:       &StackBlock{blocks: blocks},
+		root:       &StackBlock{blocks: c.compileBlocks(node.FirstChild(), nil)},
 		headings:   c.headings,
 		soleImages: c.soleImages,
 	}
+}
+
+// compileBlocks compiles first and its following siblings under parent,
+// dropping any that compile to nothing.
+func (c *compiler) compileBlocks(first gmast.Node, parent *ASTNode) []Block {
+	var blocks []Block
+	for node := first; node != nil; node = node.NextSibling() {
+		if _, ok := node.(gmast.BlockNode); !ok {
+			continue
+		}
+		if block := c.compileBlock(node, parent); block != nil {
+			blocks = append(blocks, block)
+		}
+	}
+	return blocks
+}
+
+// compileInlines compiles node's children as a fresh run of inline
+// content - a paragraph, heading, list item head or table cell.
+func (c *compiler) compileInlines(node gmast.Node, astNode *ASTNode) []Inline {
+	c.pendingSpace = true
+	return c.appendChildren(nil, node, astNode)
 }
 
 // codeBlockTabExpansion is what a literal tab in a code block's source is
 // replaced with - see the KindCodeBlock case below.
 const codeBlockTabExpansion = "    "
 
-func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block {
+func (c *compiler) compileBlock(node gmast.Node, parent *ASTNode) Block {
 	switch node.Kind() {
 	case gmast.KindParagraph:
 		return c.compileTextBlock(node, parent.AddChild(TagParagraph), parent == nil)
@@ -87,11 +87,9 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		list := node.(*gmast.List)
 		astNode := parent.AddChild(TagList)
 		var items []Block
-		var index = 1
-		child := node.FirstChild()
-		for child != nil {
-			items = append(items, c.CompileListItem(child, index, list.Marker, list.IsTight, astNode))
-			child = child.NextSibling()
+		index := 0
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			items = append(items, c.compileListItem(child, list, index, astNode))
 			index++
 		}
 		return &MarginBlock{Block: &StackBlock{blocks: items}, node: astNode}
@@ -129,20 +127,12 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 		}
 	case gmast.KindBlockquote:
 		astNode := parent.AddChild(TagBlockquote)
-		var items []Block
-		child := node.FirstChild()
-		for child != nil {
-			if block := c.CompileNode(child, astNode); block != nil {
-				items = append(items, block)
-			}
-			child = child.NextSibling()
-		}
 		return &MarginBlock{
-			Block: &BlockquoteBlock{inner: wrapBlocks(items), node: astNode},
+			Block: &BlockquoteBlock{inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode)), node: astNode},
 			node:  astNode,
 		}
 	case extast.KindTable:
-		return c.CompileTable(node, parent)
+		return c.compileTable(node, parent)
 	case gmast.KindLinkReferenceDefinition:
 		// A `[foo]: /url "title"` line - already consumed by goldmark to
 		// resolve reference-style links elsewhere in the document (see
@@ -163,12 +153,8 @@ func (c *MarkdownCompiler) CompileBlock(node gmast.Node, parent *ASTNode) Block 
 // caller has already created. A top-level one is also recorded in the
 // Document: a heading as a TOCEntry, and one whose only content is an
 // image as a soleImages entry.
-func (c *MarkdownCompiler) compileTextBlock(node gmast.Node, astNode *ASTNode, topLevel bool) Block {
-	var items []Inline
-	c.pendingSpace = true
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		items = c.AppendInlineNode(items, child, astNode)
-	}
+func (c *compiler) compileTextBlock(node gmast.Node, astNode *ASTNode, topLevel bool) Block {
+	items := c.compileInlines(node, astNode)
 	block := &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
 
 	if !topLevel {
@@ -209,7 +195,7 @@ func plainText(items []Inline) string {
 // whole document, it logs a warning and renders the construct as a
 // code block in StyleSheet.UnsupportedColor, showing its raw source
 // where possible so the gap is visible rather than silently dropped.
-func (c *MarkdownCompiler) compileUnsupportedBlock(node gmast.Node, parent *ASTNode) Block {
+func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ASTNode) Block {
 	astNode := parent.AddChild(TagUnsupported)
 	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
 
@@ -235,51 +221,35 @@ func headingTag(level int) ASTTag {
 	return TagHeading1 + ASTTag(level-1)
 }
 
-func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker byte, tight bool, parent *ASTNode) Block {
+// compileListItem compiles the item at index (0-based) in list.
+func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ASTNode) Block {
 	itemNode := parent.AddChild(TagListItem)
-	var items []Inline
-	var markerInline Inline
+	var marker Inline
 	if status, ok := extension.TaskStatusOf(node); ok {
-		markerInline = &TaskCheckbox{checked: status == extension.TaskStatusCompleted, node: itemNode}
+		marker = &TaskCheckbox{checked: status == extension.TaskStatusCompleted, node: itemNode}
 	} else {
-		var markerString string
-		switch marker {
-		case '-', '+', '*':
-			markerString = string(marker)
-		case ')':
-			markerString = fmt.Sprintf("%d)", index)
-		case '.':
-			markerString = fmt.Sprintf("%d.", index)
-		default:
-			panic("Unsupported marker")
-		}
-		markerInline = &InlineText{text: markerString, node: itemNode}
+		marker = &InlineText{text: listMarker(list, index), node: itemNode}
 	}
 
 	// A leading Paragraph is the item's own text, flowed with the marker
-	// hanging off its first line (see ListItemHeadBlock.GetBlockLayout). Anything
-	// after it - a nested List, or (in a loose list) further paragraphs -
-	// stacks below as trailing block content, each already compiled with
-	// its own real margins by CompileNode. An item with no leading
-	// paragraph leaves items empty, so the marker ends up on a line of
-	// its own - GetBlockLayout already handles that with no special-casing.
+	// hanging off its first line (see ListItemHeadBlock.GetBlockLayout).
+	// Anything after it - a nested List, or (in a loose list) further
+	// paragraphs - stacks below as trailing block content. An item with no
+	// leading paragraph has no parts, so the marker ends up on a line of
+	// its own.
+	var parts []Inline
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
-		c.pendingSpace = true
-		child := next.FirstChild()
-		for child != nil {
-			items = c.AppendInlineNode(items, child, itemNode)
-			child = child.NextSibling()
-		}
+		parts = c.compileInlines(next, itemNode)
 		next = next.NextSibling()
 	}
 
 	head := Block(&ListItemHeadBlock{
-		marker: markerInline,
-		parts:  items,
+		marker: marker,
+		parts:  parts,
 		node:   itemNode,
 	})
-	if !tight {
+	if !list.IsTight {
 		// Loose items get real paragraph spacing on their own leading text
 		// too, not a tight head's zero margins. This also grows the gap
 		// between items with no separate constant: StackBlock.Margins()
@@ -295,13 +265,7 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	}
 	blocks := []Block{head}
 
-	var trailingBlocks []Block
-	for ; next != nil; next = next.NextSibling() {
-		if block := c.CompileNode(next, itemNode); block != nil {
-			trailingBlocks = append(trailingBlocks, block)
-		}
-	}
-	if len(trailingBlocks) > 0 {
+	if trailingBlocks := c.compileBlocks(next, itemNode); len(trailingBlocks) > 0 {
 		blocks = append(blocks, wrapBlocks(trailingBlocks))
 	}
 
@@ -314,18 +278,28 @@ func (c *MarkdownCompiler) CompileListItem(node gmast.Node, index int, marker by
 	return &MarginBlock{Block: &StackBlock{blocks: blocks}, node: itemNode}
 }
 
-// CompileTable compiles a Table node. The header is mandatory (GFM
+// listMarker is the marker text for the item at index (0-based) in list:
+// the bullet character itself, or the item's number (counting from the
+// list's own start number) followed by the list's delimiter.
+func listMarker(list *gmast.List, index int) string {
+	if list.IsOrdered() {
+		return fmt.Sprintf("%d%c", list.Start+index, list.Marker)
+	}
+	return string(list.Marker)
+}
+
+// compileTable compiles a Table node. The header is mandatory (GFM
 // requires it); the body is not - a table can legitimately have zero
 // data rows, in which case Table has no TableBody child at all.
-func (c *MarkdownCompiler) CompileTable(node gmast.Node, parent *ASTNode) Block {
+func (c *compiler) compileTable(node gmast.Node, parent *ASTNode) Block {
 	astNode := parent.AddChild(TagTable)
 	headerNode := node.FirstChild()
-	header := c.CompileTableRow(headerNode, astNode)
+	header := c.compileTableRow(headerNode, astNode)
 
 	var rows [][]tableCell
 	if bodyNode := headerNode.NextSibling(); bodyNode != nil {
 		for row := bodyNode.FirstChild(); row != nil; row = row.NextSibling() {
-			rows = append(rows, c.CompileTableRow(row, astNode))
+			rows = append(rows, c.compileTableRow(row, astNode))
 		}
 	}
 
@@ -335,35 +309,48 @@ func (c *MarkdownCompiler) CompileTable(node gmast.Node, parent *ASTNode) Block 
 	}
 }
 
-// CompileTableRow compiles the cells of a TableHeader or a TableRow -
+// compileTableRow compiles the cells of a TableHeader or a TableRow -
 // both have TableCell children directly, no intermediate node, so one
 // method handles both despite the different AST kinds.
-func (c *MarkdownCompiler) CompileTableRow(node gmast.Node, parent *ASTNode) []tableCell {
+func (c *compiler) compileTableRow(node gmast.Node, parent *ASTNode) []tableCell {
 	var cells []tableCell
 	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
 		tc := cellNode.(*extast.TableCell)
 		cellASTNode := parent.AddChild(TagTableCell)
-		var parts []Inline
-		c.pendingSpace = true
-		for child := tc.FirstChild(); child != nil; child = child.NextSibling() {
-			parts = c.AppendInlineNode(parts, child, cellASTNode)
-		}
 		cells = append(cells, tableCell{
-			content:   &TextBlock{parts: parts, node: cellASTNode},
+			content:   &TextBlock{parts: c.compileInlines(tc, cellASTNode), node: cellASTNode},
 			alignment: tableCellAlignment(tc.Alignment),
 		})
 	}
 	return cells
 }
 
-// AppendInlineNode walks an inline subtree, appending each leaf as an
-// Inline. astNode is node's parent in the ASTNode tree - updated only by
-// the constructs that get their own ASTTag (Emphasis, Strong, Link,
-// CodeSpan, Strikethrough) via AddChild, and threaded straight through
+// spanTags maps each inline construct that only wraps other inline
+// content to the ASTTag it applies to that content.
+var spanTags = map[gmast.NodeKind]ASTTag{
+	gmast.KindEmphasis:       TagEmphasis,
+	gmast.KindStrong:         TagStrong,
+	extast.KindStrikethrough: TagStrikethrough,
+}
+
+// appendChildren appends node's inline children, under astNode.
+func (c *compiler) appendChildren(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		items = c.appendInline(items, child, astNode)
+	}
+	return items
+}
+
+// appendInline walks an inline subtree, appending each leaf as an
+// Inline. astNode is node's parent in the ASTNode tree - extended only by
+// the constructs that get their own ASTTag, and threaded straight through
 // everywhere else. Appearance (font, color, strike) is never resolved
 // here - each produced Inline just carries the ASTNode it was created
 // under, resolved later by RenderingContext against a StyleSheet.
-func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
+func (c *compiler) appendInline(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
+	if tag, ok := spanTags[node.Kind()]; ok {
+		return c.appendChildren(items, node, astNode.AddChild(tag))
+	}
 	switch node.Kind() {
 	case gmast.KindText:
 		t := node.(*gmast.Text)
@@ -375,22 +362,6 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 		// kinds just become a space.
 		if t.SoftLineBreak() || t.HardLineBreak() {
 			c.pendingSpace = true
-		}
-		return items
-	case gmast.KindEmphasis:
-		child := node.FirstChild()
-		childNode := astNode.AddChild(TagEmphasis)
-		for child != nil {
-			items = c.AppendInlineNode(items, child, childNode)
-			child = child.NextSibling()
-		}
-		return items
-	case gmast.KindStrong:
-		child := node.FirstChild()
-		childNode := astNode.AddChild(TagStrong)
-		for child != nil {
-			items = c.AppendInlineNode(items, child, childNode)
-			child = child.NextSibling()
 		}
 		return items
 	case gmast.KindCodeSpan:
@@ -417,40 +388,26 @@ func (c *MarkdownCompiler) AppendInlineNode(items []Inline, node gmast.Node, ast
 			glued:        glued,
 		})
 	case gmast.KindLink:
-		link := node.(*gmast.Link)
-		child := node.FirstChild()
-		childNode := astNode.AddChild(TagLink)
-		childNode.Destination = link.Destination.Value(c.source)
-		for child != nil {
-			items = c.AppendInlineNode(items, child, childNode)
-			child = child.NextSibling()
-		}
-		return items
+		linkNode := astNode.AddChild(TagLink)
+		linkNode.Destination = node.(*gmast.Link).Destination.Value(c.source)
+		return c.appendChildren(items, node, linkNode)
 	case gmast.KindAutoLink:
 		al := node.(*gmast.AutoLink)
 		childNode := astNode.AddChild(TagLink)
 		childNode.Destination = al.Destination.Value(c.source)
 		return c.appendString(items, al.Label.Value(c.source), childNode)
-	case extast.KindStrikethrough:
-		child := node.FirstChild()
-		childNode := astNode.AddChild(TagStrikethrough)
-		for child != nil {
-			items = c.AppendInlineNode(items, child, childNode)
-			child = child.NextSibling()
-		}
-		return items
 	default:
 		return c.appendUnsupportedInline(items, node, astNode)
 	}
 }
 
-// appendUnsupportedInline is AppendInlineNode's fallback for any inline
+// appendUnsupportedInline is appendInline's fallback for any inline
 // Markdown construct whynot doesn't have a case for - the inline
 // counterpart to compileUnsupportedBlock. Inline content can't hold a
 // block-level box, so the raw source (where available) is spliced into
 // the surrounding paragraph as ordinary words, styled in
 // StyleSheet.UnsupportedColor via TagUnsupported.
-func (c *MarkdownCompiler) appendUnsupportedInline(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
+func (c *compiler) appendUnsupportedInline(items []Inline, node gmast.Node, astNode *ASTNode) []Inline {
 	text := fmt.Sprintf("(unsupported: %s)", node.Kind())
 	if raw, ok := node.(*gmast.RawHTML); ok {
 		text = raw.Value.Value(c.source)
@@ -527,11 +484,11 @@ const nbsp = ' '
 // Each produced item's Glued reflects c.pendingSpace, the whitespace
 // carried over from wherever the previous item (in this call or an
 // earlier one, however many sibling nodes back) left off - see
-// MarkdownCompiler.pendingSpace's own doc comment for why that carry is
+// compiler.pendingSpace's own doc comment for why that carry is
 // needed at all (a whitespace-only Text node between two non-text
 // siblings, e.g. "**a** *b*", produces zero items of its own here but
 // still needs to un-glue whatever comes next).
-func (c *MarkdownCompiler) appendString(items []Inline, s string, node *ASTNode) []Inline {
+func (c *compiler) appendString(items []Inline, s string, node *ASTNode) []Inline {
 	runes := []rune(s)
 	for i := 0; i < len(runes); {
 		switch r := runes[i]; {

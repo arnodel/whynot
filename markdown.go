@@ -1,8 +1,8 @@
 package whynot
 
-// MarkdownCompiler compiles Markdown source into a Block/ASTNode tree -
-// structure only, no appearance. See Parse.
-type MarkdownCompiler struct {
+// compiler compiles Markdown source into a Block/ASTNode tree - structure
+// only, no appearance. See Parse.
+type compiler struct {
 	source      []byte
 	highlighter Highlighter
 
@@ -31,7 +31,7 @@ type MarkdownCompiler struct {
 // pluginFor returns the first registered CodeBlockPlugin that handles
 // language, or nil if none do - resolved once per distinct language and
 // cached from then on.
-func (c *MarkdownCompiler) pluginFor(language string) CodeBlockPlugin {
+func (c *compiler) pluginFor(language string) CodeBlockPlugin {
 	if p, ok := c.pluginCache[language]; ok {
 		return p
 	}
@@ -46,4 +46,26 @@ func (c *MarkdownCompiler) pluginFor(language string) CodeBlockPlugin {
 	}
 	c.pluginCache[language] = nil
 	return nil
+}
+
+// ParseOption customizes Parse - see WithSyntaxHighlighter and
+// WithCodeBlockPlugin.
+type ParseOption func(*compiler)
+
+// WithSyntaxHighlighter sets the Highlighter Parse uses to color code
+// blocks token-by-token. Unset, code blocks render in one flat color.
+func WithSyntaxHighlighter(h Highlighter) ParseOption {
+	return func(c *compiler) {
+		c.highlighter = h
+	}
+}
+
+// WithCodeBlockPlugin registers one CodeBlockPlugin - callable more
+// than once to register several; a fenced code block's language is
+// matched against them in registration order (see
+// compiler.pluginFor).
+func WithCodeBlockPlugin(p CodeBlockPlugin) ParseOption {
+	return func(c *compiler) {
+		c.codeBlockPlugins = append(c.codeBlockPlugins, p)
+	}
 }
