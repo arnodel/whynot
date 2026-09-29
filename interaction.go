@@ -40,12 +40,37 @@ type Interaction struct {
 	AnchorScrolling bool
 
 	hoverDest string
-	momentum  float64
 	lastTick  time.Time
+
+	// momentum is the page's coasting velocity after a vertical touch
+	// fling; hMomentum that of hTarget, after a sideways one.
+	momentum  float64
+	hMomentum float64
+	hTarget   Block
+
+	// The touch drag in progress - see TouchStart.
+	touchAxis    touchAxis
+	touchTarget  Block // the sideways-scrolling block it started on, if any
+	touchPending image.Point
 }
 
+// touchAxis is what a touch drag scrolls.
+type touchAxis int
+
+const (
+	touchNone       touchAxis = iota // no touch, or one that started outside Bounds
+	touchUndecided                   // on a sideways-scrolling block, not moved far enough to tell
+	touchVertical                    // the page
+	touchHorizontal                  // touchTarget
+)
+
+// touchAxisLockDistance is how far, in logical pixels, a touch starting
+// on a sideways-scrolling block moves before its dominant direction
+// decides whether it scrolls the block or the page.
+const touchAxisLockDistance = 10
+
 // tick returns real elapsed seconds since the last call (0 on the very
-// first), updating the internal clock - shared by AccumulateMomentum and
+// first), updating the internal clock - shared by touch drags and
 // Momentum, since both need real time, not tick count, to stay correct
 // regardless of frame rate.
 func (in *Interaction) tick(now time.Time) float64 {
@@ -65,18 +90,96 @@ func (in *Interaction) Scroll(cx, cy int, scrollDelta float64) {
 	}
 }
 
-// AccumulateMomentum blends scrollDelta - this tick's touch-drag amount,
-// already in View.Scroll's units - into the coasting velocity Momentum
-// applies once the touch ends. Call every tick an active touch drag is
-// actually scrolling the document (not, say, dragging a scrollbar
-// instead - that's the caller's call, via whether it calls this at all).
-func (in *Interaction) AccumulateMomentum(scrollDelta float64, now time.Time) {
+// TouchStart begins a touch drag at cx, cy, stopping any fling. A drag
+// starting on a block that scrolls sideways locks to whichever direction
+// it first clearly moves in, scrolling the block or the page; any other
+// drag inside Bounds scrolls the page, and one outside Bounds nothing.
+func (in *Interaction) TouchStart(cx, cy int, now time.Time) {
+	in.CancelMomentum()
+	in.tick(now)
+	in.touchPending = image.Point{}
+	in.touchTarget = nil
+	p := image.Pt(cx, cy)
+	switch {
+	case !p.In(in.Bounds):
+		in.touchAxis = touchNone
+	case in.hscroll() != nil:
+		if a, ok := in.hscroll().areaAt(p.Sub(in.Bounds.Min)); ok {
+			in.touchTarget = a.source
+			in.touchAxis = touchUndecided
+			return
+		}
+		fallthrough
+	default:
+		in.touchAxis = touchVertical
+	}
+}
+
+// TouchDrag applies one frame of the touch drag begun by TouchStart: dx,
+// dy is how far the finger moved since the last frame ("content follows
+// the finger": positive moves content right/down). Call every frame the
+// touch is down, even without movement, so a finger held still before
+// lifting leaves no fling.
+func (in *Interaction) TouchDrag(dx, dy int, now time.Time) {
+	if in.touchAxis == touchUndecided {
+		in.touchPending = in.touchPending.Add(image.Pt(dx, dy))
+		d := in.touchPending
+		if math.Hypot(float64(d.X), float64(d.Y)) < touchAxisLockDistance*in.View.ctx.Scale {
+			in.tick(now)
+			return
+		}
+		// Apply everything moved so far, along the locked axis.
+		dx, dy = d.X, d.Y
+		if abs(dx) > abs(dy) {
+			in.touchAxis = touchHorizontal
+		} else {
+			in.touchAxis = touchVertical
+		}
+	}
+	switch in.touchAxis {
+	case touchVertical:
+		in.View.Scroll(float64(dy))
+		in.accumulate(&in.momentum, float64(dy), now)
+	case touchHorizontal:
+		in.scrollTarget(in.touchTarget, float64(dx))
+		in.hTarget = in.touchTarget
+		in.accumulate(&in.hMomentum, float64(dx), now)
+	}
+}
+
+// TouchEnd ends the touch drag; a fling keeps coasting (see Momentum).
+func (in *Interaction) TouchEnd() {
+	in.touchAxis = touchNone
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func (in *Interaction) hscroll() *hscrollState {
+	return in.View.ctx.hscroll
+}
+
+// scrollTarget scrolls the sideways-scrolling block target by dx, showing
+// its scrollbar (there's no hover on touch).
+func (in *Interaction) scrollTarget(target Block, dx float64) {
+	if s := in.hscroll(); s != nil && target != nil {
+		s.scrollSource(target, dx)
+		s.reveal(target, in.View.ctx.Time)
+	}
+}
+
+// accumulate blends delta, moved since the last tick, into the coasting
+// velocity v.
+func (in *Interaction) accumulate(v *float64, delta float64, now time.Time) {
 	dt := in.tick(now)
 	if dt <= 0 {
 		return
 	}
-	velocity := scrollDelta / dt
-	in.momentum = in.momentum*0.5 + velocity*0.5
+	*v = *v*0.5 + delta/dt*0.5
 }
 
 // CancelMomentum stops any in-progress coasting outright - call on a
@@ -84,13 +187,26 @@ func (in *Interaction) AccumulateMomentum(scrollDelta float64, now time.Time) {
 // which should kill a fling rather than let it keep decaying.
 func (in *Interaction) CancelMomentum() {
 	in.momentum = 0
+	in.hMomentum = 0
 }
 
 // Moving reports whether there's a velocity fast enough for Momentum to
-// act on. A caller whose frames are event-driven (like Gio's) must keep
-// requesting frames while it's true, or a released fling stops dead.
+// act on.
 func (in *Interaction) Moving() bool {
-	return math.Abs(in.momentum) >= interactionMomentumMinVelocity
+	return fastEnough(in.momentum) || fastEnough(in.hMomentum)
+}
+
+// Animating reports whether frames must keep coming even without input:
+// while there's a fling to coast (see Momentum), or a scrollbar fading
+// out. A caller whose frames are event-driven (like Gio's) must keep
+// requesting frames while it's true, or the animation stops dead.
+func (in *Interaction) Animating() bool {
+	s := in.hscroll()
+	return in.Moving() || s != nil && s.animating(in.View.ctx.Time)
+}
+
+func fastEnough(v float64) bool {
+	return math.Abs(v) >= interactionMomentumMinVelocity
 }
 
 // Momentum applies one tick of decay to any velocity left over from a
@@ -98,21 +214,28 @@ func (in *Interaction) Moving() bool {
 // touch/mouse-wheel input, so a released fling keeps coasting.
 func (in *Interaction) Momentum(now time.Time) {
 	dt := in.tick(now)
-	if !in.Moving() {
+	in.momentum = coast(in.momentum, dt, in.View.Scroll)
+	in.hMomentum = coast(in.hMomentum, dt, func(d float64) { in.scrollTarget(in.hTarget, d) })
+}
+
+// coast applies dt seconds of velocity v through apply, and returns v
+// decayed over that time - 0 once it's too slow to act on.
+func coast(v, dt float64, apply func(float64)) float64 {
+	if !fastEnough(v) {
 		// Dropped before applying any of it: a slow velocity left over a
 		// long gap between calls would otherwise turn into a jump.
-		in.momentum = 0
-		return
+		return 0
 	}
 	if dt <= 0 {
-		return
+		return v
 	}
-	delta := in.momentum * dt
-	in.momentum *= math.Pow(interactionMomentumDecayPerSecond, dt)
-	if math.Abs(in.momentum) < interactionMomentumMinVelocity {
-		in.momentum = 0
+	delta := v * dt
+	v *= math.Pow(interactionMomentumDecayPerSecond, dt)
+	if !fastEnough(v) {
+		v = 0
 	}
-	in.View.Scroll(delta)
+	apply(delta)
+	return v
 }
 
 // Reset clears hover state that shouldn't carry over from whatever View

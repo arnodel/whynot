@@ -22,6 +22,13 @@ const (
 	hscrollMinThumbWidth = 24
 )
 
+// How long a scrollbar revealed by touch panning (there's no hover on
+// touch) stays fully visible after the last movement, then fades out.
+const (
+	hscrollRevealHold = 600 * time.Millisecond
+	hscrollRevealFade = 300 * time.Millisecond
+)
+
 // ScrollBox shows a window, width wide, onto content that's wider,
 // scrolled horizontally by the offset its View keeps for source. An edge
 // fades into the page background wherever there's hidden content, and a
@@ -120,11 +127,12 @@ func (b *ScrollBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 		contentWidth: b.contentWidth(),
 		scale:        b.scale,
 	})
-	if b.state.hovered == b.source || b.state.dragging == b.source {
+	if opacity := b.state.barOpacity(b.source, now); opacity > 0 {
 		thumb := hscrollThumb(box, clipped.Bounds(), b.contentWidth(), offset, b.scale)
 		pressed := b.state.dragging == b.source
-		dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(),
-			scrollbarColor(b.styleSheet, b.state.barHovered || pressed, pressed))
+		c := color.NRGBAModel.Convert(scrollbarColor(b.styleSheet, b.state.barHovered || pressed, pressed)).(color.NRGBA)
+		c.A = uint8(float64(c.A) * opacity)
+		dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(), c)
 	}
 }
 
@@ -191,6 +199,11 @@ type hscrollState struct {
 	barHovered bool  // whether the pointer is on hovered's scrollbar
 	dragging   Block // whose scrollbar is being dragged, or nil
 	grab       int   // pointer x minus thumb x, while dragging
+
+	// revealed's scrollbar shows until revealUntil (in RenderingContext.
+	// Time's clock), fading out at the end - see reveal.
+	revealed    Block
+	revealUntil time.Duration
 }
 
 // hscrollArea is where a ScrollBox was drawn, in View coordinates.
@@ -318,4 +331,37 @@ func (s *hscrollState) dragTo(x int) {
 
 func (s *hscrollState) endDrag() {
 	s.dragging = nil
+}
+
+// scrollSource scrolls source's box by dx, as scrollAt does, wherever it
+// is now - for a touch pan, which sticks to the block it started on.
+func (s *hscrollState) scrollSource(source Block, dx float64) {
+	if a, ok := s.areaOf(source); ok {
+		s.offsets[source] = clampOffsetF(s.offsets[source]-dx, a.contentWidth-a.box.Dx())
+	}
+}
+
+// reveal shows source's scrollbar from now, for touch panning, where
+// there's no hover to show it.
+func (s *hscrollState) reveal(source Block, now time.Duration) {
+	s.revealed = source
+	s.revealUntil = now + hscrollRevealHold + hscrollRevealFade
+}
+
+// barOpacity is how visible source's scrollbar is at now, from 0
+// (hidden) to 1.
+func (s *hscrollState) barOpacity(source Block, now time.Duration) float64 {
+	switch {
+	case s.hovered == source || s.dragging == source:
+		return 1
+	case s.revealed != source || now >= s.revealUntil:
+		return 0
+	}
+	return min(1, float64(s.revealUntil-now)/float64(hscrollRevealFade))
+}
+
+// animating reports whether a revealed scrollbar is still showing at
+// now, so frames must keep coming for it to fade out.
+func (s *hscrollState) animating(now time.Duration) bool {
+	return s.revealed != nil && now < s.revealUntil
 }
