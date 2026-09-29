@@ -326,3 +326,24 @@ func TestTouchPanRevealsScrollbarThenFades(t *testing.T) {
 		t.Error("scrollbar still animating after the fade ended")
 	}
 }
+
+// TestTouchEndUnhoversPannedBlock checks that a touch pan doesn't leave
+// its block hovered - which would keep its scrollbar at full opacity
+// instead of fading - even though the Panel passed the touch through
+// HoverAndClick while the finger was down.
+func TestTouchEndUnhoversPannedBlock(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.HoverAndClick(start.X, start.Y, true)
+	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
+	in.TouchEnd()
+
+	fadeMid := v.ctx.Time + hscrollRevealHold + hscrollRevealFade/2
+	if got := v.ctx.hscroll.barOpacity(area.source, fadeMid); got >= 1 {
+		t.Errorf("scrollbar opacity partway through the fade = %v, want less than 1 (not stuck hovered)", got)
+	}
+}

@@ -65,3 +65,47 @@ func TestPanelTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 		t.Errorf("top = %d after 5 frames following release, want more than %d (still coasting)", got, released)
 	}
 }
+
+// TestPanelTouchLeavesNoHover checks that a tap doesn't leave anything
+// hovered once the finger lifts. There's no hover on touch, and Gio sends
+// no further pointer events to move it off again - so a tapped link would
+// stay highlighted, and a panned code block keep its scrollbar showing.
+func TestPanelTouchLeavesNoHover(t *testing.T) {
+	doc := whynot.Parse([]byte(strings.Repeat("[a link](#nowhere) ", 20)))
+	bounds := image.Rect(0, 0, 400, 300)
+	panel := NewPanel(whynot.NewView(doc, whynot.NewGoFontFaceSelector(72)), New(), bounds)
+	var hovered []string
+	panel.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
+
+	var router input.Router
+	var ops op.Ops
+	frame := func() {
+		ops.Reset()
+		gtx := layout.Context{Ops: &ops, Source: router.Source(), Now: time.Now()}
+		panel.Update(gtx)
+		panel.Draw(gtx)
+		router.Frame(&ops)
+	}
+	var link f32.Point
+	for y := 0; y < 100 && link == (f32.Point{}); y++ {
+		for x := 0; x < 200; x++ {
+			if _, ok := panel.View().LinkAt(x, y); ok {
+				link = f32.Pt(float32(x), float32(y))
+				break
+			}
+		}
+	}
+	if link == (f32.Point{}) {
+		t.Fatal("test setup: no link found")
+	}
+
+	frame()
+	router.Queue(pointer.Event{Kind: pointer.Press, Source: pointer.Touch, Position: link})
+	frame()
+	router.Queue(pointer.Event{Kind: pointer.Release, Source: pointer.Touch, Position: link})
+	frame()
+
+	if len(hovered) == 0 || hovered[len(hovered)-1] != "" {
+		t.Errorf("OnLinkHover calls = %q, want the last one to clear the hover (\"\")", hovered)
+	}
+}

@@ -148,8 +148,18 @@ func (in *Interaction) TouchDrag(dx, dy int, now time.Time) {
 }
 
 // TouchEnd ends the touch drag; a fling keeps coasting (see Momentum).
+// It also clears hover: there's no hover on touch, so whatever the finger
+// was on mustn't stay hovered - a link highlighted, or a block's
+// scrollbar showing - after it lifts.
 func (in *Interaction) TouchEnd() {
 	in.touchAxis = touchNone
+	in.View.Hover(-1, -1)
+	if in.hoverDest != "" {
+		in.hoverDest = ""
+		if in.OnLinkHover != nil {
+			in.OnLinkHover("")
+		}
+	}
 }
 
 func abs(n int) int {
