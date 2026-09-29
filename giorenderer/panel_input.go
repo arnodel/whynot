@@ -40,6 +40,7 @@ func (p *Panel) Update(gtx layout.Context) {
 	mouseJustPressed := false
 	gotEvent := false
 	touchReleased := false
+	lastWasTouch := false
 	// drag totals this frame's touch movement, applied once per frame
 	// (TouchDrag): every event in a frame shares the same now, so per
 	// event only the first would count toward a fling's velocity.
@@ -60,6 +61,7 @@ func (p *Panel) Update(gtx layout.Context) {
 			continue
 		}
 		gotEvent = true
+		lastWasTouch = pe.Source == pointer.Touch
 		pos = image.Pt(int(pe.Position.X), int(pe.Position.Y))
 
 		switch pe.Kind {
@@ -112,9 +114,6 @@ func (p *Panel) Update(gtx layout.Context) {
 		// Also while the finger is held still (drag 0), so the velocity
 		// decays toward 0 before release rather than flinging.
 		p.interaction.TouchDrag(drag.X, drag.Y, now)
-		if touchReleased {
-			p.interaction.TouchEnd()
-		}
 	case !justPressed:
 		p.interaction.Momentum(now)
 	}
@@ -129,7 +128,14 @@ func (p *Panel) Update(gtx layout.Context) {
 	}
 
 	// A scrollbar drag owns the pointer: no hover or click underneath.
-	if gotEvent && !p.interaction.DragHorizontalScrollbar(pos.X, pos.Y, p.mouseDown, mouseJustPressed) {
+	// A touch only presses (a tap on a link): it doesn't hover.
+	if gotEvent && (!lastWasTouch || justPressed) &&
+		!p.interaction.DragHorizontalScrollbar(pos.X, pos.Y, p.mouseDown, mouseJustPressed) {
 		p.interaction.HoverAndClick(pos.X, pos.Y, justPressed)
+	}
+	// After HoverAndClick, which a tap within one frame also goes through,
+	// so the tap leaves nothing hovered.
+	if touchReleased {
+		p.interaction.TouchEnd()
 	}
 }
