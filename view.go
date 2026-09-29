@@ -288,8 +288,13 @@ func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
 // handling a click at the same position doesn't need a second HitTest.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
 	if v.ctx.hscroll != nil {
-		v.ctx.hscroll.hover(image.Pt(x, y))
+		v.ctx.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
+	return v.hoverLink(x, y)
+}
+
+// hoverLink is Hover for links only.
+func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
 	if node != v.ctx.HighlightNode {
 		if v.ctx.HighlightNode != nil && v.stack.laidOut() {
@@ -313,7 +318,7 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 // start, matching Scroll's convention for dy. Reports whether there was
 // such a block. Works from what the last Draw drew.
 func (v *View) ScrollHorizontal(x, y int, dx float64) bool {
-	return v.ctx.hscroll != nil && v.ctx.hscroll.scrollAt(image.Pt(x, y), dx)
+	return v.ctx.hscroll != nil && v.ctx.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time)
 }
 
 // LinkAt reports the destination URL of the link at document position

@@ -270,12 +270,16 @@ func (in *Interaction) HoverAndClick(cx, cy int, justPressed bool) {
 	var dest string
 	var hasLink bool
 	if cursor.In(in.Bounds) {
-		dest, hasLink = in.View.Hover(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
-		if s := in.hscroll(); in.touching && s != nil {
-			// Touch has no hover: a block's scrollbar shows only while
-			// panning it sideways (see TouchDrag), not just for being
-			// under the finger.
-			s.hover(image.Pt(-1, -1))
+		if in.touching {
+			// Touch has no hover, only taps on links: a block's
+			// scrollbar shows only while panning it sideways (see
+			// TouchDrag), not for being under the finger.
+			dest, hasLink = in.View.hoverLink(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
+			if s := in.hscroll(); s != nil {
+				s.unhover()
+			}
+		} else {
+			dest, hasLink = in.View.Hover(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
 		}
 	} else {
 		// (-1, -1) can't land on anything - only ever clears a
@@ -324,8 +328,8 @@ func (in *Interaction) DragHorizontalScrollbar(cx, cy int, down, justPressed boo
 	p := image.Pt(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
 	switch {
 	case s.dragging != nil && !down:
-		s.endDrag()
-		s.hover(p)
+		s.endDrag(in.View.ctx.Time)
+		s.hover(p, in.View.ctx.Time)
 		return true
 	case s.dragging != nil:
 		s.dragTo(p.X)

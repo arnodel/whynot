@@ -22,8 +22,8 @@ const (
 	hscrollMinThumbWidth = 24
 )
 
-// How long a scrollbar revealed by touch panning (there's no hover on
-// touch) stays fully visible after the last movement, then fades out.
+// How long a revealed scrollbar - by scrolling its block, or moving the
+// pointer over it - stays fully visible after that, then fades out.
 const (
 	hscrollRevealHold = 600 * time.Millisecond
 	hscrollRevealFade = 300 * time.Millisecond
@@ -32,7 +32,9 @@ const (
 // ScrollBox shows a window, width wide, onto content that's wider,
 // scrolled horizontally by the offset its View keeps for source. An edge
 // fades into the page background wherever there's hidden content, and a
-// scrollbar is drawn over the bottom edge while the pointer is over it.
+// scrollbar is drawn over the bottom edge while it's being scrolled or the
+// pointer moves over it, fading out once idle (see hscrollState.
+// barOpacity).
 type ScrollBox struct {
 	inner  BlockLayout
 	width  int
@@ -195,8 +197,9 @@ type hscrollState struct {
 	areas  []hscrollArea
 	origin image.Point
 
-	hovered    Block // whose box is under the pointer, or nil
-	barHovered bool  // whether the pointer is on hovered's scrollbar
+	hovered    Block       // whose box is under the pointer, or nil
+	barHovered bool        // whether the pointer is on hovered's scrollbar
+	pointer    image.Point // where hover last saw the pointer
 	dragging   Block // whose scrollbar is being dragged, or nil
 	grab       int   // pointer x minus thumb x, while dragging
 
@@ -268,29 +271,41 @@ func (s *hscrollState) barZone(a hscrollArea) image.Rectangle {
 	return image.Rect(a.box.Min.X, thumb.Min.Y-int(hscrollBarInset*a.scale), a.box.Max.X, a.visible.Max.Y)
 }
 
-// hover updates which box, and whether its scrollbar, is under p. The
-// box being dragged stays hovered until the drag ends.
-func (s *hscrollState) hover(p image.Point) {
+// hover updates which box, and whether its scrollbar, is under p at now.
+// Moving over a box reveals its scrollbar; a resting pointer lets it fade.
+// The box being dragged stays hovered until the drag ends.
+func (s *hscrollState) hover(p image.Point, now time.Duration) {
+	moved := p != s.pointer
+	s.pointer = p
 	if s.dragging != nil {
 		return
 	}
 	a, ok := s.areaAt(p)
 	if !ok {
-		s.hovered, s.barHovered = nil, false
+		s.unhover()
 		return
 	}
 	s.hovered = a.source
 	s.barHovered = p.In(s.barZone(a))
+	if moved {
+		s.reveal(a.source, now)
+	}
+}
+
+// unhover forgets any hovered box, without revealing anything.
+func (s *hscrollState) unhover() {
+	s.hovered, s.barHovered = nil, false
 }
 
 // scrollAt scrolls the box at p by dx (positive moves the content right,
-// revealing its start), reporting whether there was one.
-func (s *hscrollState) scrollAt(p image.Point, dx float64) bool {
+// revealing its start) at now, reporting whether there was one.
+func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) bool {
 	a, ok := s.areaAt(p)
 	if !ok {
 		return false
 	}
 	s.offsets[a.source] = clampOffsetF(s.offsets[a.source]-dx, a.contentWidth-a.box.Dx())
+	s.reveal(a.source, now)
 	return true
 }
 
@@ -329,7 +344,10 @@ func (s *hscrollState) dragTo(x int) {
 	s.offsets[a.source] = clampOffsetF(ratio*float64(maxOffset), maxOffset)
 }
 
-func (s *hscrollState) endDrag() {
+// endDrag ends a scrollbar drag at now; the scrollbar then fades out
+// like after any other scroll, unless the pointer stays on it.
+func (s *hscrollState) endDrag(now time.Duration) {
+	s.reveal(s.dragging, now)
 	s.dragging = nil
 }
 
@@ -341,18 +359,19 @@ func (s *hscrollState) scrollSource(source Block, dx float64) {
 	}
 }
 
-// reveal shows source's scrollbar from now, for touch panning, where
-// there's no hover to show it.
+// reveal shows source's scrollbar from now, fading out after
+// hscrollRevealHold.
 func (s *hscrollState) reveal(source Block, now time.Duration) {
 	s.revealed = source
 	s.revealUntil = now + hscrollRevealHold + hscrollRevealFade
 }
 
 // barOpacity is how visible source's scrollbar is at now, from 0
-// (hidden) to 1.
+// (hidden) to 1: fully while being dragged or pointed at, and otherwise
+// for a while after it's revealed (see reveal).
 func (s *hscrollState) barOpacity(source Block, now time.Duration) float64 {
 	switch {
-	case s.hovered == source || s.dragging == source:
+	case s.dragging == source, s.hovered == source && s.barHovered:
 		return 1
 	case s.revealed != source || now >= s.revealUntil:
 		return 0
