@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -35,6 +36,7 @@ func (p *Panel) Update(gtx layout.Context) {
 	now := time.Now()
 	pos := image.Pt(-1, -1)
 	justPressed := false
+	mouseJustPressed := false
 	gotEvent := false
 	// dragDelta totals this frame's touch drag. Momentum is accumulated
 	// once per frame from it, not per event: every event in a frame
@@ -45,6 +47,7 @@ func (p *Panel) Update(gtx layout.Context) {
 		e, ok := gtx.Source.Event(pointer.Filter{
 			Target:  p,
 			Kinds:   pointer.Press | pointer.Release | pointer.Cancel | pointer.Move | pointer.Drag | pointer.Scroll,
+			ScrollX: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 			ScrollY: pointer.ScrollRange{Min: -1 << 20, Max: 1 << 20},
 		})
 		if !ok {
@@ -62,8 +65,13 @@ func (p *Panel) Update(gtx layout.Context) {
 			justPressed = true
 			p.dragging = pe.Source == pointer.Touch
 			p.lastDragPos = pos
+			if pe.Source == pointer.Mouse {
+				mouseJustPressed = true
+				p.mouseDown = true
+			}
 		case pointer.Release, pointer.Cancel:
 			p.dragging = false
+			p.mouseDown = false
 		case pointer.Drag:
 			if p.dragging {
 				// "Content follows your finger" - see whynot.Interaction's
@@ -81,8 +89,15 @@ func (p *Panel) Update(gtx layout.Context) {
 			// moves down - see ScrollDown) - negated here, not inside
 			// Interaction, since that's specific to Gio's own event
 			// shape, not something ebitenrenderer's wheel path shares.
+			sx, sy := pe.Scroll.X, pe.Scroll.Y
+			if pe.Modifiers.Contain(key.ModShift) {
+				// Shift+wheel scrolls sideways. Some platforms (macOS)
+				// already report it as horizontal, leaving sy 0.
+				sx, sy = sx+sy, 0
+			}
 			p.interaction.CancelMomentum()
-			p.interaction.Scroll(pos.X, pos.Y, -float64(pe.Scroll.Y))
+			p.interaction.Scroll(pos.X, pos.Y, -float64(sy))
+			p.interaction.ScrollHorizontal(pos.X, pos.Y, -float64(sx))
 		}
 	}
 
@@ -107,7 +122,8 @@ func (p *Panel) Update(gtx layout.Context) {
 		p.OnPress()
 	}
 
-	if gotEvent {
+	// A scrollbar drag owns the pointer: no hover or click underneath.
+	if gotEvent && !p.interaction.DragHorizontalScrollbar(pos.X, pos.Y, p.mouseDown, mouseJustPressed) {
 		p.interaction.HoverAndClick(pos.X, pos.Y, justPressed)
 	}
 }

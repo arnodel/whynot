@@ -27,16 +27,35 @@ func (p *Panel) Update() {
 	}
 
 	cx, cy := ebiten.CursorPosition()
-	_, wheelDy := ebiten.Wheel()
+	wheelDx, wheelDy := ebiten.Wheel()
+	if ebiten.IsKeyPressed(ebiten.KeyShift) {
+		// Shift+wheel scrolls sideways. Some platforms (macOS) already
+		// report it as horizontal wheel movement, leaving wheelDy 0.
+		wheelDx, wheelDy = wheelDx+wheelDy, 0
+	}
 	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 
-	if wheelDy != 0 || justPressed {
+	if wheelDx != 0 || wheelDy != 0 || justPressed {
 		p.interaction.CancelMomentum()
 	} else {
 		p.interaction.Momentum(now)
 	}
+	p.syncInteraction()
+	if p.interaction.DragHorizontalScrollbar(cx, cy, mouseDown, justPressed) {
+		return
+	}
+	p.interaction.ScrollHorizontal(cx, cy, wheelDx*p.scale*2)
 	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
+}
+
+// syncInteraction copies the Panel's current settings into interaction.
+func (p *Panel) syncInteraction() {
+	p.interaction.View = p.view
+	p.interaction.Bounds = p.bounds
+	p.interaction.OnLinkClick = p.OnLinkClick
+	p.interaction.OnLinkHover = p.OnLinkHover
+	p.interaction.AnchorScrolling = p.anchorScrolling
 }
 
 // update takes this tick's input as parameters rather than reading
@@ -46,12 +65,7 @@ func (p *Panel) Update() {
 // giorenderer.Panel) - only the scrollbar-drag check stays here, since
 // each backend represents its scrollbar too differently to share.
 func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed bool) {
-	p.interaction.View = p.view
-	p.interaction.Bounds = p.bounds
-	p.interaction.OnLinkClick = p.OnLinkClick
-	p.interaction.OnLinkHover = p.OnLinkHover
-	p.interaction.AnchorScrolling = p.anchorScrolling
-
+	p.syncInteraction()
 	p.interaction.Scroll(cx, cy, scrollDelta)
 
 	if p.scrollbarEnabled && p.updateScrollbarDrag(cx, cy, pointerDown, justPressed) {

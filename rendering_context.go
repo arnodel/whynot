@@ -22,6 +22,10 @@ type RenderingContext struct {
 	// its source code block.
 	ImageCache *ImageCache
 
+	// hscroll is the View's horizontal scrolling state, shared with the
+	// ScrollBoxes laid out under this context; nil outside a View.
+	hscroll *hscrollState
+
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never
 	// compared against a wall-clock timestamp), set every View.Layout

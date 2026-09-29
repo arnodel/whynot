@@ -25,4 +25,8 @@ type Canvas interface {
 	DrawText(s string, face font.Face, x, y int, clr color.Color)
 	DrawImage(img image.Image, x, y, width, height int)
 	DrawRect(x, y, w, h int, clr color.Color)
+	// Clip returns a Canvas drawing onto the same destination, in the
+	// same coordinates, but only within r intersected with Bounds() -
+	// which is also what the returned Canvas's Bounds() reports.
+	Clip(r image.Rectangle) Canvas
 }

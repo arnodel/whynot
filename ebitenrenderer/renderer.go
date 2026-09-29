@@ -108,6 +108,12 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 	text.Draw(c.dst, s, goXFace, opts)
 }
 
+// Clip draws through a sub-image, which ebiten clips to while keeping
+// the parent's coordinates.
+func (c *Canvas) Clip(r image.Rectangle) whynot.Canvas {
+	return &Canvas{dst: c.dst.SubImage(r.Intersect(c.Bounds())).(*ebiten.Image), renderer: c.renderer}
+}
+
 func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 	vector.DrawFilledRect(c.dst, float32(x), float32(y), float32(w), float32(h), clr, false)
 }
