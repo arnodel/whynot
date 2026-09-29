@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Without this, mobile browsers lay the page out at a ~980px desktop
+     width and zoom out to fit, shrinking everything. Ebitengine adds this
+     tag itself (see cmd/whynot/web/index.html); Gio doesn't. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>giowhynot</title>
 <style>
   /* Gio's js backend creates and manages its own <canvas>/<textarea>,

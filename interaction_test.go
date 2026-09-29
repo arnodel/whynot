@@ -221,3 +221,24 @@ func TestInteractionMomentumUnscaled(t *testing.T) {
 		t.Errorf("momentum after one tick = %v, want %v", in.momentum, want)
 	}
 }
+
+// TestInteractionMomentumBelowMinimumNeverScrolls checks that a velocity
+// already below the stopping speed is dropped rather than applied: after
+// a long gap between calls (e.g. a finger held still, then lifted, with
+// no frames in between), applying it for the whole gap would jump.
+func TestInteractionMomentumBelowMinimumNeverScrolls(t *testing.T) {
+	in, v := newTestInteraction(t, strings.Repeat(longDoc, 20))
+	in.Bounds = image.Rect(0, 0, testWidth, testHeight)
+	viewport := image.Pt(testWidth, testHeight)
+	in.momentum = -(interactionMomentumMinVelocity - 1)
+
+	if in.Moving() {
+		t.Error("Moving() = true for a velocity below the minimum, want false")
+	}
+	now := time.Now()
+	in.Momentum(now)
+	in.Momentum(now.Add(3 * time.Second))
+	if got := v.VisibleViewBounds(viewport).Min.Y; got != 0 {
+		t.Errorf("VisibleViewBounds top = %d after Momentum with a below-minimum velocity, want 0 (no scroll)", got)
+	}
+}

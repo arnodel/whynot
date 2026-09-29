@@ -86,12 +86,25 @@ func (in *Interaction) CancelMomentum() {
 	in.momentum = 0
 }
 
+// Moving reports whether there's a velocity fast enough for Momentum to
+// act on. A caller whose frames are event-driven (like Gio's) must keep
+// requesting frames while it's true, or a released fling stops dead.
+func (in *Interaction) Moving() bool {
+	return math.Abs(in.momentum) >= interactionMomentumMinVelocity
+}
+
 // Momentum applies one tick of decay to any velocity left over from a
 // touch drag that's since ended. Call every tick there's no active
 // touch/mouse-wheel input, so a released fling keeps coasting.
 func (in *Interaction) Momentum(now time.Time) {
 	dt := in.tick(now)
-	if in.momentum == 0 || dt <= 0 {
+	if !in.Moving() {
+		// Dropped before applying any of it: a slow velocity left over a
+		// long gap between calls would otherwise turn into a jump.
+		in.momentum = 0
+		return
+	}
+	if dt <= 0 {
 		return
 	}
 	delta := in.momentum * dt
