@@ -19,11 +19,14 @@ func (p *Panel) Update() {
 
 	if cx, cy, dx, dy, justPressed, ok := p.touchInput(); ok {
 		p.touching = true
+		if justPressed {
+			// Before update, whose hover/click then knows it's a touch.
+			p.interaction.TouchStart(cx, cy, now)
+		}
 		// The page is scrolled by TouchDrag below, not by update.
 		p.update(cx, cy, 0, true, justPressed)
 		switch {
 		case justPressed:
-			p.interaction.TouchStart(cx, cy, now)
 		case p.draggingScrollbar:
 			p.interaction.CancelMomentum()
 		default:
