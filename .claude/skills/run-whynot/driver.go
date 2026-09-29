@@ -124,7 +124,16 @@ func (d *driver) Update() error {
 	if *settleDelay > 0 {
 		time.Sleep(*settleDelay)
 	}
-	d.guest.AdvanceTicks(*ticks)
+	// Draw after each settle tick, like a real app draws every frame:
+	// some input handling (e.g. hovering a block that scrolls sideways)
+	// works from what the last frame drew.
+	for range *ticks {
+		d.guest.AdvanceTicks(1)
+		d.guest.AdvanceFrame()
+		if !d.guest.WaitFrame() {
+			return ebiten.Termination
+		}
+	}
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is
 	// rendered, so the screen reflects the end of the run.

@@ -44,7 +44,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-w`, `-h` | `1024`, `768` | logical window size |
 | `-wheel-dy` | `-50` | wheel dy re-injected every tick of the scroll phase; negative scrolls **down** the document |
 | `-scroll-ticks` | `0` | how many ticks to hold `-wheel-dy` before releasing it; `0` skips scrolling entirely |
-| `-ticks` | `5` | settle ticks run after scrolling, immediately before the frame is captured |
+| `-ticks` | `5` | settle ticks run after scrolling, immediately before the frame is captured - each one also draws a frame, as a real app would, since some input handling (hovering a sideways-scrolling block) works from the last drawn frame |
 | `-cursor-x`, `-cursor-y` | `-1`, `-1` | cursor position (device-independent pixels, same space as `-w`/`-h`) to move to before the settle ticks; negative (either one) skips moving the cursor |
 | `-click` | `false` | press and release the left mouse button (at `-cursor-x`/`-cursor-y`) after scrolling, before the settle ticks - e.g. to follow a link under the cursor |
 | `-key` | `""` | name of an `ebiten.Key` (e.g. `Backspace`) to press and release after scrolling, before the settle ticks - e.g. to trigger cmd/whynot's back action |
