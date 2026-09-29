@@ -347,3 +347,42 @@ func TestTouchEndUnhoversPannedBlock(t *testing.T) {
 		t.Errorf("scrollbar opacity partway through the fade = %v, want less than 1 (not stuck hovered)", got)
 	}
 }
+
+// TestTouchVerticalScrollOnBlockShowsNoScrollbar checks that a touch
+// starting on a sideways-scrolling block but scrolling the page doesn't
+// show the block's scrollbar - even though the Panel passes the press
+// through HoverAndClick (for a tap on a link).
+func TestTouchVerticalScrollOnBlockShowsNoScrollbar(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.HoverAndClick(start.X, start.Y, true)
+	in.TouchDrag(0, -30, now.Add(16*time.Millisecond))
+	if got := v.ctx.hscroll.barOpacity(area.source, v.ctx.Time); got != 0 {
+		t.Errorf("scrollbar opacity while scrolling the page = %v, want 0", got)
+	}
+}
+
+// TestTouchEndStartsScrollbarFade checks that after a sideways pan, the
+// scrollbar fades out from when the finger lifts, even if it rested
+// longer than the fade takes before lifting.
+func TestTouchEndStartsScrollbarFade(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
+	// The finger rests (no frames - Gio draws none without events), then
+	// lifts after longer than the whole reveal.
+	v.Layout(300, 400, 1, v.ctx.Time+2*(hscrollRevealHold+hscrollRevealFade))
+	in.TouchEnd()
+
+	if got := v.ctx.hscroll.barOpacity(area.source, v.ctx.Time); got != 1 {
+		t.Errorf("scrollbar opacity when the finger lifts = %v, want 1 (fading from here)", got)
+	}
+}
