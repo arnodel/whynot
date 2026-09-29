@@ -2,10 +2,11 @@
 
 Runs the real `cmd/whynot` - toolbar, history, zoom, theme, syntax highlighting - in a
 browser tab via Ebitengine's own `js`/`wasm` backend, not just a demo (see
-[`examples/wasm`](../../examples/wasm) for that). Local file opening, paste-to-open, and
-"open a real webpage in the system browser" all no-op with a console message instead of
-working, since none of those map onto a browser sandbox the way they do on desktop -
-everything else (opening a Markdown document by `http(s)` URL, following links between
+[`examples/wasm`](../../examples/wasm) for that). Local file opening and paste-to-open both
+no-op with a console message instead of working, since neither maps onto a browser sandbox
+the way it does on desktop. A link to a webpage opens in a new tab rather than the system
+browser; so does any page the browser won't let this one fetch (most websites, via CORS),
+since from inside the page that's indistinguishable from a web page. Everything else (opening a Markdown document by `http(s)` URL, following links between
 documents, scrolling/resizing/zooming) works the same as the desktop app.
 
 ## Build

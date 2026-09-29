@@ -3,7 +3,8 @@
 Runs the real `cmd/giowhynot` - toolbar (including the editable address bar), history, zoom,
 theme - in a browser tab via Gio's own `js`/`wasm` backend. Local file opening and paste-to-open
 both no-op with a console message instead of working, since neither maps onto a browser sandbox
-the way it does on desktop - everything else (opening a Markdown document by `http(s)` URL,
+the way it does on desktop. A link to a webpage opens in a new tab, as in
+[`cmd/whynot/web`](../../whynot/web). Everything else (opening a Markdown document by `http(s)` URL,
 following links between documents, scrolling/resizing/zooming, editing the address bar) works the
 same as the desktop app.
 

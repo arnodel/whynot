@@ -21,7 +21,7 @@ const httpTimeout = 10 * time.Second
 // (load_notjs.go, load_js.go) use for that scheme - only the URL
 // scheme dispatch around this differs between platforms (a local
 // file: scheme on desktop, nothing on the web). An http(s) response
-// whose Content-Type is HTML fails with *htmlContentError rather than
+// whose Content-Type is HTML fails with *webPageError rather than
 // being fed straight into the Markdown parser (whynot has no way to
 // tell HTML apart from Markdown itself); any other clearly-non-Markdown
 // Content-Type is just rejected outright, since it's not a web page
@@ -32,7 +32,7 @@ func fetchDocument(location *url.URL) ([]byte, error) {
 	client := http.Client{Timeout: httpTimeout}
 	resp, err := client.Get(location.String())
 	if err != nil {
-		return nil, err
+		return nil, &requestError{err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -44,7 +44,7 @@ func fetchDocument(location *url.URL) ([]byte, error) {
 			case "text/plain", "text/markdown":
 				// Proceed - read the body below.
 			case "text/html", "application/xhtml+xml":
-				return nil, &htmlContentError{url: location.String()}
+				return nil, &webPageError{url: location.String()}
 			default:
 				return nil, fmt.Errorf("%s: not Markdown (Content-Type: %s)", location, mediaType)
 			}
@@ -71,18 +71,27 @@ func fetchImage(location *url.URL) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-// htmlContentError means LoadDocument found an http(s) response whose
-// Content-Type is HTML, not a fetch failure or a genuinely unreadable
-// one - App.Follow/Reload/Paste offer to open the URL in the system's
-// own browser instead of just reporting an error, since it's
-// presumably a real webpage rather than a broken link.
-type htmlContentError struct {
+// webPageError means LoadDocument found a web page rather than a
+// Markdown document - an http(s) response whose Content-Type is HTML, or
+// in the browser build, a page it isn't allowed to fetch (see
+// load_js.go). App.Follow/Reload/Navigate open it in a web browser
+// instead of just reporting an error.
+type webPageError struct {
 	url string
 }
 
-func (e *htmlContentError) Error() string {
+func (e *webPageError) Error() string {
 	return fmt.Sprintf("%s looks like a web page, not Markdown", e.url)
 }
+
+// requestError means fetchDocument's request itself failed: no response
+// at all, as opposed to an error status or an unsuitable Content-Type.
+type requestError struct {
+	err error
+}
+
+func (e *requestError) Error() string { return e.err.Error() }
+func (e *requestError) Unwrap() error { return e.err }
 
 // resolveAgainst resolves ref against base, the way a relative link or
 // image src in a document is meant to be interpreted - relative to

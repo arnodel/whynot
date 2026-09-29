@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -41,7 +42,16 @@ func LoadDocument(location *url.URL) ([]byte, error) {
 	case "whynot":
 		return renderWelcome(), nil
 	case "http", "https":
-		return fetchDocument(location)
+		source, err := fetchDocument(location)
+		var reqErr *requestError
+		if errors.As(err, &reqErr) {
+			// Most sites don't allow other sites' pages to fetch them
+			// (CORS), and in a browser that failure is indistinguishable
+			// from an unreachable server. Either way, a real browser tab
+			// is the right place for it: it shows the page, or why not.
+			return nil, &webPageError{url: location.String()}
+		}
+		return source, err
 	default:
 		return nil, fmt.Errorf("unsupported link scheme %q", location.Scheme)
 	}
