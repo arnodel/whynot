@@ -153,17 +153,17 @@ func TestInteractionMomentum(t *testing.T) {
 	in.Bounds = image.Rect(0, 0, testWidth, testHeight)
 	viewport := image.Pt(testWidth, testHeight)
 
-	// No time passed yet - AccumulateMomentum should record nothing to
-	// decay from.
+	// No fling yet - nothing to coast.
 	in.Momentum(time.Now())
 	if got := v.VisibleViewBounds(viewport).Min.Y; got != 0 {
 		t.Fatalf("VisibleViewBounds top after Momentum with none accumulated = %d, want 0", got)
 	}
 
 	now := time.Now()
-	in.AccumulateMomentum(-600, now) // dt=0 on the very first call - no-op
+	in.TouchStart(10, 10, now)
 	now = now.Add(100 * time.Millisecond)
-	in.AccumulateMomentum(-60, now) // -60px over 100ms = -600px/s
+	in.TouchDrag(0, -60, now) // -60px over 100ms = -600px/s
+	in.TouchEnd()
 
 	before := v.VisibleViewBounds(viewport).Min.Y
 	now = now.Add(100 * time.Millisecond)
@@ -186,9 +186,10 @@ func TestInteractionMomentumDecaysToZero(t *testing.T) {
 	in.Bounds = image.Rect(0, 0, testWidth, testHeight)
 
 	now := time.Now()
-	in.AccumulateMomentum(-100, now)
+	in.TouchStart(10, 10, now)
 	now = now.Add(100 * time.Millisecond)
-	in.AccumulateMomentum(-6000, now) // a strong flick
+	in.TouchDrag(0, -6000, now) // a strong flick
+	in.TouchEnd()
 
 	for i := 0; i < 1000 && in.momentum != 0; i++ {
 		now = now.Add(500 * time.Millisecond)

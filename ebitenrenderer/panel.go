@@ -75,6 +75,9 @@ type Panel struct {
 	// Touch state - see touchInput. At most one touch tracked at a time.
 	trackingTouch bool
 	activeTouch   ebiten.TouchID
+	// touching is whether the last Update saw a touch, to end the
+	// gesture (whynot.Interaction.TouchEnd) once it lifts.
+	touching bool
 }
 
 // buttonState is the scrollbar thumb's per-frame hover/pressed state,

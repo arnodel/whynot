@@ -10,20 +10,30 @@ import (
 
 // Update reads this tick's input (touch if active, else mouse) and
 // drives scroll/hover/click - call once per game tick. A touch drag
-// keeps scrolling after release, decaying like native touch scrolling,
-// until a new drag or a mouse wheel/click cancels it.
+// scrolls the page, or a block that scrolls sideways (see
+// whynot.Interaction.TouchStart), and keeps coasting after release,
+// decaying like native touch scrolling, until a new drag or a mouse
+// wheel/click cancels it.
 func (p *Panel) Update() {
 	now := time.Now()
 
-	if cx, cy, scrollDelta, down, justPressed, ok := p.touchInput(); ok {
-		p.update(cx, cy, scrollDelta, down, justPressed)
+	if cx, cy, dx, dy, justPressed, ok := p.touchInput(); ok {
+		p.touching = true
+		// The page is scrolled by TouchDrag below, not by update.
+		p.update(cx, cy, 0, true, justPressed)
 		switch {
-		case justPressed, p.draggingScrollbar, !image.Pt(cx, cy).In(p.bounds):
+		case justPressed:
+			p.interaction.TouchStart(cx, cy, now)
+		case p.draggingScrollbar:
 			p.interaction.CancelMomentum()
 		default:
-			p.interaction.AccumulateMomentum(scrollDelta, now)
+			p.interaction.TouchDrag(dx, dy, now)
 		}
 		return
+	}
+	if p.touching {
+		p.touching = false
+		p.interaction.TouchEnd()
 	}
 
 	cx, cy := ebiten.CursorPosition()
@@ -78,17 +88,16 @@ func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed
 
 // touchInput is Update's touch equivalent of reading mouse state - ok
 // is false when there's no touch, so Update falls back to the mouse.
-// Tracks at most one touch, ignoring any second simultaneous one.
-// scrollDelta follows "content follows your finger": dragging down is
-// positive, reporting 0 on a touch's first tick since there's no
-// previous position yet to diff against.
-func (p *Panel) touchInput() (cx, cy int, scrollDelta float64, down, justPressed bool, ok bool) {
+// Tracks at most one touch, ignoring any second simultaneous one. dx, dy
+// is how far it moved since the last tick, 0 on its first tick since
+// there's no previous position yet to diff against.
+func (p *Panel) touchInput() (cx, cy, dx, dy int, justPressed bool, ok bool) {
 	if p.trackingTouch {
 		for _, id := range ebiten.AppendTouchIDs(nil) {
 			if id == p.activeTouch {
 				x, y := ebiten.TouchPosition(id)
-				_, py := inpututil.TouchPositionInPreviousTick(id)
-				return x, y, float64(y - py), true, false, true
+				px, py := inpututil.TouchPositionInPreviousTick(id)
+				return x, y, x - px, y - py, false, true
 			}
 		}
 		// The touch we were tracking ended - fall through to look for a
@@ -98,12 +107,12 @@ func (p *Panel) touchInput() (cx, cy int, scrollDelta float64, down, justPressed
 
 	ids := ebiten.AppendTouchIDs(nil)
 	if len(ids) == 0 {
-		return 0, 0, 0, false, false, false
+		return 0, 0, 0, 0, false, false
 	}
 	p.activeTouch = ids[0]
 	p.trackingTouch = true
 	x, y := ebiten.TouchPosition(p.activeTouch)
-	return x, y, 0, true, true, true
+	return x, y, 0, 0, true, true
 }
 
 // updateScrollbarDrag handles pressing, dragging, and releasing the

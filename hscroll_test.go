@@ -4,13 +4,16 @@ import (
 	"image"
 	"strings"
 	"testing"
+	"time"
 )
 
 // hscrollTestView returns a View of a document with one code block much
 // wider than width, laid out and drawn once, and the code block's area.
 func hscrollTestView(t *testing.T, width int) (*View, hscrollArea) {
 	t.Helper()
-	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n"
+	// Filler after the code block, so the page itself can scroll too.
+	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
+		strings.Repeat("Filler paragraph.\n\n", 60)
 	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
 	v.Layout(width, 400, 1, 0)
 	v.Draw(&recordingCanvas{bounds: image.Rect(0, 0, width, 400)}, 0, 0)
@@ -218,5 +221,108 @@ func TestTableScrollsWhenTooWide(t *testing.T) {
 	}
 	if _, ok := table("short").GetBlockLayout(ctx, 300).(*ScrollBox); ok {
 		t.Error("table that fits: got a *ScrollBox, want the plain table")
+	}
+}
+
+// pageTop is how far down the page v is scrolled.
+func pageTop(v *View) int {
+	return v.VisibleViewBounds(image.Pt(v.width, 400)).Min.Y
+}
+
+func TestTouchPansCodeBlockSideways(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	x, top := drawnTextX(t, v, "wide"), pageTop(v)
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.TouchDrag(-4, 1, now.Add(16*time.Millisecond))
+	if got := drawnTextX(t, v, "wide"); got != x || pageTop(v) != top {
+		t.Fatalf("moved before passing the lock distance: text x %d (want %d), page top %d (want %d)", got, x, pageTop(v), top)
+	}
+	in.TouchDrag(-20, 2, now.Add(32*time.Millisecond))
+	if got := drawnTextX(t, v, "wide"); got != x-24 {
+		t.Errorf("text x = %d after a mostly sideways drag, want %d (all movement so far applied)", got, x-24)
+	}
+	in.TouchDrag(-10, -30, now.Add(48*time.Millisecond))
+	if got := drawnTextX(t, v, "wide"); got != x-34 || pageTop(v) != top {
+		t.Errorf("once locked sideways: text x %d (want %d), page top %d (want %d, unchanged)", got, x-34, pageTop(v), top)
+	}
+}
+
+func TestTouchOnCodeBlockMostlyVerticalScrollsPage(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	x, top := drawnTextX(t, v, "wide"), pageTop(v)
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.TouchDrag(3, -20, now.Add(16*time.Millisecond))
+	if got := pageTop(v); got != top+20 {
+		t.Errorf("page top = %d after a mostly vertical drag, want %d", got, top+20)
+	}
+	if got := drawnTextX(t, v, "wide"); got != x {
+		t.Errorf("code block scrolled sideways (text x %d, want %d) by a vertical drag", got, x)
+	}
+}
+
+func TestTouchOffCodeBlockScrollsPageImmediately(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	top := pageTop(v)
+	now := time.Now()
+
+	in.TouchStart(10, area.visible.Min.Y-5, now) // just above the code block
+	in.TouchDrag(0, -3, now.Add(16*time.Millisecond))
+	if got := pageTop(v); got != top+3 {
+		t.Errorf("page top = %d after a small drag off the code block, want %d (no lock delay)", got, top+3)
+	}
+}
+
+func TestTouchSidewaysFlingCoasts(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	now := time.Now()
+
+	in.TouchStart(start.X, start.Y, now)
+	in.TouchDrag(-20, 0, now.Add(16*time.Millisecond))
+	in.TouchDrag(-20, 0, now.Add(32*time.Millisecond))
+	in.TouchEnd()
+	released := drawnTextX(t, v, "wide")
+	if !in.Animating() {
+		t.Fatal("Animating() = false right after a sideways fling, want true")
+	}
+	in.Momentum(now.Add(48 * time.Millisecond))
+	if got := drawnTextX(t, v, "wide"); got >= released {
+		t.Errorf("text x = %d after a frame of coasting, want less than %d (still moving left)", got, released)
+	}
+}
+
+func TestTouchPanRevealsScrollbarThenFades(t *testing.T) {
+	v, area := hscrollTestView(t, 300)
+	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	start := area.visible.Min.Add(image.Pt(10, 10))
+	now := time.Now()
+	in.TouchStart(start.X, start.Y, now)
+	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
+	in.TouchEnd()
+
+	s := v.ctx.hscroll
+	if got := s.barOpacity(area.source, v.ctx.Time); got != 1 {
+		t.Errorf("scrollbar opacity right after panning = %v, want 1", got)
+	}
+	mid := v.ctx.Time + hscrollRevealHold + hscrollRevealFade/2
+	if got := s.barOpacity(area.source, mid); got <= 0 || got >= 1 {
+		t.Errorf("scrollbar opacity halfway through fading = %v, want between 0 and 1", got)
+	}
+	v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
+	if got := s.barOpacity(area.source, v.ctx.Time); got != 0 {
+		t.Errorf("scrollbar opacity after the fade = %v, want 0", got)
+	}
+	if s.animating(v.ctx.Time) {
+		t.Error("scrollbar still animating after the fade ended")
 	}
 }

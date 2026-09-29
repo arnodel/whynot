@@ -13,9 +13,10 @@ import (
 )
 
 // Update reads this frame's pointer input and drives scroll/hover/click
-// - call once per frame, before Draw. A touch drag keeps scrolling after
-// release, decaying like native touch scrolling, until a new press or a
-// mouse wheel cancels it. Gio unifies mouse and touch into
+// - call once per frame, before Draw. A touch drag scrolls the page, or a
+// block that scrolls sideways (see whynot.Interaction.TouchStart), and
+// keeps coasting after release, decaying like native touch scrolling,
+// until a new press or a mouse wheel cancels it. Gio unifies mouse and touch into
 // one event stream (pointer.Event.Source tells them apart) - unlike
 // ebitenrenderer.Panel, which has to poll two separate ebiten APIs (see
 // its own touchInput) - and routes events by area, so a press on the
@@ -38,10 +39,11 @@ func (p *Panel) Update(gtx layout.Context) {
 	justPressed := false
 	mouseJustPressed := false
 	gotEvent := false
-	// dragDelta totals this frame's touch drag. Momentum is accumulated
-	// once per frame from it, not per event: every event in a frame
-	// shares the same now, so per event only the first would count.
-	dragDelta := 0.0
+	touchReleased := false
+	// drag totals this frame's touch movement, applied once per frame
+	// (TouchDrag): every event in a frame shares the same now, so per
+	// event only the first would count toward a fling's velocity.
+	var drag image.Point
 
 	for {
 		e, ok := gtx.Source.Event(pointer.Filter{
@@ -65,22 +67,23 @@ func (p *Panel) Update(gtx layout.Context) {
 			justPressed = true
 			p.dragging = pe.Source == pointer.Touch
 			p.lastDragPos = pos
+			if p.dragging {
+				p.interaction.TouchStart(pos.X, pos.Y, now)
+			}
 			if pe.Source == pointer.Mouse {
 				mouseJustPressed = true
 				p.mouseDown = true
 			}
 		case pointer.Release, pointer.Cancel:
+			touchReleased = touchReleased || p.dragging
 			p.dragging = false
 			p.mouseDown = false
 		case pointer.Drag:
 			if p.dragging {
-				// "Content follows your finger" - see whynot.Interaction's
-				// own doc comment on AccumulateMomentum for the sign
-				// convention this matches.
-				delta := float64(pos.Y - p.lastDragPos.Y)
+				// "Content follows your finger" - see
+				// whynot.Interaction.TouchDrag.
+				drag = drag.Add(pos.Sub(p.lastDragPos))
 				p.lastDragPos = pos
-				p.interaction.Scroll(pos.X, pos.Y, delta)
-				dragDelta += delta
 			}
 		case pointer.Scroll:
 			// Gio's Scroll.Y is positive scrolling down (confirmed
@@ -105,16 +108,19 @@ func (p *Panel) Update(gtx layout.Context) {
 		p.interaction.CancelMomentum()
 	}
 	switch {
-	case p.dragging || dragDelta != 0:
-		// Also while the finger is held still (dragDelta 0), so the
-		// velocity decays toward 0 before release rather than flinging.
-		p.interaction.AccumulateMomentum(dragDelta, now)
+	case p.dragging || touchReleased:
+		// Also while the finger is held still (drag 0), so the velocity
+		// decays toward 0 before release rather than flinging.
+		p.interaction.TouchDrag(drag.X, drag.Y, now)
+		if touchReleased {
+			p.interaction.TouchEnd()
+		}
 	case !justPressed:
 		p.interaction.Momentum(now)
 	}
 	// Gio only produces frames when something happens, so keep asking
-	// for them while there's momentum to apply.
-	if p.interaction.Moving() {
+	// for them while there's a fling or a fading scrollbar to animate.
+	if p.interaction.Animating() {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 
