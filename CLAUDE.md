@@ -15,6 +15,11 @@ Changes go through a branch and a pull request, not straight to `main`:
 
 A trivial fix (a typo, a one-liner) may go straight to `main`.
 
+A feature or a design change starts with a GitHub issue describing it,
+before any code. Its PRs reference the issue: "Part of #N" when the work
+spans several PRs (tracked as a task list in the issue), and "Closes #N"
+on the one that completes it.
+
 ## Commit messages and PR titles
 
 Prefix them with a [Conventional Commits](https://www.conventionalcommits.org/)
