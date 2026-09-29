@@ -200,8 +200,8 @@ type hscrollState struct {
 	hovered    Block       // whose box is under the pointer, or nil
 	barHovered bool        // whether the pointer is on hovered's scrollbar
 	pointer    image.Point // where hover last saw the pointer
-	dragging   Block // whose scrollbar is being dragged, or nil
-	grab       int   // pointer x minus thumb x, while dragging
+	dragging   Block       // whose scrollbar is being dragged, or nil
+	grab       int         // pointer x minus thumb x, while dragging
 
 	// revealed's scrollbar shows until revealUntil (in RenderingContext.
 	// Time's clock), fading out at the end - see reveal.
