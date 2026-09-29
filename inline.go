@@ -20,7 +20,7 @@ type InlineText struct {
 	node *ASTNode
 
 	// glued - see InlineLayout.Glued's doc comment. Set by the compiler
-	// (MarkdownCompiler.appendString/pendingSpace) from whether the
+	// (compiler.appendString/pendingSpace) from whether the
 	// source actually had whitespace immediately before this item;
 	// false (the zero value) for every InlineText built directly rather
 	// than through the compiler, matching the old always-space behavior.

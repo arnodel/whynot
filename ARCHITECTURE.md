@@ -82,10 +82,9 @@ outside our control; it's the source of truth for document structure.
 
 ### Layer 1 — Semantic tree (`Block` / `Inline` + `ASTNode`)
 
-`MarkdownCompiler.CompileNode`/`CompileBlock`/`AppendInlineNode`
-([compile.go](compile.go); `MarkdownCompiler` itself, in
-[markdown.go](markdown.go), holds nothing but the source bytes) walk the
-goldmark tree once and produce two parallel trees: a `Block`/`Inline` tree
+`Parse`'s `compiler` ([compile.go](compile.go); its state and the
+`ParseOption`s that configure it in [markdown.go](markdown.go)) walks the
+goldmark tree once and produces two parallel trees: a `Block`/`Inline` tree
 ([block.go](block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
 blocks; `InlineText`, `InlineImage` for inline content - and an `ASTNode`
@@ -420,7 +419,7 @@ callers only query points already within their own rendered viewport.
 
 ## Graceful degradation for unsupported Markdown
 
-`CompileBlock`/`AppendInlineNode` ([compile.go](compile.go)) don't
+`compileBlock`/`appendInline` ([compile.go](compile.go)) don't
 `panic` on a goldmark node kind they have no case for - see
 `compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
 warning and render the construct as text/a code block tagged
@@ -442,11 +441,9 @@ actually-correct behavior, since no Markdown renderer ever shows them:
   block form; inline `*ast.RawHTML` carries no such kind of its own, so
   the inline case is detected via its raw text's `<!--` prefix instead.
 
-Since a compiled child can now legitimately be `nil` (the two cases
-above), every call site that builds a `[]Block` from a sequence of
-children (`CompileDocument`, a blockquote's children,
-`CompileListItem`'s trailing blocks) filters `nil` out rather than
-assuming every child produces a real `Block`.
+Since a compiled child can legitimately be `nil` (the two cases above),
+`compileBlocks` - which every `[]Block` of children goes through - filters
+`nil` out rather than assuming every child produces a real `Block`.
 
 `browser` additionally rejects an `http(s)` fetch whose
 `Content-Type` isn't Markdown/plain-text-ish before handing it to

@@ -38,7 +38,7 @@ func textOf(t *testing.T, parts []Inline) []string {
 }
 
 // listItemParts returns item's ListItemHeadBlock and, if present, its
-// trailing block - item is the StackBlock CompileListItem builds for a
+// trailing block - item is the StackBlock compileListItem builds for a
 // single list item (blocks: [head] or [head, trailing]).
 func listItemParts(t *testing.T, item Block) (head *ListItemHeadBlock, trailing Block) {
 	t.Helper()
@@ -111,6 +111,8 @@ func TestParseTightList(t *testing.T) {
 		{"dash", "- one\n- two\n- three", []string{"-", "-", "-"}},
 		{"paren", "1) one\n2) two", []string{"1)", "2)"}},
 		{"dot", "1. one\n2. two", []string{"1.", "2."}},
+		{"start", "3. three\n4. four", []string{"3.", "4."}},
+		{"plus", "+ one\n+ two", []string{"+", "+"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,7 +277,7 @@ func TestWrapLinesNaturalWidthFits(t *testing.T) {
 // TestParseAdjacentCodeSpanGluedFlags checks that "a(`b`)" - no source
 // whitespace around the code span - marks the code span's word and the
 // trailing ")" as glued to what comes before them (see InlineLayout.
-// Glued and MarkdownCompiler.pendingSpace), so no gap gets rendered and
+// Glued and compiler.pendingSpace), so no gap gets rendered and
 // neither boundary can become a line break.
 func TestParseAdjacentCodeSpanGluedFlags(t *testing.T) {
 	doc := Parse([]byte("a(`b`)"))
@@ -338,7 +340,7 @@ func TestParseAdjacentPunctuationStaysOnOneLine(t *testing.T) {
 // its own whitespace-only Text node, producing zero Inline items on its
 // own (confirmed directly against goldmark v2) - still results in a
 // normal, breakable space between "a" and "b". This is what needs
-// MarkdownCompiler.pendingSpace to carry across appendString calls,
+// compiler.pendingSpace to carry across appendString calls,
 // rather than each call only looking at its own string's edges.
 func TestParseSpaceBetweenNonTextSiblings(t *testing.T) {
 	doc := Parse([]byte("**a** *b*"))
@@ -661,7 +663,7 @@ func TestParseWithSyntaxHighlighter(t *testing.T) {
 
 // fakeCodeBlockPlugin is a CodeBlockPlugin test double - handles is the
 // set of languages CanHandle accepts; canHandleCalls counts how many
-// times CanHandle actually ran, for tests checking MarkdownCompiler's
+// times CanHandle actually ran, for tests checking the compiler's
 // per-language caching (see pluginFor).
 type fakeCodeBlockPlugin struct {
 	name           string

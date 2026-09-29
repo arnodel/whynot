@@ -8,7 +8,7 @@ import (
 )
 
 // These pin DefaultStyleSheet's values against whynot's previous
-// hardcoded config in MarkdownCompiler's old Parse implementation.
+// hardcoded config in the compiler's old Parse implementation.
 
 func TestDefaultStyleSheetMargins(t *testing.T) {
 	s := NewDarkStyleSheet()
