@@ -31,9 +31,9 @@ type Marginer interface {
 	Margins(ctx RenderingContext) Margins
 }
 
-// WithoutMargins satisfies Block's Margins() with a zero value, for content
-// that never gets margins of its own (a list item's head, a table cell's
-// content).
+// WithoutMargins satisfies Block's Margins() with a zero value, for a Block
+// that has no margins of its own. Margins can still be added around it by
+// wrapping it in a MarginBlock, as the compiler does for most blocks.
 type WithoutMargins struct{}
 
 func (WithoutMargins) Margins(ctx RenderingContext) Margins {
