@@ -1,7 +1,7 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"strings"
 	"testing"
@@ -15,7 +15,7 @@ func hscrollTestView(t *testing.T, width int) (*View, hscrollArea) {
 	// Filler after the code block, so the page itself can scroll too.
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
-	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(width, 400, 1, 0)
 	v.Draw(&recordingCanvas{bounds: image.Rect(0, 0, width, 400)}, 0, 0)
 	if len(v.ctx.hscroll.areas) != 1 {
@@ -40,7 +40,7 @@ func drawnTextX(t *testing.T, v *View, prefix string) int {
 }
 
 func TestCodeBlockScrollsOnlyWhenWider(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
 	doc := Parse([]byte("```\n" + strings.Repeat("wide ", 100) + "\n```\n"))
 	code := unwrap(doc.root.blocks[0])
 
@@ -192,7 +192,7 @@ func TestInteractionDragsHorizontalScrollbar(t *testing.T) {
 // not at its own off-screen bottom.
 func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	source := "```\n" + strings.Repeat("wide ", 100) + "\n" + strings.Repeat("line\n", 100) + "```\n"
-	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(300, 400, 1, 0)
 	v.Draw(&recordingCanvas{bounds: image.Rect(0, 0, 300, 400)}, 0, 0)
 	area := v.ctx.hscroll.areas[0]
@@ -214,7 +214,7 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 // narrow enough - one holds an unbreakable word - scrolls sideways,
 // while one that fits doesn't.
 func TestTableScrollsWhenTooWide(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
 	table := func(cell string) Block {
 		return unwrap(Parse([]byte("| A | B |\n|---|---|\n| " + cell + " | x |\n")).root.blocks[0])
 	}

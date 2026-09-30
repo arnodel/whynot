@@ -254,8 +254,10 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 		whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}),
 		whynot.WithCodeBlockPlugin(kroki.Renderer{}),
 	)
-	return whynot.NewView(doc, a.faceSelector,
-		whynot.WithStyleSheet(a.styleSheet),
+	return whynot.NewView(
+		doc,
+		a.faceSelector,
+		a.styleSheet,
 		whynot.WithImageSource(imageSource),
 	)
 }

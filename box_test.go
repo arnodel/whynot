@@ -2,7 +2,7 @@ package whynot
 
 import (
 	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"image/color"
 	"testing"
@@ -655,7 +655,7 @@ func goRegularFace(t *testing.T) font.Face {
 // existed), so GetInlineLayout must fall back to CheckboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
 	for _, checked := range []bool{false, true} {
 		c := &TaskCheckbox{checked: checked, node: &ast.Node{Tag: ast.TagListItem}}
 		layout := c.GetInlineLayout(ctx, 100)
@@ -677,7 +677,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		Face: goRegularFace(t),
 		has:  map[rune]bool{checkboxUnchecked: true, checkboxChecked: true},
 	}
-	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, Styles: styling.Dark()}
+	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, Styles: stylingtest.Basic()}
 
 	cases := []struct {
 		checked bool

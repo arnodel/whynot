@@ -76,8 +76,9 @@ API only has `whynot.StyleSheet`, an opaque interface whose one method returns
 so only packages in the module can make a `StyleSheet`: the theme packages
 under [styles/](styles). [styles/simpletheme](styles/simpletheme) is a public
 struct of fields (`Theme`) whose `StyleSheet()` converts a snapshot of it into
-`styling.Basic`, the field-configured `Styles` implementation that also
-provides the default look. This keeps theme vocabulary (field names like
+`styling.Basic`, the field-configured `Styles` implementation. The core has no
+look of its own: `NewView` takes a `StyleSheet`, and the dark and light presets
+are defined in `simpletheme`. This keeps theme vocabulary (field names like
 `ParagraphMargins`) out of the core API: a more expressive way to write
 stylesheets later is a new package under `styles/`, and the engine can change
 what it queries without breaking anyone. Outside code that needs a color, like
@@ -440,7 +441,7 @@ callers only query points already within their own rendered viewport.
 `panic` on a goldmark node kind they have no case for - see
 `compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
 warning and render the construct as text/a code block tagged
-`TagUnsupported`, styled via `Styles.Color` (`UnsupportedColor` in the default look, a "scary"
+`TagUnsupported`, styled via `Styles.Color` (`UnsupportedColor` in `simpletheme`, a "scary"
 red, reusing `CodeBlockMargins`/`CodeBlockTextStyle` rather than a new
 layout primitive) - showing the construct's own raw source where
 goldmark exposes it (`*ast.HTMLBlock`/`*ast.RawHTML`), a placeholder

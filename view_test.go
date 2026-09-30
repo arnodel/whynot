@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"image/color"
 	"io"
@@ -60,7 +61,7 @@ func (b *scaledHeightBlock) Node() *ast.Node {
 // accounting for in every expected value, none of which is what these
 // tests are about.
 func noMarginStyleSheet() *styling.Basic {
-	s := styling.Dark()
+	s := stylingtest.Basic()
 	s.ViewMargin = Margins{}
 	return s
 }
@@ -172,8 +173,8 @@ func TestViewDrawFillsBackgroundBeforeLayout(t *testing.T) {
 // TestNewViewWithStyleSheet checks that WithStyleSheet overrides NewView's
 // default StyleSheet (styling.Dark).
 func TestNewViewWithStyleSheet(t *testing.T) {
-	custom := styling.Dark()
-	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), WithStyleSheet(custom))
+	custom := stylingtest.Basic()
+	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), custom)
 	if v.ctx.Styles != custom.Styles() {
 		t.Errorf("StyleSheet = %v, want the instance passed via WithStyleSheet", v.ctx.Styles)
 	}
@@ -187,9 +188,9 @@ func TestNewViewWithStyleSheet(t *testing.T) {
 // until something else happened to trigger a resize.
 func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
 	block := Parse([]byte("hello world"))
-	small := styling.Dark()
+	small := stylingtest.Basic()
 	small.ParagraphTextStyle.Size = 10
-	big := styling.Dark()
+	big := stylingtest.Basic()
 	big.ParagraphTextStyle.Size = 40
 
 	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: small}}
@@ -209,7 +210,7 @@ func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
 // at a meaningless zero width) - the eventual first Layout call picks up
 // the StyleSheet on its own.
 func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
-	custom := styling.Light()
+	custom := stylingtest.Basic()
 	v := newTestView(&fixedHeightBlock{height: 10})
 
 	v.SetStyleSheet(custom)
@@ -230,10 +231,10 @@ func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
 // the raw pixel offset alone would point at different content.
 func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	block := Parse([]byte("first\n\nsecond"))
-	small := styling.Dark()
+	small := stylingtest.Basic()
 	small.ParagraphTextStyle.Size = 10
 	small.ViewMargin = Margins{}
-	big := styling.Dark()
+	big := stylingtest.Basic()
 	big.ParagraphTextStyle.Size = 40
 	big.ViewMargin = Margins{}
 
@@ -267,7 +268,7 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 // real leading/trailing EmptyBox slots (not just a draw-time offset), and
 // that a zero margin (the common case in other tests) adds none.
 func TestViewRebuildInsertsMarginSlots(t *testing.T) {
-	style := styling.Dark()
+	style := stylingtest.Basic()
 	style.ViewMargin = Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
@@ -294,7 +295,7 @@ func TestViewRebuildInsertsMarginSlots(t *testing.T) {
 // the last real content block - the margin is real (if empty) space in
 // the tree, so it's reachable by scrolling exactly like any other slot.
 func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
-	style := styling.Dark()
+	style := stylingtest.Basic()
 	style.ViewMargin = Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
@@ -314,9 +315,9 @@ func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 // point on real content resolves with bounds correctly shifted back into
 // the same coordinate space the query arrived in.
 func TestViewHitTestAppliesMargin(t *testing.T) {
-	style := styling.Dark()
+	style := stylingtest.Basic()
 	style.ViewMargin = Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
-	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), style)
 	v.Layout(300, 1000, 1, 0)
 
 	if len(v.stack.box.slots) != 3 {
@@ -346,9 +347,9 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 // itself (see TestViewRebuildInsertsMarginSlots), but left has no slot to
 // carry it, so Draw has to apply it directly.
 func TestViewDrawAppliesLeftMargin(t *testing.T) {
-	style := styling.Dark()
+	style := stylingtest.Basic()
 	style.ViewMargin = Margins{Left: 20}
-	v := NewView(Parse([]byte("---")), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	v := NewView(Parse([]byte("---")), NewGoFontFaceSelector(72), style)
 	v.Layout(300, 1000, 1, 0)
 
 	dst := &recordingCanvas{bounds: image.Rect(0, 0, 300, 100)}
@@ -464,7 +465,7 @@ code line
 ---
 `)
 
-	v := NewView(Parse(source), NewGoFontFaceSelector(72))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), stylingtest.Basic())
 	const width = 300
 	v.Layout(width, 1000, 1, 0)
 
@@ -519,8 +520,8 @@ func findTag(v *View, tag ast.Tag) (x, y int, ok bool) {
 // invalidation (see StackBox.invalidate), not a full rebuild: v.stack.box itself
 // stays the same object throughout.
 func TestViewHoverHighlightsLink(t *testing.T) {
-	style := styling.Dark()
-	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	style := stylingtest.Basic()
+	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), style)
 	v.Layout(300, 1000, 1, 0)
 
 	x, y, ok := findTag(v, ast.TagLink)
@@ -556,7 +557,7 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 // TestViewLinkAt checks that LinkAt resolves a link's own destination,
 // and reports ok=false off a link.
 func TestViewLinkAt(t *testing.T) {
-	v := NewView(Parse([]byte("click [this](https://example.com/target) now")), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte("click [this](https://example.com/target) now")), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 
 	x, y, ok := findTag(v, ast.TagLink)
@@ -585,7 +586,7 @@ func TestViewLinkAt(t *testing.T) {
 // target heading.
 func TestViewScrollToAnchor(t *testing.T) {
 	source := []byte("# First\n\n- one\n- two\n\n# Second\n\nMore text.\n")
-	v := NewView(Parse(source), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(300, 1000, 1, 0)
 
 	if ok := v.ScrollToAnchor("does-not-exist"); ok {
@@ -613,7 +614,7 @@ func TestViewScrollToAnchor(t *testing.T) {
 // in-page anchor jump without keeping a second View around.
 func TestViewScrollPositionRoundTrip(t *testing.T) {
 	source := []byte(strings.Repeat("# Heading\n\nSome text.\n\n", 20))
-	v := NewView(Parse(source), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(300, 1000, 1, 0)
 
 	v.Scroll(-500)
@@ -702,7 +703,7 @@ func TestViewScrollToRatioNilBox(t *testing.T) {
 // it (see project_scrollbar_hover_rebuild_tension).
 func TestViewScrollToRatioSelfConsistent(t *testing.T) {
 	source := []byte(strings.Repeat("# Heading\n\nSome text, quite a bit of it actually.\n\n", 30))
-	v := NewView(Parse(source), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(300, 1000, 1, 0)
 
 	const viewportH = 200
@@ -721,7 +722,7 @@ func TestViewScrollToRatioSelfConsistent(t *testing.T) {
 // ok=false before the first one.
 func TestViewCurrentHeadingID(t *testing.T) {
 	source := []byte("Intro text, before any heading.\n\n# First\n\nMore text.\n\n# Second\n\nMore text.\n")
-	v := NewView(Parse(source), NewGoFontFaceSelector(72), WithStyleSheet(noMarginStyleSheet()))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), noMarginStyleSheet())
 	v.Layout(300, 1000, 1, 0)
 
 	if _, ok := v.CurrentHeadingID(); ok {
@@ -749,7 +750,7 @@ func TestViewCurrentHeadingID(t *testing.T) {
 // itself never changes now (see TestViewHoverHighlightsLink), so the
 // slot's own memoized box is what has to stay identical instead.
 func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
-	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 
 	x, y, ok := findTag(v, ast.TagLink)
@@ -770,7 +771,7 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 // HighlightNode (and rebuilds to un-highlight it), rather than leaving
 // the last-hovered link highlighted indefinitely.
 func TestViewHoverClearsWhenMovingAway(t *testing.T) {
-	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 
 	x, y, ok := findTag(v, ast.TagLink)
@@ -831,7 +832,7 @@ const twoLinkDoc = "first paragraph\n\n[link one](url1)\n\nsecond paragraph\n\n[
 // two slots' memoized boxes - v.stack.box itself is untouched (no full
 // rebuild), and so is every other already-resolved slot.
 func TestViewHoverSurgicalInvalidation(t *testing.T) {
-	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 
 	x1, y1, x2, y2 := findTwoLinks(t, v)
@@ -875,8 +876,8 @@ func TestViewHoverSurgicalInvalidation(t *testing.T) {
 // (the mechanism highlightSlot's own doc comment relies on to stay
 // fresh across a rebuild it can't itself observe).
 func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
-	style := styling.Dark()
-	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72), WithStyleSheet(style))
+	style := stylingtest.Basic()
+	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72), style)
 	v.Layout(300, 1000, 1, 0)
 
 	x1, y1, x2, y2 := findTwoLinks(t, v)
@@ -918,7 +919,7 @@ func BenchmarkViewHover(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	v := NewView(Parse(source), NewGoFontFaceSelector(72))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(1024, 1000, 1, 0)
 
 	x, y, ok := findTag(v, ast.TagLink)
@@ -948,7 +949,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark(), ImageCache: NewImageCache(FileImageSource{})}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic(), ImageCache: NewImageCache(FileImageSource{})}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {
@@ -1095,7 +1096,7 @@ func TestViewHeightEstimateExtrapolates(t *testing.T) {
 // used until the slot is naturally re-resolved.
 func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph")
-	v := NewView(Parse(source), NewGoFontFaceSelector(72))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 	for i := range v.stack.box.slots {
 		v.stack.box.boxAt(i) // resolve every slot once
@@ -1176,7 +1177,7 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 // before, since a highlight never changes a slot's real height.
 func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph\n\nfourth paragraph\n\nfifth paragraph")
-	v := NewView(Parse(source), NewGoFontFaceSelector(72))
+	v := NewView(Parse(source), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
 	v.Scroll(20) // resolve a couple of slots, the way real scrolling would
 
@@ -1296,7 +1297,7 @@ func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	}
 
 	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
-	view := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), WithImageSource(source))
+	view := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), stylingtest.Basic(), WithImageSource(source))
 	view.Layout(300, 1000, 1, 0)
 	view.stack.box.Bounds() // force every slot to resolve once, including the image's
 
@@ -1346,7 +1347,7 @@ func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 	}
 
 	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
-	view := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), WithImageSource(source))
+	view := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), stylingtest.Basic(), WithImageSource(source))
 	view.Layout(300, 1000, 1, 0)
 	// Slots: 0 = leading view margin, 1 = "first paragraph here", 2 =
 	// inter-block gap, 3 = the image's own paragraph, 4 = gap, 5 =
@@ -1596,7 +1597,7 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 		strings.Repeat("Filler paragraph with a bit of text in it to take up some space.\n\n", 20) +
 		"![cat](testdata/cat.jpeg)\n\n" +
 		strings.Repeat("More filler text after the image.\n\n", 5)
-	v := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte(doc)), NewGoFontFaceSelector(72), stylingtest.Basic())
 	const viewportHeight = 200
 	v.Layout(300, viewportHeight, 1, 0)
 

@@ -1,37 +1,40 @@
-package styling
+package styling_test
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 	"testing"
 
 	"golang.org/x/image/font"
+
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
-// These pin Basic's values against whynot's previous
+// These pin styling.Basic's values against whynot's previous
 // hardcoded config in the compiler's old Parse implementation.
 
 func TestBasicMargins(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	cases := []struct {
 		tag  ast.Tag
-		want Margins
+		want styling.Margins
 	}{
-		{ast.TagParagraph, Margins{Top: 10, Bottom: 10}},
-		{ast.TagHeading1, Margins{Top: 30, Bottom: 10}},
-		{ast.TagHeading2, Margins{Top: 26, Bottom: 10}},
-		{ast.TagHeading3, Margins{Top: 22, Bottom: 10}},
-		{ast.TagHeading4, Margins{Top: 18, Bottom: 10}},
-		{ast.TagHeading5, Margins{Top: 14, Bottom: 10}},
-		{ast.TagHeading6, Margins{Top: 10, Bottom: 10}},
-		{ast.TagList, Margins{Top: 10, Bottom: 10}},
-		{ast.TagListItem, Margins{Top: 5, Bottom: 5, Left: 40}},
-		{ast.TagCodeBlock, Margins{Top: 20, Bottom: 20, Left: 20}},
-		{ast.TagThematicBreak, Margins{Top: 20, Bottom: 20}},
-		{ast.TagBlockquote, Margins{Top: 10, Bottom: 10}},
-		{ast.TagTable, Margins{Top: 10, Bottom: 10}},
-		{ast.TagTableCell, Margins{}},
-		{ast.TagLink, Margins{}},
+		{ast.TagParagraph, styling.Margins{Top: 10, Bottom: 10}},
+		{ast.TagHeading1, styling.Margins{Top: 30, Bottom: 10}},
+		{ast.TagHeading2, styling.Margins{Top: 26, Bottom: 10}},
+		{ast.TagHeading3, styling.Margins{Top: 22, Bottom: 10}},
+		{ast.TagHeading4, styling.Margins{Top: 18, Bottom: 10}},
+		{ast.TagHeading5, styling.Margins{Top: 14, Bottom: 10}},
+		{ast.TagHeading6, styling.Margins{Top: 10, Bottom: 10}},
+		{ast.TagList, styling.Margins{Top: 10, Bottom: 10}},
+		{ast.TagListItem, styling.Margins{Top: 5, Bottom: 5, Left: 40}},
+		{ast.TagCodeBlock, styling.Margins{Top: 20, Bottom: 20, Left: 20}},
+		{ast.TagThematicBreak, styling.Margins{Top: 20, Bottom: 20}},
+		{ast.TagBlockquote, styling.Margins{Top: 10, Bottom: 10}},
+		{ast.TagTable, styling.Margins{Top: 10, Bottom: 10}},
+		{ast.TagTableCell, styling.Margins{}},
+		{ast.TagLink, styling.Margins{}},
 	}
 	for _, tc := range cases {
 		node := &ast.Node{Tag: tc.tag}
@@ -42,8 +45,8 @@ func TestBasicMargins(t *testing.T) {
 }
 
 func TestBasicMarginsNilNode(t *testing.T) {
-	s := Dark()
-	if got := s.Margins(nil); got != (Margins{}) {
+	s := stylingtest.Basic()
+	if got := s.Margins(nil); got != (styling.Margins{}) {
 		t.Errorf("Margins(nil) = %+v, want zero value", got)
 	}
 }
@@ -53,22 +56,22 @@ func TestBasicMarginsNilNode(t *testing.T) {
 // to be inherited from an ancestor (see TestResolvedTextStyle) rather
 // than read as its zero value.
 func TestBasicTextStyle(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	cases := []struct {
 		tag  ast.Tag
-		want PartialTextStyle
+		want styling.PartialTextStyle
 	}{
-		{ast.TagParagraph, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{ast.TagHeading1, PartialTextStyle{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{ast.TagHeading2, PartialTextStyle{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{ast.TagHeading6, PartialTextStyle{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{ast.TagListItem, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{ast.TagCodeBlock, PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
-		{ast.TagTableCell, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{ast.TagCodeSpan, PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily}},
-		{ast.TagEmphasis, PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle}},
-		{ast.TagStrong, PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight}},
-		{ast.TagLink, PartialTextStyle{}},
+		{ast.TagParagraph, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagHeading1, styling.PartialTextStyle{styling.TextStyle{Size: 40, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagHeading2, styling.PartialTextStyle{styling.TextStyle{Size: 36, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagHeading6, styling.PartialTextStyle{styling.TextStyle{Size: 20, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagListItem, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagCodeBlock, styling.PartialTextStyle{styling.TextStyle{Size: 16, Family: styling.Monospace}, styling.FieldSize | styling.FieldFamily}},
+		{ast.TagTableCell, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagCodeSpan, styling.PartialTextStyle{styling.TextStyle{Family: styling.Monospace}, styling.FieldFamily}},
+		{ast.TagEmphasis, styling.PartialTextStyle{styling.TextStyle{Style: font.StyleItalic}, styling.FieldStyle}},
+		{ast.TagStrong, styling.PartialTextStyle{styling.TextStyle{Weight: font.WeightBold}, styling.FieldWeight}},
+		{ast.TagLink, styling.PartialTextStyle{}},
 	}
 	for _, tc := range cases {
 		node := &ast.Node{Tag: tc.tag}
@@ -82,8 +85,8 @@ func TestBasicTextStyle(t *testing.T) {
 // field via BaseTextStyle - the fallback ResolvedTextStyle reaches if no
 // real ancestor ever set some field.
 func TestBasicTextStyleNilNode(t *testing.T) {
-	s := Dark()
-	want := PartialTextStyle{TextStyle{Size: 16}, AllTextStyleFields}
+	s := stylingtest.Basic()
+	want := styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.AllTextStyleFields}
 	if got := s.TextStyle(nil); got != want {
 		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
 	}
@@ -94,7 +97,7 @@ func TestBasicTextStyleNilNode(t *testing.T) {
 // including the block types with their own BorderColor, returns nil so
 // ResolvedColor's ancestry walk passes through them.
 func TestBasicColor(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	cases := []struct {
 		tag  ast.Tag
 		want color.Color
@@ -123,7 +126,7 @@ func TestBasicColor(t *testing.T) {
 }
 
 func TestBasicColorNilNode(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	if got := s.Color(nil); got != color.White {
 		t.Errorf("Color(nil) = %v, want %v", got, color.White)
 	}
@@ -133,7 +136,7 @@ func TestBasicColorNilNode(t *testing.T) {
 // color - a thematic break's rule, a blockquote's bar, a table's frame -
 // resolved directly against exactly the tag it decorates, unlike Color.
 func TestBasicBorderColor(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	cases := []struct {
 		tag  ast.Tag
 		want color.Color
@@ -153,7 +156,7 @@ func TestBasicBorderColor(t *testing.T) {
 }
 
 func TestBasicBorderColorNilNode(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 	if got := s.BorderColor(nil); got != nil {
 		t.Errorf("BorderColor(nil) = %v, want nil", got)
 	}
@@ -163,7 +166,7 @@ func TestBasicBorderColorNilNode(t *testing.T) {
 // as the "is this struck at all" signal: 0 unless node or an ancestor
 // carries ast.TagStrikethrough.
 func TestBasicStrikeThickness(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 
 	if got := s.StrikeThickness(nil); got != 0 {
 		t.Errorf("StrikeThickness(nil) = %v, want 0", got)
@@ -186,18 +189,18 @@ func TestBasicStrikeThickness(t *testing.T) {
 }
 
 func TestBasicDimensions(t *testing.T) {
-	s := Dark()
+	s := stylingtest.Basic()
 
 	if got := s.ThematicBreakThickness(nil); got != 2 {
 		t.Errorf("ThematicBreakThickness() = %v, want 2", got)
 	}
 
-	wantBQ := BlockquoteGeometry{Indent: 16, BarWidth: 3}
+	wantBQ := styling.BlockquoteGeometry{Indent: 16, BarWidth: 3}
 	if got := s.BlockquoteGeometry(nil); got != wantBQ {
 		t.Errorf("BlockquoteGeometry() = %+v, want %+v", got, wantBQ)
 	}
 
-	wantTable := TableGeometry{FrameThickness: 2, ColumnGap: 12, RowGap: 6, HeaderGap: 4, ColumnRuleThickness: 1}
+	wantTable := styling.TableGeometry{FrameThickness: 2, ColumnGap: 12, RowGap: 6, HeaderGap: 4, ColumnRuleThickness: 1}
 	if got := s.TableGeometry(nil); got != wantTable {
 		t.Errorf("TableGeometry() = %+v, want %+v", got, wantTable)
 	}
@@ -207,53 +210,19 @@ func TestBasicDimensions(t *testing.T) {
 	}
 }
 
-// TestLightColors checks that the light theme actually
-// inverts the parts that need to be readable against a light background
-// (background itself, default text, links, code) rather than just being
-// Dark under a different name.
-func TestLightColors(t *testing.T) {
-	dark := Dark()
-	light := Light()
-
-	if light.Background == dark.Background {
-		t.Errorf("light Background = dark's (%v), want a light background", light.Background)
-	}
-	if light.TextColor == dark.TextColor {
-		t.Errorf("light TextColor = dark's (%v), want a dark foreground", light.TextColor)
-	}
-	if light.LinkColor == dark.LinkColor {
-		t.Errorf("light LinkColor = dark's (%v), want a color readable on a light background", light.LinkColor)
-	}
-	if light.CodeBlockColor == dark.CodeBlockColor {
-		t.Errorf("light CodeBlockColor = dark's (%v), want a color readable on a light background", light.CodeBlockColor)
-	}
-	if light.CodeSpanColor == dark.CodeSpanColor {
-		t.Errorf("light CodeSpanColor = dark's (%v), want a color readable on a light background", light.CodeSpanColor)
-	}
-	if light.Scrollbar == dark.Scrollbar {
-		t.Errorf("light Scrollbar = dark's (%+v), want colors readable on a light background", light.Scrollbar)
-	}
-	if light.Syntax == dark.Syntax {
-		t.Errorf("light Syntax = dark's (%+v), want a palette readable on a light background", light.Syntax)
-	}
-}
-
 // TestBasicScrollbarColor checks that ScrollbarColor picks the right one of the three Scrollbar
 // colors for each combination of hover/pressed.
 func TestBasicScrollbarColor(t *testing.T) {
 	cases := []struct {
 		name           string
-		sheet          *Basic
+		sheet          *styling.Basic
 		hover, pressed bool
 		want           color.Color
 	}{
-		{"dark idle", Dark(), false, false, color.RGBA{0x80, 0x80, 0x80, 0xA0}},
-		{"dark hover", Dark(), true, false, color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}},
-		{"dark pressed", Dark(), true, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
-		{"dark pressed without hover", Dark(), false, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
-		{"light idle", Light(), false, false, color.RGBA{0x60, 0x60, 0x60, 0xA0}},
-		{"light hover", Light(), true, false, color.RGBA{0x40, 0x40, 0x40, 0xC0}},
-		{"light pressed", Light(), true, true, color.RGBA{0x20, 0x20, 0x20, 0xE0}},
+		{"idle", stylingtest.Basic(), false, false, color.RGBA{0x80, 0x80, 0x80, 0xA0}},
+		{"hover", stylingtest.Basic(), true, false, color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}},
+		{"pressed", stylingtest.Basic(), true, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
+		{"pressed without hover", stylingtest.Basic(), false, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -261,27 +230,5 @@ func TestBasicScrollbarColor(t *testing.T) {
 				t.Errorf("ScrollbarColor(%v, %v) = %v, want %v", c.hover, c.pressed, got, c.want)
 			}
 		})
-	}
-}
-
-// TestLightSharesNonColorValues checks that margins, sizes,
-// weights, and dimensional constants aren't duplicated/drifted between
-// the two themes - only color should differ.
-func TestLightSharesNonColorValues(t *testing.T) {
-	dark := Dark()
-	light := Light()
-
-	if light.ParagraphMargins != dark.ParagraphMargins {
-		t.Errorf("ParagraphMargins = %+v, want dark's %+v", light.ParagraphMargins, dark.ParagraphMargins)
-	}
-	if light.HeadingTextStyles != dark.HeadingTextStyles {
-		t.Errorf("HeadingTextStyles = %+v, want dark's %+v", light.HeadingTextStyles, dark.HeadingTextStyles)
-	}
-	struckNode := &ast.Node{Tag: ast.TagStrikethrough}
-	if light.StrikeThickness(struckNode) != dark.StrikeThickness(struckNode) {
-		t.Errorf("StrikeThickness value differs from dark's")
-	}
-	if light.TableGeometry(nil) != dark.TableGeometry(nil) {
-		t.Errorf("TableGeometry = %+v, want dark's %+v", light.TableGeometry(nil), dark.TableGeometry(nil))
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/chromahighlight"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
@@ -97,6 +98,7 @@ func main() {
 		view: whynot.NewView(
 			whynot.Parse([]byte(exampleDoc()), whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{})),
 			whynot.NewGoFontFaceSelector(72),
+			simpletheme.DarkStyleSheet,
 		),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),

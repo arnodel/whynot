@@ -22,6 +22,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 	"github.com/arnodel/whynot/systemfont"
 )
 
@@ -83,7 +84,7 @@ func main() {
 	}
 
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), selector),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), selector, simpletheme.DarkStyleSheet),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}

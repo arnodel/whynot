@@ -4,7 +4,7 @@
 //
 // Use a ready-made stylesheet:
 //
-//	view := whynot.NewView(doc, faces, whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+//	view := whynot.NewView(doc, faces, simpletheme.DarkStyleSheet)
 //
 // or start from a preset and change what you need:
 //
@@ -93,7 +93,7 @@ type Theme struct {
 	SyntaxColors SyntaxColors
 
 	// LineHeight is the space a line of text takes, as a multiple of its
-	// font's natural height: 1.2 adds 20%.
+	// font's natural height: 1.2 adds 20%. Zero means 1.2.
 	LineHeight float64
 }
 
@@ -160,22 +160,143 @@ const (
 	SmallCaps
 )
 
-// Dark returns whynot's default look, light text on a dark background, to
-// start from.
+// Dark returns the dark look, light text on a dark background, to start
+// from.
 func Dark() *Theme {
-	return fromBasic(styling.Dark())
+	gray := color.RGBA{0x80, 0x80, 0x80, 0xFF}
+	return &Theme{
+		ParagraphMargins:   whynot.Margins{Top: 10, Bottom: 10},
+		ParagraphTextStyle: TextStyle{Size: 16},
+
+		HeadingMargins: [6]whynot.Margins{
+			{Top: 30, Bottom: 10},
+			{Top: 26, Bottom: 10},
+			{Top: 22, Bottom: 10},
+			{Top: 18, Bottom: 10},
+			{Top: 14, Bottom: 10},
+			{Top: 10, Bottom: 10},
+		},
+		// Proportional even inside small caps: the bundled Go fonts have
+		// no bold small caps.
+		HeadingTextStyles: [6]TextStyle{
+			{Size: 40, Weight: WeightBold, Family: Proportional},
+			{Size: 36, Weight: WeightBold, Family: Proportional},
+			{Size: 32, Weight: WeightBold, Family: Proportional},
+			{Size: 28, Weight: WeightBold, Family: Proportional},
+			{Size: 24, Weight: WeightBold, Family: Proportional},
+			{Size: 20, Weight: WeightBold, Family: Proportional},
+		},
+
+		ListMargins:       whynot.Margins{Top: 10, Bottom: 10},
+		ListItemMargins:   whynot.Margins{Top: 5, Bottom: 5, Left: 40},
+		ListItemTextStyle: TextStyle{Size: 16},
+
+		CodeBlockMargins:   whynot.Margins{Top: 20, Bottom: 20, Left: 20},
+		CodeBlockTextStyle: TextStyle{Size: 16, Family: Monospace},
+		// A neutral gray: a whole block in an accent color reads as garish
+		// and fights with syntax colors inside it.
+		CodeBlockColor: color.RGBA{0xD4, 0xD4, 0xD4, 0xFF},
+
+		UnsupportedColor: color.RGBA{0xFF, 0x33, 0x33, 0xFF},
+
+		CodeSpanTextStyle: TextStyle{Family: Monospace},
+		// An accent color, unlike CodeBlockColor: a single word in prose
+		// reads fine highlighted.
+		CodeSpanColor:     color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
+		EmphasisTextStyle: TextStyle{Style: StyleItalic},
+		StrongTextStyle:   TextStyle{Weight: WeightBold},
+
+		ThematicBreakMargins: whynot.Margins{Top: 20, Bottom: 20},
+		ThematicBreakColor:   gray,
+
+		LinkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
+
+		BlockquoteMargins:  whynot.Margins{Top: 10, Bottom: 10},
+		BlockquoteBarColor: gray,
+
+		TableCellTextStyle: TextStyle{Size: 16},
+		TableMargins:       whynot.Margins{Top: 10, Bottom: 10},
+		TableFrameColor:    gray,
+
+		ImagePlaceholderColor: gray,
+
+		TextColor:     color.White,
+		BaseTextStyle: TextStyle{Size: 16},
+
+		BackgroundColor: color.Black,
+		ViewMargins:     whynot.Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
+		HighlightColor:  color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
+
+		ScrollbarColors: ScrollbarColors{
+			Idle:    color.RGBA{0x80, 0x80, 0x80, 0xA0},
+			Hover:   color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
+			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
+		},
+		SyntaxColors: SyntaxColors{
+			Keyword:  color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
+			Type:     color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
+			Function: color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}, // soft yellow-tan
+			String:   color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
+			Number:   color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
+			Comment:  gray,
+		},
+
+		LineHeight: 1.2,
+	}
 }
 
-// Light returns whynot's light look, dark text on a light background, to
-// start from.
+// Light returns the light look, dark text on a light background, to start
+// from. It differs from Dark only in colors; the grays and the red and
+// orange accents read well on either background, so they're shared.
 func Light() *Theme {
-	return fromBasic(styling.Light())
+	t := Dark()
+	t.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
+	t.BackgroundColor = color.White
+	t.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
+	t.CodeBlockColor = color.RGBA{0x33, 0x33, 0x33, 0xFF}
+	t.CodeSpanColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
+	t.ScrollbarColors = ScrollbarColors{
+		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
+		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
+		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
+	}
+	t.SyntaxColors = SyntaxColors{
+		Keyword:  color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
+		Type:     color.RGBA{0x00, 0x7A, 0x6E, 0xFF},
+		Function: color.RGBA{0x7A, 0x66, 0x00, 0xFF},
+		String:   color.RGBA{0x1E, 0x7A, 0x2E, 0xFF},
+		Number:   color.RGBA{0xB0, 0x5A, 0x00, 0xFF},
+		Comment:  color.RGBA{0x60, 0x60, 0x60, 0xFF},
+	}
+	return t
 }
+
+// Dimensions a Theme doesn't expose - see #22 for where they're headed.
+var dims = styling.Dimensions{
+	Strike:         1,
+	ThematicBreak:  2,
+	DiagramPadding: 12,
+	Blockquote:     styling.BlockquoteGeometry{Indent: 16, BarWidth: 3},
+	Table: styling.TableGeometry{
+		FrameThickness:      2,
+		ColumnGap:           12,
+		RowGap:              6,
+		HeaderGap:           4,
+		ColumnRuleThickness: 1,
+	},
+}
+
+// Defaults for what a Theme leaves zero where there's nothing to inherit
+// from: BaseTextStyle's fields, and LineHeight.
+var (
+	defaultBaseTextStyle = styling.TextStyle{Size: 16, Style: font.StyleNormal, Weight: font.WeightNormal, Family: styling.Proportional}
+	defaultLineHeight    = 1.2
+)
 
 // StyleSheet returns a snapshot of t, for a whynot.View: changing t
 // afterwards doesn't affect it.
 func (t *Theme) StyleSheet() whynot.StyleSheet {
-	b := styling.Dark() // for the dimensions a Theme doesn't expose
+	b := &styling.Basic{Dims: dims}
 	b.ParagraphMargins = t.ParagraphMargins
 	b.ParagraphTextStyle = t.ParagraphTextStyle.partial()
 	b.HeadingMargins = t.HeadingMargins
@@ -203,56 +324,17 @@ func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b.TableFrameColor = t.TableFrameColor
 	b.ImagePlaceholderColor = t.ImagePlaceholderColor
 	b.TextColor = t.TextColor
-	b.BaseTextStyle = t.BaseTextStyle.over(b.BaseTextStyle)
+	b.BaseTextStyle = t.BaseTextStyle.over(defaultBaseTextStyle)
 	b.Background = t.BackgroundColor
 	b.ViewMargin = t.ViewMargins
 	b.Highlight = t.HighlightColor
 	b.Scrollbar = styling.ScrollbarColors(t.ScrollbarColors)
 	b.Syntax = styling.SyntaxColors(t.SyntaxColors)
-	if t.LineHeight != 0 {
-		b.Dims.LineHeight = t.LineHeight
+	b.Dims.LineHeight = t.LineHeight
+	if b.Dims.LineHeight == 0 {
+		b.Dims.LineHeight = defaultLineHeight
 	}
 	return b
-}
-
-func fromBasic(b *styling.Basic) *Theme {
-	t := &Theme{
-		ParagraphMargins:      b.ParagraphMargins,
-		ParagraphTextStyle:    fromPartial(b.ParagraphTextStyle),
-		HeadingMargins:        b.HeadingMargins,
-		ListMargins:           b.ListMargins,
-		ListItemMargins:       b.ListItemMargins,
-		ListItemTextStyle:     fromPartial(b.ListItemTextStyle),
-		CodeBlockMargins:      b.CodeBlockMargins,
-		CodeBlockTextStyle:    fromPartial(b.CodeBlockTextStyle),
-		CodeBlockColor:        b.CodeBlockColor,
-		UnsupportedColor:      b.UnsupportedColor,
-		CodeSpanTextStyle:     fromPartial(b.CodeSpanTextStyle),
-		CodeSpanColor:         b.CodeSpanColor,
-		EmphasisTextStyle:     fromPartial(b.EmphasisTextStyle),
-		StrongTextStyle:       fromPartial(b.StrongTextStyle),
-		ThematicBreakMargins:  b.ThematicBreakMargins,
-		ThematicBreakColor:    b.ThematicBreakColor,
-		LinkColor:             b.LinkColor,
-		BlockquoteMargins:     b.BlockquoteMargins,
-		BlockquoteBarColor:    b.BlockquoteBarColor,
-		TableCellTextStyle:    fromPartial(b.TableCellTextStyle),
-		TableMargins:          b.TableMargins,
-		TableFrameColor:       b.TableFrameColor,
-		ImagePlaceholderColor: b.ImagePlaceholderColor,
-		TextColor:             b.TextColor,
-		BaseTextStyle:         fromPartial(styling.PartialTextStyle{TextStyle: b.BaseTextStyle, Set: styling.AllTextStyleFields}),
-		BackgroundColor:       b.Background,
-		ViewMargins:           b.ViewMargin,
-		HighlightColor:        b.Highlight,
-		ScrollbarColors:       ScrollbarColors(b.Scrollbar),
-		SyntaxColors:          SyntaxColors(b.Syntax),
-		LineHeight:            b.Dims.LineHeight,
-	}
-	for i, s := range b.HeadingTextStyles {
-		t.HeadingTextStyles[i] = fromPartial(s)
-	}
-	return t
 }
 
 // partial converts s to the engine's form, flagging its non-zero fields.
@@ -293,21 +375,4 @@ func (s TextStyle) over(base styling.TextStyle) styling.TextStyle {
 		base.Family = p.Family
 	}
 	return base
-}
-
-func fromPartial(p styling.PartialTextStyle) TextStyle {
-	var s TextStyle
-	if p.Set&styling.FieldSize != 0 {
-		s.Size = p.Size
-	}
-	if p.Set&styling.FieldStyle != 0 {
-		s.Style = Style(p.Style) + StyleNormal
-	}
-	if p.Set&styling.FieldWeight != 0 {
-		s.Weight = Weight(p.Weight) + WeightNormal
-	}
-	if p.Set&styling.FieldFamily != 0 {
-		s.Family = Family(p.Family) + Proportional
-	}
-	return s
 }

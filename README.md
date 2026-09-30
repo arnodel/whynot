@@ -128,7 +128,7 @@ func exampleDoc() string {
 }
 
 func main() {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 
@@ -188,6 +188,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
@@ -231,7 +232,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72)),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
@@ -256,7 +257,7 @@ Appearance - colors, margins, text sizes and weights - comes from the `View`'s
 plain fields. Use a ready-made one, or start from a preset and change what you need:
 
 ```go
-view := whynot.NewView(doc, faces, whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+view := whynot.NewView(doc, faces, simpletheme.DarkStyleSheet)
 
 theme := simpletheme.Dark() // or Light()
 theme.LinkColor = myColor
@@ -290,7 +291,7 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   ```go
   selector := whynot.NewCustomFontFaceSelector(72)
   selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
-  view := whynot.NewView(whynot.Parse(source), selector)
+  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
   `AddFontCollection`/`AddFontCollectionFile` register every subfont a `.ttc`/`.otc`
@@ -308,7 +309,7 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   ```go
   selector := systemfont.NewSystemFontFaceSelector(72)
   selector.RegisterSystemFont(whynot.Proportional, "Arial")
-  view := whynot.NewView(whynot.Parse(source), selector)
+  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
   `RegisterSystemFont` finds the best-matching installed font, then uses
@@ -326,7 +327,7 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   selector := systemfont.NewSystemFontFaceSelector(72)
   selector.RegisterPreferredFont(whynot.Proportional)
   selector.RegisterPreferredFont(whynot.Monospace)
-  view := whynot.NewView(whynot.Parse(source), selector)
+  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
   There's no portable way to ask the OS directly for its actual configured UI font
@@ -349,7 +350,7 @@ spans - colors it token-by-token instead, via `whynot.Parse`'s
 
 ```go
 doc := whynot.Parse(source, whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}))
-view := whynot.NewView(doc, selector)
+view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
 ```
 
 `chromahighlight` (`github.com/arnodel/whynot/chromahighlight`, a separate package to

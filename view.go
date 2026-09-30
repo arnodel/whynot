@@ -2,7 +2,6 @@ package whynot
 
 import (
 	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"time"
@@ -43,15 +42,6 @@ type View struct {
 // parameter.
 type ViewOption func(*View)
 
-// WithStyleSheet sets how the document looks, instead of the default dark
-// look - e.g. NewView(doc, faceSelector,
-// WithStyleSheet(simpletheme.LightStyleSheet)).
-func WithStyleSheet(s StyleSheet) ViewOption {
-	return func(v *View) {
-		v.ctx.Styles = s.Styles()
-	}
-}
-
 // WithImageSource overrides the ImageSource NewView otherwise defaults
 // to (FileImageSource) - e.g. for an embedder that wants images
 // resolved relative to a document's own location, or fetched over
@@ -63,14 +53,15 @@ func WithImageSource(s ImageSource) ViewOption {
 	}
 }
 
-// NewView returns a View of doc (see Parse), ready to render it once Layout
-// has been called at least once to establish a width.
-func NewView(doc *Document, faceSelector FaceSelector, opts ...ViewOption) *View {
+// NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
+// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
+// once Layout has been called to establish a width.
+func NewView(doc *Document, faceSelector FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
-			Styles:       styling.Dark(),
+			Styles:       styleSheet.Styles(),
 			ImageCache:   NewImageCache(FileImageSource{}),
 			hscroll:      newHScrollState(),
 		},

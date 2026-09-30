@@ -48,7 +48,7 @@ func main() {
 }
 
 func run() error {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
 	panel := giorenderer.NewPanel(view, giorenderer.New(), image.Rectangle{}, giorenderer.WithScrollbar())
 	panel.OnLinkClick = func(dest string) { log.Printf("clicked: %s", dest) }
 	panel.OnLinkHover = func(dest string) {

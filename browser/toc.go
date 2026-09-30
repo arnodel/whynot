@@ -40,8 +40,11 @@ func (a *App) ShowTOC() {
 	entries := docView.Document().TOCEntries()
 	currentID, _ := docView.CurrentHeadingID()
 
-	tocView := whynot.NewView(whynot.Parse(buildTOCSource(entries, currentID)), a.faceSelector,
-		whynot.WithStyleSheet(a.styleSheet))
+	tocView := whynot.NewView(
+		whynot.Parse(buildTOCSource(entries, currentID)),
+		a.faceSelector,
+		a.styleSheet,
+	)
 	tocView.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
 	if currentID != "" {
 		tocView.ScrollToAnchor(currentID)

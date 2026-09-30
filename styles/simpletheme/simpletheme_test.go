@@ -2,7 +2,6 @@ package simpletheme
 
 import (
 	"image/color"
-	"reflect"
 	"testing"
 
 	"golang.org/x/image/font"
@@ -10,24 +9,6 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 )
-
-// TestPresetsMatchEngineDefaults checks that converting a preset to a
-// StyleSheet reproduces the engine's own default styles exactly - no field
-// lost or mapped wrong in either direction.
-func TestPresetsMatchEngineDefaults(t *testing.T) {
-	for name, c := range map[string]struct {
-		theme *Theme
-		want  *styling.Basic
-	}{
-		"dark":  {Dark(), styling.Dark()},
-		"light": {Light(), styling.Light()},
-	} {
-		got := c.theme.StyleSheet().Styles()
-		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("%s: StyleSheet() = %+v, want %+v", name, got, c.want)
-		}
-	}
-}
 
 func TestTextStyleZeroInherits(t *testing.T) {
 	p := TextStyle{Weight: WeightBold}.partial()
@@ -57,7 +38,7 @@ func TestBaseTextStyleZeroTakesDefault(t *testing.T) {
 	theme := Dark()
 	theme.BaseTextStyle = TextStyle{Family: Monospace}
 	got := theme.StyleSheet().Styles().TextStyle(nil)
-	want := styling.Dark().BaseTextStyle
+	want := defaultBaseTextStyle
 	want.Family = styling.Monospace
 	if got.TextStyle != want || got.Set != styling.AllTextStyleFields {
 		t.Errorf("root text style = %+v, want %+v with every field set", got, want)
@@ -78,5 +59,43 @@ func TestLineHeight(t *testing.T) {
 	theme.LineHeight = 1.5
 	if got := theme.StyleSheet().Styles().LineHeight(nil); got != 1.5 {
 		t.Errorf("LineHeight = %v, want 1.5", got)
+	}
+}
+
+// TestLightColors checks that Light changes the colors that must be
+// readable on a light background, rather than being Dark under another
+// name.
+func TestLightColors(t *testing.T) {
+	dark, light := Dark(), Light()
+	for _, c := range []struct {
+		name        string
+		dark, light any
+	}{
+		{"BackgroundColor", dark.BackgroundColor, light.BackgroundColor},
+		{"TextColor", dark.TextColor, light.TextColor},
+		{"LinkColor", dark.LinkColor, light.LinkColor},
+		{"CodeBlockColor", dark.CodeBlockColor, light.CodeBlockColor},
+		{"CodeSpanColor", dark.CodeSpanColor, light.CodeSpanColor},
+		{"ScrollbarColors", dark.ScrollbarColors, light.ScrollbarColors},
+		{"SyntaxColors", dark.SyntaxColors, light.SyntaxColors},
+	} {
+		if c.dark == c.light {
+			t.Errorf("light %s = dark's (%v), want one readable on a light background", c.name, c.light)
+		}
+	}
+}
+
+// TestLightSharesNonColorValues checks that only colors differ between the
+// presets.
+func TestLightSharesNonColorValues(t *testing.T) {
+	dark, light := Dark(), Light()
+	if light.ParagraphMargins != dark.ParagraphMargins {
+		t.Errorf("ParagraphMargins = %+v, want dark's %+v", light.ParagraphMargins, dark.ParagraphMargins)
+	}
+	if light.HeadingTextStyles != dark.HeadingTextStyles {
+		t.Errorf("HeadingTextStyles = %+v, want dark's %+v", light.HeadingTextStyles, dark.HeadingTextStyles)
+	}
+	if light.LineHeight != dark.LineHeight {
+		t.Errorf("LineHeight = %v, want dark's %v", light.LineHeight, dark.LineHeight)
 	}
 }

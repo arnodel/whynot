@@ -1,10 +1,9 @@
 package styling
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 
-	"golang.org/x/image/font"
+	"github.com/arnodel/whynot/internal/ast"
 )
 
 // ScrollbarColors is the three colors a scrollbar thumb picks between -
@@ -26,8 +25,8 @@ type SyntaxColors struct {
 	Comment  color.Color
 }
 
-// Basic is the field-configured Styles implementation behind whynot's
-// default look (Dark, Light) and styles/simpletheme. It also satisfies
+// Basic is the field-configured Styles implementation behind
+// styles/simpletheme. It also satisfies
 // whynot.StyleSheet (see Styles), so it can be handed to a View directly;
 // treat it as immutable once it has been.
 type Basic struct {
@@ -130,148 +129,6 @@ var _ Styles = (*Basic)(nil)
 // a *Basic can be handed to a View directly.
 func (b *Basic) Styles() Styles {
 	return b
-}
-
-// Dark returns whynot's built-in dark look - light text on a dark
-// background - which is what a View uses when given no StyleSheet.
-func Dark() *Basic {
-	return &Basic{
-		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
-		ParagraphTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
-
-		HeadingMargins: [6]Margins{
-			{Top: 30, Bottom: 10},
-			{Top: 26, Bottom: 10},
-			{Top: 22, Bottom: 10},
-			{Top: 18, Bottom: 10},
-			{Top: 14, Bottom: 10},
-			{Top: 10, Bottom: 10},
-		},
-		// Family is left at its zero value (Proportional) for every
-		// level: no bold small-caps font ships in
-		// golang.org/x/image/font/gofont, and headings are bold, so
-		// small caps isn't available as a default.
-		HeadingTextStyles: [6]PartialTextStyle{
-			{TextStyle{Size: 40, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-			{TextStyle{Size: 36, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-			{TextStyle{Size: 32, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-			{TextStyle{Size: 28, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-			{TextStyle{Size: 24, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-			{TextStyle{Size: 20, Weight: font.WeightBold}, FieldSize | FieldWeight | FieldFamily},
-		},
-
-		ListMargins: Margins{Top: 10, Bottom: 10},
-
-		ListItemMargins:   Margins{Top: 5, Bottom: 5, Left: 40},
-		ListItemTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
-
-		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
-		CodeBlockTextStyle: PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily},
-		CodeBlockColor:     color.RGBA{0xD4, 0xD4, 0xD4, 0xFF},
-
-		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
-		// below, a strong red reads as an error against either a light
-		// or dark background, so Light leaves it as-is.
-		UnsupportedColor: color.RGBA{0xFF, 0x33, 0x33, 0xFF},
-
-		CodeSpanTextStyle: PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily},
-		CodeSpanColor:     color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
-		EmphasisTextStyle: PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle},
-		StrongTextStyle:   PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight},
-
-		ThematicBreakMargins: Margins{Top: 20, Bottom: 20},
-		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
-
-		LinkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
-
-		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
-		// below, an orange reads fine against either a light or dark
-		// background, so Light leaves it as-is.
-		Highlight: color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
-
-		// Light overrides this fully (see below) - unlike
-		// Highlight above, these don't read well against both
-		// backgrounds.
-		Scrollbar: ScrollbarColors{
-			Idle:    color.RGBA{0x80, 0x80, 0x80, 0xA0},
-			Hover:   color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
-			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
-		},
-
-		// Light overrides this fully (see below) - a palette
-		// tuned for a dark background won't read well on light and vice
-		// versa, the same reason TextColor/LinkColor/CodeBlockColor/
-		// CodeSpanColor differ between the two themes.
-		Syntax: SyntaxColors{
-			Keyword:  color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
-			Type:     color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
-			Function: color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}, // soft yellow-tan
-			String:   color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
-			Number:   color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
-			Comment:  color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
-		},
-
-		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
-		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
-
-		TableCellTextStyle: PartialTextStyle{TextStyle{Size: 16}, FieldSize},
-		TableMargins:       Margins{Top: 10, Bottom: 10},
-		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
-
-		ImagePlaceholderColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
-
-		TextColor:     color.White,
-		BaseTextStyle: TextStyle{Size: 16},
-
-		Background: color.Black,
-		ViewMargin: Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
-
-		Dims: Dimensions{
-			Strike:         1,
-			ThematicBreak:  2,
-			LineHeight:     1.2,
-			DiagramPadding: 12,
-			Blockquote:     BlockquoteGeometry{Indent: 16, BarWidth: 3},
-			Table: TableGeometry{
-				FrameThickness:      2,
-				ColumnGap:           12,
-				RowGap:              6,
-				HeaderGap:           4,
-				ColumnRuleThickness: 1,
-			},
-		},
-	}
-}
-
-// Light returns whynot's built-in light look - dark text on a light
-// background. Everything but color is identical to Dark (margins, sizes, weights, dimensional constants), so
-// it's built from it rather than repeating them: ThematicBreakColor,
-// BlockquoteBarColor, TableFrameColor, and ImagePlaceholderColor are
-// also left as Dark's mid-grey, which reads fine against
-// either a light or dark background, unlike
-// TextColor/Background/LinkColor/CodeBlockColor/CodeSpanColor/Scrollbar,
-// which need real light-appropriate values.
-func Light() *Basic {
-	s := Dark()
-	s.TextColor = color.RGBA{0x1A, 0x1A, 0x1A, 0xFF}
-	s.Background = color.White
-	s.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
-	s.CodeBlockColor = color.RGBA{0x33, 0x33, 0x33, 0xFF}
-	s.CodeSpanColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
-	s.Scrollbar = ScrollbarColors{
-		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
-		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
-		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
-	}
-	s.Syntax = SyntaxColors{
-		Keyword:  color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
-		Type:     color.RGBA{0x00, 0x7A, 0x6E, 0xFF},
-		Function: color.RGBA{0x7A, 0x66, 0x00, 0xFF},
-		String:   color.RGBA{0x1E, 0x7A, 0x2E, 0xFF},
-		Number:   color.RGBA{0xB0, 0x5A, 0x00, 0xFF},
-		Comment:  color.RGBA{0x60, 0x60, 0x60, 0xFF},
-	}
-	return s
 }
 
 func (s *Basic) Margins(node *ast.Node) Margins {

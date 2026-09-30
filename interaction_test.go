@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"math"
 	"strings"
@@ -30,7 +31,7 @@ func findLinkPos(t *testing.T, v *View, w, h int) (x, y int) {
 
 func newTestInteraction(t *testing.T, source string) (*Interaction, *View) {
 	t.Helper()
-	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72))
+	v := NewView(Parse([]byte(source)), NewGoFontFaceSelector(72), stylingtest.Basic())
 	v.Layout(testWidth, testHeight, 1, 0)
 	return &Interaction{View: v, Bounds: image.Rect(0, 0, testWidth, testHeight)}, v
 }

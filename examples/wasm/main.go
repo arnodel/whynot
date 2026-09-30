@@ -42,7 +42,7 @@ const initialWidth, initialHeight = 1024, 768
 var demoDoc []byte
 
 func main() {
-	view := whynot.NewView(whynot.Parse(demoDoc), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+	view := whynot.NewView(whynot.Parse(demoDoc), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(0, 0, initialWidth, initialHeight)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 

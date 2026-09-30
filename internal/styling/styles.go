@@ -1,16 +1,17 @@
 // Package styling is whynot's style machinery: the per-element queries
 // the layout engine resolves appearance through (Styles), and the
-// field-configured implementation behind the default look (Basic). It's
+// field-configured implementation simpletheme builds (Basic). It's
 // internal so the public API only exposes an opaque whynot.StyleSheet;
 // stylesheets are made by packages under styles/.
 package styling
 
 import (
 	"fmt"
-	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 
 	"golang.org/x/image/font"
+
+	"github.com/arnodel/whynot/internal/ast"
 )
 
 // Margins is the space around a block, in logical (unscaled) pixels.
