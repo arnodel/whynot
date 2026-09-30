@@ -29,6 +29,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // initialWidth/Height only matter for the very first frame - Layout
@@ -41,7 +42,7 @@ const initialWidth, initialHeight = 1024, 768
 var demoDoc []byte
 
 func main() {
-	view := whynot.NewView(whynot.Parse(demoDoc), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
+	view := whynot.NewView(whynot.Parse(demoDoc), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
 	bounds := image.Rect(0, 0, initialWidth, initialHeight)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 

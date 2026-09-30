@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"bytes"
+	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"io"
@@ -29,7 +30,7 @@ func (b *fixedHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
-func (b *fixedHeightBlock) Node() *ASTNode {
+func (b *fixedHeightBlock) Node() *styling.Node {
 	return nil
 }
 
@@ -48,17 +49,17 @@ func (b *scaledHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
-func (b *scaledHeightBlock) Node() *ASTNode {
+func (b *scaledHeightBlock) Node() *styling.Node {
 	return nil
 }
 
-// noMarginStyleSheet returns NewDarkStyleSheet with its ViewMargins zeroed,
+// noMarginStyleSheet returns the default dark styles with its ViewMargins zeroed,
 // for tests that check exact slot indices/heights - the default nonzero
 // margin would shift every index by the leading margin slot and need
 // accounting for in every expected value, none of which is what these
 // tests are about.
-func noMarginStyleSheet() *DefaultStyleSheet {
-	s := NewDarkStyleSheet()
+func noMarginStyleSheet() *styling.Basic {
+	s := styling.Dark()
 	s.ViewMargin = Margins{}
 	return s
 }
@@ -71,7 +72,7 @@ func testDocument(blocks ...Block) *Document {
 func newTestView(blocks ...Block) *View {
 	return &View{
 		doc: testDocument(blocks...),
-		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()},
+		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: noMarginStyleSheet()},
 	}
 }
 
@@ -147,7 +148,7 @@ func TestViewDrawFillsBackground(t *testing.T) {
 		t.Fatal("Draw issued no DrawRect calls, want at least a background fill")
 	}
 	got := dst.rects[0]
-	want := drawnRect{5, 10, 100, 50, v.ctx.StyleSheet.BackgroundColor()}
+	want := drawnRect{5, 10, 100, 50, v.ctx.Styles.BackgroundColor()}
 	if got != want {
 		t.Errorf("background fill = %+v, want %+v", got, want)
 	}
@@ -168,12 +169,12 @@ func TestViewDrawFillsBackgroundBeforeLayout(t *testing.T) {
 }
 
 // TestNewViewWithStyleSheet checks that WithStyleSheet overrides NewView's
-// default StyleSheet (NewDarkStyleSheet).
+// default StyleSheet (styling.Dark).
 func TestNewViewWithStyleSheet(t *testing.T) {
-	custom := NewDarkStyleSheet()
+	custom := styling.Dark()
 	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), WithStyleSheet(custom))
-	if v.ctx.StyleSheet != StyleSheet(custom) {
-		t.Errorf("StyleSheet = %v, want the instance passed via WithStyleSheet", v.ctx.StyleSheet)
+	if v.ctx.Styles != custom.Styles() {
+		t.Errorf("StyleSheet = %v, want the instance passed via WithStyleSheet", v.ctx.Styles)
 	}
 }
 
@@ -185,12 +186,12 @@ func TestNewViewWithStyleSheet(t *testing.T) {
 // until something else happened to trigger a resize.
 func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
 	block := Parse([]byte("hello world"))
-	small := NewDarkStyleSheet()
+	small := styling.Dark()
 	small.ParagraphTextStyle.Size = 10
-	big := NewDarkStyleSheet()
+	big := styling.Dark()
 	big.ParagraphTextStyle.Size = 40
 
-	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
+	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: small}}
 	v.Layout(200, 1000, 1, 0)
 	smallHeight := v.stack.box.Bounds().Dy()
 
@@ -207,7 +208,7 @@ func TestViewSetStyleSheetRebuildsImmediately(t *testing.T) {
 // at a meaningless zero width) - the eventual first Layout call picks up
 // the StyleSheet on its own.
 func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
-	custom := NewLightStyleSheet()
+	custom := styling.Light()
 	v := newTestView(&fixedHeightBlock{height: 10})
 
 	v.SetStyleSheet(custom)
@@ -216,8 +217,8 @@ func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
 	}
 
 	v.Layout(100, 1000, 1, 0)
-	if v.ctx.StyleSheet != StyleSheet(custom) {
-		t.Errorf("StyleSheet after the first Layout = %v, want the instance passed to SetStyleSheet", v.ctx.StyleSheet)
+	if v.ctx.Styles != custom.Styles() {
+		t.Errorf("StyleSheet after the first Layout = %v, want the instance passed to SetStyleSheet", v.ctx.Styles)
 	}
 }
 
@@ -228,14 +229,14 @@ func TestViewSetStyleSheetBeforeLayout(t *testing.T) {
 // the raw pixel offset alone would point at different content.
 func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	block := Parse([]byte("first\n\nsecond"))
-	small := NewDarkStyleSheet()
+	small := styling.Dark()
 	small.ParagraphTextStyle.Size = 10
 	small.ViewMargin = Margins{}
-	big := NewDarkStyleSheet()
+	big := styling.Dark()
 	big.ParagraphTextStyle.Size = 40
 	big.ViewMargin = Margins{}
 
-	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: small}}
+	v := &View{doc: block, ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: small}}
 	v.Layout(200, 1000, 1, 0)
 
 	// Slot 1 is the margin gap StackBlock.GetBlockLayout inserts between the two
@@ -265,11 +266,11 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 // real leading/trailing EmptyBox slots (not just a draw-time offset), and
 // that a zero margin (the common case in other tests) adds none.
 func TestViewRebuildInsertsMarginSlots(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	style.ViewMargin = Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
-		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: style},
+		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: style},
 	}
 	v.Layout(100, 1000, 1, 0)
 
@@ -292,11 +293,11 @@ func TestViewRebuildInsertsMarginSlots(t *testing.T) {
 // the last real content block - the margin is real (if empty) space in
 // the tree, so it's reachable by scrolling exactly like any other slot.
 func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	style.ViewMargin = Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
-		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: style},
+		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: style},
 	}
 	v.Layout(100, 1000, 1, 0)
 
@@ -312,7 +313,7 @@ func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 // point on real content resolves with bounds correctly shifted back into
 // the same coordinate space the query arrived in.
 func TestViewHitTestAppliesMargin(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	style.ViewMargin = Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
 	v := NewView(Parse([]byte("hello")), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
@@ -344,7 +345,7 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 // itself (see TestViewRebuildInsertsMarginSlots), but left has no slot to
 // carry it, so Draw has to apply it directly.
 func TestViewDrawAppliesLeftMargin(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	style.ViewMargin = Margins{Left: 20}
 	v := NewView(Parse([]byte("---")), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
@@ -436,7 +437,7 @@ func TestViewLayoutReanchor(t *testing.T) {
 }
 
 // TestViewHitTestEndToEnd checks that HitTest reaches every kind of
-// content in a real document, resolving to the right ASTTag. Exact pixel
+// content in a real document, resolving to the right styling.Tag. Exact pixel
 // positions aren't predictable across margins/gaps/nesting, so this
 // scans a coarse grid over the whole rendered document and just checks
 // that *some* point resolves to each expected tag - a topological
@@ -467,7 +468,7 @@ code line
 	v.Layout(width, 1000, 1, 0)
 
 	height := v.stack.box.Bounds().Dy()
-	found := map[ASTTag]bool{}
+	found := map[styling.Tag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
 			hit, _ := v.HitTest(x, y)
@@ -478,15 +479,15 @@ code line
 		}
 	}
 
-	for _, tag := range []ASTTag{
-		TagHeading1,
-		TagParagraph,
-		TagCodeBlock,
-		TagListItem,
-		TagBlockquote,
-		TagTable,
-		TagTableCell,
-		TagThematicBreak,
+	for _, tag := range []styling.Tag{
+		styling.TagHeading1,
+		styling.TagParagraph,
+		styling.TagCodeBlock,
+		styling.TagListItem,
+		styling.TagBlockquote,
+		styling.TagTable,
+		styling.TagTableCell,
+		styling.TagThematicBreak,
 	} {
 		if !found[tag] {
 			t.Errorf("no point in the document resolved to tag %v", tag)
@@ -498,7 +499,7 @@ code line
 // returning the first match - for tests that need a real point on
 // specific content without hardcoding pixel positions (exact positions
 // depend on font metrics/wrapping, which this sidesteps).
-func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
+func findTag(v *View, tag styling.Tag) (x, y int, ok bool) {
 	height := v.stack.box.Bounds().Dy()
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < v.width; x += 2 {
@@ -517,13 +518,13 @@ func findTag(v *View, tag ASTTag) (x, y int, ok bool) {
 // invalidation (see StackBox.invalidate), not a full rebuild: v.stack.box itself
 // stays the same object throughout.
 func TestViewHoverHighlightsLink(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 
 	beforeBox := v.stack.box
@@ -557,9 +558,9 @@ func TestViewLinkAt(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](https://example.com/target) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 	dest, ok := v.LinkAt(x, y)
 	if !ok {
@@ -598,7 +599,7 @@ func TestViewScrollToAnchor(t *testing.T) {
 	if hit == nil {
 		t.Fatal("hit at the top of the viewport after ScrollToAnchor = nil")
 	}
-	heading := hit.Source().Node().AncestorTag(TagHeading1)
+	heading := hit.Source().Node().AncestorTag(styling.TagHeading1)
 	if heading == nil || heading.ID != "second" {
 		t.Errorf("top of viewport after ScrollToAnchor(\"second\") isn't the Second heading (heading = %v)", heading)
 	}
@@ -750,9 +751,9 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 
 	v.Hover(x, y)
@@ -771,9 +772,9 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 	v.Hover(x, y)
 	if v.ctx.HighlightNode == nil {
@@ -786,12 +787,12 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	}
 }
 
-// findTwoLinks scans v for two points landing on two different TagLink
+// findTwoLinks scans v for two points landing on two different styling.TagLink
 // nodes, for tests that need to hover between distinct links.
 func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 	t.Helper()
 	height := v.stack.box.Bounds().Dy()
-	var firstNode *ASTNode
+	var firstNode *styling.Node
 	found := 0
 	for y := 0; y < height && found < 2; y += 2 {
 		for x := 0; x < v.width && found < 2; x += 2 {
@@ -800,7 +801,7 @@ func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 				continue
 			}
 			n := hit.Source().Node()
-			if n == nil || n.Tag != TagLink {
+			if n == nil || n.Tag != styling.TagLink {
 				continue
 			}
 			if found == 0 {
@@ -873,7 +874,7 @@ func TestViewHoverSurgicalInvalidation(t *testing.T) {
 // (the mechanism highlightSlot's own doc comment relies on to stay
 // fresh across a rebuild it can't itself observe).
 func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
-	style := NewDarkStyleSheet()
+	style := styling.Dark()
 	v := NewView(Parse([]byte(twoLinkDoc)), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
 
@@ -919,9 +920,9 @@ func BenchmarkViewHover(b *testing.B) {
 	v := NewView(Parse(source), NewGoFontFaceSelector(72))
 	v.Layout(1024, 1000, 1, 0)
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		b.Fatal("no point in the document resolved to TagLink")
+		b.Fatal("no point in the document resolved to styling.TagLink")
 	}
 
 	b.ResetTimer()
@@ -946,7 +947,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet(), ImageCache: NewImageCache(FileImageSource{})}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark(), ImageCache: NewImageCache(FileImageSource{})}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {
@@ -1100,9 +1101,9 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	}
 	before := v.DocumentBounds()
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 	_, slot := v.linkNodeAt(x, y)
 
@@ -1130,7 +1131,7 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 			&scaledHeightBlock{scale: 1}, // height == width given
 			&scaledHeightBlock{scale: 1},
 		),
-		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()},
+		ctx: RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: noMarginStyleSheet()},
 	}
 	v.Layout(100, 1000, 1, 0)
 	v.stack.box.boxAt(1)   // resolve slot 1 too, not just the cursor's own slot 0
@@ -1178,9 +1179,9 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	v.Layout(300, 1000, 1, 0)
 	v.Scroll(20) // resolve a couple of slots, the way real scrolling would
 
-	x, y, ok := findTag(v, TagLink)
+	x, y, ok := findTag(v, styling.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to TagLink")
+		t.Fatal("no point in the document resolved to styling.TagLink")
 	}
 
 	wantDoc := v.DocumentBounds()
@@ -1430,7 +1431,7 @@ func (b *slowBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 }
 
 func (b *slowBlock) Margins(ctx RenderingContext) Margins { return Margins{} }
-func (b *slowBlock) Node() *ASTNode                       { return nil }
+func (b *slowBlock) Node() *styling.Node                  { return nil }
 
 // TestViewPreLayoutNearbyRespectsTimeBudget checks that documentStack.preLayout
 // stops resolving once preLayoutTimeBudget is spent, rather than
@@ -1552,7 +1553,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 	// production code does.
 	slots[imageSlotIndex] = stackSlot{block: &TextBlock{parts: []Inline{&InlineImage{src: "cat.jpeg"}}}, width: 100}
 
-	ctx := RenderingContext{Scale: 1, ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: noMarginStyleSheet()}
+	ctx := RenderingContext{Scale: 1, ImageCache: cache, FaceSelector: NewGoFontFaceSelector(72), Styles: noMarginStyleSheet()}
 	view := &View{
 		doc:   &Document{},
 		ctx:   ctx,

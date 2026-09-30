@@ -93,7 +93,7 @@ type PanelOption func(*Panel)
 // right edge, draggable - omitted by default so a panel that never
 // needs one pays no cost tracking drag state or hit-testing a rect
 // that was never drawn. Colour/width aren't configured here - they come
-// from the View's own StyleSheet (ScrollbarStyleSheet) and
+// from the View's StyleSheet (View.ScrollbarColor) and
 // ScaledViewMargins, exactly as cmd/whynot's scrollbar already does.
 func WithScrollbar() PanelOption {
 	return func(p *Panel) { p.scrollbarEnabled = true }

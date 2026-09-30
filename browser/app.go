@@ -26,6 +26,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/chromahighlight"
 	"github.com/arnodel/whynot/kroki"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // document pairs a View with the location it was loaded from, so a
@@ -79,10 +80,9 @@ type App struct {
 
 	faceSelector whynot.FaceSelector
 	styleSheet   whynot.StyleSheet
-	// darkTheme tracks which of styleSheet's two possible values is
-	// current - NewDarkStyleSheet/NewLightStyleSheet both return the
-	// same concrete type, so there's no way to recover this from
-	// styleSheet itself.
+	// darkTheme tracks which of the two built-in stylesheets is current,
+	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
+	// recovered from styleSheet itself.
 	darkTheme bool
 
 	// zoom is a user-controlled multiplier on top of the display's own
@@ -179,9 +179,9 @@ func (a *App) elapsed() time.Duration {
 // to show) reads.
 func (a *App) SetTheme(dark bool) {
 	if dark {
-		a.styleSheet = whynot.NewDarkStyleSheet()
+		a.styleSheet = simpletheme.DarkStyleSheet
 	} else {
-		a.styleSheet = whynot.NewLightStyleSheet()
+		a.styleSheet = simpletheme.LightStyleSheet
 	}
 	a.darkTheme = dark
 	a.Panel.SetStyleSheet(a.styleSheet)

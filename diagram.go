@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"time"
@@ -11,27 +12,27 @@ import (
 // that would've rendered without a plugin - while it's still pending or
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See CodeBlockPlugin.
-func NewDiagramBlock(node *ASTNode, img AsyncImage, fallback Block) Block {
-	return &diagramBlock{node: node, imageNode: node.AddChild(TagImage), img: img, fallback: fallback}
+func NewDiagramBlock(node *styling.Node, img AsyncImage, fallback Block) Block {
+	return &diagramBlock{node: node, imageNode: node.AddChild(styling.TagImage), img: img, fallback: fallback}
 }
 
 type diagramBlock struct {
 	WithoutMargins
-	node *ASTNode
-	// imageNode is a TagImage child of node, precomputed once here
+	node *styling.Node
+	// imageNode is a styling.TagImage child of node, precomputed once here
 	// rather than on demand inside GetBlockLayout (which can run many
-	// times - a resize, a theme change - and ASTNode.AddChild isn't
+	// times - a resize, a theme change - and styling.Node.AddChild isn't
 	// idempotent) - mirrors InlineImage's identical fallbackNode field.
 	// Its only job is giving the ready image's frame a StyleSheet.
-	// BorderColor to resolve (TagCodeBlock, node's own tag, has none).
-	imageNode *ASTNode
+	// BorderColor to resolve (styling.TagCodeBlock, node's own tag, has none).
+	imageNode *styling.Node
 	img       AsyncImage
 	fallback  Block
 }
 
 var _ Block = (*diagramBlock)(nil)
 
-func (b *diagramBlock) Node() *ASTNode {
+func (b *diagramBlock) Node() *styling.Node {
 	return b.node
 }
 
@@ -51,7 +52,7 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 	}
 
 	frameThickness := int(ctx.ScaledThematicBreakThickness(b.imageNode))
-	inset := frameThickness + int(diagramPadding(ctx.StyleSheet, b.imageNode)*ctx.Scale)
+	inset := frameThickness + int(ctx.Styles.DiagramPadding(b.imageNode)*ctx.Scale)
 	availableWidth := width - 2*inset
 	if availableWidth < 0 {
 		availableWidth = 0
@@ -63,47 +64,9 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 		bounds:         image.Rect(0, 0, imgBounds.Dx()+2*inset, imgBounds.Dy()+2*inset),
 		inset:          inset,
 		frameThickness: frameThickness,
-		frameColor:     ctx.StyleSheet.BorderColor(b.imageNode),
+		frameColor:     ctx.Styles.BorderColor(b.imageNode),
 		source:         b,
 	}}
-}
-
-// DiagramStyleSheet is an optional StyleSheet capability for
-// customizing a rendered diagram's own "matting" (see NewDiagramBlock) -
-// a StyleSheet that doesn't implement it gets fallbackDiagramPadding
-// instead (DefaultStyleSheet does implement it, so both of whynot's own
-// built-in themes are already customizable this way, including via the
-// usual embed-and-override-one-method pattern documented on
-// DefaultStyleSheet's own dimensional-constant fields).
-//
-// This - a small capability interface specific to one Block/BlockLayout
-// pair, checked with a type assertion, rather than a method on the core
-// StyleSheet interface itself - is the general pattern for any future
-// CodeBlockPlugin (or other extension) that needs its own styling knob:
-// StyleSheet stays fixed, so every existing implementation keeps
-// compiling unmodified, and only a StyleSheet that actually wants to
-// customize that one extension's own concern needs to implement its
-// (equally small) interface.
-type DiagramStyleSheet interface {
-	// DiagramPadding is the "matting" between a diagram's frame and its
-	// own content, in logical (unscaled) pixels - without it, the frame
-	// hugs the diagram's own edges too tightly, which often come right
-	// up to its bounding box.
-	DiagramPadding(node *ASTNode) float64
-}
-
-// fallbackDiagramPadding is diagramPadding's answer for a StyleSheet
-// that doesn't implement DiagramStyleSheet at all (some pre-existing
-// custom implementation, most likely).
-const fallbackDiagramPadding = 12
-
-// diagramPadding resolves DiagramStyleSheet if styleSheet implements it,
-// falling back to fallbackDiagramPadding otherwise.
-func diagramPadding(styleSheet StyleSheet, node *ASTNode) float64 {
-	if ds, ok := styleSheet.(DiagramStyleSheet); ok {
-		return ds.DiagramPadding(node)
-	}
-	return fallbackDiagramPadding
 }
 
 // diagramBox is a thin delegating BlockLayout: Bounds/Source/
@@ -147,7 +110,7 @@ func (b *diagramBox) PendingImages() []string {
 // any other image once decoded, except for one deliberate difference:
 // it always draws on an opaque white backdrop, framed the same way
 // TableBox's own border is (frameThickness/frameColor, both from
-// ctx.StyleSheet). A rendered diagram's own colors (arrow strokes, thin
+// ctx.Styles). A rendered diagram's own colors (arrow strokes, thin
 // lines, text) are chosen by whatever tool produced it assuming a light
 // backdrop, and Kroki's own output is transparent where nothing is
 // drawn - composited directly over the page's own background, a dark

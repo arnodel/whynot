@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // longDoc is long enough, laid out at testPanelWidth, to exceed
@@ -236,22 +237,15 @@ func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
 	}
 }
 
-// scrollbarStyle is a minimal whynot.ScrollbarStyleSheet for tests,
-// wrapping a StyleSheet with one fixed, distinctive color regardless
-// of hover/pressed state.
-type fixedScrollbarStyleSheet struct {
-	whynot.StyleSheet
-	c color.Color
-}
-
-func (s fixedScrollbarStyleSheet) ScrollbarColor(hover, pressed bool) color.Color { return s.c }
-
 func TestSetView(t *testing.T) {
-	styled := fixedScrollbarStyleSheet{StyleSheet: whynot.NewDarkStyleSheet(), c: color.RGBA{1, 2, 3, 4}}
+	// A stylesheet with one distinctive scrollbar color, whatever the state.
+	c := color.RGBA{1, 2, 3, 4}
+	theme := simpletheme.Dark()
+	theme.ScrollbarColors = simpletheme.ScrollbarColors{Idle: c, Hover: c, Pressed: c}
 
-	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar(), WithStyleSheet(styled))
-	if got := p.scrollbarColor(); got != styled.c {
-		t.Fatalf("scrollbarColor before SetView = %v, want %v", got, styled.c)
+	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar(), WithStyleSheet(theme.StyleSheet()))
+	if got := p.scrollbarColor(); got != c {
+		t.Fatalf("scrollbarColor before SetView = %v, want %v", got, c)
 	}
 
 	// Get it into a mid-drag state so SetView's reset is meaningful to check.
@@ -278,8 +272,8 @@ func TestSetView(t *testing.T) {
 	// The remembered StyleSheet should carry over to the new View -
 	// scrollbarColor is the only externally-observable proof available
 	// (View has no public getter for its own current StyleSheet).
-	if got := p.scrollbarColor(); got != styled.c {
-		t.Errorf("scrollbarColor after SetView = %v, want %v (StyleSheet not re-applied)", got, styled.c)
+	if got := p.scrollbarColor(); got != c {
+		t.Errorf("scrollbarColor after SetView = %v, want %v (StyleSheet not re-applied)", got, c)
 	}
 }
 

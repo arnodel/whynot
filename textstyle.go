@@ -1,8 +1,6 @@
 package whynot
 
 import (
-	"fmt"
-
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gobolditalic"
@@ -17,37 +15,22 @@ import (
 	"golang.org/x/image/font/gofont/gosmallcaps"
 	"golang.org/x/image/font/gofont/gosmallcapsitalic"
 	"golang.org/x/image/font/opentype"
+
+	"github.com/arnodel/whynot/internal/styling"
 )
 
-type FontFamily int
+// FontFamily is a broad family of fonts a FaceSelector chooses between.
+type FontFamily = styling.FontFamily
 
 const (
-	Proportional FontFamily = iota
-	Monospace
-	SmallCaps
+	Proportional = styling.Proportional
+	Monospace    = styling.Monospace
+	SmallCaps    = styling.SmallCaps
 )
 
-// String names f for logging/debugging - e.g. a FaceSelector reporting
-// which family a font-resolution decision was made for.
-func (f FontFamily) String() string {
-	switch f {
-	case Proportional:
-		return "Proportional"
-	case Monospace:
-		return "Monospace"
-	case SmallCaps:
-		return "SmallCaps"
-	default:
-		return fmt.Sprintf("FontFamily(%d)", int(f))
-	}
-}
-
-type TextStyle struct {
-	Size   float64
-	Style  font.Style
-	Weight font.Weight
-	Family FontFamily
-}
+// TextStyle is a fully resolved text style: what a FaceSelector is asked
+// to find a face for.
+type TextStyle = styling.TextStyle
 
 type FaceSelector interface {
 	SelectFace(TextStyle) (font.Face, error)
@@ -128,16 +111,16 @@ func (s *GoFontFaceSelector) SelectFace(style TextStyle) (font.Face, error) {
 }
 
 var goFonts = map[TextStyle][]byte{
-	{0, font.StyleNormal, font.WeightNormal, Proportional}: goregular.TTF,
-	{0, font.StyleItalic, font.WeightNormal, Proportional}: goitalic.TTF,
-	{0, font.StyleNormal, font.WeightMedium, Proportional}: gomedium.TTF,
-	{0, font.StyleItalic, font.WeightMedium, Proportional}: gomediumitalic.TTF,
-	{0, font.StyleNormal, font.WeightBold, Proportional}:   gobold.TTF,
-	{0, font.StyleItalic, font.WeightBold, Proportional}:   gobolditalic.TTF,
-	{0, font.StyleNormal, font.WeightNormal, Monospace}:    gomono.TTF,
-	{0, font.StyleItalic, font.WeightNormal, Monospace}:    gomonoitalic.TTF,
-	{0, font.StyleNormal, font.WeightBold, Monospace}:      gomonobold.TTF,
-	{0, font.StyleItalic, font.WeightBold, Monospace}:      gomonobolditalic.TTF,
-	{0, font.StyleNormal, font.WeightNormal, SmallCaps}:    gosmallcaps.TTF,
-	{0, font.StyleItalic, font.WeightNormal, SmallCaps}:    gosmallcapsitalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightNormal, Family: Proportional}: goregular.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightNormal, Family: Proportional}: goitalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightMedium, Family: Proportional}: gomedium.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightMedium, Family: Proportional}: gomediumitalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightBold, Family: Proportional}:   gobold.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightBold, Family: Proportional}:   gobolditalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightNormal, Family: Monospace}:    gomono.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightNormal, Family: Monospace}:    gomonoitalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightBold, Family: Monospace}:      gomonobold.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightBold, Family: Monospace}:      gomonobolditalic.TTF,
+	{Style: font.StyleNormal, Weight: font.WeightNormal, Family: SmallCaps}:    gosmallcaps.TTF,
+	{Style: font.StyleItalic, Weight: font.WeightNormal, Family: SmallCaps}:    gosmallcapsitalic.TTF,
 }

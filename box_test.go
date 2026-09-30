@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"testing"
@@ -14,25 +15,25 @@ import (
 // known Node() to trace back to - GetBlockLayout/Margins are never called by
 // these tests.
 type sourceBlock struct {
-	node *ASTNode
+	node *styling.Node
 }
 
 func (b *sourceBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
 	panic("not implemented")
 }
 func (b *sourceBlock) Margins(ctx RenderingContext) Margins { panic("not implemented") }
-func (b *sourceBlock) Node() *ASTNode                       { return b.node }
+func (b *sourceBlock) Node() *styling.Node                  { return b.node }
 
 func TestRuleBoxHitTest(t *testing.T) {
-	src := &sourceBlock{node: &ASTNode{Tag: TagThematicBreak}}
+	src := &sourceBlock{node: &styling.Node{Tag: styling.TagThematicBreak}}
 	b := &RuleBox{width: 100, thickness: 2, source: src}
 
 	hit, offset := b.HitTest(image.Pt(50, 1))
 	if hit == nil {
 		t.Fatal("HitTest = nil hit, want a match")
 	}
-	if hit.Source().Node().Tag != TagThematicBreak {
-		t.Errorf("Tag = %v, want TagThematicBreak", hit.Source().Node().Tag)
+	if hit.Source().Node().Tag != styling.TagThematicBreak {
+		t.Errorf("Tag = %v, want styling.TagThematicBreak", hit.Source().Node().Tag)
 	}
 	if want := b.Bounds(); hit.Bounds().Add(offset) != want {
 		t.Errorf("bounds = %v, want %v (the whole rule)", hit.Bounds().Add(offset), want)
@@ -47,13 +48,13 @@ func TestEmptyBoxHitTest(t *testing.T) {
 }
 
 func TestContainerBoxHitTest(t *testing.T) {
-	src := &sourceBlock{node: &ASTNode{Tag: TagThematicBreak}}
+	src := &sourceBlock{node: &styling.Node{Tag: styling.TagThematicBreak}}
 	inner := &RuleBox{width: 50, thickness: 2, source: src}
 	b := NewContainerBox(inner, 100, 10, 20, 3) // inner offset by (20, 3)
 
 	// Inside inner's shifted footprint.
 	hit, offset := b.HitTest(image.Pt(30, 4))
-	if hit == nil || hit.Source().Node().Tag != TagThematicBreak {
+	if hit == nil || hit.Source().Node().Tag != styling.TagThematicBreak {
 		t.Fatalf("hit inside inner = %v, want ThematicBreak", hit)
 	}
 	if want := inner.Bounds().Add(image.Pt(20, 3)); hit.Bounds().Add(offset) != want {
@@ -67,17 +68,17 @@ func TestContainerBoxHitTest(t *testing.T) {
 }
 
 func TestBlockquoteBoxHitTest(t *testing.T) {
-	quoteSrc := &sourceBlock{node: &ASTNode{Tag: TagBlockquote}}
-	contentSrc := &sourceBlock{node: &ASTNode{Tag: TagParagraph}}
+	quoteSrc := &sourceBlock{node: &styling.Node{Tag: styling.TagBlockquote}}
+	contentSrc := &sourceBlock{node: &styling.Node{Tag: styling.TagParagraph}}
 	content := &RuleBox{width: 80, thickness: 10, source: contentSrc}
 	b := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: content, source: quoteSrc}
 
-	if hit, offset := b.HitTest(image.Pt(1, 1)); hit == nil || hit.Source().Node().Tag != TagBlockquote {
+	if hit, offset := b.HitTest(image.Pt(1, 1)); hit == nil || hit.Source().Node().Tag != styling.TagBlockquote {
 		t.Errorf("bar hit = %v, want Blockquote", hit)
 	} else if want := b.Bounds(); hit.Bounds().Add(offset) != want {
 		t.Errorf("bar hit bounds = %v, want %v (the whole quote)", hit.Bounds().Add(offset), want)
 	}
-	if hit, offset := b.HitTest(image.Pt(50, 1)); hit == nil || hit.Source().Node().Tag != TagParagraph {
+	if hit, offset := b.HitTest(image.Pt(50, 1)); hit == nil || hit.Source().Node().Tag != styling.TagParagraph {
 		t.Errorf("content hit = %v, want Paragraph", hit)
 	} else if want := content.Bounds().Add(image.Pt(16, 0)); hit.Bounds().Add(offset) != want {
 		t.Errorf("content hit bounds = %v, want %v (content's bounds shifted by indent)", hit.Bounds().Add(offset), want)
@@ -86,14 +87,14 @@ func TestBlockquoteBoxHitTest(t *testing.T) {
 	// A gap inside the content area (EmptyBox always declines) falls
 	// back to the blockquote itself rather than reporting no match.
 	empty := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: NewEmptyBox(80, 10), source: quoteSrc}
-	if hit, _ := empty.HitTest(image.Pt(50, 1)); hit == nil || hit.Source().Node().Tag != TagBlockquote {
+	if hit, _ := empty.HitTest(image.Pt(50, 1)); hit == nil || hit.Source().Node().Tag != styling.TagBlockquote {
 		t.Errorf("gap-in-content hit = %v, want fallback Blockquote", hit)
 	}
 }
 
 func TestTableBoxHitTest(t *testing.T) {
-	tableSrc := &sourceBlock{node: &ASTNode{Tag: TagTable}}
-	cellSrc := &sourceBlock{node: &ASTNode{Tag: TagTableCell}}
+	tableSrc := &sourceBlock{node: &styling.Node{Tag: styling.TagTable}}
+	cellSrc := &sourceBlock{node: &styling.Node{Tag: styling.TagTableCell}}
 	cell := &RuleBox{width: 30, thickness: 10, source: cellSrc}
 
 	// One column [5, 45), one row [5, 25) - everything outside that
@@ -106,12 +107,12 @@ func TestTableBoxHitTest(t *testing.T) {
 		source:        tableSrc,
 	}
 
-	if hit, offset := b.HitTest(image.Pt(20, 10)); hit == nil || hit.Source().Node().Tag != TagTableCell {
+	if hit, offset := b.HitTest(image.Pt(20, 10)); hit == nil || hit.Source().Node().Tag != styling.TagTableCell {
 		t.Errorf("cell hit = %v, want TableCell", hit)
 	} else if want := cell.Bounds().Add(image.Pt(5, 5)); hit.Bounds().Add(offset) != want {
 		t.Errorf("cell hit bounds = %v, want %v (cell's bounds shifted by its offset)", hit.Bounds().Add(offset), want)
 	}
-	if hit, offset := b.HitTest(image.Pt(2, 10)); hit == nil || hit.Source().Node().Tag != TagTable {
+	if hit, offset := b.HitTest(image.Pt(2, 10)); hit == nil || hit.Source().Node().Tag != styling.TagTable {
 		t.Errorf("frame hit (before first column) = %v, want fallback Table", hit)
 	} else if want := b.Bounds(); hit.Bounds().Add(offset) != want {
 		t.Errorf("frame hit bounds = %v, want %v (the whole table)", hit.Bounds().Add(offset), want)
@@ -124,7 +125,7 @@ func TestTableBoxHitTest(t *testing.T) {
 		cells:         [][]BlockLayout{{NewEmptyBox(40, 20)}},
 		source:        tableSrc,
 	}
-	if hit, _ := bEmpty.HitTest(image.Pt(20, 10)); hit == nil || hit.Source().Node().Tag != TagTable {
+	if hit, _ := bEmpty.HitTest(image.Pt(20, 10)); hit == nil || hit.Source().Node().Tag != styling.TagTable {
 		t.Errorf("declining-cell hit = %v, want fallback Table", hit)
 	}
 }
@@ -135,7 +136,7 @@ func TestTextBoxHitTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := &InlineText{text: "hi", node: &ASTNode{Tag: TagParagraph}}
+	src := &InlineText{text: "hi", node: &styling.Node{Tag: styling.TagParagraph}}
 	b := &TextBox{Text: "hi", Face: face, source: src}
 
 	bounds, _ := b.BoundsAndAdvance()
@@ -143,8 +144,8 @@ func TestTextBoxHitTest(t *testing.T) {
 	if hit == nil {
 		t.Fatal("HitTest inside glyph bounds = nil hit, want a match")
 	}
-	if hit.Source().Node().Tag != TagParagraph {
-		t.Errorf("Tag = %v, want TagParagraph", hit.Source().Node().Tag)
+	if hit.Source().Node().Tag != styling.TagParagraph {
+		t.Errorf("Tag = %v, want styling.TagParagraph", hit.Source().Node().Tag)
 	}
 	if got := hit.Bounds().Add(offset); got != bounds {
 		t.Errorf("bounds = %v, want %v (the glyph's own bounds, at x=y=0)", got, bounds)
@@ -194,7 +195,7 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerSrc := &InlineText{text: "•", node: &ASTNode{Tag: TagListItem}}
+	markerSrc := &InlineText{text: "•", node: &styling.Node{Tag: styling.TagListItem}}
 	markerBox := &TextBox{Text: markerSrc.text, Face: face, source: markerSrc}
 	marker := &ListItemMarkerBox{Marker: markerBox}
 
@@ -208,8 +209,8 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	if hit == nil {
 		t.Fatal("HitTest at the marker's actual drawn position = nil hit, want a match")
 	}
-	if hit.Source().Node().Tag != TagListItem {
-		t.Errorf("Tag = %v, want TagListItem", hit.Source().Node().Tag)
+	if hit.Source().Node().Tag != styling.TagListItem {
+		t.Errorf("Tag = %v, want styling.TagListItem", hit.Source().Node().Tag)
 	}
 	if want := markerBounds.Add(image.Pt(markerX, y)); hit.Bounds().Add(offset) != want {
 		t.Errorf("bounds = %v, want %v (marker's own bounds at its real, offset position)", hit.Bounds().Add(offset), want)
@@ -233,8 +234,8 @@ func TestLineBoxHitTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src1 := &InlineText{text: "aa", node: &ASTNode{Tag: TagEmphasis}}
-	src2 := &InlineText{text: "bb", node: &ASTNode{Tag: TagStrong}}
+	src1 := &InlineText{text: "aa", node: &styling.Node{Tag: styling.TagEmphasis}}
+	src2 := &InlineText{text: "bb", node: &styling.Node{Tag: styling.TagStrong}}
 	b1 := &TextBox{Text: "aa", Face: face, source: src1}
 	b2 := &TextBox{Text: "bb", Face: face, source: src2}
 	line := newLineBox([]InlineLayout{b1, b2}, false)
@@ -244,7 +245,7 @@ func TestLineBoxHitTest(t *testing.T) {
 
 	p1 := image.Pt(bounds.Min.X, midY)
 	hit, offset := line.HitTest(p1)
-	if hit == nil || hit.Source().Node().Tag != TagEmphasis {
+	if hit == nil || hit.Source().Node().Tag != styling.TagEmphasis {
 		t.Errorf("hit at left edge = %v, want Emphasis - the first word", hit)
 	}
 	if hit != nil && !p1.In(hit.Bounds().Add(offset)) {
@@ -253,7 +254,7 @@ func TestLineBoxHitTest(t *testing.T) {
 
 	p2 := image.Pt(bounds.Max.X-1, midY)
 	hit, offset = line.HitTest(p2)
-	if hit == nil || hit.Source().Node().Tag != TagStrong {
+	if hit == nil || hit.Source().Node().Tag != styling.TagStrong {
 		t.Errorf("hit at right edge = %v, want Strong - the second word", hit)
 	}
 	if hit != nil && !p2.In(hit.Bounds().Add(offset)) {
@@ -350,7 +351,7 @@ func TestStackBoxHitTestIndentedLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := "                                        return 42"
-	src := &InlineText{text: text, node: &ASTNode{Tag: TagCodeBlock}}
+	src := &InlineText{text: text, node: &styling.Node{Tag: styling.TagCodeBlock}}
 	line := newLineBox([]InlineLayout{&TextBox{Text: text, Face: face, source: src}}, false)
 	stack := stackOf(line)
 
@@ -360,13 +361,13 @@ func TestStackBoxHitTestIndentedLine(t *testing.T) {
 	midY := line.Bounds().Dy() / 2
 	p := image.Pt(raw.Max.X-1, midY)
 	hit, _ := stack.HitTest(p)
-	if hit == nil || hit.Source().Node().Tag != TagCodeBlock {
+	if hit == nil || hit.Source().Node().Tag != styling.TagCodeBlock {
 		t.Errorf("hit near the right edge of an indented line = %v, want CodeBlock", hit)
 	}
 }
 
 func TestStackBoxHitTest(t *testing.T) {
-	src := &sourceBlock{node: &ASTNode{Tag: TagThematicBreak}}
+	src := &sourceBlock{node: &styling.Node{Tag: styling.TagThematicBreak}}
 	stack := stackOf(
 		NewEmptyBox(100, 10),
 		&RuleBox{width: 100, thickness: 20, source: src},
@@ -379,7 +380,7 @@ func TestStackBoxHitTest(t *testing.T) {
 	}
 	// In the RuleBox slot - y in [10, 30).
 	hit, offset := stack.HitTest(image.Pt(50, 15))
-	if hit == nil || hit.Source().Node().Tag != TagThematicBreak {
+	if hit == nil || hit.Source().Node().Tag != styling.TagThematicBreak {
 		t.Errorf("hit in middle slot = %v, want ThematicBreak", hit)
 	}
 	if want := image.Rect(0, 0, 100, 20).Add(image.Pt(0, 10)); hit.Bounds().Add(offset) != want {
@@ -398,13 +399,13 @@ func TestStackBoxHitTest(t *testing.T) {
 // fallback-to-self behavior. Covers both ways a slot can fail to cover
 // a point: geometrically out of bounds, and in bounds but declining.
 func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
-	src := &sourceBlock{node: &ASTNode{Tag: TagParagraph}}
+	src := &sourceBlock{node: &styling.Node{Tag: styling.TagParagraph}}
 
 	outOfBounds := &StackBox{
 		slots:  preResolvedSlots([]BlockLayout{&RuleBox{width: 50, thickness: 10}}),
 		source: src,
 	}
-	if hit, offset := outOfBounds.HitTest(image.Pt(80, 5)); hit == nil || hit.Source().Node().Tag != TagParagraph {
+	if hit, offset := outOfBounds.HitTest(image.Pt(80, 5)); hit == nil || hit.Source().Node().Tag != styling.TagParagraph {
 		t.Errorf("hit past the line's own width = %v, want fallback Paragraph", hit)
 	} else if want := outOfBounds.Bounds(); hit.Bounds().Add(offset) != want {
 		t.Errorf("bounds = %v, want %v (the whole StackBox)", hit.Bounds().Add(offset), want)
@@ -414,7 +415,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 		slots:  preResolvedSlots([]BlockLayout{NewEmptyBox(50, 10)}),
 		source: src,
 	}
-	if hit, offset := declining.HitTest(image.Pt(10, 5)); hit == nil || hit.Source().Node().Tag != TagParagraph {
+	if hit, offset := declining.HitTest(image.Pt(10, 5)); hit == nil || hit.Source().Node().Tag != styling.TagParagraph {
 		t.Errorf("hit on a declining child = %v, want fallback Paragraph", hit)
 	} else if want := declining.Bounds(); hit.Bounds().Add(offset) != want {
 		t.Errorf("bounds = %v, want %v (the whole StackBox)", hit.Bounds().Add(offset), want)
@@ -653,9 +654,9 @@ func goRegularFace(t *testing.T) font.Face {
 // existed), so GetInlineLayout must fall back to CheckboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
 	for _, checked := range []bool{false, true} {
-		c := &TaskCheckbox{checked: checked, node: &ASTNode{Tag: TagListItem}}
+		c := &TaskCheckbox{checked: checked, node: &styling.Node{Tag: styling.TagListItem}}
 		layout := c.GetInlineLayout(ctx, 100)
 		cb, ok := layout.(*CheckboxBox)
 		if !ok {
@@ -675,7 +676,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		Face: goRegularFace(t),
 		has:  map[rune]bool{checkboxUnchecked: true, checkboxChecked: true},
 	}
-	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, StyleSheet: NewDarkStyleSheet()}
+	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, Styles: styling.Dark()}
 
 	cases := []struct {
 		checked bool
@@ -685,7 +686,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		{true, checkboxChecked},
 	}
 	for _, c := range cases {
-		box := &TaskCheckbox{checked: c.checked, node: &ASTNode{Tag: TagListItem}}
+		box := &TaskCheckbox{checked: c.checked, node: &styling.Node{Tag: styling.TagListItem}}
 		layout := box.GetInlineLayout(ctx, 100)
 		tb, ok := layout.(*TextBox)
 		if !ok {
@@ -701,7 +702,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 // (Min.Y < 0, Max.Y == 0), the same convention TextBox's glyph path
 // follows, so a checkbox aligns with surrounding text either way.
 func TestCheckboxBoxBounds(t *testing.T) {
-	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &styling.Node{Tag: styling.TagListItem}})
 	bounds, advance := b.BoundsAndAdvance()
 	if bounds.Min.Y >= 0 || bounds.Max.Y != 0 {
 		t.Errorf("bounds = %v, want Min.Y < 0 and Max.Y == 0", bounds)
@@ -716,14 +717,14 @@ func TestCheckboxBoxBounds(t *testing.T) {
 // checked draws those same 4 edges plus one filled interior rect.
 func TestCheckboxBoxDrawInline(t *testing.T) {
 	face := goRegularFace(t)
-	unchecked := newCheckboxBox(false, face, color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	unchecked := newCheckboxBox(false, face, color.White, &TaskCheckbox{node: &styling.Node{Tag: styling.TagListItem}})
 	dst := &recordingCanvas{}
 	unchecked.DrawInline(dst, 0, 0, 0)
 	if len(dst.rects) != 4 {
 		t.Errorf("unchecked issued %d DrawRect calls, want 4 (just the border)", len(dst.rects))
 	}
 
-	checked := newCheckboxBox(true, face, color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	checked := newCheckboxBox(true, face, color.White, &TaskCheckbox{node: &styling.Node{Tag: styling.TagListItem}})
 	dst = &recordingCanvas{}
 	checked.DrawInline(dst, 0, 0, 0)
 	if len(dst.rects) != 5 {
@@ -733,7 +734,7 @@ func TestCheckboxBoxDrawInline(t *testing.T) {
 
 // TestCheckboxBoxHitTest checks hit-testing against the box's own footprint.
 func TestCheckboxBoxHitTest(t *testing.T) {
-	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ASTNode{Tag: TagListItem}})
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &styling.Node{Tag: styling.TagListItem}})
 	bounds, _ := b.BoundsAndAdvance()
 
 	hit, offset := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)

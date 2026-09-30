@@ -1,12 +1,15 @@
 package whynot
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/arnodel/whynot/internal/styling"
+)
 
 // Highlighter classifies a code block's source into consecutive typed
 // spans, used to color it token-by-token instead of as one flat run.
-// Parse has no highlighter by default - every code block then
-// renders in one flat color (StyleSheet's existing TagCodeBlock case),
-// exactly as before this existed.
+// Parse has no highlighter by default - every code block then renders
+// in its StyleSheet's single code color.
 type Highlighter interface {
 	// Highlight splits code (a whole fenced/indented block's source,
 	// potentially multiple lines) into consecutive spans whose Text
@@ -54,8 +57,8 @@ const (
 // recognized language renders - e.g. a ```mermaid fence as a diagram
 // (see the kroki package) instead of its raw/highlighted
 // diagram-definition text. Checked before Highlighter, and only for a
-// language CanHandle recognizes - it knows nothing about Block/ASTNode,
-// compile.go owns all of that uniformly for every plugin.
+// language CanHandle recognizes. A plugin only produces an image; laying
+// it out is whynot's job, the same for every plugin.
 type CodeBlockPlugin interface {
 	// CanHandle reports whether this plugin handles fenced code blocks
 	// written in language.
@@ -65,18 +68,18 @@ type CodeBlockPlugin interface {
 	Image(language, code string) AsyncImage
 }
 
-// tokenClassTags maps a Highlighter's TokenClass to the ASTTag whose
-// StyleSheet.Color contribution renders it - TokenPlain deliberately has
-// no entry: a plain span reuses its enclosing code block's own ASTNode
+// tokenClassTags maps a Highlighter's TokenClass to the styling.Tag whose
+// Styles.Color contribution renders it - TokenPlain deliberately has
+// no entry: a plain span reuses its enclosing code block's own styling.Node
 // directly rather than getting a child node of its own, inheriting
 // CodeBlockColor the same way untouched code text always has.
-var tokenClassTags = map[TokenClass]ASTTag{
-	TokenKeyword:  TagCodeKeyword,
-	TokenType:     TagCodeType,
-	TokenFunction: TagCodeFunction,
-	TokenString:   TagCodeString,
-	TokenNumber:   TagCodeNumber,
-	TokenComment:  TagCodeComment,
+var tokenClassTags = map[TokenClass]styling.Tag{
+	TokenKeyword:  styling.TagCodeKeyword,
+	TokenType:     styling.TagCodeType,
+	TokenFunction: styling.TagCodeFunction,
+	TokenString:   styling.TagCodeString,
+	TokenNumber:   styling.TagCodeNumber,
+	TokenComment:  styling.TagCodeComment,
 }
 
 // codeBlockLines returns the per-visual-line Inline spans for a fenced
@@ -86,7 +89,7 @@ var tokenClassTags = map[TokenClass]ASTTag{
 // CodeBlockPlugin's fallback content (see compile.go's KindCodeBlock
 // case) - identical either way, since a plugin's fallback is exactly
 // what today's non-plugin rendering already is.
-func (c *compiler) codeBlockLines(astNode *ASTNode, language string, rawLines []string) [][]Inline {
+func (c *compiler) codeBlockLines(astNode *styling.Node, language string, rawLines []string) [][]Inline {
 	var lines [][]Inline
 	if c.highlighter != nil {
 		lines = highlightLines(c.highlighter, astNode, language, rawLines)
@@ -111,7 +114,7 @@ func (c *compiler) codeBlockLines(astNode *ASTNode, language string, rawLines []
 // nil if h's output doesn't reproduce exactly len(rawLines) lines (a
 // misbehaving Highlighter), so the caller can fall back to plain,
 // unhighlighted rendering instead.
-func highlightLines(h Highlighter, blockNode *ASTNode, language string, rawLines []string) [][]Inline {
+func highlightLines(h Highlighter, blockNode *styling.Node, language string, rawLines []string) [][]Inline {
 	if len(rawLines) == 0 {
 		return [][]Inline{}
 	}

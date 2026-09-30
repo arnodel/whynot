@@ -19,8 +19,8 @@ type Document struct {
 // TOCEntry is one heading of a Document - enough to build a table of
 // contents entry linking to ID.
 type TOCEntry struct {
-	ID    string // ASTNode.ID - what View.ScrollToAnchor takes
-	Level int    // 1-6, from TagHeading1..TagHeading6
+	ID    string // the heading's anchor id - what View.ScrollToAnchor takes
+	Level int    // 1-6
 	Text  string
 }
 

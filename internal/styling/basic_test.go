@@ -1,4 +1,4 @@
-package whynot
+package styling
 
 import (
 	"image/color"
@@ -7,13 +7,13 @@ import (
 	"golang.org/x/image/font"
 )
 
-// These pin DefaultStyleSheet's values against whynot's previous
+// These pin Basic's values against whynot's previous
 // hardcoded config in the compiler's old Parse implementation.
 
-func TestDefaultStyleSheetMargins(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicMargins(t *testing.T) {
+	s := Dark()
 	cases := []struct {
-		tag  ASTTag
+		tag  Tag
 		want Margins
 	}{
 		{TagParagraph, Margins{Top: 10, Bottom: 10}},
@@ -33,28 +33,28 @@ func TestDefaultStyleSheetMargins(t *testing.T) {
 		{TagLink, Margins{}},
 	}
 	for _, tc := range cases {
-		node := &ASTNode{Tag: tc.tag}
+		node := &Node{Tag: tc.tag}
 		if got := s.Margins(node); got != tc.want {
 			t.Errorf("Margins(tag=%v) = %+v, want %+v", tc.tag, got, tc.want)
 		}
 	}
 }
 
-func TestDefaultStyleSheetMarginsNilNode(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicMarginsNilNode(t *testing.T) {
+	s := Dark()
 	if got := s.Margins(nil); got != (Margins{}) {
 		t.Errorf("Margins(nil) = %+v, want zero value", got)
 	}
 }
 
-// TestDefaultStyleSheetTextStyle pins each tag's own contribution - the
+// TestBasicTextStyle pins each tag's own contribution - the
 // Set mask matters as much as the values, since an unset field is meant
 // to be inherited from an ancestor (see TestResolvedTextStyle) rather
 // than read as its zero value.
-func TestDefaultStyleSheetTextStyle(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicTextStyle(t *testing.T) {
+	s := Dark()
 	cases := []struct {
-		tag  ASTTag
+		tag  Tag
 		want PartialTextStyle
 	}{
 		{TagParagraph, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
@@ -70,32 +70,32 @@ func TestDefaultStyleSheetTextStyle(t *testing.T) {
 		{TagLink, PartialTextStyle{}},
 	}
 	for _, tc := range cases {
-		node := &ASTNode{Tag: tc.tag}
+		node := &Node{Tag: tc.tag}
 		if got := s.TextStyle(node); got != tc.want {
 			t.Errorf("TextStyle(tag=%v) = %+v, want %+v", tc.tag, got, tc.want)
 		}
 	}
 }
 
-// TestDefaultStyleSheetTextStyleNilNode checks that the root claims every
+// TestBasicTextStyleNilNode checks that the root claims every
 // field via BaseTextStyle - the fallback ResolvedTextStyle reaches if no
 // real ancestor ever set some field.
-func TestDefaultStyleSheetTextStyleNilNode(t *testing.T) {
-	s := NewDarkStyleSheet()
-	want := PartialTextStyle{TextStyle{Size: 16}, allTextStyleFields}
+func TestBasicTextStyleNilNode(t *testing.T) {
+	s := Dark()
+	want := PartialTextStyle{TextStyle{Size: 16}, AllTextStyleFields}
 	if got := s.TextStyle(nil); got != want {
 		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
 	}
 }
 
-// TestDefaultStyleSheetColor checks the cascading text color: only tags
+// TestBasicColor checks the cascading text color: only tags
 // with a real opinion (code, link) return non-nil - everything else,
 // including the block types with their own BorderColor, returns nil so
 // ResolvedColor's ancestry walk passes through them.
-func TestDefaultStyleSheetColor(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicColor(t *testing.T) {
+	s := Dark()
 	cases := []struct {
-		tag  ASTTag
+		tag  Tag
 		want color.Color
 	}{
 		{TagCodeBlock, color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
@@ -114,27 +114,27 @@ func TestDefaultStyleSheetColor(t *testing.T) {
 		{TagThematicBreak, nil},
 	}
 	for _, tc := range cases {
-		node := &ASTNode{Tag: tc.tag}
+		node := &Node{Tag: tc.tag}
 		if got := s.Color(node); got != tc.want {
 			t.Errorf("Color(tag=%v) = %v, want %v", tc.tag, got, tc.want)
 		}
 	}
 }
 
-func TestDefaultStyleSheetColorNilNode(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicColorNilNode(t *testing.T) {
+	s := Dark()
 	if got := s.Color(nil); got != color.White {
 		t.Errorf("Color(nil) = %v, want %v", got, color.White)
 	}
 }
 
-// TestDefaultStyleSheetBorderColor checks the non-cascading decoration
+// TestBasicBorderColor checks the non-cascading decoration
 // color - a thematic break's rule, a blockquote's bar, a table's frame -
 // resolved directly against exactly the tag it decorates, unlike Color.
-func TestDefaultStyleSheetBorderColor(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicBorderColor(t *testing.T) {
+	s := Dark()
 	cases := []struct {
-		tag  ASTTag
+		tag  Tag
 		want color.Color
 	}{
 		{TagThematicBreak, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
@@ -144,36 +144,36 @@ func TestDefaultStyleSheetBorderColor(t *testing.T) {
 		{TagLink, nil},
 	}
 	for _, tc := range cases {
-		node := &ASTNode{Tag: tc.tag}
+		node := &Node{Tag: tc.tag}
 		if got := s.BorderColor(node); got != tc.want {
 			t.Errorf("BorderColor(tag=%v) = %v, want %v", tc.tag, got, tc.want)
 		}
 	}
 }
 
-func TestDefaultStyleSheetBorderColorNilNode(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicBorderColorNilNode(t *testing.T) {
+	s := Dark()
 	if got := s.BorderColor(nil); got != nil {
 		t.Errorf("BorderColor(nil) = %v, want nil", got)
 	}
 }
 
-// TestDefaultStyleSheetStrikeThickness checks that the thickness doubles
+// TestBasicStrikeThickness checks that the thickness doubles
 // as the "is this struck at all" signal: 0 unless node or an ancestor
 // carries TagStrikethrough.
-func TestDefaultStyleSheetStrikeThickness(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicStrikeThickness(t *testing.T) {
+	s := Dark()
 
 	if got := s.StrikeThickness(nil); got != 0 {
 		t.Errorf("StrikeThickness(nil) = %v, want 0", got)
 	}
 
-	notStruck := &ASTNode{Tag: TagEmphasis}
+	notStruck := &Node{Tag: TagEmphasis}
 	if got := s.StrikeThickness(notStruck); got != 0 {
 		t.Errorf("StrikeThickness(Emphasis) = %v, want 0", got)
 	}
 
-	struck := &ASTNode{Tag: TagStrikethrough}
+	struck := &Node{Tag: TagStrikethrough}
 	if got := s.StrikeThickness(struck); got != 1 {
 		t.Errorf("StrikeThickness(Strikethrough) = %v, want 1", got)
 	}
@@ -184,8 +184,8 @@ func TestDefaultStyleSheetStrikeThickness(t *testing.T) {
 	}
 }
 
-func TestDefaultStyleSheetDimensions(t *testing.T) {
-	s := NewDarkStyleSheet()
+func TestBasicDimensions(t *testing.T) {
+	s := Dark()
 
 	if got := s.ThematicBreakThickness(nil); got != 2 {
 		t.Errorf("ThematicBreakThickness() = %v, want 2", got)
@@ -206,13 +206,13 @@ func TestDefaultStyleSheetDimensions(t *testing.T) {
 	}
 }
 
-// TestNewLightStyleSheetColors checks that the light theme actually
+// TestLightColors checks that the light theme actually
 // inverts the parts that need to be readable against a light background
 // (background itself, default text, links, code) rather than just being
-// NewDarkStyleSheet under a different name.
-func TestNewLightStyleSheetColors(t *testing.T) {
-	dark := NewDarkStyleSheet()
-	light := NewLightStyleSheet()
+// Dark under a different name.
+func TestLightColors(t *testing.T) {
+	dark := Dark()
+	light := Light()
 
 	if light.Background == dark.Background {
 		t.Errorf("light Background = dark's (%v), want a light background", light.Background)
@@ -237,44 +237,38 @@ func TestNewLightStyleSheetColors(t *testing.T) {
 	}
 }
 
-// TestDefaultStyleSheetScrollbarColor checks that both of whynot's
-// built-in themes implement the optional ScrollbarStyleSheet interface,
-// and that ScrollbarColor picks the right one of the three Scrollbar
+// TestBasicScrollbarColor checks that ScrollbarColor picks the right one of the three Scrollbar
 // colors for each combination of hover/pressed.
-func TestDefaultStyleSheetScrollbarColor(t *testing.T) {
+func TestBasicScrollbarColor(t *testing.T) {
 	cases := []struct {
 		name           string
-		sheet          *DefaultStyleSheet
+		sheet          *Basic
 		hover, pressed bool
 		want           color.Color
 	}{
-		{"dark idle", NewDarkStyleSheet(), false, false, color.RGBA{0x80, 0x80, 0x80, 0xA0}},
-		{"dark hover", NewDarkStyleSheet(), true, false, color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}},
-		{"dark pressed", NewDarkStyleSheet(), true, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
-		{"dark pressed without hover", NewDarkStyleSheet(), false, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
-		{"light idle", NewLightStyleSheet(), false, false, color.RGBA{0x60, 0x60, 0x60, 0xA0}},
-		{"light hover", NewLightStyleSheet(), true, false, color.RGBA{0x40, 0x40, 0x40, 0xC0}},
-		{"light pressed", NewLightStyleSheet(), true, true, color.RGBA{0x20, 0x20, 0x20, 0xE0}},
+		{"dark idle", Dark(), false, false, color.RGBA{0x80, 0x80, 0x80, 0xA0}},
+		{"dark hover", Dark(), true, false, color.RGBA{0xA0, 0xA0, 0xA0, 0xC0}},
+		{"dark pressed", Dark(), true, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
+		{"dark pressed without hover", Dark(), false, true, color.RGBA{0xC0, 0xC0, 0xC0, 0xE0}},
+		{"light idle", Light(), false, false, color.RGBA{0x60, 0x60, 0x60, 0xA0}},
+		{"light hover", Light(), true, false, color.RGBA{0x40, 0x40, 0x40, 0xC0}},
+		{"light pressed", Light(), true, true, color.RGBA{0x20, 0x20, 0x20, 0xE0}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			sh, ok := StyleSheet(c.sheet).(ScrollbarStyleSheet)
-			if !ok {
-				t.Fatal("does not implement ScrollbarStyleSheet")
-			}
-			if got := sh.ScrollbarColor(c.hover, c.pressed); got != c.want {
+			if got := c.sheet.ScrollbarColor(c.hover, c.pressed); got != c.want {
 				t.Errorf("ScrollbarColor(%v, %v) = %v, want %v", c.hover, c.pressed, got, c.want)
 			}
 		})
 	}
 }
 
-// TestNewLightStyleSheetSharesNonColorValues checks that margins, sizes,
+// TestLightSharesNonColorValues checks that margins, sizes,
 // weights, and dimensional constants aren't duplicated/drifted between
 // the two themes - only color should differ.
-func TestNewLightStyleSheetSharesNonColorValues(t *testing.T) {
-	dark := NewDarkStyleSheet()
-	light := NewLightStyleSheet()
+func TestLightSharesNonColorValues(t *testing.T) {
+	dark := Dark()
+	light := Light()
 
 	if light.ParagraphMargins != dark.ParagraphMargins {
 		t.Errorf("ParagraphMargins = %+v, want dark's %+v", light.ParagraphMargins, dark.ParagraphMargins)
@@ -282,7 +276,7 @@ func TestNewLightStyleSheetSharesNonColorValues(t *testing.T) {
 	if light.HeadingTextStyles != dark.HeadingTextStyles {
 		t.Errorf("HeadingTextStyles = %+v, want dark's %+v", light.HeadingTextStyles, dark.HeadingTextStyles)
 	}
-	struckNode := &ASTNode{Tag: TagStrikethrough}
+	struckNode := &Node{Tag: TagStrikethrough}
 	if light.StrikeThickness(struckNode) != dark.StrikeThickness(struckNode) {
 		t.Errorf("StrikeThickness value differs from dark's")
 	}

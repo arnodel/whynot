@@ -295,7 +295,7 @@ func (tb *toolbar) layoutLocation(gtx layout.Context, app *browser.App) layout.D
 	}
 	text, textColor := app.Location().String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
 	if hoverDest := app.HoverDest(); hoverDest != "" {
-		text, textColor = hoverDest, app.StyleSheet().HighlightColor()
+		text, textColor = hoverDest, app.Panel.View().HighlightColor()
 	}
 	text = truncateMiddle(face, text, size.X)
 	canvas := tb.renderer.NewCanvas(gtx.Ops, image.Rectangle{Max: size})

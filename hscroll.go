@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"math"
@@ -44,7 +45,7 @@ type ScrollBox struct {
 	state      *hscrollState
 	scale      float64
 	background color.Color
-	styleSheet StyleSheet
+	styles     styling.Styles
 }
 
 var _ BlockLayout = (*ScrollBox)(nil)
@@ -61,8 +62,8 @@ func scrollIfWider(ctx RenderingContext, source Block, inner BlockLayout, width 
 		source:     source,
 		state:      ctx.hscroll,
 		scale:      ctx.Scale,
-		background: ctx.StyleSheet.BackgroundColor(),
-		styleSheet: ctx.StyleSheet,
+		background: ctx.Styles.BackgroundColor(),
+		styles:     ctx.Styles,
 	}
 }
 
@@ -132,7 +133,7 @@ func (b *ScrollBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 	if opacity := b.state.barOpacity(b.source, now); opacity > 0 {
 		thumb := hscrollThumb(box, clipped.Bounds(), b.contentWidth(), offset, b.scale)
 		pressed := b.state.dragging == b.source
-		c := color.NRGBAModel.Convert(scrollbarColor(b.styleSheet, b.state.barHovered || pressed, pressed)).(color.NRGBA)
+		c := color.NRGBAModel.Convert(b.styles.ScrollbarColor(b.state.barHovered || pressed, pressed)).(color.NRGBA)
 		c.A = uint8(float64(c.A) * opacity)
 		dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(), c)
 	}
@@ -172,15 +173,6 @@ func hscrollThumb(box, visible image.Rectangle, contentWidth, offset int, scale 
 	inset := int(hscrollBarInset * scale)
 	bottom := min(box.Max.Y, visible.Max.Y) - inset
 	return image.Rect(x, bottom-int(hscrollBarThickness*scale), x+thumbWidth, bottom)
-}
-
-// scrollbarColor is the StyleSheet's scrollbar color if it has one (see
-// ScrollbarStyleSheet), else a neutral translucent gray.
-func scrollbarColor(s StyleSheet, hover, pressed bool) color.Color {
-	if ss, ok := s.(ScrollbarStyleSheet); ok {
-		return ss.ScrollbarColor(hover, pressed)
-	}
-	return color.RGBA{0x80, 0x80, 0x80, 0xA0}
 }
 
 // hscrollState is a View's horizontal scrolling state, shared with its

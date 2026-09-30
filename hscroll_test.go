@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ func drawnTextX(t *testing.T, v *View, prefix string) int {
 }
 
 func TestCodeBlockScrollsOnlyWhenWider(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
 	doc := Parse([]byte("```\n" + strings.Repeat("wide ", 100) + "\n```\n"))
 	code := unwrap(doc.root.blocks[0])
 
@@ -213,7 +214,7 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 // narrow enough - one holds an unbreakable word - scrolls sideways,
 // while one that fits doesn't.
 func TestTableScrollsWhenTooWide(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), StyleSheet: NewDarkStyleSheet()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: styling.Dark()}
 	table := func(cell string) Block {
 		return unwrap(Parse([]byte("| A | B |\n|---|---|\n| " + cell + " | x |\n")).root.blocks[0])
 	}

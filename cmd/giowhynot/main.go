@@ -16,6 +16,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // initialWindowWidth/Height are Gio's starting window size, in dp.
@@ -45,9 +46,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	styleSheet := whynot.StyleSheet(whynot.NewDarkStyleSheet())
+	styleSheet := simpletheme.DarkStyleSheet
 	if *light {
-		styleSheet = whynot.NewLightStyleSheet()
+		styleSheet = simpletheme.LightStyleSheet
 	}
 
 	// scale (1) is a placeholder - View.Layout (via browserApp.Relayout)

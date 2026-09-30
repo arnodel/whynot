@@ -1,6 +1,6 @@
 package whynot
 
-// compiler compiles Markdown source into a Block/ASTNode tree - structure
+// compiler compiles Markdown source into a Block/styling.Node tree - structure
 // only, no appearance. See Parse.
 type compiler struct {
 	source      []byte

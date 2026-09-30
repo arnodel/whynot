@@ -10,52 +10,6 @@ import (
 	"time"
 )
 
-// bareStyleSheet implements StyleSheet with zero-value/no-opinion
-// answers everywhere - deliberately does *not* implement
-// DiagramStyleSheet, so diagramPadding's own fallback branch has
-// something real to exercise (a StyleSheet written before
-// DiagramStyleSheet existed, or one that simply doesn't care).
-type bareStyleSheet struct{}
-
-func (bareStyleSheet) Margins(*ASTNode) Margins                       { return Margins{} }
-func (bareStyleSheet) TextStyle(*ASTNode) PartialTextStyle            { return PartialTextStyle{} }
-func (bareStyleSheet) Color(*ASTNode) color.Color                     { return nil }
-func (bareStyleSheet) BorderColor(*ASTNode) color.Color               { return nil }
-func (bareStyleSheet) BackgroundColor() color.Color                   { return nil }
-func (bareStyleSheet) ViewMargins() Margins                           { return Margins{} }
-func (bareStyleSheet) HighlightColor() color.Color                    { return nil }
-func (bareStyleSheet) StrikeThickness(*ASTNode) float64               { return 0 }
-func (bareStyleSheet) ThematicBreakThickness(*ASTNode) float64        { return 0 }
-func (bareStyleSheet) BlockquoteGeometry(*ASTNode) BlockquoteGeometry { return BlockquoteGeometry{} }
-func (bareStyleSheet) TableGeometry(*ASTNode) TableGeometry           { return TableGeometry{} }
-func (bareStyleSheet) LineHeight(*ASTNode) float64                    { return 1 }
-
-var _ StyleSheet = bareStyleSheet{}
-
-// overriddenPaddingStyleSheet demonstrates the actual extension
-// mechanism DiagramStyleSheet's own doc comment describes: embed
-// *DefaultStyleSheet (so every other method, and DiagramPadding's own
-// default, come along for free) and override just the one method a
-// caller wants to customize.
-type overriddenPaddingStyleSheet struct {
-	*DefaultStyleSheet
-}
-
-func (s overriddenPaddingStyleSheet) DiagramPadding(*ASTNode) float64 { return 99 }
-
-func TestDiagramPadding(t *testing.T) {
-	if got := diagramPadding(bareStyleSheet{}, nil); got != fallbackDiagramPadding {
-		t.Errorf("diagramPadding with a StyleSheet not implementing DiagramStyleSheet = %v, want fallbackDiagramPadding (%v)", got, fallbackDiagramPadding)
-	}
-	if got := diagramPadding(NewDarkStyleSheet(), nil); got != 12 {
-		t.Errorf("diagramPadding(NewDarkStyleSheet(), nil) = %v, want 12", got)
-	}
-	overridden := overriddenPaddingStyleSheet{NewDarkStyleSheet()}
-	if got := diagramPadding(overridden, nil); got != 99 {
-		t.Errorf("diagramPadding with an embed-and-override StyleSheet = %v, want 99 (the override)", got)
-	}
-}
-
 // waitForDiagramSettled polls block.GetBlockLayout(ctx, width) until its
 // PendingImages() is empty (the diagram resolved) or the test's
 // deadline passes - fetchAndDecode always runs on its own goroutine, so
@@ -192,7 +146,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: NewImageCache(FileImageSource{}), StyleSheet: noMarginStyleSheet(), Scale: 1}
+	ctx := RenderingContext{ImageCache: NewImageCache(FileImageSource{}), Styles: noMarginStyleSheet(), Scale: 1}
 
 	box := waitForDiagramSettled(t, block, ctx, 300)
 	if box.Bounds() == (fallback.GetBlockLayout(ctx, 300).Bounds()) {
@@ -221,8 +175,8 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	// The image itself must sit inset from the outer (white+frame)
 	// bounds by frameThickness+DiagramPadding on every side - the
 	// "matting" a bare frame around the diagram doesn't give it on its
-	// own (see DiagramStyleSheet).
-	wantInset := int(ctx.ScaledThematicBreakThickness(nil)) + int(diagramPadding(ctx.StyleSheet, nil)*ctx.Scale)
+	// own.
+	wantInset := int(ctx.ScaledThematicBreakThickness(nil)) + int(ctx.Styles.DiagramPadding(nil)*ctx.Scale)
 	wantImageRect := image.Rect(wantInset, wantInset, box.Bounds().Dx()-wantInset, box.Bounds().Dy()-wantInset)
 	if canvas.imageRects[0] != wantImageRect {
 		t.Errorf("image drawn at %v, want %v (inset %d on every side)", canvas.imageRects[0], wantImageRect, wantInset)

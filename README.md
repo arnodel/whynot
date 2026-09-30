@@ -14,9 +14,9 @@ it, [Ebitengine](https://ebitengine.org/) (`ebitenrenderer`) and [Gio](https://g
 - **Built for long documents** - layout and drawing are lazy, anchored at
   the current scroll position, so a resize or scroll costs the same
   whether the document is 10 lines or 10,000
-- **Fully customizable styling** - colors, margins, and text styles all
-  resolve through one `StyleSheet` interface (dark and light themes built
-  in), swappable at runtime
+- **Customizable styling** - colors, margins, and text styles come from a
+  `StyleSheet` (dark and light ones built in, or your own from a theme),
+  swappable at runtime
 - **Drop-in embedding** - `ebitenrenderer.Panel`/`giorenderer.Panel` add a
   scrollable, zoomable Markdown view to part of a larger window in a few
   lines, with resizing, hover/click, and an optional scrollbar all
@@ -102,6 +102,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 const (
@@ -127,7 +128,7 @@ func exampleDoc() string {
 }
 
 func main() {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(whynot.NewDarkStyleSheet()))
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 
@@ -249,16 +250,23 @@ above), handling display scale, zoom, and a toolbar too.
 
 ## Styling
 
-Appearance - colors, margins, text sizes/weights, and a handful of dimensional
-constants (table/blockquote geometry, rule and strikethrough thickness) - is entirely
-driven by the `StyleSheet` interface ([stylesheet.go](stylesheet.go)), resolved per node
-when the layout tree is built rather than hardcoded anywhere. `DefaultStyleSheet` is the
-configurable built-in implementation; `NewDarkStyleSheet()`/`NewLightStyleSheet()` (what
-`cmd/whynot`'s theme toggle switches between) are both just different field values on the
-same struct - tweak one (`s := whynot.NewDarkStyleSheet(); s.LinkColor = myColor`) and
-pass it via `whynot.WithStyleSheet(s)`, or embed `DefaultStyleSheet` in your own type and
-override individual methods for full control over one aspect (e.g. per-node margins)
-without reimplementing the rest. Swapping a `View`'s `StyleSheet` at runtime
+Appearance - colors, margins, text sizes and weights - comes from the `View`'s
+`StyleSheet`: an immutable, opaque value made by a theme package under
+[`styles/`](styles). [`styles/simpletheme`](styles/simpletheme) configures one through
+plain fields. Use a ready-made one, or start from a preset and change what you need:
+
+```go
+view := whynot.NewView(doc, faces, whynot.WithStyleSheet(simpletheme.DarkStyleSheet))
+
+theme := simpletheme.Dark() // or Light()
+theme.LinkColor = myColor
+theme.HeadingTextStyles[0] = simpletheme.TextStyle{Size: 48, Weight: simpletheme.WeightBlack}
+view.SetStyleSheet(theme.StyleSheet())
+```
+
+A `simpletheme.TextStyle` only sets its non-zero fields; the rest are inherited from the
+enclosing element. `StyleSheet()` takes a snapshot, so changing the theme afterwards
+doesn't affect stylesheets already made from it. Swapping a `View`'s stylesheet at runtime
 (`View.SetStyleSheet`) re-lays-out the document immediately, which is all `cmd/whynot`'s
 theme toggle button does.
 
@@ -267,8 +275,8 @@ theme toggle button does.
 `NewView`'s second argument is a `FaceSelector` ([textstyle.go](textstyle.go)) -
 `SelectFace(TextStyle) (font.Face, error)` plus `SetDPI(float64)` - the interface
 every example above passes `whynot.NewGoFontFaceSelector(72)` to. It's decoupled from
-`StyleSheet`: `StyleSheet` decides *which* size/weight/style/family a piece of text
-gets, `FaceSelector` decides what font file actually renders that combination.
+the `StyleSheet`: the stylesheet decides *which* size/weight/style/family a piece of text
+gets, the `FaceSelector` decides what font file actually renders that combination.
 
 - `GoFontFaceSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
   - what every example above uses.
@@ -331,7 +339,7 @@ gets, `FaceSelector` decides what font file actually renders that combination.
 ## Syntax highlighting
 
 By default, a fenced or indented code block renders in one flat, neutral color
-(`StyleSheet`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
+(`simpletheme.Theme`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
 eye-catching accent color instead (`CodeSpanColor`), since a small isolated word in
 prose reads fine as an accent while a whole block of it would fight with any
 syntax-highlighted spans inside it. Passing a `whynot.Highlighter` - `Highlight(language,
@@ -349,7 +357,7 @@ keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of th
 library's dependency graph) implements `Highlighter` on top of chroma, picking a lexer
 from the fence's own language string (falling back to unhighlighted, flat-color
 rendering for a language it doesn't recognize, or for an indented block, which has no
-fence to name one). Colors come from `StyleSheet`'s own `SyntaxColors` (keyword/type/
+fence to name one). Colors come from the theme's `SyntaxColors` (keyword/type/
 function/string/number/comment), tuned separately for the dark and light themes - not
 from chroma's own named styles. A builtin type (e.g. Go's `int`) and a declared custom
 type/class name share the `type` color, deliberately, and likewise for `function` -
@@ -515,11 +523,10 @@ by implementation order now that most of the list is done.
       [above](#embed-a-markdown-viewer-in-your-game)
 
 **Styling**
-- [x] Fully customizable via the `StyleSheet` interface (see [above](#styling)) -
-      colors, margins, text styles/sizes, and dimensional constants all resolve through
-      it; override one field on `DefaultStyleSheet`, or embed it in a custom
-      `StyleSheet` for full control. Swappable at runtime (`View.SetStyleSheet`) -
-      `cmd/whynot`'s light/dark toggle is just two `DefaultStyleSheet` instances
+- [x] Customizable styling (see [above](#styling)) - colors, margins, text
+      styles/sizes and line height, set on a `simpletheme.Theme`. Swappable at runtime
+      (`View.SetStyleSheet`) - `cmd/whynot`'s light/dark toggle switches between
+      `simpletheme.DarkStyleSheet` and `LightStyleSheet`
 - [x] Custom font files via `CustomFontFaceSelector` (see [above](#fonts)) - register
       your own TTF/OTF bytes per weight/style slot, falling back to the bundled Go
       fonts for anything not overridden
@@ -556,7 +563,7 @@ Floated but not scoped or started:
 
 - A different Markdown parser, or a different input format entirely (e.g. reStructuredText) -
   `Parse()` is the only goldmark-specific code in the library; everything downstream just
-  consumes a `Block`/`ASTNode` tree with no idea where it came from
+  consumes a `Block` tree with no idea where it came from
 - Video - a static poster image with a play button, opening an external player rather than
   playing in-app
 - Image zoom/lightbox - a click-to-open overlay for one image, independent of the document's

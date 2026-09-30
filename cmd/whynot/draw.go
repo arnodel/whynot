@@ -69,7 +69,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	}
 	text, textColor := g.app.Location().String(), color.Color(color.RGBA{0xCC, 0xCC, 0xCC, 0xFF})
 	if hoverDest := g.app.HoverDest(); hoverDest != "" {
-		text, textColor = hoverDest, g.app.StyleSheet().HighlightColor()
+		text, textColor = hoverDest, g.panel.View().HighlightColor()
 	}
 	x := g.tocButton.Max.X + int(16*g.deviceScale)
 	maxWidth := g.zoomOutButton.Min.X - int(16*g.deviceScale) - x
