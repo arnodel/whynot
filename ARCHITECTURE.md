@@ -39,9 +39,9 @@ flowchart TD
     subgraph L0["Layer 0 — Parse (goldmark, external)"]
         A["[]byte source"] --> B["gmast.Node tree"]
     end
-    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, internal/styling/node.go)"]
+    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, internal/ast)"]
         B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
-        B --> G["styling.Node tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *styling.Node into it)"]
+        B --> G["ast.Node tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ast.Node into it)"]
     end
     subgraph L2["Layer 2 — Layout tree (block.go, inline.go, block_layout.go,\ninline_layout.go, rendering_context.go, internal/styling)"]
         C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
@@ -55,9 +55,9 @@ flowchart TD
     end
 ```
 
-Styling ([internal/styling](internal/styling)) and `textstyle.go` cut across
-layers 1 and 2. Layer 1's `styling.Node` tree ([node.go](internal/styling/node.go))
-records only structure - each node's semantic tag (`TagParagraph`,
+The semantic tree ([internal/ast](internal/ast)), styling
+([internal/styling](internal/styling)) and `textstyle.go` cut across layers 1
+and 2. Layer 1's `ast.Node` tree records only structure - each node's semantic tag (`TagParagraph`,
 `TagHeading1`..`6`, `TagEmphasis`, `TagLink`, ...) and its parent - no
 appearance. Layer 2 resolves that tag ancestry against the context's
 `styling.Styles` ([styles.go](internal/styling/styles.go)) - `Margins`,
@@ -95,22 +95,22 @@ each with a fallback `FaceSelector` for anything unregistered/unresolved.
 `goldmark` turns the raw `[]byte` into a `gmast.Node` tree. Off-the-shelf,
 outside our control; it's the source of truth for document structure.
 
-### Layer 1 — Semantic tree (`Block` / `Inline` + `styling.Node`)
+### Layer 1 — Semantic tree (`Block` / `Inline` + `ast.Node`)
 
 `Parse`'s `compiler` ([compile.go](compile.go); its state and the
 `ParseOption`s that configure it in [markdown.go](markdown.go)) walks the
 goldmark tree once and produces two parallel trees: a `Block`/`Inline` tree
 ([block.go](block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
-blocks; `InlineText`, `InlineImage` for inline content - and a `styling.Node`
-tree ([node.go](internal/styling/node.go)) giving each one a semantic tag (`TagParagraph`,
+blocks; `InlineText`, `InlineImage` for inline content - and an `ast.Node`
+tree ([internal/ast](internal/ast)) giving each one a semantic tag (`TagParagraph`,
 `TagHeading1`..`6`, `TagEmphasis`, `TagStrong`, `TagLink`, ...) and a
 parent, mirroring real document nesting *including* inline spans, which
 the `Block`/`Inline` tree itself keeps flat (line-wrapping needs a linear
 sequence; `Node.Parent` is where the nesting actually lives). This is
 where Markdown syntax gets resolved into semantic *structure* - which tag,
 what nests in what - not into appearance: no font, color, or margin value
-is decided here, only recorded via each `Block`/`Inline`'s `node *styling.Node`
+is decided here, only recorded via each `Block`/`Inline`'s `node *ast.Node`
 field for the styles to resolve later, in Layer 2.
 
 Margins aren't a field every `Block` carries: most embed `WithoutMargins`
@@ -146,7 +146,7 @@ margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 `ctx.Styles.Margins`/`.Color`/`.BorderColor`, `ctx.ResolvedTextStyle`/
 `.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
 dimensional constants, scaled by DPI in one step) - all read against each
-`Block`/`Inline`'s own `*styling.Node`. Line-wrapping happens here
+`Block`/`Inline`'s own `*ast.Node`. Line-wrapping happens here
 (`wrapLines`, [line_layout.go](line_layout.go)), as does font selection (`ctx.SelectFace`, given the
 resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
@@ -386,7 +386,7 @@ scroll position doesn't force-build every slot in between.
 
 It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
 
-- `Source` ([block.go](block.go)) is `Node() *styling.Node` - the common
+- `Source` ([block.go](block.go)) is `Node() *ast.Node` - the common
   ground between `Block` and `Inline`, letting a resolved position trace
   back to its origin in the semantic tree (Layer 1). Every `Block`/
   `Inline` implements it, including `StackBlock`, which reports `nil`

@@ -1,6 +1,7 @@
 package styling
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 	"testing"
 
@@ -13,27 +14,27 @@ import (
 func TestBasicMargins(t *testing.T) {
 	s := Dark()
 	cases := []struct {
-		tag  Tag
+		tag  ast.Tag
 		want Margins
 	}{
-		{TagParagraph, Margins{Top: 10, Bottom: 10}},
-		{TagHeading1, Margins{Top: 30, Bottom: 10}},
-		{TagHeading2, Margins{Top: 26, Bottom: 10}},
-		{TagHeading3, Margins{Top: 22, Bottom: 10}},
-		{TagHeading4, Margins{Top: 18, Bottom: 10}},
-		{TagHeading5, Margins{Top: 14, Bottom: 10}},
-		{TagHeading6, Margins{Top: 10, Bottom: 10}},
-		{TagList, Margins{Top: 10, Bottom: 10}},
-		{TagListItem, Margins{Top: 5, Bottom: 5, Left: 40}},
-		{TagCodeBlock, Margins{Top: 20, Bottom: 20, Left: 20}},
-		{TagThematicBreak, Margins{Top: 20, Bottom: 20}},
-		{TagBlockquote, Margins{Top: 10, Bottom: 10}},
-		{TagTable, Margins{Top: 10, Bottom: 10}},
-		{TagTableCell, Margins{}},
-		{TagLink, Margins{}},
+		{ast.TagParagraph, Margins{Top: 10, Bottom: 10}},
+		{ast.TagHeading1, Margins{Top: 30, Bottom: 10}},
+		{ast.TagHeading2, Margins{Top: 26, Bottom: 10}},
+		{ast.TagHeading3, Margins{Top: 22, Bottom: 10}},
+		{ast.TagHeading4, Margins{Top: 18, Bottom: 10}},
+		{ast.TagHeading5, Margins{Top: 14, Bottom: 10}},
+		{ast.TagHeading6, Margins{Top: 10, Bottom: 10}},
+		{ast.TagList, Margins{Top: 10, Bottom: 10}},
+		{ast.TagListItem, Margins{Top: 5, Bottom: 5, Left: 40}},
+		{ast.TagCodeBlock, Margins{Top: 20, Bottom: 20, Left: 20}},
+		{ast.TagThematicBreak, Margins{Top: 20, Bottom: 20}},
+		{ast.TagBlockquote, Margins{Top: 10, Bottom: 10}},
+		{ast.TagTable, Margins{Top: 10, Bottom: 10}},
+		{ast.TagTableCell, Margins{}},
+		{ast.TagLink, Margins{}},
 	}
 	for _, tc := range cases {
-		node := &Node{Tag: tc.tag}
+		node := &ast.Node{Tag: tc.tag}
 		if got := s.Margins(node); got != tc.want {
 			t.Errorf("Margins(tag=%v) = %+v, want %+v", tc.tag, got, tc.want)
 		}
@@ -54,23 +55,23 @@ func TestBasicMarginsNilNode(t *testing.T) {
 func TestBasicTextStyle(t *testing.T) {
 	s := Dark()
 	cases := []struct {
-		tag  Tag
+		tag  ast.Tag
 		want PartialTextStyle
 	}{
-		{TagParagraph, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{TagHeading1, PartialTextStyle{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagHeading2, PartialTextStyle{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagHeading6, PartialTextStyle{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
-		{TagListItem, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{TagCodeBlock, PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
-		{TagTableCell, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
-		{TagCodeSpan, PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily}},
-		{TagEmphasis, PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle}},
-		{TagStrong, PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight}},
-		{TagLink, PartialTextStyle{}},
+		{ast.TagParagraph, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{ast.TagHeading1, PartialTextStyle{TextStyle{Size: 40, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{ast.TagHeading2, PartialTextStyle{TextStyle{Size: 36, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{ast.TagHeading6, PartialTextStyle{TextStyle{Size: 20, Weight: font.WeightBold, Family: Proportional}, FieldSize | FieldWeight | FieldFamily}},
+		{ast.TagListItem, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{ast.TagCodeBlock, PartialTextStyle{TextStyle{Size: 16, Family: Monospace}, FieldSize | FieldFamily}},
+		{ast.TagTableCell, PartialTextStyle{TextStyle{Size: 16}, FieldSize}},
+		{ast.TagCodeSpan, PartialTextStyle{TextStyle{Family: Monospace}, FieldFamily}},
+		{ast.TagEmphasis, PartialTextStyle{TextStyle{Style: font.StyleItalic}, FieldStyle}},
+		{ast.TagStrong, PartialTextStyle{TextStyle{Weight: font.WeightBold}, FieldWeight}},
+		{ast.TagLink, PartialTextStyle{}},
 	}
 	for _, tc := range cases {
-		node := &Node{Tag: tc.tag}
+		node := &ast.Node{Tag: tc.tag}
 		if got := s.TextStyle(node); got != tc.want {
 			t.Errorf("TextStyle(tag=%v) = %+v, want %+v", tc.tag, got, tc.want)
 		}
@@ -95,26 +96,26 @@ func TestBasicTextStyleNilNode(t *testing.T) {
 func TestBasicColor(t *testing.T) {
 	s := Dark()
 	cases := []struct {
-		tag  Tag
+		tag  ast.Tag
 		want color.Color
 	}{
-		{TagCodeBlock, color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
-		{TagCodeSpan, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
-		{TagLink, color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
-		{TagCodeKeyword, color.RGBA{0xC5, 0x86, 0xF2, 0xFF}},
-		{TagCodeType, color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}},
-		{TagCodeFunction, color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}},
-		{TagCodeString, color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}},
-		{TagCodeNumber, color.RGBA{0xF2, 0xB0, 0x66, 0xFF}},
-		{TagCodeComment, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagParagraph, nil},
-		{TagHeading1, nil},
-		{TagBlockquote, nil},
-		{TagTable, nil},
-		{TagThematicBreak, nil},
+		{ast.TagCodeBlock, color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
+		{ast.TagCodeSpan, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
+		{ast.TagLink, color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
+		{ast.TagCodeKeyword, color.RGBA{0xC5, 0x86, 0xF2, 0xFF}},
+		{ast.TagCodeType, color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}},
+		{ast.TagCodeFunction, color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}},
+		{ast.TagCodeString, color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}},
+		{ast.TagCodeNumber, color.RGBA{0xF2, 0xB0, 0x66, 0xFF}},
+		{ast.TagCodeComment, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{ast.TagParagraph, nil},
+		{ast.TagHeading1, nil},
+		{ast.TagBlockquote, nil},
+		{ast.TagTable, nil},
+		{ast.TagThematicBreak, nil},
 	}
 	for _, tc := range cases {
-		node := &Node{Tag: tc.tag}
+		node := &ast.Node{Tag: tc.tag}
 		if got := s.Color(node); got != tc.want {
 			t.Errorf("Color(tag=%v) = %v, want %v", tc.tag, got, tc.want)
 		}
@@ -134,17 +135,17 @@ func TestBasicColorNilNode(t *testing.T) {
 func TestBasicBorderColor(t *testing.T) {
 	s := Dark()
 	cases := []struct {
-		tag  Tag
+		tag  ast.Tag
 		want color.Color
 	}{
-		{TagThematicBreak, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagBlockquote, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagTable, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{TagParagraph, nil},
-		{TagLink, nil},
+		{ast.TagThematicBreak, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{ast.TagBlockquote, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{ast.TagTable, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		{ast.TagParagraph, nil},
+		{ast.TagLink, nil},
 	}
 	for _, tc := range cases {
-		node := &Node{Tag: tc.tag}
+		node := &ast.Node{Tag: tc.tag}
 		if got := s.BorderColor(node); got != tc.want {
 			t.Errorf("BorderColor(tag=%v) = %v, want %v", tc.tag, got, tc.want)
 		}
@@ -160,7 +161,7 @@ func TestBasicBorderColorNilNode(t *testing.T) {
 
 // TestBasicStrikeThickness checks that the thickness doubles
 // as the "is this struck at all" signal: 0 unless node or an ancestor
-// carries TagStrikethrough.
+// carries ast.TagStrikethrough.
 func TestBasicStrikeThickness(t *testing.T) {
 	s := Dark()
 
@@ -168,17 +169,17 @@ func TestBasicStrikeThickness(t *testing.T) {
 		t.Errorf("StrikeThickness(nil) = %v, want 0", got)
 	}
 
-	notStruck := &Node{Tag: TagEmphasis}
+	notStruck := &ast.Node{Tag: ast.TagEmphasis}
 	if got := s.StrikeThickness(notStruck); got != 0 {
 		t.Errorf("StrikeThickness(Emphasis) = %v, want 0", got)
 	}
 
-	struck := &Node{Tag: TagStrikethrough}
+	struck := &ast.Node{Tag: ast.TagStrikethrough}
 	if got := s.StrikeThickness(struck); got != 1 {
 		t.Errorf("StrikeThickness(Strikethrough) = %v, want 1", got)
 	}
 
-	nestedInStruck := struck.AddChild(TagEmphasis)
+	nestedInStruck := struck.AddChild(ast.TagEmphasis)
 	if got := s.StrikeThickness(nestedInStruck); got != 1 {
 		t.Errorf("StrikeThickness(Emphasis nested in Strikethrough) = %v, want 1", got)
 	}
@@ -276,7 +277,7 @@ func TestLightSharesNonColorValues(t *testing.T) {
 	if light.HeadingTextStyles != dark.HeadingTextStyles {
 		t.Errorf("HeadingTextStyles = %+v, want dark's %+v", light.HeadingTextStyles, dark.HeadingTextStyles)
 	}
-	struckNode := &Node{Tag: TagStrikethrough}
+	struckNode := &ast.Node{Tag: ast.TagStrikethrough}
 	if light.StrikeThickness(struckNode) != dark.StrikeThickness(struckNode) {
 		t.Errorf("StrikeThickness value differs from dark's")
 	}

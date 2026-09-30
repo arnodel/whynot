@@ -1,7 +1,13 @@
+// Package styling is whynot's style machinery: the per-element queries
+// the layout engine resolves appearance through (Styles), and the
+// field-configured implementation behind the default look (Basic). It's
+// internal so the public API only exposes an opaque whynot.StyleSheet;
+// stylesheets are made by packages under styles/.
 package styling
 
 import (
 	"fmt"
+	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 
 	"golang.org/x/image/font"
@@ -83,30 +89,30 @@ type TableGeometry struct {
 	ColumnRuleThickness float64
 }
 
-// Styles resolves a Node's semantic role to concrete appearance - what the
+// Styles resolves an ast.Node's semantic role to concrete appearance - what the
 // layout engine queries. Every per-element method takes the node,
 // uniformly, even where nothing varies a value by node today - an
 // implementation is free to ignore it. Dimensions are in logical
 // (unscaled) pixels.
 type Styles interface {
 	// Margins returns the margins for node's own tag.
-	Margins(node *Node) Margins
+	Margins(node *ast.Node) Margins
 	// TextStyle returns node's own tag's contribution to TextStyle -
 	// combined with its ancestors' contributions by the engine, since e.g.
 	// Strong nested inside Emphasis needs both a bold and an italic
 	// contribution to survive. At the root (a nil node) it must set every
 	// field, so resolution never leaves one unset.
-	TextStyle(node *Node) PartialTextStyle
+	TextStyle(node *ast.Node) PartialTextStyle
 	// Color returns node's own tag's contribution to the cascading text
 	// color, or nil if it has no opinion (inherits from an ancestor, or
 	// the document default at the root - a nil node). Mirrors CSS's
 	// `color`, which inherits by default.
-	Color(node *Node) color.Color
+	Color(node *ast.Node) color.Color
 	// BorderColor returns node's own single, non-inherited decoration
 	// color - a thematic break's rule, a blockquote's bar, a table's
 	// frame. Unlike Color, it's never resolved by walking ancestry -
 	// mirrors CSS's border-color, which doesn't inherit.
-	BorderColor(node *Node) color.Color
+	BorderColor(node *ast.Node) color.Color
 	// BackgroundColor is the color the whole view is filled with.
 	BackgroundColor() color.Color
 	// ViewMargins is the space between the view's edge and the document.
@@ -122,18 +128,18 @@ type Styles interface {
 	// StrikeThickness returns the thickness of a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
 	// both "should this be struck" and "how thick".
-	StrikeThickness(node *Node) float64
-	ThematicBreakThickness(node *Node) float64
-	BlockquoteGeometry(node *Node) BlockquoteGeometry
-	TableGeometry(node *Node) TableGeometry
+	StrikeThickness(node *ast.Node) float64
+	ThematicBreakThickness(node *ast.Node) float64
+	BlockquoteGeometry(node *ast.Node) BlockquoteGeometry
+	TableGeometry(node *ast.Node) TableGeometry
 	// DiagramPadding is the space between a rendered diagram's frame and
 	// the diagram itself.
-	DiagramPadding(node *Node) float64
+	DiagramPadding(node *ast.Node) float64
 	// LineHeight returns the multiplier applied to a line's natural
 	// Ascent+Descent to get the vertical space reserved for it - CSS's
 	// unitless line-height (1.2 means 120% of the font's own single-line
 	// height). A font's own metrics don't reliably encode comfortable
 	// reading spacing, so this is what separates wrapped lines within a
 	// paragraph - distinct from Margins, which separate blocks.
-	LineHeight(node *Node) float64
+	LineHeight(node *ast.Node) float64
 }

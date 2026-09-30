@@ -1,14 +1,13 @@
-// Package styling is whynot's style machinery: the semantic node tree a
-// document's elements are tagged with, and the per-element queries the
-// layout engine resolves appearance through (Styles). It's internal so the
-// public API only exposes an opaque whynot.StyleSheet; stylesheets are
-// made by packages under styles/.
-package styling
+// Package ast is the semantic tree of a whynot document: what each element
+// is (its Tag), how elements nest, and the few facts about them the engine
+// needs, like a heading's anchor ID or a link's destination. It's built
+// alongside the layout tree by the compiler, and is what styling, links,
+// hover highlighting and anchors all work from.
+package ast
 
 import "slices"
 
-// Tag identifies the semantic role of a Node - which part of a Styles
-// implementation a value tagged with it resolves its appearance against.
+// Tag identifies the semantic role of a Node: what kind of element it is.
 type Tag int
 
 const (
@@ -51,8 +50,7 @@ type Path []Tag
 
 // Node is a node in the semantic tree built alongside the Block/Inline
 // tree during compilation - structural only (what kind of thing this is,
-// and where it sits), with no rendering or style baked in. It's what Styles
-// is queried with.
+// and where it sits), with no rendering or style baked in.
 type Node struct {
 	Tag    Tag
 	Parent *Node
@@ -78,7 +76,7 @@ func (n *Node) AddChild(tag Tag) *Node {
 }
 
 // Path returns the tag ancestry from the root down to and including n - a
-// convenience for Styles implementations that want ancestry without
+// convenience for code that wants ancestry without
 // walking Parent themselves. Computed once and cached.
 //
 // slices.Concat, not append(parentPath, n.Tag) - append can leave two

@@ -1,7 +1,7 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/ast"
 	"image"
 	"image/color"
 	"time"
@@ -12,27 +12,27 @@ import (
 // that would've rendered without a plugin - while it's still pending or
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See CodeBlockPlugin.
-func NewDiagramBlock(node *styling.Node, img AsyncImage, fallback Block) Block {
-	return &diagramBlock{node: node, imageNode: node.AddChild(styling.TagImage), img: img, fallback: fallback}
+func NewDiagramBlock(node *ast.Node, img AsyncImage, fallback Block) Block {
+	return &diagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), img: img, fallback: fallback}
 }
 
 type diagramBlock struct {
 	WithoutMargins
-	node *styling.Node
-	// imageNode is a styling.TagImage child of node, precomputed once here
+	node *ast.Node
+	// imageNode is a ast.TagImage child of node, precomputed once here
 	// rather than on demand inside GetBlockLayout (which can run many
-	// times - a resize, a theme change - and styling.Node.AddChild isn't
+	// times - a resize, a theme change - and ast.Node.AddChild isn't
 	// idempotent) - mirrors InlineImage's identical fallbackNode field.
 	// Its only job is giving the ready image's frame a StyleSheet.
-	// BorderColor to resolve (styling.TagCodeBlock, node's own tag, has none).
-	imageNode *styling.Node
+	// BorderColor to resolve (ast.TagCodeBlock, node's own tag, has none).
+	imageNode *ast.Node
 	img       AsyncImage
 	fallback  Block
 }
 
 var _ Block = (*diagramBlock)(nil)
 
-func (b *diagramBlock) Node() *styling.Node {
+func (b *diagramBlock) Node() *ast.Node {
 	return b.node
 }
 

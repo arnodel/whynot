@@ -3,7 +3,7 @@ package whynot
 import (
 	"strings"
 
-	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/ast"
 )
 
 // Highlighter classifies a code block's source into consecutive typed
@@ -68,18 +68,18 @@ type CodeBlockPlugin interface {
 	Image(language, code string) AsyncImage
 }
 
-// tokenClassTags maps a Highlighter's TokenClass to the styling.Tag whose
+// tokenClassTags maps a Highlighter's TokenClass to the ast.Tag whose
 // Styles.Color contribution renders it - TokenPlain deliberately has
-// no entry: a plain span reuses its enclosing code block's own styling.Node
+// no entry: a plain span reuses its enclosing code block's own ast.Node
 // directly rather than getting a child node of its own, inheriting
 // CodeBlockColor the same way untouched code text always has.
-var tokenClassTags = map[TokenClass]styling.Tag{
-	TokenKeyword:  styling.TagCodeKeyword,
-	TokenType:     styling.TagCodeType,
-	TokenFunction: styling.TagCodeFunction,
-	TokenString:   styling.TagCodeString,
-	TokenNumber:   styling.TagCodeNumber,
-	TokenComment:  styling.TagCodeComment,
+var tokenClassTags = map[TokenClass]ast.Tag{
+	TokenKeyword:  ast.TagCodeKeyword,
+	TokenType:     ast.TagCodeType,
+	TokenFunction: ast.TagCodeFunction,
+	TokenString:   ast.TagCodeString,
+	TokenNumber:   ast.TagCodeNumber,
+	TokenComment:  ast.TagCodeComment,
 }
 
 // codeBlockLines returns the per-visual-line Inline spans for a fenced
@@ -89,7 +89,7 @@ var tokenClassTags = map[TokenClass]styling.Tag{
 // CodeBlockPlugin's fallback content (see compile.go's KindCodeBlock
 // case) - identical either way, since a plugin's fallback is exactly
 // what today's non-plugin rendering already is.
-func (c *compiler) codeBlockLines(astNode *styling.Node, language string, rawLines []string) [][]Inline {
+func (c *compiler) codeBlockLines(astNode *ast.Node, language string, rawLines []string) [][]Inline {
 	var lines [][]Inline
 	if c.highlighter != nil {
 		lines = highlightLines(c.highlighter, astNode, language, rawLines)
@@ -114,7 +114,7 @@ func (c *compiler) codeBlockLines(astNode *styling.Node, language string, rawLin
 // nil if h's output doesn't reproduce exactly len(rawLines) lines (a
 // misbehaving Highlighter), so the caller can fall back to plain,
 // unhighlighted rendering instead.
-func highlightLines(h Highlighter, blockNode *styling.Node, language string, rawLines []string) [][]Inline {
+func highlightLines(h Highlighter, blockNode *ast.Node, language string, rawLines []string) [][]Inline {
 	if len(rawLines) == 0 {
 		return [][]Inline{}
 	}

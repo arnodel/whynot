@@ -1,6 +1,7 @@
 package styling
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"image/color"
 
 	"golang.org/x/image/font"
@@ -13,7 +14,7 @@ type ScrollbarColors struct {
 }
 
 // SyntaxColors is the palette a Highlighter's classified tokens draw from
-// (see TagCodeKeyword..TagCodeFunction).
+// (see ast.TagCodeKeyword..ast.TagCodeFunction).
 type SyntaxColors struct {
 	Keyword color.Color
 	// Type is shared by a builtin primitive type and a declared custom
@@ -52,7 +53,7 @@ type Basic struct {
 
 	// UnsupportedColor is the text color for a Markdown construct
 	// whynot doesn't understand - rendered as a code block (see
-	// CodeBlockMargins/CodeBlockTextStyle, shared with TagCodeBlock) but
+	// CodeBlockMargins/CodeBlockTextStyle, shared with ast.TagCodeBlock) but
 	// in this distinct color so it reads as an error, not as normal code.
 	UnsupportedColor color.Color
 
@@ -273,26 +274,26 @@ func Light() *Basic {
 	return s
 }
 
-func (s *Basic) Margins(node *Node) Margins {
+func (s *Basic) Margins(node *ast.Node) Margins {
 	if node == nil {
 		return Margins{}
 	}
 	switch node.Tag {
-	case TagParagraph:
+	case ast.TagParagraph:
 		return s.ParagraphMargins
-	case TagHeading1, TagHeading2, TagHeading3, TagHeading4, TagHeading5, TagHeading6:
-		return s.HeadingMargins[node.Tag-TagHeading1]
-	case TagList:
+	case ast.TagHeading1, ast.TagHeading2, ast.TagHeading3, ast.TagHeading4, ast.TagHeading5, ast.TagHeading6:
+		return s.HeadingMargins[node.Tag-ast.TagHeading1]
+	case ast.TagList:
 		return s.ListMargins
-	case TagListItem:
+	case ast.TagListItem:
 		return s.ListItemMargins
-	case TagCodeBlock, TagUnsupported:
+	case ast.TagCodeBlock, ast.TagUnsupported:
 		return s.CodeBlockMargins
-	case TagThematicBreak:
+	case ast.TagThematicBreak:
 		return s.ThematicBreakMargins
-	case TagBlockquote:
+	case ast.TagBlockquote:
 		return s.BlockquoteMargins
-	case TagTable:
+	case ast.TagTable:
 		return s.TableMargins
 	default:
 		return Margins{}
@@ -305,26 +306,26 @@ func (s *Basic) Margins(node *Node) Margins {
 // root (node == nil) it returns BaseTextStyle claiming every field, the
 // fallback ResolvedTextStyle reaches if no ancestor ever set some field -
 // guarantees e.g. Size is never silently left at 0.
-func (s *Basic) TextStyle(node *Node) PartialTextStyle {
+func (s *Basic) TextStyle(node *ast.Node) PartialTextStyle {
 	if node == nil {
 		return PartialTextStyle{s.BaseTextStyle, AllTextStyleFields}
 	}
 	switch node.Tag {
-	case TagParagraph:
+	case ast.TagParagraph:
 		return s.ParagraphTextStyle
-	case TagHeading1, TagHeading2, TagHeading3, TagHeading4, TagHeading5, TagHeading6:
-		return s.HeadingTextStyles[node.Tag-TagHeading1]
-	case TagListItem:
+	case ast.TagHeading1, ast.TagHeading2, ast.TagHeading3, ast.TagHeading4, ast.TagHeading5, ast.TagHeading6:
+		return s.HeadingTextStyles[node.Tag-ast.TagHeading1]
+	case ast.TagListItem:
 		return s.ListItemTextStyle
-	case TagCodeBlock, TagUnsupported:
+	case ast.TagCodeBlock, ast.TagUnsupported:
 		return s.CodeBlockTextStyle
-	case TagTableCell:
+	case ast.TagTableCell:
 		return s.TableCellTextStyle
-	case TagCodeSpan:
+	case ast.TagCodeSpan:
 		return s.CodeSpanTextStyle
-	case TagEmphasis:
+	case ast.TagEmphasis:
 		return s.EmphasisTextStyle
-	case TagStrong:
+	case ast.TagStrong:
 		return s.StrongTextStyle
 	default:
 		return PartialTextStyle{}
@@ -337,48 +338,48 @@ func (s *Basic) TextStyle(node *Node) PartialTextStyle {
 // root). Only Link, the two code tags, and Unsupported have an opinion;
 // block-level decoration colors live on BorderColor instead, since e.g.
 // a blockquote's bar color must never leak into its inner text color.
-func (s *Basic) Color(node *Node) color.Color {
+func (s *Basic) Color(node *ast.Node) color.Color {
 	if node == nil {
 		return s.TextColor
 	}
 	switch node.Tag {
-	case TagCodeBlock:
+	case ast.TagCodeBlock:
 		return s.CodeBlockColor
-	case TagCodeSpan:
+	case ast.TagCodeSpan:
 		return s.CodeSpanColor
-	case TagCodeKeyword:
+	case ast.TagCodeKeyword:
 		return s.Syntax.Keyword
-	case TagCodeType:
+	case ast.TagCodeType:
 		return s.Syntax.Type
-	case TagCodeFunction:
+	case ast.TagCodeFunction:
 		return s.Syntax.Function
-	case TagCodeString:
+	case ast.TagCodeString:
 		return s.Syntax.String
-	case TagCodeNumber:
+	case ast.TagCodeNumber:
 		return s.Syntax.Number
-	case TagCodeComment:
+	case ast.TagCodeComment:
 		return s.Syntax.Comment
-	case TagUnsupported:
+	case ast.TagUnsupported:
 		return s.UnsupportedColor
-	case TagLink:
+	case ast.TagLink:
 		return s.LinkColor
 	default:
 		return nil
 	}
 }
 
-func (s *Basic) BorderColor(node *Node) color.Color {
+func (s *Basic) BorderColor(node *ast.Node) color.Color {
 	if node == nil {
 		return nil
 	}
 	switch node.Tag {
-	case TagThematicBreak:
+	case ast.TagThematicBreak:
 		return s.ThematicBreakColor
-	case TagBlockquote:
+	case ast.TagBlockquote:
 		return s.BlockquoteBarColor
-	case TagTable:
+	case ast.TagTable:
 		return s.TableFrameColor
-	case TagImage:
+	case ast.TagImage:
 		return s.ImagePlaceholderColor
 	default:
 		return nil
@@ -409,32 +410,32 @@ func (s *Basic) ScrollbarColor(hover, pressed bool) color.Color {
 }
 
 // StrikeThickness returns 0 unless node (or an ancestor) is tagged
-// TagStrikethrough - encoding "should this be struck" and "how thick" in
+// ast.TagStrikethrough - encoding "should this be struck" and "how thick" in
 // one value, the same way TextStyle's Weight being font.WeightNormal
 // means "not bold".
-func (s *Basic) StrikeThickness(node *Node) float64 {
-	if !node.HasAncestorTag(TagStrikethrough) {
+func (s *Basic) StrikeThickness(node *ast.Node) float64 {
+	if !node.HasAncestorTag(ast.TagStrikethrough) {
 		return 0
 	}
 	return s.Dims.Strike
 }
 
-func (s *Basic) ThematicBreakThickness(node *Node) float64 {
+func (s *Basic) ThematicBreakThickness(node *ast.Node) float64 {
 	return s.Dims.ThematicBreak
 }
 
-func (s *Basic) DiagramPadding(node *Node) float64 {
+func (s *Basic) DiagramPadding(node *ast.Node) float64 {
 	return s.Dims.DiagramPadding
 }
 
-func (s *Basic) BlockquoteGeometry(node *Node) BlockquoteGeometry {
+func (s *Basic) BlockquoteGeometry(node *ast.Node) BlockquoteGeometry {
 	return s.Dims.Blockquote
 }
 
-func (s *Basic) TableGeometry(node *Node) TableGeometry {
+func (s *Basic) TableGeometry(node *ast.Node) TableGeometry {
 	return s.Dims.Table
 }
 
-func (s *Basic) LineHeight(node *Node) float64 {
+func (s *Basic) LineHeight(node *ast.Node) float64 {
 	return s.Dims.LineHeight
 }

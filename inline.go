@@ -2,7 +2,7 @@ package whynot
 
 import (
 	"fmt"
-	"github.com/arnodel/whynot/internal/styling"
+	"github.com/arnodel/whynot/internal/ast"
 	"image"
 )
 
@@ -18,7 +18,7 @@ type Inline interface {
 
 type InlineText struct {
 	text string
-	node *styling.Node
+	node *ast.Node
 
 	// glued - see InlineLayout.Glued's doc comment. Set by the compiler
 	// (compiler.appendString/pendingSpace) from whether the
@@ -30,7 +30,7 @@ type InlineText struct {
 
 var _ Inline = (*InlineText)(nil)
 
-func (t *InlineText) Node() *styling.Node {
+func (t *InlineText) Node() *ast.Node {
 	return t.node
 }
 
@@ -69,12 +69,12 @@ const (
 // have it.
 type TaskCheckbox struct {
 	checked bool
-	node    *styling.Node
+	node    *ast.Node
 }
 
 var _ Inline = (*TaskCheckbox)(nil)
 
-func (c *TaskCheckbox) Node() *styling.Node {
+func (c *TaskCheckbox) Node() *ast.Node {
 	return c.node
 }
 
@@ -103,11 +103,11 @@ type InlineImage struct {
 	src   string
 	alt   string
 	title string
-	node  *styling.Node
-	// fallbackNode is a styling.TagUnsupported child of node - see the compile.go
+	node  *ast.Node
+	// fallbackNode is a ast.TagUnsupported child of node - see the compile.go
 	// KindImage case for why it's precomputed once, at parse time,
 	// rather than created on demand here.
-	fallbackNode *styling.Node
+	fallbackNode *ast.Node
 
 	// glued - see InlineLayout.Glued's doc comment and InlineText.glued.
 	glued bool
@@ -115,7 +115,7 @@ type InlineImage struct {
 
 var _ Inline = (*InlineImage)(nil)
 
-func (i *InlineImage) Node() *styling.Node {
+func (i *InlineImage) Node() *ast.Node {
 	return i.node
 }
 

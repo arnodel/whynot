@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 )
 
@@ -67,7 +68,7 @@ func TestStyleSheetIsASnapshot(t *testing.T) {
 	theme := Dark()
 	sheet := theme.StyleSheet()
 	theme.LinkColor = color.RGBA{1, 2, 3, 255}
-	if got := sheet.Styles().Color(&styling.Node{Tag: styling.TagLink}); got == theme.LinkColor {
+	if got := sheet.Styles().Color(&ast.Node{Tag: ast.TagLink}); got == theme.LinkColor {
 		t.Error("changing the theme changed a StyleSheet taken before")
 	}
 }

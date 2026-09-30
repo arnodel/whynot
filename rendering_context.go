@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"image/color"
 	"time"
@@ -11,10 +12,10 @@ type RenderingContext struct {
 	FaceSelector
 	Styles styling.Styles
 
-	// HighlightNode is the styling.Node currently under the mouse (e.g. a
+	// HighlightNode is the ast.Node currently under the mouse (e.g. a
 	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
 	// rebuilds the layout tree when it changes.
-	HighlightNode *styling.Node
+	HighlightNode *ast.Node
 
 	// ImageCache resolves, fetches, and decodes images, caching the
 	// result - see ImageCache. NewView always sets one (FileImageSource
@@ -62,15 +63,15 @@ func (c RenderingContext) ScaledViewMargins() Margins {
 	return margins
 }
 
-func (c RenderingContext) ScaledStrikeThickness(node *styling.Node) float64 {
+func (c RenderingContext) ScaledStrikeThickness(node *ast.Node) float64 {
 	return c.Styles.StrikeThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledThematicBreakThickness(node *styling.Node) float64 {
+func (c RenderingContext) ScaledThematicBreakThickness(node *ast.Node) float64 {
 	return c.Styles.ThematicBreakThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledBlockquoteGeometry(node *styling.Node) styling.BlockquoteGeometry {
+func (c RenderingContext) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
 	g := c.Styles.BlockquoteGeometry(node)
 	return styling.BlockquoteGeometry{
 		Indent:   g.Indent * c.Scale,
@@ -78,7 +79,7 @@ func (c RenderingContext) ScaledBlockquoteGeometry(node *styling.Node) styling.B
 	}
 }
 
-func (c RenderingContext) ScaledTableGeometry(node *styling.Node) styling.TableGeometry {
+func (c RenderingContext) ScaledTableGeometry(node *ast.Node) styling.TableGeometry {
 	g := c.Styles.TableGeometry(node)
 	return styling.TableGeometry{
 		FrameThickness:      g.FrameThickness * c.Scale,
@@ -95,7 +96,7 @@ func (c RenderingContext) ScaledTableGeometry(node *styling.Node) styling.TableG
 // weight (from Strong) and an italic style (from Emphasis). Walks one step
 // past the root (node == nil) so StyleSheet's baseline contribution can
 // fill in any field nothing along the way ever claimed.
-func (c RenderingContext) ResolvedTextStyle(node *styling.Node) TextStyle {
+func (c RenderingContext) ResolvedTextStyle(node *ast.Node) TextStyle {
 	var result TextStyle
 	var resolved styling.TextStyleField
 	for n := node; ; n = n.Parent {
@@ -124,7 +125,7 @@ func (c RenderingContext) ResolvedTextStyle(node *styling.Node) TextStyle {
 // ResolvedColor walks node's ancestry (node itself first) for the nearest
 // non-nil Color contribution - mirrors CSS's `color`, which inherits down
 // from the nearest ancestor that sets it.
-func (c RenderingContext) ResolvedColor(node *styling.Node) color.Color {
+func (c RenderingContext) ResolvedColor(node *ast.Node) color.Color {
 	if node.HasAncestor(c.HighlightNode) {
 		return c.Styles.HighlightColor()
 	}

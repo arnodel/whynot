@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
@@ -99,7 +100,7 @@ func TestParseHeading(t *testing.T) {
 		t.Errorf("words = %v, want %v", got, want)
 	}
 	// Heading weight/size/margins are resolved later, from StyleSheet
-	// against the node's own tag (styling.TagHeading3 here) - nothing further to
+	// against the node's own tag (ast.TagHeading3 here) - nothing further to
 	// assert here structurally.
 }
 
@@ -650,8 +651,8 @@ func TestParseWithSyntaxHighlighter(t *testing.T) {
 	if !ok || keyword.text != "func" {
 		t.Fatalf("lines[0][0] = %#v, want InlineText %q", code.lines[0][0], "func")
 	}
-	if keyword.node.Tag != styling.TagCodeKeyword {
-		t.Errorf("keyword node tag = %v, want styling.TagCodeKeyword", keyword.node.Tag)
+	if keyword.node.Tag != ast.TagCodeKeyword {
+		t.Errorf("keyword node tag = %v, want ast.TagCodeKeyword", keyword.node.Tag)
 	}
 	plain, ok := code.lines[0][1].(*InlineText)
 	if !ok || plain.text != " f()" {
@@ -989,14 +990,14 @@ func TestParseStrikethrough(t *testing.T) {
 	}
 
 	plain := para.parts[0].(*InlineText)
-	if plain.node.HasAncestorTag(styling.TagStrikethrough) {
+	if plain.node.HasAncestorTag(ast.TagStrikethrough) {
 		t.Errorf("part %q: struck = true, want false", plain.text)
 	}
 
 	struckWords := para.parts[1:4]
 	for _, part := range struckWords {
 		text := part.(*InlineText)
-		if !text.node.HasAncestorTag(styling.TagStrikethrough) {
+		if !text.node.HasAncestorTag(ast.TagStrikethrough) {
 			t.Errorf("part %q: struck = false, want true", text.text)
 		}
 	}
@@ -1007,7 +1008,7 @@ func TestParseStrikethrough(t *testing.T) {
 	}
 
 	trailing := para.parts[4].(*InlineText)
-	if trailing.node.HasAncestorTag(styling.TagStrikethrough) {
+	if trailing.node.HasAncestorTag(ast.TagStrikethrough) {
 		t.Errorf("part %q: struck = true, want false", trailing.text)
 	}
 }
@@ -1016,13 +1017,13 @@ func TestInlineTextStrikeThickness(t *testing.T) {
 	styleSheet := styling.Dark()
 	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), Styles: styleSheet}
 
-	plainNode := (*styling.Node)(nil).AddChild(styling.TagParagraph).AddChild(styling.TagEmphasis)
+	plainNode := (*ast.Node)(nil).AddChild(ast.TagParagraph).AddChild(ast.TagEmphasis)
 	plain := (&InlineText{text: "x", node: plainNode}).GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	if plain.StrikeThickness != 0 {
 		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
 	}
 
-	struckNode := (*styling.Node)(nil).AddChild(styling.TagParagraph).AddChild(styling.TagStrikethrough)
+	struckNode := (*ast.Node)(nil).AddChild(ast.TagParagraph).AddChild(ast.TagStrikethrough)
 	struck := (&InlineText{text: "x", node: struckNode}).GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	want := int(styleSheet.StrikeThickness(struckNode) * ctx.Scale)
 	if struck.StrikeThickness != want {
@@ -1050,11 +1051,11 @@ func TestParseImageWithTitle(t *testing.T) {
 	if img.title != "a lovely cat" {
 		t.Errorf("title = %q, want %q", img.title, "a lovely cat")
 	}
-	if img.node.Tag != styling.TagImage {
-		t.Errorf("node.Tag = %v, want styling.TagImage", img.node.Tag)
+	if img.node.Tag != ast.TagImage {
+		t.Errorf("node.Tag = %v, want ast.TagImage", img.node.Tag)
 	}
-	if img.fallbackNode == nil || img.fallbackNode.Tag != styling.TagUnsupported {
-		t.Errorf("fallbackNode = %#v, want a styling.TagUnsupported node", img.fallbackNode)
+	if img.fallbackNode == nil || img.fallbackNode.Tag != ast.TagUnsupported {
+		t.Errorf("fallbackNode = %#v, want a ast.TagUnsupported node", img.fallbackNode)
 	}
 	if img.fallbackNode.Parent != img.node {
 		t.Errorf("fallbackNode.Parent = %#v, want img.node", img.fallbackNode.Parent)
@@ -1182,7 +1183,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		Styles:       styleSheet,
 		ImageCache:   NewImageCache(FileImageSource{}),
 	}
-	fallbackNode := (*styling.Node)(nil).AddChild(styling.TagImage).AddChild(styling.TagUnsupported)
+	fallbackNode := (*ast.Node)(nil).AddChild(ast.TagImage).AddChild(ast.TagUnsupported)
 
 	// All three cases below share the src "nope.png" (only alt/title
 	// differ), so waiting once here - before any of them look at the

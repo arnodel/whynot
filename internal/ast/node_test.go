@@ -1,4 +1,4 @@
-package styling
+package ast
 
 import (
 	"slices"

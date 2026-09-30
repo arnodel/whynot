@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
@@ -95,15 +96,15 @@ func (v *View) CurrentHeadingID() (id string, ok bool) {
 		return "", false
 	}
 	for i := min(v.stack.cursor.index, v.stack.len()-1); i >= 0; i-- {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= styling.TagHeading1 && n.Tag <= styling.TagHeading6 {
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
 			return n.ID, true
 		}
 	}
 	return "", false
 }
 
-// nodeOf returns block's styling.Node, or nil for a nil block (a spacer slot).
-func nodeOf(block Block) *styling.Node {
+// nodeOf returns block's ast.Node, or nil for a nil block (a spacer slot).
+func nodeOf(block Block) *ast.Node {
 	if block == nil {
 		return nil
 	}
@@ -139,7 +140,7 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 }
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id
-// (see styling.Node.ID) at the top of the viewport, e.g. after following a
+// (see ast.Node.ID) at the top of the viewport, e.g. after following a
 // link with a URL fragment. ok is false, and the scroll position
 // unchanged, if no heading has that id or nothing has been laid out
 // yet (see Layout).
@@ -283,15 +284,15 @@ func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
 	return hit, offset.Add(image.Pt(left, y-int(c.offset))), c.index
 }
 
-// linkNodeAt returns the styling.Node of the link at document position
+// linkNodeAt returns the ast.Node of the link at document position
 // (x, y), or nil if none - same coordinate space as HitTest - and the
 // top-level slot it's in.
-func (v *View) linkNodeAt(x, y int) (node *styling.Node, slot int) {
+func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 	hit, _, slot := v.hitTest(x, y)
 	if hit == nil {
 		return nil, 0
 	}
-	return hit.Source().Node().AncestorTag(styling.TagLink), slot
+	return hit.Source().Node().AncestorTag(ast.TagLink), slot
 }
 
 // Hover updates the currently-highlighted link, given the mouse position

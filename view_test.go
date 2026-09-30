@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"bytes"
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
@@ -30,7 +31,7 @@ func (b *fixedHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
-func (b *fixedHeightBlock) Node() *styling.Node {
+func (b *fixedHeightBlock) Node() *ast.Node {
 	return nil
 }
 
@@ -49,7 +50,7 @@ func (b *scaledHeightBlock) Margins(ctx RenderingContext) Margins {
 	return Margins{}
 }
 
-func (b *scaledHeightBlock) Node() *styling.Node {
+func (b *scaledHeightBlock) Node() *ast.Node {
 	return nil
 }
 
@@ -437,7 +438,7 @@ func TestViewLayoutReanchor(t *testing.T) {
 }
 
 // TestViewHitTestEndToEnd checks that HitTest reaches every kind of
-// content in a real document, resolving to the right styling.Tag. Exact pixel
+// content in a real document, resolving to the right ast.Tag. Exact pixel
 // positions aren't predictable across margins/gaps/nesting, so this
 // scans a coarse grid over the whole rendered document and just checks
 // that *some* point resolves to each expected tag - a topological
@@ -468,7 +469,7 @@ code line
 	v.Layout(width, 1000, 1, 0)
 
 	height := v.stack.box.Bounds().Dy()
-	found := map[styling.Tag]bool{}
+	found := map[ast.Tag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
 			hit, _ := v.HitTest(x, y)
@@ -479,15 +480,15 @@ code line
 		}
 	}
 
-	for _, tag := range []styling.Tag{
-		styling.TagHeading1,
-		styling.TagParagraph,
-		styling.TagCodeBlock,
-		styling.TagListItem,
-		styling.TagBlockquote,
-		styling.TagTable,
-		styling.TagTableCell,
-		styling.TagThematicBreak,
+	for _, tag := range []ast.Tag{
+		ast.TagHeading1,
+		ast.TagParagraph,
+		ast.TagCodeBlock,
+		ast.TagListItem,
+		ast.TagBlockquote,
+		ast.TagTable,
+		ast.TagTableCell,
+		ast.TagThematicBreak,
 	} {
 		if !found[tag] {
 			t.Errorf("no point in the document resolved to tag %v", tag)
@@ -499,7 +500,7 @@ code line
 // returning the first match - for tests that need a real point on
 // specific content without hardcoding pixel positions (exact positions
 // depend on font metrics/wrapping, which this sidesteps).
-func findTag(v *View, tag styling.Tag) (x, y int, ok bool) {
+func findTag(v *View, tag ast.Tag) (x, y int, ok bool) {
 	height := v.stack.box.Bounds().Dy()
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < v.width; x += 2 {
@@ -522,9 +523,9 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72), WithStyleSheet(style))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
 	beforeBox := v.stack.box
@@ -558,9 +559,9 @@ func TestViewLinkAt(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](https://example.com/target) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 	dest, ok := v.LinkAt(x, y)
 	if !ok {
@@ -599,7 +600,7 @@ func TestViewScrollToAnchor(t *testing.T) {
 	if hit == nil {
 		t.Fatal("hit at the top of the viewport after ScrollToAnchor = nil")
 	}
-	heading := hit.Source().Node().AncestorTag(styling.TagHeading1)
+	heading := hit.Source().Node().AncestorTag(ast.TagHeading1)
 	if heading == nil || heading.ID != "second" {
 		t.Errorf("top of viewport after ScrollToAnchor(\"second\") isn't the Second heading (heading = %v)", heading)
 	}
@@ -751,9 +752,9 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
 	v.Hover(x, y)
@@ -772,9 +773,9 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	v := NewView(Parse([]byte("click [this](url) now")), NewGoFontFaceSelector(72))
 	v.Layout(300, 1000, 1, 0)
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 	v.Hover(x, y)
 	if v.ctx.HighlightNode == nil {
@@ -787,12 +788,12 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	}
 }
 
-// findTwoLinks scans v for two points landing on two different styling.TagLink
+// findTwoLinks scans v for two points landing on two different ast.TagLink
 // nodes, for tests that need to hover between distinct links.
 func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 	t.Helper()
 	height := v.stack.box.Bounds().Dy()
-	var firstNode *styling.Node
+	var firstNode *ast.Node
 	found := 0
 	for y := 0; y < height && found < 2; y += 2 {
 		for x := 0; x < v.width && found < 2; x += 2 {
@@ -801,7 +802,7 @@ func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 				continue
 			}
 			n := hit.Source().Node()
-			if n == nil || n.Tag != styling.TagLink {
+			if n == nil || n.Tag != ast.TagLink {
 				continue
 			}
 			if found == 0 {
@@ -920,9 +921,9 @@ func BenchmarkViewHover(b *testing.B) {
 	v := NewView(Parse(source), NewGoFontFaceSelector(72))
 	v.Layout(1024, 1000, 1, 0)
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		b.Fatal("no point in the document resolved to styling.TagLink")
+		b.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
 	b.ResetTimer()
@@ -1101,9 +1102,9 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	}
 	before := v.DocumentBounds()
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 	_, slot := v.linkNodeAt(x, y)
 
@@ -1179,9 +1180,9 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	v.Layout(300, 1000, 1, 0)
 	v.Scroll(20) // resolve a couple of slots, the way real scrolling would
 
-	x, y, ok := findTag(v, styling.TagLink)
+	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
-		t.Fatal("no point in the document resolved to styling.TagLink")
+		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
 	wantDoc := v.DocumentBounds()
@@ -1431,7 +1432,7 @@ func (b *slowBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 }
 
 func (b *slowBlock) Margins(ctx RenderingContext) Margins { return Margins{} }
-func (b *slowBlock) Node() *styling.Node                  { return nil }
+func (b *slowBlock) Node() *ast.Node                      { return nil }
 
 // TestViewPreLayoutNearbyRespectsTimeBudget checks that documentStack.preLayout
 // stops resolving once preLayoutTimeBudget is spent, rather than

@@ -1,6 +1,7 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"math"
 	"sort"
@@ -10,12 +11,12 @@ import (
 type Margins = styling.Margins
 
 // Source is the common ground between Block and Inline: something with
-// a semantic identity in the compiled styling.Node tree. Leaf boxes expose
+// a semantic identity in the compiled ast.Node tree. Leaf boxes expose
 // it so a hit-test result traces back to its origin - and since the
 // concrete value is the real Block/Inline, a caller can type-assert
 // further for anything beyond the node itself.
 type Source interface {
-	Node() *styling.Node
+	Node() *ast.Node
 }
 
 type Block interface {
@@ -51,7 +52,7 @@ func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 // caller, scales the result via ctx.ScaledMargins).
 type MarginBlock struct {
 	Block
-	node *styling.Node
+	node *ast.Node
 }
 
 func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
@@ -67,10 +68,10 @@ func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 
 // Node delegates to the wrapped Block rather than returning b.node: a
 // loose list item's head wraps a ListItemHeadBlock in a MarginBlock
-// keyed to a synthetic styling.TagParagraph node (purely so its margins resolve
-// like a paragraph's) - the wrapped content's styling.TagListItem is the more
+// keyed to a synthetic ast.TagParagraph node (purely so its margins resolve
+// like a paragraph's) - the wrapped content's ast.TagListItem is the more
 // correct identity for hit-testing.
-func (b *MarginBlock) Node() *styling.Node {
+func (b *MarginBlock) Node() *ast.Node {
 	return b.Block.Node()
 }
 
@@ -79,12 +80,12 @@ func (b *MarginBlock) Node() *styling.Node {
 // spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
 	WithoutMargins
-	node *styling.Node
+	node *ast.Node
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
 
-func (b *ThematicBreakBlock) Node() *styling.Node {
+func (b *ThematicBreakBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -108,12 +109,12 @@ func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) Blo
 type BlockquoteBlock struct {
 	WithoutMargins
 	inner Block
-	node  *styling.Node
+	node  *ast.Node
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
 
-func (b *BlockquoteBlock) Node() *styling.Node {
+func (b *BlockquoteBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -137,12 +138,12 @@ type CodeBlock struct {
 	// more than one when a Highlighter has split the line into classified
 	// tokens (see highlightLines).
 	lines [][]Inline
-	node  *styling.Node
+	node  *ast.Node
 }
 
 var _ Block = (*CodeBlock)(nil)
 
-func (b *CodeBlock) Node() *styling.Node {
+func (b *CodeBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -158,12 +159,12 @@ func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 type TextBlock struct {
 	WithoutMargins
 	parts []Inline
-	node  *styling.Node
+	node  *ast.Node
 }
 
 var _ Block = (*TextBlock)(nil)
 
-func (b *TextBlock) Node() *styling.Node {
+func (b *TextBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -190,12 +191,12 @@ type ListItemHeadBlock struct {
 	WithoutMargins
 	marker Inline
 	parts  []Inline
-	node   *styling.Node
+	node   *ast.Node
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
 
-func (b *ListItemHeadBlock) Node() *styling.Node {
+func (b *ListItemHeadBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -225,12 +226,12 @@ type TableBlock struct {
 	WithoutMargins
 	header []tableCell
 	rows   [][]tableCell
-	node   *styling.Node
+	node   *ast.Node
 }
 
 var _ Block = (*TableBlock)(nil)
 
-func (b *TableBlock) Node() *styling.Node {
+func (b *TableBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -429,7 +430,7 @@ var _ Block = (*StackBlock)(nil)
 // with their own identity, so it has none of its own - hit-testing that
 // reaches a bare StackBlock should already have recursed into whichever
 // child slot actually matched.
-func (b *StackBlock) Node() *styling.Node {
+func (b *StackBlock) Node() *ast.Node {
 	return nil
 }
 
