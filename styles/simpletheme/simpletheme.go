@@ -271,7 +271,9 @@ func Light() *Theme {
 	return t
 }
 
-// Dimensions a Theme doesn't expose - see #22 for where they're headed.
+// Dimensions a Theme doesn't expose. Most are borders and padding in all
+// but name (blockquote bar and indent, table frame, diagram padding), which
+// a box model would expose properly rather than as one-off fields.
 var dims = styling.Dimensions{
 	Strike:         1,
 	ThematicBreak:  2,
