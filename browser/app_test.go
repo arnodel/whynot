@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 const (
@@ -75,7 +76,7 @@ func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 // exactly.
 func newTestApp(t *testing.T, dir string, location *url.URL, source string) *App {
 	t.Helper()
-	app := NewApp(whynot.NewGoFontFaceSelector(72), whynot.NewDarkStyleSheet(), true)
+	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte(source), location)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -346,11 +347,9 @@ func TestAppSetThemeSyncsDarkThemeAndPanel(t *testing.T) {
 		t.Fatal("DarkTheme() = false right after construction with dark=true, want true")
 	}
 
-	// NewDarkStyleSheet/NewLightStyleSheet both return the same concrete
-	// type (see App.darkTheme's own doc comment), so there's no type to
-	// assert on here - check identity with App's own StyleSheet()
-	// instead, confirming SetTheme actually reached the panel rather
-	// than just updating App's own bookkeeping.
+	// A StyleSheet is opaque, so check identity with App's own
+	// StyleSheet() instead, confirming SetTheme actually reached the
+	// panel rather than just updating App's own bookkeeping.
 	app.SetTheme(false)
 	if app.DarkTheme() {
 		t.Error("DarkTheme() = true after SetTheme(false), want false")
@@ -415,7 +414,7 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 	dir := t.TempDir()
 	loc := writeTempMD(t, dir, "a.md", "# My Title")
 
-	app := NewApp(whynot.NewGoFontFaceSelector(72), whynot.NewDarkStyleSheet(), true)
+	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("# My Title"), loc)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -590,7 +589,7 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 	dir := t.TempDir()
 	loc := writeTempMD(t, dir, "a.md", "no heading here")
 
-	app := NewApp(whynot.NewGoFontFaceSelector(72), whynot.NewDarkStyleSheet(), true)
+	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("no heading here"), loc)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)

@@ -39,13 +39,13 @@ flowchart TD
     subgraph L0["Layer 0 — Parse (goldmark, external)"]
         A["[]byte source"] --> B["gmast.Node tree"]
     end
-    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, ast.go)"]
+    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, internal/ast)"]
         B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
-        B --> G["ASTNode tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ASTNode into it)"]
+        B --> G["ast.Node tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ast.Node into it)"]
     end
-    subgraph L2["Layer 2 — Layout tree (block.go, inline.go, block_layout.go,\ninline_layout.go, rendering_context.go, stylesheet.go)"]
+    subgraph L2["Layer 2 — Layout tree (block.go, inline.go, block_layout.go,\ninline_layout.go, rendering_context.go, internal/styling)"]
         C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
-        G -. "ctx.StyleSheet resolves\nMargins / TextStyle / Color / ..." .-> D
+        G -. "ctx.Styles resolves\nMargins / TextStyle / Color / ..." .-> D
     end
     subgraph L3["Layer 3 — Canvas boundary (canvas.go)"]
         D -- "DrawBlockLayout(box, dst, x, y, now)" --> E["Canvas calls\n(DrawText, DrawImage)"]
@@ -55,19 +55,35 @@ flowchart TD
     end
 ```
 
-`stylesheet.go` and `textstyle.go` cut across layers 1 and 2. Layer 1's
-`ASTNode` tree ([ast.go](ast.go)) records only structure - each node's
-semantic tag (`TagParagraph`, `TagHeading1`..`6`, `TagEmphasis`, `TagLink`,
-...) and its parent - no appearance. Layer 2 resolves that tag ancestry
-against a `StyleSheet` ([stylesheet.go](stylesheet.go)) - `Margins`,
+The semantic tree ([internal/ast](internal/ast)), styling
+([internal/styling](internal/styling)) and `textstyle.go` cut across layers 1
+and 2. Layer 1's `ast.Node` tree records only structure - each node's semantic tag (`TagParagraph`,
+`TagHeading1`..`6`, `TagEmphasis`, `TagLink`, ...) and its parent - no
+appearance. Layer 2 resolves that tag ancestry against the context's
+`styling.Styles` ([styles.go](internal/styling/styles.go)) - `Margins`,
 `TextStyle` (via `RenderingContext.ResolvedTextStyle`, merging
 contributions across ancestry so e.g. `Strong` nested inside `Emphasis`
 picks up both), `Color`/`BorderColor`, `StrikeThickness`, `LineHeight`,
 table/blockquote geometry - during `GetBlockLayout`/`GetInlineLayout`, so the same parsed document can
-render under a different `StyleSheet` without re-parsing. `TextStyle`
-(the struct, in [textstyle.go](textstyle.go)) is what `StyleSheet`
-resolves *to* and what `FaceSelector` resolves *from* - the vocabulary
-connecting the two, not something a `Block` carries itself.
+render under a different stylesheet without re-parsing. `TextStyle`
+(an alias of `styling.TextStyle`) is what the styles resolve *to* and what
+`FaceSelector` resolves *from* - the vocabulary connecting the two, not
+something a `Block` carries itself.
+
+`Styles` is internal, and so are the node types it's queried with. The public
+API only has `whynot.StyleSheet`, an opaque interface whose one method returns
+`styling.Styles`. Code outside this module can't import `internal/` packages,
+so only packages in the module can make a `StyleSheet`: the theme packages
+under [styles/](styles). [styles/simpletheme](styles/simpletheme) is a public
+struct of fields (`Theme`) whose `StyleSheet()` converts a snapshot of it into
+`styling.Basic`, the field-configured `Styles` implementation. The core has no
+look of its own: `NewView` takes a `StyleSheet`, and the dark and light presets
+are defined in `simpletheme`. This keeps theme vocabulary (field names like
+`ParagraphMargins`) out of the core API: a more expressive way to write
+stylesheets later is a new package under `styles/`, and the engine can change
+what it queries without breaking anyone. Outside code that needs a color, like
+a backend drawing a scrollbar, asks the `View` (`ScrollbarColor`,
+`HighlightColor`), which reads its current styles.
 `FaceSelector` has three implementations: `GoFontFaceSelector`, serving the
 bundled Go fonts; `CustomFontFaceSelector`, serving caller-registered
 TTF/OTF bytes (including `AddFontCollection`, which registers every
@@ -80,27 +96,27 @@ each with a fallback `FaceSelector` for anything unregistered/unresolved.
 `goldmark` turns the raw `[]byte` into a `gmast.Node` tree. Off-the-shelf,
 outside our control; it's the source of truth for document structure.
 
-### Layer 1 — Semantic tree (`Block` / `Inline` + `ASTNode`)
+### Layer 1 — Semantic tree (`Block` / `Inline` + `ast.Node`)
 
 `Parse`'s `compiler` ([compile.go](compile.go); its state and the
 `ParseOption`s that configure it in [markdown.go](markdown.go)) walks the
 goldmark tree once and produces two parallel trees: a `Block`/`Inline` tree
 ([block.go](block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
-blocks; `InlineText`, `InlineImage` for inline content - and an `ASTNode`
-tree ([ast.go](ast.go)) giving each one a semantic tag (`TagParagraph`,
+blocks; `InlineText`, `InlineImage` for inline content - and an `ast.Node`
+tree ([internal/ast](internal/ast)) giving each one a semantic tag (`TagParagraph`,
 `TagHeading1`..`6`, `TagEmphasis`, `TagStrong`, `TagLink`, ...) and a
 parent, mirroring real document nesting *including* inline spans, which
 the `Block`/`Inline` tree itself keeps flat (line-wrapping needs a linear
-sequence; `ASTNode.Parent` is where the nesting actually lives). This is
+sequence; `Node.Parent` is where the nesting actually lives). This is
 where Markdown syntax gets resolved into semantic *structure* - which tag,
 what nests in what - not into appearance: no font, color, or margin value
-is decided here, only recorded via each `Block`/`Inline`'s `node *ASTNode`
-field for `StyleSheet` to resolve later, in Layer 2.
+is decided here, only recorded via each `Block`/`Inline`'s `node *ast.Node`
+field for the styles to resolve later, in Layer 2.
 
 Margins aren't a field every `Block` carries: most embed `WithoutMargins`
 (a zero-value `Margins()`) and get real ones only where the compiler wraps
-them in a `MarginBlock{Block, node}` - resolved from `StyleSheet.Margins`
+them in a `MarginBlock{Block, node}` - resolved from `Styles.Margins`
 against that node during `GetBlockLayout`, not baked in here at construction time.
 `StackBlock` is the one exception with real, non-trivial margins of its
 own - its Top/Bottom is whatever its first/last child reports, the same
@@ -122,16 +138,16 @@ rediscover them by inspecting the `Block` tree's shape. Any number of
 `Block.GetBlockLayout(ctx, width)` ([block.go](block.go)) / `Inline.GetInlineLayout(ctx)`
 ([inline.go](inline.go)) take a concrete pixel `width` and a
 `RenderingContext` ([rendering_context.go](rendering_context.go); DPI scale,
-font face cache, and `StyleSheet`) and produce a `BlockLayout` /
+font face cache, and `Styles`) and produce a `BlockLayout` /
 `InlineLayout` tree ([block_layout.go](block_layout.go),
 [inline_layout.go](inline_layout.go)): `TextBox`,
 `ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
 margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 (margin spacer). This is where appearance actually gets resolved -
-`ctx.StyleSheet.Margins`/`.Color`/`.BorderColor`, `ctx.ResolvedTextStyle`/
+`ctx.Styles.Margins`/`.Color`/`.BorderColor`, `ctx.ResolvedTextStyle`/
 `.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
 dimensional constants, scaled by DPI in one step) - all read against each
-`Block`/`Inline`'s own `*ASTNode`. Line-wrapping happens here
+`Block`/`Inline`'s own `*ast.Node`. Line-wrapping happens here
 (`wrapLines`, [line_layout.go](line_layout.go)), as does font selection (`ctx.SelectFace`, given the
 resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
@@ -371,7 +387,7 @@ scroll position doesn't force-build every slot in between.
 
 It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
 
-- `Source` ([block.go](block.go)) is `Node() *ASTNode` - the common
+- `Source` ([block.go](block.go)) is `Node() *ast.Node` - the common
   ground between `Block` and `Inline`, letting a resolved position trace
   back to its origin in the semantic tree (Layer 1). Every `Block`/
   `Inline` implements it, including `StackBlock`, which reports `nil`
@@ -425,7 +441,7 @@ callers only query points already within their own rendered viewport.
 `panic` on a goldmark node kind they have no case for - see
 `compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
 warning and render the construct as text/a code block tagged
-`TagUnsupported`, styled via `StyleSheet.UnsupportedColor` (a "scary"
+`TagUnsupported`, styled via `Styles.Color` (`UnsupportedColor` in `simpletheme`, a "scary"
 red, reusing `CodeBlockMargins`/`CodeBlockTextStyle` rather than a new
 layout primitive) - showing the construct's own raw source where
 goldmark exposes it (`*ast.HTMLBlock`/`*ast.RawHTML`), a placeholder

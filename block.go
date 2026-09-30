@@ -1,21 +1,22 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling"
 	"math"
 	"sort"
 )
 
-type Margins struct {
-	Top, Bottom, Left, Right float64
-}
+// Margins is the space around a block, in logical (unscaled) pixels.
+type Margins = styling.Margins
 
 // Source is the common ground between Block and Inline: something with
-// a semantic identity in the compiled ASTNode tree. Leaf boxes expose
+// a semantic identity in the compiled ast.Node tree. Leaf boxes expose
 // it so a hit-test result traces back to its origin - and since the
 // concrete value is the real Block/Inline, a caller can type-assert
 // further for anything beyond the node itself.
 type Source interface {
-	Node() *ASTNode
+	Node() *ast.Node
 }
 
 type Block interface {
@@ -46,17 +47,17 @@ func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 // StackBlock, the only Block with any derived margins, only ever derives
 // Top/Bottom from its children.
 //
-// Its own margins are resolved from ctx.StyleSheet via node - unscaled,
+// Its own margins are resolved from ctx.Styles via node - unscaled,
 // matching Block.Margins' convention (StackBlock.GetBlockLayout, the one real
 // caller, scales the result via ctx.ScaledMargins).
 type MarginBlock struct {
 	Block
-	node *ASTNode
+	node *ast.Node
 }
 
 func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 	inner := b.Block.Margins(ctx)
-	own := ctx.StyleSheet.Margins(b.node)
+	own := ctx.Styles.Margins(b.node)
 	return Margins{
 		Top:    math.Max(inner.Top, own.Top),
 		Bottom: math.Max(inner.Bottom, own.Bottom),
@@ -67,10 +68,10 @@ func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
 
 // Node delegates to the wrapped Block rather than returning b.node: a
 // loose list item's head wraps a ListItemHeadBlock in a MarginBlock
-// keyed to a synthetic TagParagraph node (purely so its margins resolve
-// like a paragraph's) - the wrapped content's TagListItem is the more
+// keyed to a synthetic ast.TagParagraph node (purely so its margins resolve
+// like a paragraph's) - the wrapped content's ast.TagListItem is the more
 // correct identity for hit-testing.
-func (b *MarginBlock) Node() *ASTNode {
+func (b *MarginBlock) Node() *ast.Node {
 	return b.Block.Node()
 }
 
@@ -79,12 +80,12 @@ func (b *MarginBlock) Node() *ASTNode {
 // spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
 	WithoutMargins
-	node *ASTNode
+	node *ast.Node
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
 
-func (b *ThematicBreakBlock) Node() *ASTNode {
+func (b *ThematicBreakBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -92,7 +93,7 @@ func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) Blo
 	return &RuleBox{
 		width:     width,
 		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
-		color:     ctx.StyleSheet.BorderColor(b.node),
+		color:     ctx.Styles.BorderColor(b.node),
 		source:    b,
 	}
 }
@@ -108,12 +109,12 @@ func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) Blo
 type BlockquoteBlock struct {
 	WithoutMargins
 	inner Block
-	node  *ASTNode
+	node  *ast.Node
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
 
-func (b *BlockquoteBlock) Node() *ASTNode {
+func (b *BlockquoteBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -124,7 +125,7 @@ func (b *BlockquoteBlock) GetBlockLayout(ctx RenderingContext, width int) BlockL
 		width:    width,
 		indent:   indent,
 		barWidth: int(geom.BarWidth),
-		barColor: ctx.StyleSheet.BorderColor(b.node),
+		barColor: ctx.Styles.BorderColor(b.node),
 		inner:    b.inner.GetBlockLayout(ctx, width-indent),
 		source:   b,
 	}
@@ -137,12 +138,12 @@ type CodeBlock struct {
 	// more than one when a Highlighter has split the line into classified
 	// tokens (see highlightLines).
 	lines [][]Inline
-	node  *ASTNode
+	node  *ast.Node
 }
 
 var _ Block = (*CodeBlock)(nil)
 
-func (b *CodeBlock) Node() *ASTNode {
+func (b *CodeBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -158,12 +159,12 @@ func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout 
 type TextBlock struct {
 	WithoutMargins
 	parts []Inline
-	node  *ASTNode
+	node  *ast.Node
 }
 
 var _ Block = (*TextBlock)(nil)
 
-func (b *TextBlock) Node() *ASTNode {
+func (b *TextBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -190,12 +191,12 @@ type ListItemHeadBlock struct {
 	WithoutMargins
 	marker Inline
 	parts  []Inline
-	node   *ASTNode
+	node   *ast.Node
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
 
-func (b *ListItemHeadBlock) Node() *ASTNode {
+func (b *ListItemHeadBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -225,12 +226,12 @@ type TableBlock struct {
 	WithoutMargins
 	header []tableCell
 	rows   [][]tableCell
-	node   *ASTNode
+	node   *ast.Node
 }
 
 var _ Block = (*TableBlock)(nil)
 
-func (b *TableBlock) Node() *ASTNode {
+func (b *TableBlock) Node() *ast.Node {
 	return b.node
 }
 
@@ -413,7 +414,7 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 		frameThickness:      frameThickness,
 		columnGap:           columnGap,
 		columnRuleThickness: columnRuleThickness,
-		frameColor:          ctx.StyleSheet.BorderColor(b.node),
+		frameColor:          ctx.Styles.BorderColor(b.node),
 		cells:               cells,
 		source:              b,
 	}, width)
@@ -429,7 +430,7 @@ var _ Block = (*StackBlock)(nil)
 // with their own identity, so it has none of its own - hit-testing that
 // reaches a bare StackBlock should already have recursed into whichever
 // child slot actually matched.
-func (b *StackBlock) Node() *ASTNode {
+func (b *StackBlock) Node() *ast.Node {
 	return nil
 }
 

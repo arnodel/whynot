@@ -1,6 +1,10 @@
 package whynot
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/arnodel/whynot/internal/ast"
+)
 
 // fakeHighlighter is a Highlighter test double whose Highlight method is
 // swapped in per test case, so each test can control exactly what spans
@@ -47,7 +51,7 @@ func TestHighlightLinesMultipleSpansPerLine(t *testing.T) {
 			{Text: " f() {", Class: TokenPlain},
 		}
 	}}
-	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	lines := highlightLines(h, blockNode, "go", []string{"func f() {"})
 	if len(lines) != 1 {
 		t.Fatalf("len(lines) = %d, want 1", len(lines))
@@ -57,10 +61,10 @@ func TestHighlightLinesMultipleSpansPerLine(t *testing.T) {
 	}
 	keywordNode := lines[0][0].(*InlineText).node
 	if keywordNode == blockNode {
-		t.Fatalf("keyword span reused the block's own node, want a TagCodeKeyword child")
+		t.Fatalf("keyword span reused the block's own node, want a ast.TagCodeKeyword child")
 	}
-	if keywordNode.Tag != TagCodeKeyword {
-		t.Fatalf("keyword node tag = %v, want TagCodeKeyword", keywordNode.Tag)
+	if keywordNode.Tag != ast.TagCodeKeyword {
+		t.Fatalf("keyword node tag = %v, want ast.TagCodeKeyword", keywordNode.Tag)
 	}
 	plainNode := lines[0][1].(*InlineText).node
 	if plainNode != blockNode {
@@ -75,7 +79,7 @@ func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
 			{Text: "\nrest", Class: TokenPlain},
 		}
 	}}
-	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	lines := highlightLines(h, blockNode, "", []string{"/* a", "b */", "rest"})
 	if len(lines) != 3 {
 		t.Fatalf("len(lines) = %d, want 3", len(lines))
@@ -90,8 +94,8 @@ func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
 		t.Fatalf("lines[2] texts = %#v", got)
 	}
 	for i := 0; i < 2; i++ {
-		if lines[i][0].(*InlineText).node.Tag != TagCodeComment {
-			t.Fatalf("lines[%d] node tag = %v, want TagCodeComment", i, lines[i][0].(*InlineText).node.Tag)
+		if lines[i][0].(*InlineText).node.Tag != ast.TagCodeComment {
+			t.Fatalf("lines[%d] node tag = %v, want ast.TagCodeComment", i, lines[i][0].(*InlineText).node.Tag)
 		}
 	}
 	if lines[2][0].(*InlineText).node != blockNode {
@@ -107,7 +111,7 @@ func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
 		return []HighlightSpan{{Text: code, Class: TokenPlain}}
 	}}
-	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	rawLines := []string{"line one\n", "line two\n", "line three\n"}
 	lines := highlightLines(h, blockNode, "", rawLines)
 	if len(lines) != len(rawLines) {
@@ -131,7 +135,7 @@ func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
 	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
 		return []HighlightSpan{{Text: code, Class: TokenPlain}}
 	}}
-	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	rawLines := []string{"func f() {\n", "\n", "}\n"}
 	lines := highlightLines(h, blockNode, "", rawLines)
 	if len(lines) != len(rawLines) {
@@ -151,7 +155,7 @@ func TestHighlightLinesMismatchedLineCountFallsBack(t *testing.T) {
 		// below has two - a misbehaving Highlighter.
 		return []HighlightSpan{{Text: "just one line", Class: TokenPlain}}
 	}}
-	blockNode := (*ASTNode)(nil).AddChild(TagCodeBlock)
+	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	lines := highlightLines(h, blockNode, "", []string{"line one", "line two"})
 	if lines != nil {
 		t.Fatalf("lines = %#v, want nil (fallback signal)", lines)

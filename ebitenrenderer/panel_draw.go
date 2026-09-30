@@ -50,15 +50,10 @@ func (p *Panel) drawScrollbar(canvas whynot.Canvas) {
 	}
 }
 
-// scrollbarColor picks the thumb's color via the last StyleSheet given
-// to SetStyleSheet, if it implements the optional
-// whynot.ScrollbarStyleSheet - falls back to a flat default if none was
-// ever given, or it doesn't opt in.
+// scrollbarColor is the thumb's color from the View's StyleSheet, for its
+// current hover/pressed state.
 func (p *Panel) scrollbarColor() color.Color {
-	if sh, ok := p.styleSheet.(whynot.ScrollbarStyleSheet); ok {
-		return sh.ScrollbarColor(p.scrollbarState.hover, p.scrollbarState.pressed)
-	}
-	return color.RGBA{0x80, 0x80, 0x80, 0xA0}
+	return p.view.ScrollbarColor(p.scrollbarState.hover, p.scrollbarState.pressed)
 }
 
 // Draw renders the panel - the document, clipped to Bounds, and its

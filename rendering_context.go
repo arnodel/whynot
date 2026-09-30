@@ -1,6 +1,8 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling"
 	"image/color"
 	"time"
 )
@@ -8,12 +10,12 @@ import (
 type RenderingContext struct {
 	Scale float64
 	FaceSelector
-	StyleSheet StyleSheet
+	Styles styling.Styles
 
-	// HighlightNode is the ASTNode currently under the mouse (e.g. a
+	// HighlightNode is the ast.Node currently under the mouse (e.g. a
 	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
 	// rebuilds the layout tree when it changes.
-	HighlightNode *ASTNode
+	HighlightNode *ast.Node
 
 	// ImageCache resolves, fetches, and decodes images, caching the
 	// result - see ImageCache. NewView always sets one (FileImageSource
@@ -36,7 +38,7 @@ type RenderingContext struct {
 	Time time.Duration
 }
 
-// The methods below read c.StyleSheet (or, for ScaledMargins, a Marginer -
+// The methods below read c.Styles (or, for ScaledMargins, a Marginer -
 // typically a Block) and scale the result by c.Scale in one step - layout
 // code should always go through these rather than calling Margins/the
 // StyleSheet directly, so scaling can't be forgotten or applied twice.
@@ -53,7 +55,7 @@ func (c RenderingContext) ScaledMargins(m Marginer) Margins {
 }
 
 func (c RenderingContext) ScaledViewMargins() Margins {
-	margins := c.StyleSheet.ViewMargins()
+	margins := c.Styles.ViewMargins()
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale
 	margins.Top *= c.Scale
@@ -61,25 +63,25 @@ func (c RenderingContext) ScaledViewMargins() Margins {
 	return margins
 }
 
-func (c RenderingContext) ScaledStrikeThickness(node *ASTNode) float64 {
-	return c.StyleSheet.StrikeThickness(node) * c.Scale
+func (c RenderingContext) ScaledStrikeThickness(node *ast.Node) float64 {
+	return c.Styles.StrikeThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledThematicBreakThickness(node *ASTNode) float64 {
-	return c.StyleSheet.ThematicBreakThickness(node) * c.Scale
+func (c RenderingContext) ScaledThematicBreakThickness(node *ast.Node) float64 {
+	return c.Styles.ThematicBreakThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledBlockquoteGeometry(node *ASTNode) BlockquoteGeometry {
-	g := c.StyleSheet.BlockquoteGeometry(node)
-	return BlockquoteGeometry{
+func (c RenderingContext) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
+	g := c.Styles.BlockquoteGeometry(node)
+	return styling.BlockquoteGeometry{
 		Indent:   g.Indent * c.Scale,
 		BarWidth: g.BarWidth * c.Scale,
 	}
 }
 
-func (c RenderingContext) ScaledTableGeometry(node *ASTNode) TableGeometry {
-	g := c.StyleSheet.TableGeometry(node)
-	return TableGeometry{
+func (c RenderingContext) ScaledTableGeometry(node *ast.Node) styling.TableGeometry {
+	g := c.Styles.TableGeometry(node)
+	return styling.TableGeometry{
 		FrameThickness:      g.FrameThickness * c.Scale,
 		ColumnGap:           g.ColumnGap * c.Scale,
 		RowGap:              g.RowGap * c.Scale,
@@ -94,27 +96,27 @@ func (c RenderingContext) ScaledTableGeometry(node *ASTNode) TableGeometry {
 // weight (from Strong) and an italic style (from Emphasis). Walks one step
 // past the root (node == nil) so StyleSheet's baseline contribution can
 // fill in any field nothing along the way ever claimed.
-func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
+func (c RenderingContext) ResolvedTextStyle(node *ast.Node) TextStyle {
 	var result TextStyle
-	var resolved TextStyleField
+	var resolved styling.TextStyleField
 	for n := node; ; n = n.Parent {
-		contrib := c.StyleSheet.TextStyle(n)
+		contrib := c.Styles.TextStyle(n)
 		if missing := contrib.Set &^ resolved; missing != 0 {
-			if missing&FieldSize != 0 {
+			if missing&styling.FieldSize != 0 {
 				result.Size = contrib.Size
 			}
-			if missing&FieldStyle != 0 {
+			if missing&styling.FieldStyle != 0 {
 				result.Style = contrib.Style
 			}
-			if missing&FieldWeight != 0 {
+			if missing&styling.FieldWeight != 0 {
 				result.Weight = contrib.Weight
 			}
-			if missing&FieldFamily != 0 {
+			if missing&styling.FieldFamily != 0 {
 				result.Family = contrib.Family
 			}
 			resolved |= missing
 		}
-		if resolved == allTextStyleFields || n == nil {
+		if resolved == styling.AllTextStyleFields || n == nil {
 			return result
 		}
 	}
@@ -123,12 +125,12 @@ func (c RenderingContext) ResolvedTextStyle(node *ASTNode) TextStyle {
 // ResolvedColor walks node's ancestry (node itself first) for the nearest
 // non-nil Color contribution - mirrors CSS's `color`, which inherits down
 // from the nearest ancestor that sets it.
-func (c RenderingContext) ResolvedColor(node *ASTNode) color.Color {
+func (c RenderingContext) ResolvedColor(node *ast.Node) color.Color {
 	if node.HasAncestor(c.HighlightNode) {
-		return c.StyleSheet.HighlightColor()
+		return c.Styles.HighlightColor()
 	}
 	for n := node; ; n = n.Parent {
-		if col := c.StyleSheet.Color(n); col != nil {
+		if col := c.Styles.Color(n); col != nil {
 			return col
 		}
 		if n == nil {

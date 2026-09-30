@@ -10,6 +10,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // initialWindowWidth/Height are ebiten's starting window size, and also
@@ -44,9 +45,9 @@ func main() {
 	ebiten.SetWindowSize(initialWindowWidth, initialWindowHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
-	styleSheet := whynot.StyleSheet(whynot.NewDarkStyleSheet())
+	styleSheet := simpletheme.DarkStyleSheet
 	if *light {
-		styleSheet = whynot.NewLightStyleSheet()
+		styleSheet = simpletheme.LightStyleSheet
 	}
 
 	scale := ebiten.Monitor().DeviceScaleFactor()

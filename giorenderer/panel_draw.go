@@ -6,8 +6,6 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget/material"
-
-	"github.com/arnodel/whynot"
 )
 
 // Draw renders the panel - the document, clipped to Bounds, and its
@@ -45,16 +43,12 @@ func (p *Panel) drawScrollbar(gtx layout.Context) {
 	viewportEnd := float32(visible.Max.Y) / float32(doc.Dy())
 
 	sb := material.Scrollbar(p.theme, &p.scrollbar)
-	if sh, ok := p.styleSheet.(whynot.ScrollbarStyleSheet); ok {
-		// Matches ebitenrenderer.Panel's own scrollbarColor: read the
-		// thumb's color from the current StyleSheet rather than material's
-		// default theme, which is a light-mode palette (black Fg) that's
-		// invisible against a dark StyleSheet's own background - material's
-		// two-color-slot model (idle/hover, no separate pressed) means
-		// Dragging() is folded into the hover slot.
-		sb.Indicator.Color = toNRGBA(sh.ScrollbarColor(false, false))
-		sb.Indicator.HoverColor = toNRGBA(sh.ScrollbarColor(true, p.scrollbar.Dragging()))
-	}
+	// The thumb's color comes from the View's StyleSheet rather than
+	// material's default theme, a light-mode palette that's invisible on
+	// a dark StyleSheet's background. material has two color slots
+	// (idle/hover, no separate pressed), so dragging folds into hover.
+	sb.Indicator.Color = toNRGBA(p.view.ScrollbarColor(false, false))
+	sb.Indicator.HoverColor = toNRGBA(p.view.ScrollbarColor(true, p.scrollbar.Dragging()))
 	width := gtx.Dp(sb.Width())
 	strip := image.Rect(p.bounds.Max.X-width, p.bounds.Min.Y, p.bounds.Max.X, p.bounds.Max.Y)
 

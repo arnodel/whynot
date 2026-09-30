@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"fmt"
+	"github.com/arnodel/whynot/internal/ast"
 	"image"
 )
 
@@ -17,7 +18,7 @@ type Inline interface {
 
 type InlineText struct {
 	text string
-	node *ASTNode
+	node *ast.Node
 
 	// glued - see InlineLayout.Glued's doc comment. Set by the compiler
 	// (compiler.appendString/pendingSpace) from whether the
@@ -29,7 +30,7 @@ type InlineText struct {
 
 var _ Inline = (*InlineText)(nil)
 
-func (t *InlineText) Node() *ASTNode {
+func (t *InlineText) Node() *ast.Node {
 	return t.node
 }
 
@@ -43,7 +44,7 @@ func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayo
 		Face:            face,
 		Color:           ctx.ResolvedColor(t.node),
 		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
-		LineHeight:      ctx.StyleSheet.LineHeight(t.node),
+		LineHeight:      ctx.Styles.LineHeight(t.node),
 		glued:           t.glued,
 		source:          t,
 	}
@@ -68,12 +69,12 @@ const (
 // have it.
 type TaskCheckbox struct {
 	checked bool
-	node    *ASTNode
+	node    *ast.Node
 }
 
 var _ Inline = (*TaskCheckbox)(nil)
 
-func (c *TaskCheckbox) Node() *ASTNode {
+func (c *TaskCheckbox) Node() *ast.Node {
 	return c.node
 }
 
@@ -91,7 +92,7 @@ func (c *TaskCheckbox) GetInlineLayout(ctx RenderingContext, width int) InlineLa
 			Text:       string(r),
 			Face:       face,
 			Color:      ctx.ResolvedColor(c.node),
-			LineHeight: ctx.StyleSheet.LineHeight(c.node),
+			LineHeight: ctx.Styles.LineHeight(c.node),
 			source:     c,
 		}
 	}
@@ -102,11 +103,11 @@ type InlineImage struct {
 	src   string
 	alt   string
 	title string
-	node  *ASTNode
-	// fallbackNode is a TagUnsupported child of node - see the compile.go
+	node  *ast.Node
+	// fallbackNode is a ast.TagUnsupported child of node - see the compile.go
 	// KindImage case for why it's precomputed once, at parse time,
 	// rather than created on demand here.
-	fallbackNode *ASTNode
+	fallbackNode *ast.Node
 
 	// glued - see InlineLayout.Glued's doc comment and InlineText.glued.
 	glued bool
@@ -114,7 +115,7 @@ type InlineImage struct {
 
 var _ Inline = (*InlineImage)(nil)
 
-func (i *InlineImage) Node() *ASTNode {
+func (i *InlineImage) Node() *ast.Node {
 	return i.node
 }
 
@@ -165,7 +166,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
 				bounds:           fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
-				placeholderColor: ctx.StyleSheet.BorderColor(i.node),
+				placeholderColor: ctx.Styles.BorderColor(i.node),
 				pending:          []string{resolved},
 				glued:            i.glued,
 				source:           i,

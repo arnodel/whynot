@@ -1,7 +1,9 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"image"
+	"image/color"
 	"time"
 )
 
@@ -40,15 +42,6 @@ type View struct {
 // parameter.
 type ViewOption func(*View)
 
-// WithStyleSheet overrides the StyleSheet NewView otherwise defaults to
-// (NewDarkStyleSheet) - e.g. NewView(doc, faceSelector,
-// WithStyleSheet(NewLightStyleSheet())).
-func WithStyleSheet(s StyleSheet) ViewOption {
-	return func(v *View) {
-		v.ctx.StyleSheet = s
-	}
-}
-
 // WithImageSource overrides the ImageSource NewView otherwise defaults
 // to (FileImageSource) - e.g. for an embedder that wants images
 // resolved relative to a document's own location, or fetched over
@@ -60,14 +53,15 @@ func WithImageSource(s ImageSource) ViewOption {
 	}
 }
 
-// NewView returns a View of doc (see Parse), ready to render it once Layout
-// has been called at least once to establish a width.
-func NewView(doc *Document, faceSelector FaceSelector, opts ...ViewOption) *View {
+// NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
+// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
+// once Layout has been called to establish a width.
+func NewView(doc *Document, faceSelector FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
-			StyleSheet:   NewDarkStyleSheet(),
+			Styles:       styleSheet.Styles(),
 			ImageCache:   NewImageCache(FileImageSource{}),
 			hscroll:      newHScrollState(),
 		},
@@ -93,15 +87,15 @@ func (v *View) CurrentHeadingID() (id string, ok bool) {
 		return "", false
 	}
 	for i := min(v.stack.cursor.index, v.stack.len()-1); i >= 0; i-- {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= TagHeading1 && n.Tag <= TagHeading6 {
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
 			return n.ID, true
 		}
 	}
 	return "", false
 }
 
-// nodeOf returns block's ASTNode, or nil for a nil block (a spacer slot).
-func nodeOf(block Block) *ASTNode {
+// nodeOf returns block's ast.Node, or nil for a nil block (a spacer slot).
+func nodeOf(block Block) *ast.Node {
 	if block == nil {
 		return nil
 	}
@@ -137,7 +131,7 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 }
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id
-// (see ASTNode.ID) at the top of the viewport, e.g. after following a
+// (see ast.Node.ID) at the top of the viewport, e.g. after following a
 // link with a URL fragment. ok is false, and the scroll position
 // unchanged, if no heading has that id or nothing has been laid out
 // yet (see Layout).
@@ -168,6 +162,20 @@ func (v *View) ScrollToRatio(ratio float64) {
 	if v.stack.laidOut() {
 		v.stack.scrollToRatio(ratio)
 	}
+}
+
+// HighlightColor is the color the View's StyleSheet shows a hovered link
+// in - e.g. for an app echoing the link's destination elsewhere, in the
+// same color.
+func (v *View) HighlightColor() color.Color {
+	return v.ctx.Styles.HighlightColor()
+}
+
+// ScrollbarColor is the color the View's StyleSheet gives a scrollbar
+// thumb: hover whenever it's highlighted (including while dragged),
+// pressed only while dragged - for a backend drawing the View's scrollbar.
+func (v *View) ScrollbarColor(hover, pressed bool) color.Color {
+	return v.ctx.Styles.ScrollbarColor(hover, pressed)
 }
 
 // ScaledViewMargins returns the View's current effective margin between
@@ -214,7 +222,7 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 // color, so a caller doesn't need its own clear step.
 func (v *View) Draw(dst Canvas, x, y int) {
 	bounds := dst.Bounds()
-	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.StyleSheet.BackgroundColor())
+	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.Styles.BackgroundColor())
 	if !v.stack.laidOut() {
 		return
 	}
@@ -267,15 +275,15 @@ func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
 	return hit, offset.Add(image.Pt(left, y-int(c.offset))), c.index
 }
 
-// linkNodeAt returns the ASTNode of the link at document position
+// linkNodeAt returns the ast.Node of the link at document position
 // (x, y), or nil if none - same coordinate space as HitTest - and the
 // top-level slot it's in.
-func (v *View) linkNodeAt(x, y int) (node *ASTNode, slot int) {
+func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 	hit, _, slot := v.hitTest(x, y)
 	if hit == nil {
 		return nil, 0
 	}
-	return hit.Source().Node().AncestorTag(TagLink), slot
+	return hit.Source().Node().AncestorTag(ast.TagLink), slot
 }
 
 // Hover updates the currently-highlighted link, given the mouse position
@@ -410,7 +418,7 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 // here, re-anchoring the scroll position the same way a resize does. If
 // nothing has been laid out yet, the first Layout call picks s up.
 func (v *View) SetStyleSheet(s StyleSheet) {
-	v.ctx.StyleSheet = s
+	v.ctx.Styles = s.Styles()
 	if v.stack.laidOut() {
 		v.rebuild()
 	}

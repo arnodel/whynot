@@ -1,13 +1,14 @@
 package whynot
 
 import (
+	"github.com/arnodel/whynot/internal/ast"
 	"slices"
 	"strings"
 	"testing"
 )
 
 // wantPath asserts got (from some node's Path()) matches want.
-func wantPath(t *testing.T, got ASTPath, want ASTPath) {
+func wantPath(t *testing.T, got ast.Path, want ast.Path) {
 	t.Helper()
 	if !slices.Equal(got, want) {
 		t.Errorf("Path() = %v, want %v", got, want)
@@ -21,10 +22,10 @@ func TestASTParagraphPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	wantPath(t, wrapper.node.Path(), ASTPath{TagParagraph})
+	wantPath(t, wrapper.node.Path(), ast.Path{ast.TagParagraph})
 }
 
-// TestASTHeadingID checks that a heading's ASTNode.ID gets goldmark's
+// TestASTHeadingID checks that a heading's ast.Node.ID gets goldmark's
 // auto-generated slug - what a link's URL fragment targets - and that
 // distinct headings (including ones needing de-duplication) get
 // distinct ids.
@@ -46,10 +47,10 @@ func TestASTHeadingID(t *testing.T) {
 func TestASTHeadingPath(t *testing.T) {
 	cases := []struct {
 		level int
-		want  ASTTag
+		want  ast.Tag
 	}{
-		{1, TagHeading1}, {2, TagHeading2}, {3, TagHeading3},
-		{4, TagHeading4}, {5, TagHeading5}, {6, TagHeading6},
+		{1, ast.TagHeading1}, {2, ast.TagHeading2}, {3, ast.TagHeading3},
+		{4, ast.TagHeading4}, {5, ast.TagHeading5}, {6, ast.TagHeading6},
 	}
 	for _, tc := range cases {
 		source := []byte(headingMarkdown(tc.level) + " Title")
@@ -59,7 +60,7 @@ func TestASTHeadingPath(t *testing.T) {
 		if !ok {
 			t.Fatalf("level %d: block = %T, want *MarginBlock", tc.level, stack.blocks[0])
 		}
-		wantPath(t, wrapper.node.Path(), ASTPath{tc.want})
+		wantPath(t, wrapper.node.Path(), ast.Path{tc.want})
 	}
 }
 
@@ -83,7 +84,7 @@ func TestASTNestedListItemPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("item = %T, want *MarginBlock", list.blocks[0])
 	}
-	wantPath(t, outerItemWrapper.node.Path(), ASTPath{TagList, TagListItem})
+	wantPath(t, outerItemWrapper.node.Path(), ast.Path{ast.TagList, ast.TagListItem})
 
 	_, trailing := listItemParts(t, list.blocks[0])
 	nestedList := unwrap(trailing).(*StackBlock)
@@ -91,7 +92,7 @@ func TestASTNestedListItemPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("nested item = %T, want *MarginBlock", nestedList.blocks[0])
 	}
-	wantPath(t, innerItemWrapper.node.Path(), ASTPath{TagList, TagListItem, TagList, TagListItem})
+	wantPath(t, innerItemWrapper.node.Path(), ast.Path{ast.TagList, ast.TagListItem, ast.TagList, ast.TagListItem})
 }
 
 func TestASTBlockquotePath(t *testing.T) {
@@ -101,7 +102,7 @@ func TestASTBlockquotePath(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	wantPath(t, bqWrapper.node.Path(), ASTPath{TagBlockquote})
+	wantPath(t, bqWrapper.node.Path(), ast.Path{ast.TagBlockquote})
 
 	bq := bqWrapper.Block.(*BlockquoteBlock)
 	if bq.node != bqWrapper.node {
@@ -112,7 +113,7 @@ func TestASTBlockquotePath(t *testing.T) {
 	if !ok {
 		t.Fatalf("inner = %T, want *MarginBlock", bq.inner)
 	}
-	wantPath(t, paraWrapper.node.Path(), ASTPath{TagBlockquote, TagParagraph})
+	wantPath(t, paraWrapper.node.Path(), ast.Path{ast.TagBlockquote, ast.TagParagraph})
 }
 
 func TestASTTableCellPath(t *testing.T) {
@@ -122,14 +123,14 @@ func TestASTTableCellPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	wantPath(t, wrapper.node.Path(), ASTPath{TagTable})
+	wantPath(t, wrapper.node.Path(), ast.Path{ast.TagTable})
 
 	table := wrapper.Block.(*TableBlock)
 	if len(table.header) == 0 {
 		t.Fatal("no header cells")
 	}
 	cellText := table.header[0].content.parts[0].(*InlineText)
-	wantPath(t, cellText.node.Path(), ASTPath{TagTable, TagTableCell})
+	wantPath(t, cellText.node.Path(), ast.Path{ast.TagTable, ast.TagTableCell})
 }
 
 func TestASTThematicBreakPath(t *testing.T) {
@@ -139,7 +140,7 @@ func TestASTThematicBreakPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.blocks[0])
 	}
-	wantPath(t, wrapper.node.Path(), ASTPath{TagThematicBreak})
+	wantPath(t, wrapper.node.Path(), ast.Path{ast.TagThematicBreak})
 
 	rule := wrapper.Block.(*ThematicBreakBlock)
 	if rule.node != wrapper.node {
@@ -148,7 +149,7 @@ func TestASTThematicBreakPath(t *testing.T) {
 }
 
 // TestASTInlineNestingPath checks that Emphasis/Strong/Link/CodeSpan each
-// introduce their own ASTNode, nested under the paragraph's, and that
+// introduce their own ast.Node, nested under the paragraph's, and that
 // plain text at the same level doesn't pick up a sibling span's tag.
 func TestASTInlineNestingPath(t *testing.T) {
 	doc := Parse([]byte("plain **bold *and italic*** [a link](https://example.com) `code`"))
@@ -168,19 +169,19 @@ func TestASTInlineNestingPath(t *testing.T) {
 		byWord[it.text] = it
 	}
 
-	wantPath(t, byWord["plain"].node.Path(), ASTPath{TagParagraph})
-	wantPath(t, byWord["bold"].node.Path(), ASTPath{TagParagraph, TagStrong})
-	wantPath(t, byWord["and"].node.Path(), ASTPath{TagParagraph, TagStrong, TagEmphasis})
-	wantPath(t, byWord["italic"].node.Path(), ASTPath{TagParagraph, TagStrong, TagEmphasis})
-	wantPath(t, byWord["a"].node.Path(), ASTPath{TagParagraph, TagLink})
-	wantPath(t, byWord["link"].node.Path(), ASTPath{TagParagraph, TagLink})
-	wantPath(t, byWord["code"].node.Path(), ASTPath{TagParagraph, TagCodeSpan})
+	wantPath(t, byWord["plain"].node.Path(), ast.Path{ast.TagParagraph})
+	wantPath(t, byWord["bold"].node.Path(), ast.Path{ast.TagParagraph, ast.TagStrong})
+	wantPath(t, byWord["and"].node.Path(), ast.Path{ast.TagParagraph, ast.TagStrong, ast.TagEmphasis})
+	wantPath(t, byWord["italic"].node.Path(), ast.Path{ast.TagParagraph, ast.TagStrong, ast.TagEmphasis})
+	wantPath(t, byWord["a"].node.Path(), ast.Path{ast.TagParagraph, ast.TagLink})
+	wantPath(t, byWord["link"].node.Path(), ast.Path{ast.TagParagraph, ast.TagLink})
+	wantPath(t, byWord["code"].node.Path(), ast.Path{ast.TagParagraph, ast.TagCodeSpan})
 
 	if got := byWord["a"].node.Destination; got != "https://example.com" {
 		t.Errorf("link Destination = %q, want %q", got, "https://example.com")
 	}
 	if byWord["a"].node != byWord["link"].node {
-		t.Error("both words of the link should share the same ASTNode")
+		t.Error("both words of the link should share the same ast.Node")
 	}
 }
 
@@ -190,7 +191,7 @@ func TestASTStrikethroughPath(t *testing.T) {
 	wrapper := stack.blocks[0].(*MarginBlock)
 	para := wrapper.Block.(*TextBlock)
 	text := para.parts[0].(*InlineText)
-	wantPath(t, text.node.Path(), ASTPath{TagParagraph, TagStrikethrough})
+	wantPath(t, text.node.Path(), ast.Path{ast.TagParagraph, ast.TagStrikethrough})
 }
 
 // TestASTLinkReferenceDefinitionIsInvisible checks that a reference-style
@@ -207,8 +208,8 @@ func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
 
 	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
 	link := para.parts[0].(*InlineText).node
-	if link.Tag != TagLink {
-		t.Fatalf("node.Tag = %v, want TagLink", link.Tag)
+	if link.Tag != ast.TagLink {
+		t.Fatalf("node.Tag = %v, want ast.TagLink", link.Tag)
 	}
 	if want := "https://example.com"; link.Destination != want {
 		t.Errorf("Destination = %q, want %q", link.Destination, want)
@@ -218,7 +219,7 @@ func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
 // TestASTHTMLCommentBlockIsInvisible checks that a block-level <!--
 // comment --> - unlike other raw HTML, never visible in any Markdown
 // renderer - produces no block of its own, rather than showing as
-// TagUnsupported.
+// ast.TagUnsupported.
 func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 	doc := Parse([]byte("Before.\n\n<!-- ignore -->\n\nAfter.\n"))
 	stack := doc.root
@@ -240,22 +241,22 @@ func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 // TestASTHTMLCommentInlineIsInvisible is
 // TestASTHTMLCommentBlockIsInvisible's inline counterpart: a <!--
 // comment --> mid-paragraph is dropped rather than shown as
-// TagUnsupported text.
+// ast.TagUnsupported text.
 func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
 	doc := Parse([]byte("before <!-- ignore --> after\n"))
 	stack := doc.root
 	para := stack.blocks[0].(*MarginBlock).Block.(*TextBlock)
 
 	for _, part := range para.parts {
-		if it, ok := part.(*InlineText); ok && it.node.Tag == TagUnsupported {
-			t.Errorf("found a TagUnsupported part (%q); the comment should be invisible", it.text)
+		if it, ok := part.(*InlineText); ok && it.node.Tag == ast.TagUnsupported {
+			t.Errorf("found a ast.TagUnsupported part (%q); the comment should be invisible", it.text)
 		}
 	}
 }
 
 // TestASTUnsupportedHTMLBlockShowsSource checks that a raw HTML block -
 // a real Markdown construct compile.go has no case for - renders as a
-// TagUnsupported code block showing its own source, rather than
+// ast.TagUnsupported code block showing its own source, rather than
 // panicking and taking down the whole document.
 func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
 	doc := Parse([]byte("<div>\n  <p>raw</p>\n</div>\n"))
@@ -265,8 +266,8 @@ func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
 	}
 
 	cb := stack.blocks[0].(*MarginBlock).Block.(*CodeBlock)
-	if cb.node.Tag != TagUnsupported {
-		t.Errorf("Tag = %v, want TagUnsupported", cb.node.Tag)
+	if cb.node.Tag != ast.TagUnsupported {
+		t.Errorf("Tag = %v, want ast.TagUnsupported", cb.node.Tag)
 	}
 	if len(cb.lines) == 0 {
 		t.Fatal("no lines rendered for the unsupported HTML block")
@@ -278,12 +279,12 @@ func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
 
 // TestASTUnsupportedInlineHTMLShowsSource is
 // TestASTUnsupportedHTMLBlockShowsSource's inline counterpart: raw
-// inline HTML mid-paragraph renders as TagUnsupported text carrying its
+// inline HTML mid-paragraph renders as ast.TagUnsupported text carrying its
 // own source, spliced into the surrounding paragraph rather than
 // panicking.
 func TestASTUnsupportedInlineHTMLShowsSource(t *testing.T) {
 	// <span> and </span> are each their own RawHTML node - CommonMark
-	// doesn't pair inline HTML tags - so two separate TagUnsupported
+	// doesn't pair inline HTML tags - so two separate ast.TagUnsupported
 	// runs are expected, one per tag.
 	doc := Parse([]byte("before <span>x</span> after\n"))
 	stack := doc.root
@@ -291,7 +292,7 @@ func TestASTUnsupportedInlineHTMLShowsSource(t *testing.T) {
 
 	var unsupported []string
 	for _, part := range para.parts {
-		if it, ok := part.(*InlineText); ok && it.node.Tag == TagUnsupported {
+		if it, ok := part.(*InlineText); ok && it.node.Tag == ast.TagUnsupported {
 			unsupported = append(unsupported, it.text)
 		}
 	}

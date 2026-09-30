@@ -19,6 +19,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 //go:embed Pacifico-Regular.ttf
@@ -81,7 +82,7 @@ func main() {
 	flag.Parse()
 
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), buildFaceSelector(*fontPath)),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), buildFaceSelector(*fontPath), simpletheme.DarkStyleSheet),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
