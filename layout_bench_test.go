@@ -11,6 +11,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -22,7 +23,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
@@ -58,7 +59,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
@@ -91,7 +92,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
@@ -133,7 +134,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
@@ -175,7 +176,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	block := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}
@@ -215,7 +216,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	rawBlock := whynot.Parse(source).Root()
 	ctx := whynot.RenderingContext{
 		Scale:        1,
-		FaceSelector: whynot.NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
 		ImageCache:   whynot.NewImageCache(whynot.FileImageSource{}),
 	}

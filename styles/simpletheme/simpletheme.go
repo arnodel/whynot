@@ -19,6 +19,7 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/styling"
 )
 
@@ -291,7 +292,7 @@ var dims = styling.Dimensions{
 // Defaults for what a Theme leaves zero where there's nothing to inherit
 // from: BaseTextStyle's fields, and LineHeight.
 var (
-	defaultBaseTextStyle = styling.TextStyle{Size: 16, Style: font.StyleNormal, Weight: font.WeightNormal, Family: styling.Proportional}
+	defaultBaseTextStyle = fonts.TextStyle{Size: 16, Style: font.StyleNormal, Weight: font.WeightNormal, Family: fonts.Proportional}
 	defaultLineHeight    = 1.2
 )
 
@@ -355,14 +356,14 @@ func (s TextStyle) partial() styling.PartialTextStyle {
 		p.Set |= styling.FieldWeight
 	}
 	if s.Family != FamilyInherit {
-		p.Family = styling.FontFamily(s.Family - Proportional)
+		p.Family = fonts.Family(s.Family - Proportional)
 		p.Set |= styling.FieldFamily
 	}
 	return p
 }
 
 // over returns base with s's non-zero fields applied.
-func (s TextStyle) over(base styling.TextStyle) styling.TextStyle {
+func (s TextStyle) over(base fonts.TextStyle) fonts.TextStyle {
 	p := s.partial()
 	if p.Set&styling.FieldSize != 0 {
 		base.Size = p.Size

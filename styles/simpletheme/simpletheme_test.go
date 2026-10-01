@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 )
@@ -25,11 +26,11 @@ func TestTextStyleZeroInherits(t *testing.T) {
 
 func TestTextStyleEnumsMap(t *testing.T) {
 	p := TextStyle{Style: StyleItalic, Weight: WeightThin, Family: Monospace}.partial()
-	if p.Style != font.StyleItalic || p.Weight != font.WeightThin || p.Family != styling.Monospace {
+	if p.Style != font.StyleItalic || p.Weight != font.WeightThin || p.Family != fonts.Monospace {
 		t.Errorf("got style %v, weight %v, family %v; want italic, thin, monospace", p.Style, p.Weight, p.Family)
 	}
 	p = TextStyle{Style: StyleNormal, Weight: WeightBlack, Family: Proportional}.partial()
-	if p.Style != font.StyleNormal || p.Weight != font.WeightBlack || p.Family != styling.Proportional {
+	if p.Style != font.StyleNormal || p.Weight != font.WeightBlack || p.Family != fonts.Proportional {
 		t.Errorf("got style %v, weight %v, family %v; want normal, black, proportional", p.Style, p.Weight, p.Family)
 	}
 }
@@ -39,7 +40,7 @@ func TestBaseTextStyleZeroTakesDefault(t *testing.T) {
 	theme.BaseTextStyle = TextStyle{Family: Monospace}
 	got := theme.StyleSheet().Styles().TextStyle(nil)
 	want := defaultBaseTextStyle
-	want.Family = styling.Monospace
+	want.Family = fonts.Monospace
 	if got.TextStyle != want || got.Set != styling.AllTextStyleFields {
 		t.Errorf("root text style = %+v, want %+v with every field set", got, want)
 	}

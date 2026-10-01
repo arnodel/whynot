@@ -17,6 +17,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -43,7 +44,7 @@ func exampleDoc() string {
 }
 
 func main() {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 

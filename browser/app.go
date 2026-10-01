@@ -25,6 +25,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/chromahighlight"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/kroki"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -78,7 +79,7 @@ type App struct {
 	// history once you branch off somewhere new.
 	history, future []historyEntry
 
-	faceSelector whynot.FaceSelector
+	faceSelector fonts.FaceSelector
 	styleSheet   whynot.StyleSheet
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
@@ -124,7 +125,7 @@ type App struct {
 // NewApp constructs an App with no Panel yet and no current location -
 // call NewView to build the first document's View, construct the real
 // Panel from it, assign it to Panel, then call Open to make it current.
-func NewApp(faceSelector whynot.FaceSelector, styleSheet whynot.StyleSheet, dark bool) *App {
+func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark bool) *App {
 	return &App{
 		faceSelector: faceSelector,
 		styleSheet:   styleSheet,

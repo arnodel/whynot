@@ -1,12 +1,10 @@
 // Package systemfont resolves fonts by name from whatever's installed on
 // the host machine (e.g. "Arial", "Helvetica Neue"), on top of
-// whynot.CustomFontFaceSelector.AddFontCollection. It's split out from the
-// core whynot package to keep its github.com/adrg/sysfont dependency (and
-// that package's own dependencies) out of the core library's dependency
-// graph - the same reasoning ebitenrenderer keeps the ebiten dependency
-// out of the core library. This package does no font classification of
-// its own - locating the right file is its only job; reading what's
-// inside it is whynot.CustomFontFaceSelector.AddFontCollection's.
+// fonts.CustomSelector.AddFontCollection. It's a package of its own to keep
+// its github.com/adrg/sysfont dependency (and that package's, which don't
+// build for the web) out of the fonts package. It does no font
+// classification of its own: locating the right file is its only job;
+// reading what's inside it is AddFontCollection's.
 package systemfont
 
 import (
@@ -16,7 +14,7 @@ import (
 
 	"github.com/adrg/sysfont"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 )
 
 const logPrefix = "whynot/systemfont: "
@@ -28,32 +26,32 @@ type finder interface {
 	Match(query string) *sysfont.Font
 }
 
-// SystemFontFaceSelector is a whynot.FaceSelector that resolves fonts by
-// name from whatever's installed on the host machine. It wraps a
-// whynot.CustomFontFaceSelector: RegisterSystemFont locates an installed
+// Selector is a fonts.FaceSelector that resolves fonts by name from
+// whatever's installed on the host machine. It wraps a
+// fonts.CustomSelector: RegisterSystemFont locates an installed
 // font file for a family and registers every subfont in it that
 // AddFontCollection can classify and match - anything it can't find or
-// classify is left for the underlying CustomFontFaceSelector's fallback
-// (whynot.NewGoFontFaceSelector by default) to serve instead.
+// classify is left for the underlying CustomSelector's fallback (a
+// fonts.GoSelector by default) to serve instead.
 //
-// NewSystemFontFaceSelector scans the host's real font directories once,
+// New scans the host's real font directories once,
 // synchronously - construct it during setup, not per frame or document.
-type SystemFontFaceSelector struct {
-	*whynot.CustomFontFaceSelector
+type Selector struct {
+	*fonts.CustomSelector
 	finder finder
 }
 
-var _ whynot.FaceSelector = (*SystemFontFaceSelector)(nil)
+var _ fonts.FaceSelector = (*Selector)(nil)
 
-// NewSystemFontFaceSelector returns a SystemFontFaceSelector with nothing
+// New returns a Selector with nothing
 // registered yet - every SelectFace call delegates to its fallback
 // FaceSelector until RegisterSystemFont is called. opts configures the
-// underlying CustomFontFaceSelector exactly as they would
-// whynot.NewCustomFontFaceSelector, e.g. whynot.WithFallback.
-func NewSystemFontFaceSelector(dpi float64, opts ...whynot.CustomFontFaceSelectorOption) *SystemFontFaceSelector {
-	return &SystemFontFaceSelector{
-		CustomFontFaceSelector: whynot.NewCustomFontFaceSelector(dpi, opts...),
-		finder:                 sysfont.NewFinder(nil),
+// underlying CustomSelector exactly as they would fonts.NewCustomSelector,
+// e.g. fonts.WithFallback.
+func New(opts ...fonts.CustomOption) *Selector {
+	return &Selector{
+		CustomSelector: fonts.NewCustomSelector(opts...),
+		finder:         sysfont.NewFinder(nil),
 	}
 }
 
@@ -64,7 +62,7 @@ func NewSystemFontFaceSelector(dpi float64, opts ...whynot.CustomFontFaceSelecto
 // AddFontCollection can't usefully register anything from, is logged and
 // otherwise a no-op - those slots are served by the fallback FaceSelector
 // instead, which is why this has no error return.
-func (s *SystemFontFaceSelector) RegisterSystemFont(family whynot.FontFamily, query string) {
+func (s *Selector) RegisterSystemFont(family fonts.Family, query string) {
 	s.registerSystemFont(family, query)
 }
 
@@ -73,7 +71,7 @@ func (s *SystemFontFaceSelector) RegisterSystemFont(family whynot.FontFamily, qu
 // whether a candidate name actually resolved to anything usable, without
 // exposing that as part of RegisterSystemFont's own public, no-return
 // signature.
-func (s *SystemFontFaceSelector) registerSystemFont(family whynot.FontFamily, query string) int {
+func (s *Selector) registerSystemFont(family fonts.Family, query string) int {
 	match := s.finder.Match(query)
 	if match == nil || match.Filename == "" {
 		log.Printf(logPrefix+"%v: no installed font found for %q", family, query)
@@ -117,7 +115,7 @@ func (s *SystemFontFaceSelector) registerSystemFont(family whynot.FontFamily, qu
 // see preferredFontCandidates), it logs that and leaves every slot to the
 // fallback FaceSelector, the same as an ordinary unmatched
 // RegisterSystemFont query would.
-func (s *SystemFontFaceSelector) RegisterPreferredFont(family whynot.FontFamily) {
+func (s *Selector) RegisterPreferredFont(family fonts.Family) {
 	candidates := preferredFontCandidates(runtime.GOOS, family)
 	for _, query := range candidates {
 		if s.registerSystemFont(family, query) > 0 {

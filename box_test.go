@@ -1,8 +1,6 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"image/color"
 	"testing"
@@ -10,6 +8,10 @@ import (
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+
+	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
 // sourceBlock is a minimal Block for HitTest tests that just need a
@@ -132,8 +134,8 @@ func TestTableBoxHitTest(t *testing.T) {
 }
 
 func TestTextBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,8 +166,8 @@ func TestTextBoxHitTest(t *testing.T) {
 // InlineText.GetInlineLayout) reproduces the bare Ascent+Descent bounds
 // from before LineHeight existed.
 func TestTextBoxLineHeight(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,8 +193,8 @@ func TestTextBoxLineHeight(t *testing.T) {
 // to check the same actual position - a point at the "naive" x should
 // not match.
 func TestListItemMarkerBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +232,8 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 // content as landmarks rather than hardcoded pixel offsets, so this
 // doesn't depend on exact font metrics.
 func TestLineBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,8 +272,8 @@ func TestLineBoxHitTest(t *testing.T) {
 // TestLineBoxBoundsIndentedText checks that Bounds() doesn't crop away a
 // line's leading indentation - see the comment on LineBox.Bounds.
 func TestLineBoxBoundsIndentedText(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,8 +293,8 @@ func TestLineBoxBoundsIndentedText(t *testing.T) {
 // word directly abutting a code span in the source, with no whitespace
 // between them: "a(`b`)").
 func TestLineBoxGluedNoGap(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,8 +318,8 @@ func TestLineBoxGluedNoGap(t *testing.T) {
 // otherwise be the natural wrap point - mirroring how a single oversized
 // word already overflows the line today rather than being split.
 func TestWrapLinesGluedBoundaryUnbreakable(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,8 +348,8 @@ func TestWrapLinesGluedBoundaryUnbreakable(t *testing.T) {
 // indented code line, because Bounds() under-reported its width - see
 // the comment on LineBox.Bounds.
 func TestStackBoxHitTestIndentedLine(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72)}
-	face, err := ctx.SelectFace(TextStyle{Size: 16})
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,8 +620,9 @@ func TestImageBoxDrawInlineAnimated(t *testing.T) {
 // resolves against.
 type fixedFaceSelector struct{ face font.Face }
 
-func (f fixedFaceSelector) SelectFace(TextStyle) (font.Face, error) { return f.face, nil }
-func (f fixedFaceSelector) SetDPI(float64)                          {}
+func (f fixedFaceSelector) SelectFace(fonts.TextStyle, float64) (font.Face, error) {
+	return f.face, nil
+}
 
 // fakeGlyphFace wraps a real font.Face, overriding GlyphAdvance for
 // specific runes - lets a test force TaskCheckbox's glyph-vs-fallback
@@ -642,7 +645,7 @@ func (f fakeGlyphFace) GlyphAdvance(r rune) (fixed.Int26_6, bool) {
 
 func goRegularFace(t *testing.T) font.Face {
 	t.Helper()
-	face, err := NewGoFontFaceSelector(72).SelectFace(TextStyle{Size: 16})
+	face, err := fonts.NewGoSelector().SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatalf("building a face: %v", err)
 	}
@@ -655,7 +658,7 @@ func goRegularFace(t *testing.T) font.Face {
 // existed), so GetInlineLayout must fall back to CheckboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
-	ctx := RenderingContext{FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	for _, checked := range []bool{false, true} {
 		c := &TaskCheckbox{checked: checked, node: &ast.Node{Tag: ast.TagListItem}}
 		layout := c.GetInlineLayout(ctx, 100)
@@ -677,7 +680,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		Face: goRegularFace(t),
 		has:  map[rune]bool{checkboxUnchecked: true, checkboxChecked: true},
 	}
-	ctx := RenderingContext{FaceSelector: fixedFaceSelector{face: fake}, Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fixedFaceSelector{face: fake}, Styles: stylingtest.Basic()}
 
 	cases := []struct {
 		checked bool

@@ -1,6 +1,6 @@
 package browser
 
-import "github.com/arnodel/whynot"
+import "github.com/arnodel/whynot/fonts"
 
 // NewDocumentFaceSelector falls back to the bundled Go fonts in the
 // browser - systemfont's font-directory scanning (via adrg/xdg) has no
@@ -8,6 +8,6 @@ import "github.com/arnodel/whynot"
 // graceful fallback, confirmed by trying - so it's not an option here,
 // not just skipped for being pointless in a browser sandbox (which it
 // would also be: there's no real host font directory to scan).
-func NewDocumentFaceSelector(scale float64) whynot.FaceSelector {
-	return whynot.NewGoFontFaceSelector(72 * scale)
+func NewDocumentFaceSelector() fonts.FaceSelector {
+	return fonts.NewGoSelector()
 }

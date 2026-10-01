@@ -17,7 +17,8 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `whynot.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
 | `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
-| `systemfont/` | implements a third `whynot.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `CustomFontFaceSelector.AddFontCollection` |
+| `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
+| `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
 | `chromahighlight/` | implements `whynot.Highlighter` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
 | `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
 | `cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
@@ -56,7 +57,7 @@ flowchart TD
 ```
 
 The semantic tree ([internal/ast](internal/ast)), styling
-([internal/styling](internal/styling)) and `textstyle.go` cut across layers 1
+([internal/styling](internal/styling)) and [fonts](fonts) cut across layers 1
 and 2. Layer 1's `ast.Node` tree records only structure - each node's semantic tag (`TagParagraph`,
 `TagHeading1`..`6`, `TagEmphasis`, `TagLink`, ...) and its parent - no
 appearance. Layer 2 resolves that tag ancestry against the context's
@@ -84,12 +85,15 @@ stylesheets later is a new package under `styles/`, and the engine can change
 what it queries without breaking anyone. Outside code that needs a color, like
 a backend drawing a scrollbar, asks the `View` (`ScrollbarColor`,
 `HighlightColor`), which reads its current styles.
-`FaceSelector` has three implementations: `GoFontFaceSelector`, serving the
-bundled Go fonts; `CustomFontFaceSelector`, serving caller-registered
+`fonts.FaceSelector` has three implementations: `fonts.GoSelector`, serving
+the bundled Go fonts; `fonts.CustomSelector`, serving caller-registered
 TTF/OTF bytes (including `AddFontCollection`, which registers every
-classifiable subfont of a `.ttc`/`.otc`); and `systemfont.SystemFontFaceSelector`,
+classifiable subfont of a `.ttc`/`.otc`); and `systemfont.Selector`,
 resolving fonts by name from the host's installed fonts on top of it -
 each with a fallback `FaceSelector` for anything unregistered/unresolved.
+Faces are selected per (style, dpi), with dpi = 72 × the context's scale,
+so zoom magnifies a font's design rather than changing its point size. If
+the selector fails, layout falls back to the Go fonts and logs it.
 
 ### Layer 0 — Parse
 

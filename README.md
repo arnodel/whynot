@@ -102,6 +102,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -128,7 +129,7 @@ func exampleDoc() string {
 }
 
 func main() {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
 	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
 
@@ -188,6 +189,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -232,7 +234,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}
@@ -273,24 +275,27 @@ theme toggle button does.
 
 ## Fonts
 
-`NewView`'s second argument is a `FaceSelector` ([textstyle.go](textstyle.go)) -
-`SelectFace(TextStyle) (font.Face, error)` plus `SetDPI(float64)` - the interface
-every example above passes `whynot.NewGoFontFaceSelector(72)` to. It's decoupled from
+`NewView`'s second argument is a `fonts.FaceSelector` ([fonts/fonts.go](fonts/fonts.go)) -
+`SelectFace(style TextStyle, dpi float64) (font.Face, error)`, with the size in points -
+the interface every example above passes `fonts.NewGoSelector()` to. The `View` passes
+the dpi it draws at (72 × its scale), so one selector can serve several views at
+different scales. If a selector returns an error, the `View` logs it and uses the
+bundled Go fonts instead. It's decoupled from
 the `StyleSheet`: the stylesheet decides *which* size/weight/style/family a piece of text
 gets, the `FaceSelector` decides what font file actually renders that combination.
 
-- `GoFontFaceSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
+- `fonts.GoSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
   - what every example above uses.
-- `CustomFontFaceSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
+- `fonts.CustomSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
   (`AddFontFile`), per (family, weight, style) slot - both take a trailing subfont
   `index` (almost always `0`; only matters for a `.ttc`/`.otc` collection) - falling
-  back to a `NewGoFontFaceSelector` for any slot you don't register, so you only need
-  to supply the fonts you actually want to override (or `whynot.WithFallback(...)` a
+  back to a `fonts.NewGoSelector()` for any slot you don't register, so you only need
+  to supply the fonts you actually want to override (or `fonts.WithFallback(...)` a
   different one, `nil` included, at construction):
 
   ```go
-  selector := whynot.NewCustomFontFaceSelector(72)
-  selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
+  selector := fonts.NewCustomSelector()
+  selector.AddFontFile(fonts.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
   view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
@@ -301,19 +306,19 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   See [`examples/customfont`](examples/customfont) for a runnable version - `go run
   ./examples/customfont` uses a bundled font (Pacifico, SIL Open Font License) by
   default, or pass `-font path/to/font.ttf` to try your own.
-- `systemfont.SystemFontFaceSelector` (a separate package,
-  `github.com/arnodel/whynot/systemfont`, to keep its `adrg/sysfont` dependency out of
+- `systemfont.Selector` (a separate package,
+  `github.com/arnodel/whynot/fonts/systemfont`, to keep its `adrg/sysfont` dependency out of
   the core library) resolves fonts *by name* from whatever's installed on the host
   machine, instead of requiring font bytes/files up front:
 
   ```go
-  selector := systemfont.NewSystemFontFaceSelector(72)
-  selector.RegisterSystemFont(whynot.Proportional, "Arial")
+  selector := systemfont.New()
+  selector.RegisterSystemFont(fonts.Proportional, "Arial")
   view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
   `RegisterSystemFont` finds the best-matching installed font, then uses
-  `CustomFontFaceSelector.AddFontCollection` to read every subfont in its file (a plain
+  `fonts.CustomSelector.AddFontCollection` to read every subfont in its file (a plain
   font, or every named variant in a `.ttc`/`.otc`) and register the ones it can
   confidently classify into a (weight, style) slot - anything it can't find or classify
   falls back to the bundled Go fonts.
@@ -324,9 +329,9 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   Linux) - trying each in order until one actually resolves:
 
   ```go
-  selector := systemfont.NewSystemFontFaceSelector(72)
-  selector.RegisterPreferredFont(whynot.Proportional)
-  selector.RegisterPreferredFont(whynot.Monospace)
+  selector := systemfont.New()
+  selector.RegisterPreferredFont(fonts.Proportional)
+  selector.RegisterPreferredFont(fonts.Monospace)
   view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
   ```
 
@@ -382,7 +387,7 @@ scrolling and resizing, it demonstrates what a caller can build on top of the li
 this section is about `cmd/whynot` specifically, but everything except the toolbar itself
 (see [above](#try-the-standalone-viewer)) is shared with `cmd/giowhynot` via `browser.App`:
 
-- **Document text uses this platform's own fonts** (`systemfont.SystemFontFaceSelector`,
+- **Document text uses this platform's own fonts** (`systemfont.Selector`,
   via `RegisterPreferredFont` - see [above](#fonts)) when it can find them, falling back
   to the bundled Go fonts for anything it can't - watch stderr for exactly what got
   resolved.
@@ -528,10 +533,10 @@ by implementation order now that most of the list is done.
       styles/sizes and line height, set on a `simpletheme.Theme`. Swappable at runtime
       (`View.SetStyleSheet`) - `cmd/whynot`'s light/dark toggle switches between
       `simpletheme.DarkStyleSheet` and `LightStyleSheet`
-- [x] Custom font files via `CustomFontFaceSelector` (see [above](#fonts)) - register
+- [x] Custom font files via `fonts.CustomSelector` (see [above](#fonts)) - register
       your own TTF/OTF bytes per weight/style slot, falling back to the bundled Go
       fonts for anything not overridden
-- [x] System-installed fonts by name via `systemfont.SystemFontFaceSelector` (see
+- [x] System-installed fonts by name via `systemfont.Selector` (see
       [above](#fonts)) - resolves an installed font (e.g. "Arial") and registers every
       style variant it can confidently classify, same fallback story. Don't know a name
       to ask for? `RegisterPreferredFont` guesses this platform's likely UI font from a

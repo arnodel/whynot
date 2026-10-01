@@ -13,6 +13,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -57,7 +58,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet),
 		renderer: ebitenrenderer.New(),
 		start:    time.Now(),
 	}

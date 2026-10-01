@@ -15,6 +15,7 @@ import (
 	"gioui.org/op"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -48,7 +49,7 @@ func main() {
 }
 
 func run() error {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	panel := giorenderer.NewPanel(view, giorenderer.New(), image.Rectangle{}, giorenderer.WithScrollbar())
 	panel.OnLinkClick = func(dest string) { log.Printf("clicked: %s", dest) }
 	panel.OnLinkHover = func(dest string) {

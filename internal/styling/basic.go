@@ -3,6 +3,7 @@ package styling
 import (
 	"image/color"
 
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 )
 
@@ -90,7 +91,7 @@ type Basic struct {
 	// always claims every field by definition (see TextStyle below), so
 	// there's no meaningful subset for a Set mask to express.
 	TextColor     color.Color
-	BaseTextStyle TextStyle
+	BaseTextStyle fonts.TextStyle
 
 	// Background is the whole view's fill color. Background, ViewMargin,
 	// Highlight and Scrollbar are named to avoid colliding with the

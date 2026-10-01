@@ -1,10 +1,10 @@
-// Command customfont is a runnable example of whynot.CustomFontFaceSelector.
+// Command customfont is a runnable example of fonts.CustomSelector.
 // By default it registers the bundled Pacifico-Regular.ttf (SIL Open Font
 // License, see OFL.txt) for regular proportional text; pass
 // -font path/to/font.ttf to use a different font instead. Either way, every
 // other slot (bold, italic, monospace, small caps) has nothing registered,
 // so it falls back transparently to the bundled Go fonts via
-// whynot.NewGoFontFaceSelector.
+// fonts.GoSelector.
 package main
 
 import (
@@ -19,6 +19,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -63,15 +64,15 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return width, height
 }
 
-func buildFaceSelector(fontPath string) whynot.FaceSelector {
-	selector := whynot.NewCustomFontFaceSelector(72)
+func buildFaceSelector(fontPath string) fonts.FaceSelector {
+	selector := fonts.NewCustomSelector()
 	if fontPath == "" {
-		if err := selector.AddFont(whynot.Proportional, font.WeightNormal, font.StyleNormal, defaultFontData, 0); err != nil {
+		if err := selector.AddFont(fonts.Proportional, font.WeightNormal, font.StyleNormal, defaultFontData, 0); err != nil {
 			log.Fatalf("loading the bundled default font: %v", err)
 		}
 		return selector
 	}
-	if err := selector.AddFontFile(whynot.Proportional, font.WeightNormal, font.StyleNormal, fontPath, 0); err != nil {
+	if err := selector.AddFontFile(fonts.Proportional, font.WeightNormal, font.StyleNormal, fontPath, 0); err != nil {
 		log.Fatalf("loading %s: %v", fontPath, err)
 	}
 	return selector

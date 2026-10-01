@@ -4,9 +4,9 @@ import (
 	"image"
 	"time"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 )
 
 // game adapts a browser.App (navigation/history/theme/zoom) and an
@@ -17,15 +17,10 @@ type game struct {
 	app   *browser.App
 	panel *ebitenrenderer.Panel
 
-	// toolbarFaceSelector is independent of app's own document
-	// faceSelector, deliberately: View.Layout unconditionally resets
-	// the document faceSelector's DPI every frame (see relayout) to
-	// deviceScale*zoom, so the toolbar's own text needs its own
-	// selector pinned to deviceScale alone - sharing one would either
-	// zoom the toolbar's text against its fixed-size buttons, or
-	// worse, thrash both selectors' font caches every frame as Layout
-	// and drawToolbar fought over one shared DPI.
-	toolbarFaceSelector whynot.FaceSelector
+	// toolbarFaceSelector serves the toolbar's plain Go fonts, separate
+	// from the document's system fonts. Toolbar text is drawn at
+	// deviceScale*72 dpi, not zoomed with the document.
+	toolbarFaceSelector fonts.FaceSelector
 	renderer            *ebitenrenderer.Renderer
 	debugHit            bool
 

@@ -1,4 +1,4 @@
-// Command systemfont is a runnable example of systemfont.SystemFontFaceSelector.
+// Command systemfont is a runnable example of systemfont.Selector.
 // By default it doesn't name a font at all: RegisterPreferredFont picks
 // this platform's most likely UI font (a short curated, GOOS-aware
 // candidate list - see systemfont.RegisterPreferredFont's doc comment)
@@ -22,8 +22,9 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/fonts/systemfont"
 	"github.com/arnodel/whynot/styles/simpletheme"
-	"github.com/arnodel/whynot/systemfont"
 )
 
 func exampleDoc() string {
@@ -71,16 +72,16 @@ func main() {
 	monospaceFamily := flag.String("monospace-family", "", "installed font family for monospace text (default: this platform's preferred monospace font)")
 	flag.Parse()
 
-	selector := systemfont.NewSystemFontFaceSelector(72)
+	selector := systemfont.New()
 	if *family != "" {
-		selector.RegisterSystemFont(whynot.Proportional, *family)
+		selector.RegisterSystemFont(fonts.Proportional, *family)
 	} else {
-		selector.RegisterPreferredFont(whynot.Proportional)
+		selector.RegisterPreferredFont(fonts.Proportional)
 	}
 	if *monospaceFamily != "" {
-		selector.RegisterSystemFont(whynot.Monospace, *monospaceFamily)
+		selector.RegisterSystemFont(fonts.Monospace, *monospaceFamily)
 	} else {
-		selector.RegisterPreferredFont(whynot.Monospace)
+		selector.RegisterPreferredFont(fonts.Monospace)
 	}
 
 	g := &game{
