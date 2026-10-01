@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/image/font"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/canvas"
 )
 
 // zoomIndicatorDuration is how long the "N%" popup stays up after a
@@ -22,7 +22,7 @@ const zoomIndicatorDuration = 1500 * time.Millisecond
 // face is the caller's own chrome font, sized independently of the
 // document's own zoomed scale (the indicator's own size shouldn't zoom
 // with the document).
-func (a *App) DrawZoomIndicator(canvas whynot.Canvas, face font.Face) {
+func (a *App) DrawZoomIndicator(dst canvas.Canvas, face font.Face) {
 	if !time.Now().Before(a.zoomIndicatorUntil) {
 		return
 	}
@@ -36,8 +36,8 @@ func (a *App) DrawZoomIndicator(canvas whynot.Canvas, face font.Face) {
 	x := a.width - margin - w
 	y := a.toolbarHeight + margin
 	r := image.Rect(x, y, x+w, y+h)
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
-	canvas.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
+	dst.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
+	dst.DrawText(label, face, r.Min.X+padX, baselineIn(face, r), color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
 }
 
 // DrawDebugStats shows fps/tps alongside the most recent Update/Draw
@@ -45,7 +45,7 @@ func (a *App) DrawZoomIndicator(canvas whynot.Canvas, face font.Face) {
 // gates whether to call this at all (e.g. cmd/whynot's -debug-stats/F
 // toggle) and supplies its own backend's performance counters, which
 // this package has no way to read itself.
-func (a *App) DrawDebugStats(canvas whynot.Canvas, face font.Face, fps, tps float64, updateDuration, drawDuration time.Duration) {
+func (a *App) DrawDebugStats(dst canvas.Canvas, face font.Face, fps, tps float64, updateDuration, drawDuration time.Duration) {
 	lines := [2]string{
 		fmt.Sprintf("%.0f fps  %.0f tps", fps, tps),
 		fmt.Sprintf("upd %.2fms  draw %.2fms", updateDuration.Seconds()*1000, drawDuration.Seconds()*1000),
@@ -66,10 +66,10 @@ func (a *App) DrawDebugStats(canvas whynot.Canvas, face font.Face, fps, tps floa
 	x := margin
 	y := a.toolbarHeight + margin
 	r := image.Rect(x, y, x+w, y+h)
-	canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
+	dst.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
 	baseline := r.Min.Y + padY + face.Metrics().Ascent.Ceil()
 	for i, l := range lines {
-		canvas.DrawText(l, face, r.Min.X+padX, baseline+i*lineH, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
+		dst.DrawText(l, face, r.Min.X+padX, baseline+i*lineH, color.RGBA{0xE0, 0xE0, 0xE0, 0xFF})
 	}
 }
 

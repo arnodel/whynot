@@ -3,7 +3,7 @@
 A Markdown document viewer for Go games and GUI apps - for anything that needs to show
 real formatted text (patch notes, an in-game journal, help screens, a credits scroll)
 without pulling in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
-the document onto a `whynot.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
+the document onto a `canvas.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
 to parse. The core library has no rendering backend dependency of its own - two ship with
 it, [Ebitengine](https://ebitengine.org/) (`ebitenrenderer`) and [Gio](https://gioui.org/)
 (`giorenderer`).
@@ -66,7 +66,7 @@ anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 The library (root package `whynot`) has no rendering backend dependency -
 it only depends on `goldmark` for parsing. Two backends implement
-`whynot.Canvas`: `ebitenrenderer` (on top of `ebiten`) and `giorenderer`
+`canvas.Canvas`: `ebitenrenderer` (on top of `ebiten`) and `giorenderer`
 (on top of [Gio](https://gioui.org/)). The examples below use
 `ebitenrenderer` - `giorenderer`'s own `Panel`/`Canvas` mirror its shape
 closely (see [`cmd/giowhynot`](cmd/giowhynot) and
