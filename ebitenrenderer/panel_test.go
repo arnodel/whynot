@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -21,7 +22,7 @@ const (
 
 func newTestPanel(t *testing.T, source string, opts ...PanelOption) *Panel {
 	t.Helper()
-	v := whynot.NewView(whynot.Parse([]byte(source)), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	v := whynot.NewView(whynot.Parse([]byte(source)), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	return NewPanel(v, New(), image.Rect(0, 0, testPanelWidth, testPanelHeight), opts...)
 }
 
@@ -148,7 +149,7 @@ func TestUpdateHoverAndClick(t *testing.T) {
 	// Deliberately offset from the origin to catch a coordinate-
 	// translation bug.
 	bounds := image.Rect(50, 30, 50+testPanelWidth, 30+testPanelHeight)
-	v := whynot.NewView(whynot.Parse([]byte(doc)), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	v := whynot.NewView(whynot.Parse([]byte(doc)), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	p := NewPanel(v, New(), bounds)
 
 	lx, ly := findLinkPos(t, v, bounds.Dx(), bounds.Dy())
@@ -198,7 +199,7 @@ func TestUpdateAnchorScrolling(t *testing.T) {
 	// ScrollToRatio(1)'s cursor clamps to the *end* of the last slot,
 	// leaving nothing from it actually visible).
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
-	v := whynot.NewView(whynot.Parse([]byte(doc)), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	v := whynot.NewView(whynot.Parse([]byte(doc)), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	p := NewPanel(v, New(), image.Rect(0, 0, testPanelWidth, testPanelHeight), WithAnchorScrolling())
 
 	lx, ly := findLinkPos(t, v, testPanelWidth, testPanelHeight)
@@ -255,7 +256,7 @@ func TestSetView(t *testing.T) {
 		t.Fatal("test setup: expected a drag in progress")
 	}
 
-	v2 := whynot.NewView(whynot.Parse([]byte(strings.Repeat(longDoc, 20))), whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet)
+	v2 := whynot.NewView(whynot.Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	p.SetView(v2)
 
 	if p.View() != v2 {

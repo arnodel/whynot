@@ -3,20 +3,20 @@ package systemfont
 import (
 	"testing"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 )
 
 func TestPreferredFontCandidatesNonEmpty(t *testing.T) {
 	cases := []struct {
 		goos   string
-		family whynot.FontFamily
+		family fonts.Family
 	}{
-		{"darwin", whynot.Proportional},
-		{"darwin", whynot.Monospace},
-		{"windows", whynot.Proportional},
-		{"windows", whynot.Monospace},
-		{"linux", whynot.Proportional},
-		{"linux", whynot.Monospace},
+		{"darwin", fonts.Proportional},
+		{"darwin", fonts.Monospace},
+		{"windows", fonts.Proportional},
+		{"windows", fonts.Monospace},
+		{"linux", fonts.Proportional},
+		{"linux", fonts.Monospace},
 	}
 	for _, c := range cases {
 		if got := preferredFontCandidates(c.goos, c.family); len(got) == 0 {
@@ -27,14 +27,14 @@ func TestPreferredFontCandidatesNonEmpty(t *testing.T) {
 
 func TestPreferredFontCandidatesSmallCapsEmpty(t *testing.T) {
 	for _, goos := range []string{"darwin", "windows", "linux", "freebsd"} {
-		if got := preferredFontCandidates(goos, whynot.SmallCaps); len(got) != 0 {
+		if got := preferredFontCandidates(goos, fonts.SmallCaps); len(got) != 0 {
 			t.Errorf("preferredFontCandidates(%q, SmallCaps) = %v, want empty", goos, got)
 		}
 	}
 }
 
 func TestPreferredFontCandidatesUnknownGOOSFallsBackToLinux(t *testing.T) {
-	for _, family := range []whynot.FontFamily{whynot.Proportional, whynot.Monospace} {
+	for _, family := range []fonts.Family{fonts.Proportional, fonts.Monospace} {
 		got := preferredFontCandidates("freebsd", family)
 		want := preferredFontCandidates("linux", family)
 		if len(got) != len(want) {

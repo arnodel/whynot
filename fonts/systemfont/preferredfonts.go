@@ -1,6 +1,6 @@
 package systemfont
 
-import "github.com/arnodel/whynot"
+import "github.com/arnodel/whynot/fonts"
 
 // preferredFontCandidates returns, most-preferred first, the installed
 // font names RegisterPreferredFont tries for (goos, family) - a small,
@@ -17,7 +17,7 @@ import "github.com/arnodel/whynot"
 // reliably-installed small-caps display font to guess at, so
 // RegisterPreferredFont(SmallCaps, ...) always falls straight through to
 // the fallback FaceSelector.
-func preferredFontCandidates(goos string, family whynot.FontFamily) []string {
+func preferredFontCandidates(goos string, family fonts.Family) []string {
 	byFamily, ok := preferredFonts[goos]
 	if !ok {
 		byFamily = preferredFonts["linux"]
@@ -25,17 +25,17 @@ func preferredFontCandidates(goos string, family whynot.FontFamily) []string {
 	return byFamily[family]
 }
 
-var preferredFonts = map[string]map[whynot.FontFamily][]string{
+var preferredFonts = map[string]map[fonts.Family][]string{
 	"darwin": {
-		whynot.Proportional: {"Helvetica Neue", "Helvetica", "Arial"},
-		whynot.Monospace:    {"Menlo", "Courier"},
+		fonts.Proportional: {"Helvetica Neue", "Helvetica", "Arial"},
+		fonts.Monospace:    {"Menlo", "Courier"},
 	},
 	"windows": {
-		whynot.Proportional: {"Segoe UI", "Arial"},
-		whynot.Monospace:    {"Consolas", "Courier New"},
+		fonts.Proportional: {"Segoe UI", "Arial"},
+		fonts.Monospace:    {"Consolas", "Courier New"},
 	},
 	"linux": {
-		whynot.Proportional: {"DejaVu Sans", "Liberation Sans", "Noto Sans", "FreeSans"},
-		whynot.Monospace:    {"DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "FreeMono"},
+		fonts.Proportional: {"DejaVu Sans", "Liberation Sans", "Noto Sans", "FreeSans"},
+		fonts.Monospace:    {"DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "FreeMono"},
 	},
 }

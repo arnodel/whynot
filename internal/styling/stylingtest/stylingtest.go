@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/styling"
 )
 
@@ -16,7 +17,7 @@ import (
 func Basic() *styling.Basic {
 	return &styling.Basic{
 		ParagraphMargins:   styling.Margins{Top: 10, Bottom: 10},
-		ParagraphTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Size: 16}, Set: styling.FieldSize},
+		ParagraphTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Size: 16}, Set: styling.FieldSize},
 
 		HeadingMargins: [6]styling.Margins{
 			{Top: 30, Bottom: 10},
@@ -26,26 +27,26 @@ func Basic() *styling.Basic {
 			{Top: 14, Bottom: 10},
 			{Top: 10, Bottom: 10},
 		},
-		// Family is left at its zero value (styling.Proportional) for every
+		// Family is left at its zero value (fonts.Proportional) for every
 		// level: no bold small-caps font ships in
 		// golang.org/x/image/font/gofont, and headings are bold, so
 		// small caps isn't available as a default.
 		HeadingTextStyles: [6]styling.PartialTextStyle{
-			{TextStyle: styling.TextStyle{Size: 40, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
-			{TextStyle: styling.TextStyle{Size: 36, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
-			{TextStyle: styling.TextStyle{Size: 32, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
-			{TextStyle: styling.TextStyle{Size: 28, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
-			{TextStyle: styling.TextStyle{Size: 24, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
-			{TextStyle: styling.TextStyle{Size: 20, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 40, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 36, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 32, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 28, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 24, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
+			{TextStyle: fonts.TextStyle{Size: 20, Weight: font.WeightBold}, Set: styling.FieldSize | styling.FieldWeight | styling.FieldFamily},
 		},
 
 		ListMargins: styling.Margins{Top: 10, Bottom: 10},
 
 		ListItemMargins:   styling.Margins{Top: 5, Bottom: 5, Left: 40},
-		ListItemTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Size: 16}, Set: styling.FieldSize},
+		ListItemTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Size: 16}, Set: styling.FieldSize},
 
 		CodeBlockMargins:   styling.Margins{Top: 20, Bottom: 20, Left: 20},
-		CodeBlockTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Size: 16, Family: styling.Monospace}, Set: styling.FieldSize | styling.FieldFamily},
+		CodeBlockTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Size: 16, Family: fonts.Monospace}, Set: styling.FieldSize | styling.FieldFamily},
 		CodeBlockColor:     color.RGBA{0xD4, 0xD4, 0xD4, 0xFF},
 
 		// Like ThematicBreakColor/BlockquoteBarColor/TableFrameColor
@@ -53,10 +54,10 @@ func Basic() *styling.Basic {
 		// or dark background, so Light leaves it as-is.
 		UnsupportedColor: color.RGBA{0xFF, 0x33, 0x33, 0xFF},
 
-		CodeSpanTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Family: styling.Monospace}, Set: styling.FieldFamily},
+		CodeSpanTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Family: fonts.Monospace}, Set: styling.FieldFamily},
 		CodeSpanColor:     color.RGBA{0xFF, 0xFF, 0x80, 0xFF},
-		EmphasisTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Style: font.StyleItalic}, Set: styling.FieldStyle},
-		StrongTextStyle:   styling.PartialTextStyle{TextStyle: styling.TextStyle{Weight: font.WeightBold}, Set: styling.FieldWeight},
+		EmphasisTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Style: font.StyleItalic}, Set: styling.FieldStyle},
+		StrongTextStyle:   styling.PartialTextStyle{TextStyle: fonts.TextStyle{Weight: font.WeightBold}, Set: styling.FieldWeight},
 
 		ThematicBreakMargins: styling.Margins{Top: 20, Bottom: 20},
 		ThematicBreakColor:   color.RGBA{0x80, 0x80, 0x80, 0xFF},
@@ -93,14 +94,14 @@ func Basic() *styling.Basic {
 		BlockquoteMargins:  styling.Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
-		TableCellTextStyle: styling.PartialTextStyle{TextStyle: styling.TextStyle{Size: 16}, Set: styling.FieldSize},
+		TableCellTextStyle: styling.PartialTextStyle{TextStyle: fonts.TextStyle{Size: 16}, Set: styling.FieldSize},
 		TableMargins:       styling.Margins{Top: 10, Bottom: 10},
 		TableFrameColor:    color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
 		ImagePlaceholderColor: color.RGBA{0x80, 0x80, 0x80, 0xFF},
 
 		TextColor:     color.White,
-		BaseTextStyle: styling.TextStyle{Size: 16},
+		BaseTextStyle: fonts.TextStyle{Size: 16},
 
 		Background: color.Black,
 		ViewMargin: styling.Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},

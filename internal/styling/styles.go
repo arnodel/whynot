@@ -6,11 +6,9 @@
 package styling
 
 import (
-	"fmt"
 	"image/color"
 
-	"golang.org/x/image/font"
-
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 )
 
@@ -19,42 +17,10 @@ type Margins struct {
 	Top, Bottom, Left, Right float64
 }
 
-type FontFamily int
-
-const (
-	Proportional FontFamily = iota
-	Monospace
-	SmallCaps
-)
-
-// String names f for logging/debugging - e.g. a FaceSelector reporting
-// which family a font-resolution decision was made for.
-func (f FontFamily) String() string {
-	switch f {
-	case Proportional:
-		return "Proportional"
-	case Monospace:
-		return "Monospace"
-	case SmallCaps:
-		return "SmallCaps"
-	default:
-		return fmt.Sprintf("FontFamily(%d)", int(f))
-	}
-}
-
-// TextStyle is a fully resolved text style: what a FaceSelector is asked
-// to find a face for.
-type TextStyle struct {
-	Size   float64
-	Style  font.Style
-	Weight font.Weight
-	Family FontFamily
-}
-
-// TextStyleField identifies one field of TextStyle, so a PartialTextStyle
-// can say which fields it actually sets - needed because TextStyle's own
-// zero values (font.WeightNormal, font.StyleNormal, Proportional) are
-// real, meaningful values, not "unset" sentinels.
+// TextStyleField identifies one field of fonts.TextStyle, so a
+// PartialTextStyle can say which fields it actually sets - needed because
+// its zero values (font.WeightNormal, font.StyleNormal, fonts.Proportional)
+// are real, meaningful values, not "unset" sentinels.
 type TextStyleField uint8
 
 const (
@@ -66,11 +32,11 @@ const (
 	AllTextStyleFields = FieldSize | FieldStyle | FieldWeight | FieldFamily
 )
 
-// PartialTextStyle is what a single node's own tag contributes to
-// TextStyle - only the fields flagged in Set are meaningful; every other
+// PartialTextStyle is what a single node's own tag contributes to its
+// fonts.TextStyle - only the fields flagged in Set are meaningful; every other
 // field is inherited from further up the node's ancestry.
 type PartialTextStyle struct {
-	TextStyle
+	fonts.TextStyle
 	Set TextStyleField
 }
 
@@ -98,7 +64,7 @@ type TableGeometry struct {
 type Styles interface {
 	// Margins returns the margins for node's own tag.
 	Margins(node *ast.Node) Margins
-	// TextStyle returns node's own tag's contribution to TextStyle -
+	// TextStyle returns node's own tag's contribution to its text style -
 	// combined with its ancestors' contributions by the engine, since e.g.
 	// Strong nested inside Emphasis needs both a bold and an italic
 	// contribution to survive. At the root (a nil node) it must set every

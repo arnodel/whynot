@@ -1,16 +1,22 @@
 package whynot
 
 import (
+	"image/color"
+	"log"
+	"sync"
+	"time"
+
+	"golang.org/x/image/font"
+
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
-	"image/color"
-	"time"
 )
 
 type RenderingContext struct {
-	Scale float64
-	FaceSelector
-	Styles styling.Styles
+	Scale        float64
+	FaceSelector fonts.FaceSelector
+	Styles       styling.Styles
 
 	// HighlightNode is the ast.Node currently under the mouse (e.g. a
 	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
@@ -42,8 +48,8 @@ type RenderingContext struct {
 // typically a Block) and scale the result by c.Scale in one step - layout
 // code should always go through these rather than calling Margins/the
 // StyleSheet directly, so scaling can't be forgotten or applied twice.
-// TextStyle/Color have no scaled equivalent: font size is scaled via DPI
-// on the FaceSelector instead, and color doesn't scale at all.
+// TextStyle/Color have no scaled equivalent: font size is scaled by the
+// dpi selectFace passes, and color doesn't scale at all.
 
 func (c RenderingContext) ScaledMargins(m Marginer) Margins {
 	margins := m.Margins(c)
@@ -96,8 +102,8 @@ func (c RenderingContext) ScaledTableGeometry(node *ast.Node) styling.TableGeome
 // weight (from Strong) and an italic style (from Emphasis). Walks one step
 // past the root (node == nil) so StyleSheet's baseline contribution can
 // fill in any field nothing along the way ever claimed.
-func (c RenderingContext) ResolvedTextStyle(node *ast.Node) TextStyle {
-	var result TextStyle
+func (c RenderingContext) ResolvedTextStyle(node *ast.Node) fonts.TextStyle {
+	var result fonts.TextStyle
 	var resolved styling.TextStyleField
 	for n := node; ; n = n.Parent {
 		contrib := c.Styles.TextStyle(n)
@@ -137,4 +143,40 @@ func (c RenderingContext) ResolvedColor(node *ast.Node) color.Color {
 			return nil
 		}
 	}
+}
+
+// fallbackFaces serves text when the FaceSelector fails, so a missing font
+// degrades to the bundled Go fonts rather than breaking layout. Shared by
+// every View, so guarded.
+var (
+	fallbackFaces   = fonts.NewGoSelector()
+	fallbackFacesMu sync.Mutex
+	logFaceError    sync.Once
+)
+
+// selectFace returns the face for style at the context's scale: dpi is
+// Scale × 72, so zooming magnifies a font's design rather than changing
+// its point size. If the FaceSelector fails, it falls back to the bundled
+// Go fonts, logging the first failure.
+func (c RenderingContext) selectFace(style fonts.TextStyle) font.Face {
+	dpi := c.Scale * 72
+	face, err := c.FaceSelector.SelectFace(style, dpi)
+	if err == nil {
+		return face
+	}
+	logFaceError.Do(func() {
+		log.Printf("whynot: no face for %+v (%v), using the Go fonts instead", style, err)
+	})
+	fallbackFacesMu.Lock()
+	defer fallbackFacesMu.Unlock()
+	if face, err = fallbackFaces.SelectFace(style, dpi); err == nil {
+		return face
+	}
+	// The Go fonts lack this exact style (e.g. bold small caps); their
+	// regular face always exists.
+	face, err = fallbackFaces.SelectFace(fonts.TextStyle{Size: style.Size}, dpi)
+	if err != nil {
+		panic(err) // the bundled fonts themselves failing is a bug
+	}
+	return face
 }

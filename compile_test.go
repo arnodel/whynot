@@ -1,13 +1,15 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"image"
 	"image/color"
 	"testing"
 
 	"golang.org/x/image/font"
+
+	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
 // unwrap peels away MarginBlock wrapping to reach the concrete block doing
@@ -212,7 +214,7 @@ func TestListItemTrailingGap(t *testing.T) {
 		t.Fatal("trailing = nil, want the nested list")
 	}
 
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	box := item.GetBlockLayout(ctx, 200).(*StackBox)
 	if len(box.slots) != 3 {
 		t.Fatalf("got %d slots, want 3 (head, gap, trailing): %#v", len(box.slots), box.slots)
@@ -238,7 +240,7 @@ func TestListItemTrailingGap(t *testing.T) {
 // table cells to overlap the next column once their measured width was
 // used to position it.
 func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
 		doc := Parse([]byte(source))
@@ -265,7 +267,7 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 // which should always fit on one line, by definition - would still wrap
 // its last word. This specific sentence reliably drifts Min.X to 1.
 func TestWrapLinesNaturalWidthFits(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
 	para := unwrap(doc.root.blocks[0]).(*TextBlock)
 
@@ -306,7 +308,7 @@ func TestParseAdjacentCodeSpanGluedFlags(t *testing.T) {
 // TestLineBoxBoundsIncludesInterWordSpacing, which checks the opposite
 // (a real source space DOES add a gap).
 func TestParseNoGapAroundAdjacentCodeSpan(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
 		doc := Parse([]byte(source))
@@ -327,7 +329,7 @@ func TestParseNoGapAroundAdjacentCodeSpan(t *testing.T) {
 // paren, no source space anywhere - can't be split across a line break,
 // even at a width far too narrow for it to fit.
 func TestParseAdjacentPunctuationStaysOnOneLine(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	doc := Parse([]byte("(**bold**)"))
 	para := unwrap(doc.root.blocks[0]).(*TextBlock)
 
@@ -387,7 +389,7 @@ func TestParseSoftLineBreakIsASpace(t *testing.T) {
 // item: same rendered width as an ordinary space, but glued on both
 // sides so it can never itself, or its neighbor, end up at a line break.
 func TestParseNonBreakingSpace(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
 		doc := Parse([]byte(source))
@@ -970,8 +972,8 @@ func TestParseCodeSpan(t *testing.T) {
 	}
 	ctx := RenderingContext{Styles: stylingtest.Basic()}
 	code := para.parts[1].(*InlineText)
-	if style := ctx.ResolvedTextStyle(code.node); style.Family != Monospace {
-		t.Errorf("code span family = %v, want Monospace", style.Family)
+	if style := ctx.ResolvedTextStyle(code.node); style.Family != fonts.Monospace {
+		t.Errorf("code span family = %v, want fonts.Monospace", style.Family)
 	}
 }
 
@@ -1015,7 +1017,7 @@ func TestParseStrikethrough(t *testing.T) {
 
 func TestInlineTextStrikeThickness(t *testing.T) {
 	styleSheet := stylingtest.Basic()
-	ctx := RenderingContext{Scale: 2, FaceSelector: NewGoFontFaceSelector(72), Styles: styleSheet}
+	ctx := RenderingContext{Scale: 2, FaceSelector: fonts.NewGoSelector(), Styles: styleSheet}
 
 	plainNode := (*ast.Node)(nil).AddChild(ast.TagParagraph).AddChild(ast.TagEmphasis)
 	plain := (&InlineText{text: "x", node: plainNode}).GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
@@ -1081,7 +1083,7 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 // with nothing pending to revisit.
 func TestImageGetInlineLayoutWithoutImageCache(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg", alt: "a cat"}
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 
 	box, ok := img.GetInlineLayout(ctx, naturalWidthMeasure).(*TextBox)
 	if !ok {
@@ -1107,7 +1109,7 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	ctx := RenderingContext{
 		Scale:        2,
 		ImageCache:   NewImageCache(FileImageSource{}),
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, naturalWidthMeasure)
@@ -1135,7 +1137,7 @@ func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
 	ctx := RenderingContext{
 		Scale:        1,
 		ImageCache:   NewImageCache(FileImageSource{}),
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, 200)
@@ -1179,7 +1181,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 	styleSheet := stylingtest.Basic()
 	ctx := RenderingContext{
 		Scale:        1,
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       styleSheet,
 		ImageCache:   NewImageCache(FileImageSource{}),
 	}
@@ -1224,7 +1226,7 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 	ctx := RenderingContext{
 		Scale:        2,
 		ImageCache:   NewImageCache(FileImageSource{}),
-		FaceSelector: NewGoFontFaceSelector(72),
+		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, naturalWidthMeasure)
@@ -1286,7 +1288,7 @@ func TestParseTypographerSmartQuotes(t *testing.T) {
 // can't be split across a line break even at a width that would force a
 // wrap if the boundaries were (wrongly) breakable.
 func TestParseTypographerApostropheGluedToWord(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: NewGoFontFaceSelector(72), Styles: stylingtest.Basic()}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	doc := Parse([]byte("Alice's book"))
 	para := unwrap(doc.root.blocks[0]).(*TextBlock)
 	got := textOf(t, para.parts)

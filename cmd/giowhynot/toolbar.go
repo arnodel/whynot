@@ -16,8 +16,8 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
 )
 
@@ -51,11 +51,14 @@ type toolbar struct {
 	// only for its scrollbar).
 	editTheme *material.Theme
 
-	faceSelector whynot.FaceSelector
-	renderer     *giorenderer.Renderer
+	faceSelector fonts.FaceSelector
+	// dpi is the toolbar text's: deviceScale alone, not the document's
+	// zoomed scale, so the toolbar text stays a fixed physical size.
+	dpi      float64
+	renderer *giorenderer.Renderer
 }
 
-func newToolbar(faceSelector whynot.FaceSelector, renderer *giorenderer.Renderer) *toolbar {
+func newToolbar(faceSelector fonts.FaceSelector, renderer *giorenderer.Renderer) *toolbar {
 	tb := &toolbar{
 		faceSelector: faceSelector,
 		renderer:     renderer,
@@ -68,7 +71,7 @@ func newToolbar(faceSelector whynot.FaceSelector, renderer *giorenderer.Renderer
 	// (confirmed: a blinking caret, but no text, pre-filled or typed) -
 	// there's no OS font access there for any such fallback to draw on.
 	// gofont.Collection() is the same bundled-font source
-	// whynot.NewGoFontFaceSelector itself draws from, just in Gio's own
+	// fonts.GoSelector itself draws from, just in Gio's own
 	// font.FontFace shape rather than golang.org/x/image/font.Face.
 	tb.editTheme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 	tb.addressEditor.SingleLine = true
@@ -289,7 +292,7 @@ func (tb *toolbar) layoutEditor(gtx layout.Context) layout.Dimensions {
 // middle-truncation for a long path/URL).
 func (tb *toolbar) layoutLocation(gtx layout.Context, app *browser.App) layout.Dimensions {
 	size := gtx.Constraints.Max
-	face, err := tb.faceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	face, err := tb.faceSelector.SelectFace(fonts.TextStyle{Size: 14}, tb.dpi)
 	if err != nil {
 		return layout.Dimensions{Size: size}
 	}

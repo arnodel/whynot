@@ -13,6 +13,7 @@ import (
 	"gioui.org/op"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -23,7 +24,7 @@ import (
 func TestPanelTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 	doc := whynot.Parse([]byte(strings.Repeat("A paragraph of filler text to scroll through.\n\n", 400)))
 	bounds := image.Rect(0, 0, 400, 300)
-	panel := NewPanel(whynot.NewView(doc, whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet), New(), bounds)
+	panel := NewPanel(whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet), New(), bounds)
 
 	var router input.Router
 	var ops op.Ops
@@ -74,7 +75,7 @@ func TestPanelTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 func TestPanelTouchLeavesNoHover(t *testing.T) {
 	doc := whynot.Parse([]byte(strings.Repeat("[a link](#nowhere) ", 20)))
 	bounds := image.Rect(0, 0, 400, 300)
-	panel := NewPanel(whynot.NewView(doc, whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet), New(), bounds)
+	panel := NewPanel(whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet), New(), bounds)
 	var hovered []string
 	panel.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
 

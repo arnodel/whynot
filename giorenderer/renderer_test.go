@@ -7,7 +7,7 @@ import (
 
 	"gioui.org/op"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 )
 
 func TestImageOpCachedByIdentity(t *testing.T) {
@@ -36,7 +36,7 @@ func TestImageOpCachedByIdentity(t *testing.T) {
 // the same as !ok, so DrawText only advances the pen for a space
 // instead of adding a paint op at all.
 func TestGlyphForSpaceIsSkipped(t *testing.T) {
-	face, err := whynot.NewGoFontFaceSelector(72).SelectFace(whynot.TextStyle{Size: 16})
+	face, err := fonts.NewGoSelector().SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestGlyphForSpaceIsSkipped(t *testing.T) {
 }
 
 func TestGlyphCachedByFaceRuneColor(t *testing.T) {
-	face, err := whynot.NewGoFontFaceSelector(72).SelectFace(whynot.TextStyle{Size: 16})
+	face, err := fonts.NewGoSelector().SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}

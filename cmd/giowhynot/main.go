@@ -13,8 +13,8 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -51,10 +51,7 @@ func main() {
 		styleSheet = simpletheme.LightStyleSheet
 	}
 
-	// scale (1) is a placeholder - View.Layout (via browserApp.Relayout)
-	// resets this selector's DPI to the real deviceScale*zoom on the
-	// very first frame, before anything is drawn.
-	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(1), styleSheet, !*light)
+	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light)
 	renderer := giorenderer.New()
 	view := browserApp.NewView(source, location)
 	panel := giorenderer.NewPanel(view, renderer, image.Rectangle{},
@@ -65,7 +62,7 @@ func main() {
 	panel.OnLinkClick = browserApp.Follow
 	panel.OnLinkHover = browserApp.OnLinkHover
 
-	tb := newToolbar(whynot.NewGoFontFaceSelector(72), renderer)
+	tb := newToolbar(fonts.NewGoSelector(), renderer)
 	panel.OnPress = tb.cancelEdit
 
 	win := new(app.Window)
@@ -96,11 +93,7 @@ func run(win *app.Window, browserApp *browser.App, panel *giorenderer.Panel, tb 
 			outsideWidth := int(float64(e.Size.X) / deviceScale)
 			outsideHeight := int(float64(e.Size.Y) / deviceScale)
 			browserApp.Relayout(outsideWidth, outsideHeight, deviceScale, toolbarHeight)
-			// Pinned to deviceScale alone, not the document's own
-			// zoomed scale - the toolbar's own text stays a fixed
-			// physical size regardless of document zoom, matching
-			// cmd/whynot's identically-reasoned toolbarFaceSelector.
-			tb.faceSelector.SetDPI(deviceScale * 72)
+			tb.dpi = deviceScale * 72
 
 			tb.update(gtx, browserApp)
 			// Suspended while editing the address bar - pollKeys's

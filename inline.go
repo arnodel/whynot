@@ -2,8 +2,9 @@ package whynot
 
 import (
 	"fmt"
-	"github.com/arnodel/whynot/internal/ast"
 	"image"
+
+	"github.com/arnodel/whynot/internal/ast"
 )
 
 type Inline interface {
@@ -35,10 +36,7 @@ func (t *InlineText) Node() *ast.Node {
 }
 
 func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
-	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(t.node))
-	if err != nil {
-		panic(err)
-	}
+	face := ctx.selectFace(ctx.ResolvedTextStyle(t.node))
 	return &TextBox{
 		Text:            t.text,
 		Face:            face,
@@ -79,10 +77,7 @@ func (c *TaskCheckbox) Node() *ast.Node {
 }
 
 func (c *TaskCheckbox) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
-	face, err := ctx.SelectFace(ctx.ResolvedTextStyle(c.node))
-	if err != nil {
-		panic(err)
-	}
+	face := ctx.selectFace(ctx.ResolvedTextStyle(c.node))
 	r := rune(checkboxUnchecked)
 	if c.checked {
 		r = checkboxChecked

@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
@@ -61,16 +62,16 @@ func TestBasicTextStyle(t *testing.T) {
 		tag  ast.Tag
 		want styling.PartialTextStyle
 	}{
-		{ast.TagParagraph, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
-		{ast.TagHeading1, styling.PartialTextStyle{styling.TextStyle{Size: 40, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
-		{ast.TagHeading2, styling.PartialTextStyle{styling.TextStyle{Size: 36, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
-		{ast.TagHeading6, styling.PartialTextStyle{styling.TextStyle{Size: 20, Weight: font.WeightBold, Family: styling.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
-		{ast.TagListItem, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
-		{ast.TagCodeBlock, styling.PartialTextStyle{styling.TextStyle{Size: 16, Family: styling.Monospace}, styling.FieldSize | styling.FieldFamily}},
-		{ast.TagTableCell, styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.FieldSize}},
-		{ast.TagCodeSpan, styling.PartialTextStyle{styling.TextStyle{Family: styling.Monospace}, styling.FieldFamily}},
-		{ast.TagEmphasis, styling.PartialTextStyle{styling.TextStyle{Style: font.StyleItalic}, styling.FieldStyle}},
-		{ast.TagStrong, styling.PartialTextStyle{styling.TextStyle{Weight: font.WeightBold}, styling.FieldWeight}},
+		{ast.TagParagraph, styling.PartialTextStyle{fonts.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagHeading1, styling.PartialTextStyle{fonts.TextStyle{Size: 40, Weight: font.WeightBold, Family: fonts.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagHeading2, styling.PartialTextStyle{fonts.TextStyle{Size: 36, Weight: font.WeightBold, Family: fonts.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagHeading6, styling.PartialTextStyle{fonts.TextStyle{Size: 20, Weight: font.WeightBold, Family: fonts.Proportional}, styling.FieldSize | styling.FieldWeight | styling.FieldFamily}},
+		{ast.TagListItem, styling.PartialTextStyle{fonts.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagCodeBlock, styling.PartialTextStyle{fonts.TextStyle{Size: 16, Family: fonts.Monospace}, styling.FieldSize | styling.FieldFamily}},
+		{ast.TagTableCell, styling.PartialTextStyle{fonts.TextStyle{Size: 16}, styling.FieldSize}},
+		{ast.TagCodeSpan, styling.PartialTextStyle{fonts.TextStyle{Family: fonts.Monospace}, styling.FieldFamily}},
+		{ast.TagEmphasis, styling.PartialTextStyle{fonts.TextStyle{Style: font.StyleItalic}, styling.FieldStyle}},
+		{ast.TagStrong, styling.PartialTextStyle{fonts.TextStyle{Weight: font.WeightBold}, styling.FieldWeight}},
 		{ast.TagLink, styling.PartialTextStyle{}},
 	}
 	for _, tc := range cases {
@@ -86,7 +87,7 @@ func TestBasicTextStyle(t *testing.T) {
 // real ancestor ever set some field.
 func TestBasicTextStyleNilNode(t *testing.T) {
 	s := stylingtest.Basic()
-	want := styling.PartialTextStyle{styling.TextStyle{Size: 16}, styling.AllTextStyleFields}
+	want := styling.PartialTextStyle{fonts.TextStyle{Size: 16}, styling.AllTextStyleFields}
 	if got := s.TextStyle(nil); got != want {
 		t.Errorf("TextStyle(nil) = %+v, want %+v", got, want)
 	}

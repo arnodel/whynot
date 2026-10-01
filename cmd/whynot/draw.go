@@ -9,6 +9,7 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 )
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -22,7 +23,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 	canvas := g.renderer.NewCanvas(screen)
 	g.drawToolbar(screen, canvas)
-	if face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14}); err == nil {
+	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
 		g.app.DrawZoomIndicator(canvas, face)
 		if g.debugStats {
 			g.app.DrawDebugStats(canvas, face, ebiten.ActualFPS(), ebiten.ActualTPS(), g.updateDuration, g.drawDuration)
@@ -63,7 +64,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	}
 	drawButton(dst, canvas, themeIcon, g.themeButton, true, g.themeState)
 
-	face, err := g.toolbarFaceSelector.SelectFace(whynot.TextStyle{Size: 14})
+	face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72)
 	if err != nil {
 		return
 	}

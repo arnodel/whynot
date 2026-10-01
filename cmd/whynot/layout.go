@@ -62,7 +62,6 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func (g *game) applyDeviceScale() {
 	g.deviceScale = ebiten.Monitor().DeviceScaleFactor()
 	g.width = int(float64(g.outsideWidth) * g.deviceScale)
-	g.toolbarFaceSelector.SetDPI(g.deviceScale * 72)
 	g.layoutToolbar()
 }
 

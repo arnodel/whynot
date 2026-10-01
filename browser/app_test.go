@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -76,7 +77,7 @@ func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 // exactly.
 func newTestApp(t *testing.T, dir string, location *url.URL, source string) *App {
 	t.Helper()
-	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte(source), location)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -414,7 +415,7 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 	dir := t.TempDir()
 	loc := writeTempMD(t, dir, "a.md", "# My Title")
 
-	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("# My Title"), loc)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -589,7 +590,7 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 	dir := t.TempDir()
 	loc := writeTempMD(t, dir, "a.md", "no heading here")
 
-	app := NewApp(whynot.NewGoFontFaceSelector(72), simpletheme.DarkStyleSheet, true)
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("no heading here"), loc)
 	app.Panel = &fakePanel{}
 	app.Relayout(testWidth, testHeight, 1, 0)

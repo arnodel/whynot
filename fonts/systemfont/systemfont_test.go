@@ -10,7 +10,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
 )
 
 type fakeFinder struct{ result *sysfont.Font }
@@ -28,15 +28,13 @@ func (f fakeFinderByQuery) Match(query string) *sysfont.Font { return f[query] }
 // spyFaceSelector records the arguments it was called with, so tests can
 // assert whether the fallback was actually invoked.
 type spyFaceSelector struct {
-	selectFaceCalls []whynot.TextStyle
+	selectFaceCalls []fonts.TextStyle
 }
 
-func (s *spyFaceSelector) SelectFace(style whynot.TextStyle) (font.Face, error) {
+func (s *spyFaceSelector) SelectFace(style fonts.TextStyle, dpi float64) (font.Face, error) {
 	s.selectFaceCalls = append(s.selectFaceCalls, style)
 	return nil, nil
 }
-
-func (s *spyFaceSelector) SetDPI(float64) {}
 
 func writeGoregularCopy(t *testing.T) string {
 	t.Helper()
@@ -50,12 +48,12 @@ func writeGoregularCopy(t *testing.T) string {
 func TestRegisterSystemFontEndToEnd(t *testing.T) {
 	path := writeGoregularCopy(t)
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: &sysfont.Font{Family: "Go", Filename: path}}
 
-	s.RegisterSystemFont(whynot.Proportional, "Go")
+	s.RegisterSystemFont(fonts.Proportional, "Go")
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.Proportional}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 0 {
@@ -65,12 +63,12 @@ func TestRegisterSystemFontEndToEnd(t *testing.T) {
 
 func TestRegisterSystemFontNoMatch(t *testing.T) {
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: nil}
 
-	s.RegisterSystemFont(whynot.Proportional, "Nonexistent")
+	s.RegisterSystemFont(fonts.Proportional, "Nonexistent")
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.Proportional}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 1 {
@@ -80,12 +78,12 @@ func TestRegisterSystemFontNoMatch(t *testing.T) {
 
 func TestRegisterSystemFontMissingFile(t *testing.T) {
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: &sysfont.Font{Family: "Go", Filename: "/nonexistent/path.ttf"}}
 
-	s.RegisterSystemFont(whynot.Proportional, "Go")
+	s.RegisterSystemFont(fonts.Proportional, "Go")
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.Proportional}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 1 {
@@ -99,20 +97,20 @@ func TestRegisterSystemFontMissingFile(t *testing.T) {
 // preferredFontCandidates(runtime.GOOS, ...)) so the test stays valid
 // wherever it runs - only the LAST candidate is wired to resolve.
 func TestRegisterPreferredFontTriesEachCandidate(t *testing.T) {
-	candidates := preferredFontCandidates(runtime.GOOS, whynot.Proportional)
+	candidates := preferredFontCandidates(runtime.GOOS, fonts.Proportional)
 	if len(candidates) < 2 {
 		t.Skipf("need at least 2 proportional candidates for GOOS=%s to exercise fallthrough, have %v", runtime.GOOS, candidates)
 	}
 	path := writeGoregularCopy(t)
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinderByQuery{
 		candidates[len(candidates)-1]: {Family: "Go", Filename: path},
 	}
 
-	s.RegisterPreferredFont(whynot.Proportional)
+	s.RegisterPreferredFont(fonts.Proportional)
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.Proportional}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 0 {
@@ -122,12 +120,12 @@ func TestRegisterPreferredFontTriesEachCandidate(t *testing.T) {
 
 func TestRegisterPreferredFontNoneResolve(t *testing.T) {
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinderByQuery{} // matches nothing, for any candidate
 
-	s.RegisterPreferredFont(whynot.Proportional)
+	s.RegisterPreferredFont(fonts.Proportional)
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.Proportional}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 1 {
@@ -140,12 +138,12 @@ func TestRegisterPreferredFontNoneResolve(t *testing.T) {
 // to the fallback, never even consulting the finder.
 func TestRegisterPreferredFontSmallCapsHasNoCandidates(t *testing.T) {
 	spy := &spyFaceSelector{}
-	s := NewSystemFontFaceSelector(72, whynot.WithFallback(spy))
+	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinderByQuery{}
 
-	s.RegisterPreferredFont(whynot.SmallCaps)
+	s.RegisterPreferredFont(fonts.SmallCaps)
 
-	if _, err := s.SelectFace(whynot.TextStyle{Size: 16, Family: whynot.SmallCaps}); err != nil {
+	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.SmallCaps}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
 	}
 	if len(spy.selectFaceCalls) != 1 {

@@ -1,10 +1,12 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
 	"image"
 	"image/color"
 	"time"
+
+	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/internal/ast"
 )
 
 // View renders a Document onto a Canvas. It owns the layout cache (rebuilt
@@ -56,7 +58,7 @@ func WithImageSource(s ImageSource) ViewOption {
 // NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
 // in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
 // once Layout has been called to establish a width.
-func NewView(doc *Document, faceSelector FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
+func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
 		ctx: RenderingContext{
@@ -350,7 +352,6 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 // height is the viewport's height - not used for wrapping, only to know
 // where the visible area ends when laying out and prefetching ahead.
 func (v *View) Layout(width, height int, scale float64, now time.Duration) {
-	v.ctx.SetDPI(scale * 72)
 	v.ctx.Scale = scale
 	v.ctx.Time = now
 

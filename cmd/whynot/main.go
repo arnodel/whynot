@@ -7,9 +7,9 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -51,12 +51,12 @@ func main() {
 	}
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
-	faceSelector := browser.NewDocumentFaceSelector(scale)
+	faceSelector := browser.NewDocumentFaceSelector()
 	app := browser.NewApp(faceSelector, styleSheet, !*light)
 
 	g := &game{
 		app:                 app,
-		toolbarFaceSelector: whynot.NewGoFontFaceSelector(72 * scale),
+		toolbarFaceSelector: fonts.NewGoSelector(),
 		renderer:            ebitenrenderer.New(),
 		debugHit:            *debugHit,
 		debugStats:          *debugStats,
