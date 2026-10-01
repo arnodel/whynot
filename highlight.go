@@ -3,6 +3,7 @@ package whynot
 import (
 	"strings"
 
+	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 )
 
@@ -64,8 +65,8 @@ type CodeBlockPlugin interface {
 	// written in language.
 	CanHandle(language string) bool
 	// Image starts rendering a fenced code block CanHandle has already
-	// approved, returning an AsyncImage that resolves once it's ready.
-	Image(language, code string) AsyncImage
+	// approved, returning an images.AsyncImage that resolves once it's ready.
+	Image(language, code string) images.AsyncImage
 }
 
 // tokenClassTags maps a Highlighter's TokenClass to the ast.Tag whose

@@ -7,6 +7,8 @@ import (
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+
+	"github.com/arnodel/whynot/internal/imagecache"
 )
 
 // InlineLayout is one part of a line of inline content, placed by
@@ -317,7 +319,7 @@ func (b *CheckboxBox) PendingImages() []string {
 }
 
 type ImageBox struct {
-	// img is the already-decoded image ImageCache.Load returned -
+	// img is the already-decoded image imagecache.Cache.Load returned -
 	// carried forward from InlineImage.GetInlineLayout so DrawInline
 	// can pass it straight to Canvas.DrawImage, which never fetches or
 	// decodes anything itself. nil while the image is still pending but
@@ -327,7 +329,7 @@ type ImageBox struct {
 	// anim is set instead of img for an animated GIF - exactly one of
 	// the two is non-nil on a settled ImageBox.
 	img              image.Image
-	anim             *AnimatedImage
+	anim             *imagecache.Animation
 	bounds           image.Rectangle
 	placeholderColor color.Color
 

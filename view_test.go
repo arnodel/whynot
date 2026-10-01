@@ -14,7 +14,9 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -951,7 +953,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic(), ImageCache: NewImageCache(FileImageSource{})}
+	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic(), ImageCache: imagecache.NewCache(images.FileSource{})}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {
@@ -1223,12 +1225,12 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 			return io.NopCloser(r), nil
 		},
 	}
-	cache := NewImageCache(source)
+	cache := imagecache.NewCache(source)
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		_, result := cache.Load("b.png")
-		if result.Status == ImagePending && result.Bounds != (image.Rectangle{}) {
+		if result.Status == imagecache.Pending && result.Bounds != (image.Rectangle{}) {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -1286,7 +1288,7 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 // leaving every other slot's memoized box and height estimate
 // untouched - not a full rebuild, even though this is the one
 // transition that can change a slot's height (see
-// ImageChange.BoundsRevealed).
+// imagecache.Change.BoundsRevealed).
 func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	full := onePixelPNG(t)
 	release := make(chan struct{})
@@ -1481,13 +1483,13 @@ func TestViewPreLayoutNearbyRespectsTimeBudget(t *testing.T) {
 // TestViewPrefetchImageSourcesStartsLoadWithoutLayout checks that
 // prefetchImageSources reaches an image slot well beyond
 // preLayoutHeightRadius (so documentStack.preLayout itself can't have resolved
-// it) and starts loading it - via ImageCache.Load, observed here as
+// it) and starts loading it - via imagecache.Cache.Load, observed here as
 // Resolve being called synchronously, since the actual fetch runs on
-// its own goroutine (see ImageCache.Load) - without laying that slot
+// its own goroutine (see imagecache.Cache.Load) - without laying that slot
 // out.
 func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
 	source := &countingImageSource{resolved: "b.png", data: onePixelPNG(t)}
-	cache := NewImageCache(source)
+	cache := imagecache.NewCache(source)
 
 	const fillerHeight = 500
 	const imageSlotIndex = 10
@@ -1538,7 +1540,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 			return io.NopCloser(bytes.NewReader(full)), nil
 		},
 	}
-	cache := NewImageCache(source)
+	cache := imagecache.NewCache(source)
 
 	const fillerHeight = 1000
 	const imageSlotIndex = 3
@@ -1590,7 +1592,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 // TestViewScrollingReachesImageAlreadyResolved is the end-to-end proof
 // this whole fix exists for: scrolling an ordinary distance toward a
 // standalone image, the same way real usage does (Scroll+Layout each
-// tick), the image is already ImageReady by the time the cursor
+// tick), the image is already imagecache.Ready by the time the cursor
 // actually reaches its slot - prefetchImageSources started loading it
 // long before the cursor got there, instead of the fetch only starting
 // (with zero head start) the instant the cursor arrives.

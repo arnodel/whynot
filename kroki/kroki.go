@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/images"
 )
 
 // defaultBaseURL is kroki.io's own public instance, used unless Renderer
@@ -48,10 +49,10 @@ func (r Renderer) CanHandle(language string) bool {
 // Image builds an AsyncImage directly - no type of kroki's own needed,
 // since a closure already captures everything Fetch needs (baseURL,
 // diagramType, code).
-func (r Renderer) Image(language, code string) whynot.AsyncImage {
+func (r Renderer) Image(language, code string) images.AsyncImage {
 	diagramType := diagramTypes[language]
 	baseURL := r.baseURL()
-	return whynot.AsyncImage{
+	return images.AsyncImage{
 		// Diagram type and exact source text, so recompiling identical
 		// source (a resize, a reload) reuses the cached result instead
 		// of re-fetching.

@@ -7,7 +7,7 @@ import (
 	"path"
 	"runtime"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/images"
 )
 
 // WelcomeURL identifies the embedded welcome page - an opaque, non-file,
@@ -86,7 +86,7 @@ func addressBarTip() string {
 	return "- Click the address bar, type a path, URL, or \"welcome\", then press Enter.\n"
 }
 
-// welcomeImageSource implements whynot.ImageSource for images the
+// welcomeImageSource implements images.Source for images the
 // welcome page itself references - always bundled in assetsFS
 // alongside welcome.md, never fetched, so a src is just a path
 // relative to assets/ (e.g. an image sitting right next to welcome.md
@@ -95,8 +95,8 @@ func addressBarTip() string {
 // the current document's location is WelcomeURL - see App.NewView.
 type welcomeImageSource struct{}
 
-func (welcomeImageSource) Image(src string) (whynot.AsyncImage, error) {
-	return whynot.AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) {
+func (welcomeImageSource) Image(src string) (images.AsyncImage, error) {
+	return images.AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) {
 		data, err := assetsFS.ReadFile(path.Join("assets", src))
 		if err != nil {
 			return nil, err

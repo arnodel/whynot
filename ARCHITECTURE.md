@@ -17,6 +17,8 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `whynot.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
 | `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
+| `images/` | the image contract: `Source` (src → `AsyncImage`), `AsyncImage` (a key and a fetch) and the default `FileSource` |
+| `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, through an `images.Source`) and animated GIF decoding |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
 | `chromahighlight/` | implements `whynot.Highlighter` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
@@ -167,11 +169,11 @@ backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 rectangle (used by `ScrollBox`, [hscroll.go](hscroll.go), for blocks that
 scroll sideways). `DrawImage` takes an already-decoded `image.Image`, not a
 source path — resolving, fetching, and decoding an image is entirely
-the library's own concern (`ImageCache`, see "Image loading" below), so
+the library's own concern (`imagecache.Cache`, see "Image loading" below), so
 a `Canvas` implementation never fetches or decodes anything itself; its
 job is purely backend-specific conversion (e.g. uploading a texture),
 which it's free to cache keyed by the `image.Image`'s own identity,
-since the same resolved image comes back from `ImageCache` every time.
+since the same resolved image comes back from the image cache every time.
 
 `DrawBlockLayout(box, dst, x, y, now)` ([block_layout.go](block_layout.go)) is the *only* way a
 `BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
@@ -288,22 +290,22 @@ nothing carries over between frames for it to drift from.
 
 ## Image loading
 
-An image's `src` never blocks layout or drawing. `ImageCache`
-([image_loader.go](image_loader.go)) wraps an embedder-supplied
-`ImageSource` (resolve + fetch bytes; `FileImageSource` by default,
+An image's `src` never blocks layout or drawing. `imagecache.Cache`
+([internal/imagecache](internal/imagecache)) loads images through an embedder-supplied
+`images.Source` ([images](images): resolve + fetch bytes; `images.FileSource` by default,
 `browser`'s `docImageSource` resolves relative to the document's own
 location and fetches over `http(s)` too, shared by `cmd/whynot` and
 `cmd/giowhynot`) and does the actual resolving,
 fetching, and decoding on a background goroutine — `Load` always
-returns immediately with whatever's currently known (`ImagePending`,
-`ImageReady`, or `ImageFailed`), never waiting on I/O itself. A cache
+returns immediately with whatever's currently known (`imagecache.Pending`,
+`imagecache.Ready`, or `imagecache.Failed`), never waiting on I/O itself. A cache
 entry's dimensions are often known before the rest of the fetch/decode
 completes (`fetchAndDecode` peeks the header via `image.DecodeConfig`
 through a `TeeReader`), so `InlineImage.GetInlineLayout` ([inline.go](inline.go))
 can lay out an `ImageBox` at its final, correctly-scaled size even
-while still `ImagePending` — `ImageBox.DrawInline` draws a placeholder
+while still `imagecache.Pending` — `ImageBox.DrawInline` draws a placeholder
 rect instead of pixels until the real image lands, so nothing reflows
-once it does. Pending with no known bounds yet, or `ImageFailed`, falls
+once it does. Pending with no known bounds yet, or `imagecache.Failed`, falls
 back to text instead (alt text, then title, then a generic message),
 reusing `InlineText`'s own `GetInlineLayout`.
 
@@ -312,7 +314,7 @@ built (see Layer 2 above), a `TextBox`/`ImageBox` standing in for a
 still-unsettled image records which resolved `src` it's waiting on
 (`PendingImages() []string`, aggregated bottom-up by every composite
 type). `View.Layout` ([view.go](view.go)) calls
-`ImageCache.ChangedSince` each time it's invoked, and
+`imagecache.Cache.ChangedSince` each time it's invoked, and
 `invalidateChangedImages` uses `PendingImages()` to discard only the
 memoized boxes actually waiting on something that changed — a resolved
 slot unrelated to the change, or a slot nobody has scrolled near yet,
@@ -354,7 +356,7 @@ smoothing over it after the fact:
   pixels), since it never lays anything out - it only looks each
   slot's `Block` up in the `Document`'s record of standalone images
   (no `GetBlockLayout` call) and kicks off
-  `ImageCache.Load` early, giving a slow network fetch a head start
+  `imagecache.Cache.Load` early, giving a slow network fetch a head start
   cheaply, deliberately not sharing `documentStack.preLayout`'s smaller,
   CPU-time-budgeted radius.
 
@@ -366,8 +368,8 @@ next frame is a cheap no-op, and the only real work is for genuinely
 new ground - the same total work ordinary scrolling would have paid
 reactively anyway, just shifted earlier.
 
-An animated GIF decodes to an `AnimatedImage` ([animated_image.go](animated_image.go))
-instead of a plain `image.Image` — `ImageResult`/`ImageBox` carry
+An animated GIF decodes to an `imagecache.Animation` ([internal/imagecache/animation.go](internal/imagecache/animation.go))
+instead of a plain `image.Image` — `imagecache.Result`/`ImageBox` carry
 exactly one of the two. `decodeAnimatedGIF` composites every frame to a
 full-canvas `image.Image` up front, honoring each frame's disposal
 method (many real-world GIFs only encode each frame's changed region).
@@ -375,7 +377,7 @@ Picking the current frame never affects bounds (every frame shares one
 size), so it's handled entirely on the *draw* side: `RenderingContext.Time`
 (elapsed time since the embedder started rendering, set every
 `View.Layout` call) is threaded as a `now time.Duration` parameter
-through `drawContents`/`DrawInline`, and `AnimatedImage.CurrentFrame(now)`
+through `drawContents`/`DrawInline`, and `imagecache.Animation.CurrentFrame(now)`
 is a pure function of it — no direct `time.Now()` call in library code,
 and no per-animation "start" to track, since `now % total` alone
 determines the loop position.

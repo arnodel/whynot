@@ -19,7 +19,7 @@ func TestRendererCanHandle(t *testing.T) {
 }
 
 // TestDiagramImageKeyDistinguishesCodeAndType checks Key differs for
-// different source text or diagram type - ImageCache's own caching
+// different source text or diagram type - imagecache.Cache's own caching
 // relies on this to tell distinct diagrams apart.
 func TestDiagramImageKeyDistinguishesCodeAndType(t *testing.T) {
 	r := Renderer{}

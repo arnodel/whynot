@@ -11,6 +11,7 @@ import (
 
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
@@ -593,11 +594,10 @@ func TestStackBoxBoundsCountsZeroWidthSlot(t *testing.T) {
 func TestImageBoxDrawInlineAnimated(t *testing.T) {
 	f0 := image.NewUniform(color.Black)
 	f1 := image.NewUniform(color.White)
-	anim := &AnimatedImage{
-		frames: []image.Image{f0, f1},
-		delays: []time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
-		total:  20 * time.Millisecond,
-	}
+	anim := imagecache.NewAnimation(
+		[]image.Image{f0, f1},
+		[]time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
+	)
 	box := &ImageBox{anim: anim, bounds: image.Rect(0, 0, 4, 4)}
 	dst := &recordingCanvas{}
 
