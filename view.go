@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"time"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
@@ -224,7 +225,7 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 //
 // Draw first fills dst's whole bounds with the StyleSheet's background
 // color, so a caller doesn't need its own clear step.
-func (v *View) Draw(dst Canvas, x, y int) {
+func (v *View) Draw(dst canvas.Canvas, x, y int) {
 	bounds := dst.Bounds()
 	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.Styles.BackgroundColor())
 	if !v.stack.laidOut() {

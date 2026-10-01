@@ -8,6 +8,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
@@ -30,7 +31,7 @@ type InlineLayout interface {
 	// CheckboxBox) - never queried there.
 	Glued() bool
 	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
-	DrawInline(dst Canvas, x, y int, now time.Duration)
+	DrawInline(dst canvas.Canvas, x, y int, now time.Duration)
 	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point)
 	// PendingImages - see BlockLayout's identical method.
 	PendingImages() []string
@@ -141,7 +142,7 @@ func (b *TextBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
-func (b *TextBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
+func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	_, advance := b.BoundsAndAdvance()
 	dst.DrawText(b.Text, b.Face, x, y, b.Color)
 	if b.StrikeThickness > 0 {
@@ -199,7 +200,7 @@ func (b *ListItemMarkerBox) Glued() bool {
 	return false
 }
 
-func (b *ListItemMarkerBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
+func (b *ListItemMarkerBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	b.Marker.DrawInline(dst, b.markerX(x), y, now)
 }
 
@@ -295,7 +296,7 @@ func (b *CheckboxBox) Glued() bool {
 	return false
 }
 
-func (b *CheckboxBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
+func (b *CheckboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	top := y - b.size
 	t := b.thickness
 	dst.DrawRect(x, top, b.size, t, b.color)          // top edge
@@ -366,7 +367,7 @@ func (b *ImageBox) Glued() bool {
 	return b.glued
 }
 
-func (b *ImageBox) DrawInline(dst Canvas, x, y int, now time.Duration) {
+func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	switch {
 	case b.anim != nil:
 		dst.DrawImage(b.anim.CurrentFrame(now), x, y, b.bounds.Dx(), b.bounds.Dy())

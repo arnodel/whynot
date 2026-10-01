@@ -1,4 +1,7 @@
-package whynot
+// Package canvas is the drawing contract between whynot and a rendering
+// backend: a View draws a document onto a Canvas, which a backend
+// implements on top of its framework (Ebitengine, Gio, ...).
+package canvas
 
 import (
 	"image"
@@ -7,17 +10,17 @@ import (
 	"golang.org/x/image/font"
 )
 
-// Canvas is the draw destination for a BlockLayout/InlineLayout tree - the boundary
-// between layout (which never depends on a rendering backend) and actual
-// drawing (which necessarily does). DrawImage receives an already-decoded,
+// Canvas is where a document is drawn - the boundary between layout
+// (which never depends on a rendering backend) and actual drawing (which
+// necessarily does). DrawImage receives an already-decoded,
 // backend-agnostic image.Image - whynot's image cache owns resolving,
-// fetching, and decoding (see InlineImage.GetInlineLayout), so a Canvas
+// fetching, and decoding, so a Canvas
 // implementation never fetches anything itself; its own job is purely
 // whatever backend-specific conversion drawing it needs (e.g. uploading
 // it as a GPU texture), which it's free to cache itself, keyed by img's
 // own identity - the same resolved image comes back from the cache
 // every time it's asked for. width/height are the size to draw it at -
-// already scaled by RenderingContext.Scale, and not generally img's
+// already scaled by the View's scale, and not generally img's
 // own pixel size - so an implementation must scale what it draws to
 // fit, not blit it 1:1.
 type Canvas interface {

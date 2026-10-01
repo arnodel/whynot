@@ -1,4 +1,4 @@
-// Package giorenderer implements whynot.Canvas on top of Gio (gioui.org).
+// Package giorenderer implements canvas.Canvas on top of Gio (gioui.org).
 // It's the only place in the module outside examples/gio that depends on
 // Gio - the core whynot package has no rendering backend dependency at
 // all.
@@ -22,7 +22,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/canvas"
 )
 
 // Renderer owns resources - uploaded images and rasterized glyphs - that
@@ -31,7 +31,7 @@ import (
 // program; NewCanvas is cheap enough to call every frame.
 type Renderer struct {
 	// imageCache holds each image.Image's Gio-specific conversion, keyed
-	// by the image.Image's own identity - see whynot.Canvas's own doc
+	// by the image.Image's own identity - see canvas.Canvas's own doc
 	// comment on why this identity-keyed caching is safe.
 	imageCache map[image.Image]paint.ImageOp
 	glyphCache map[glyphKey]glyph
@@ -122,7 +122,7 @@ type Canvas struct {
 }
 
 // Clip returns a Canvas whose draws are clipped to r within c's bounds.
-func (c *Canvas) Clip(r image.Rectangle) whynot.Canvas {
+func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
 	return &Canvas{ops: c.ops, bounds: r.Intersect(c.bounds), renderer: c.renderer, clipped: true}
 }
 
@@ -134,7 +134,7 @@ func (c *Canvas) pushClip() func() {
 	return clip.Rect(c.bounds).Push(c.ops).Pop
 }
 
-var _ whynot.Canvas = (*Canvas)(nil)
+var _ canvas.Canvas = (*Canvas)(nil)
 
 func (c *Canvas) Bounds() image.Rectangle {
 	return c.bounds
@@ -167,7 +167,7 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 }
 
 // DrawImage scales the loaded image from its native pixel size to
-// width/height (usually not the same size - see whynot.Canvas's own doc
+// width/height (usually not the same size - see canvas.Canvas's own doc
 // comment).
 func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
 	defer c.pushClip()()

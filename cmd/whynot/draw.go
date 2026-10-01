@@ -8,7 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/fonts"
 )
 
@@ -45,24 +45,24 @@ func (g *game) Draw(screen *ebiten.Image) {
 // or - while hovering a link - that link's destination instead, in
 // StyleSheet.HighlightColor to match the hovered link's own color in
 // the document) and the back/forward/reload/zoom/theme buttons. Icon
-// drawing needs dst directly - whynot.Canvas has no primitive for a
+// drawing needs dst directly - canvas.Canvas has no primitive for a
 // scaled, tinted image - so this is the one part of cmd/whynot's own
 // UI that goes around the library's rendering abstraction rather than
 // through it.
-func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
-	canvas.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
+func (g *game) drawToolbar(dst *ebiten.Image, cv canvas.Canvas) {
+	cv.DrawRect(0, 0, g.width, g.toolbarHeight, color.RGBA{0x20, 0x20, 0x20, 0xFF})
 
-	drawButton(dst, canvas, backIcon, g.backButton, g.app.CanGoBack(), g.backState)
-	drawButton(dst, canvas, forwardIcon, g.forwardButton, g.app.CanGoForward(), g.forwardState)
-	drawButton(dst, canvas, reloadIcon, g.reloadButton, g.app.CanReload(), g.reloadState)
-	drawButton(dst, canvas, tocIcon, g.tocButton, g.app.CanShowTOC(), g.tocState)
-	drawButton(dst, canvas, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
-	drawButton(dst, canvas, zoomInIcon, g.zoomInButton, true, g.zoomInState)
+	drawButton(dst, cv, backIcon, g.backButton, g.app.CanGoBack(), g.backState)
+	drawButton(dst, cv, forwardIcon, g.forwardButton, g.app.CanGoForward(), g.forwardState)
+	drawButton(dst, cv, reloadIcon, g.reloadButton, g.app.CanReload(), g.reloadState)
+	drawButton(dst, cv, tocIcon, g.tocButton, g.app.CanShowTOC(), g.tocState)
+	drawButton(dst, cv, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
+	drawButton(dst, cv, zoomInIcon, g.zoomInButton, true, g.zoomInState)
 	themeIcon := lightModeIcon
 	if g.app.DarkTheme() {
 		themeIcon = darkModeIcon
 	}
-	drawButton(dst, canvas, themeIcon, g.themeButton, true, g.themeState)
+	drawButton(dst, cv, themeIcon, g.themeButton, true, g.themeState)
 
 	face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72)
 	if err != nil {
@@ -75,7 +75,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, canvas whynot.Canvas) {
 	x := g.tocButton.Max.X + int(16*g.deviceScale)
 	maxWidth := g.zoomOutButton.Min.X - int(16*g.deviceScale) - x
 	text = truncateMiddle(face, text, maxWidth)
-	canvas.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
+	cv.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
 }
 
 // truncateMiddle shortens s, if needed, so it renders in face no wider
@@ -117,10 +117,10 @@ func truncateMiddle(face font.Face, s string, maxWidth int) string {
 // it. enabled only affects appearance; back is still harmless to click
 // with no history, so nothing needs disabling functionally (see
 // buttonColors).
-func drawButton(dst *ebiten.Image, canvas whynot.Canvas, iconImg *ebiten.Image, r image.Rectangle, enabled bool, st buttonState) {
+func drawButton(dst *ebiten.Image, cv canvas.Canvas, iconImg *ebiten.Image, r image.Rectangle, enabled bool, st buttonState) {
 	fillColor, tint := buttonColors(enabled, st)
 	if fillColor != nil {
-		canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), fillColor)
+		cv.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), fillColor)
 	}
 	drawIcon(dst, iconImg, r, tint)
 }
@@ -171,7 +171,7 @@ func baselineIn(face font.Face, r image.Rectangle) int {
 
 // drawOutline draws a thin border around r - Canvas has no dedicated
 // outline primitive, so this is 4 filled rects along the edges.
-func drawOutline(dst whynot.Canvas, r image.Rectangle, clr color.Color) {
+func drawOutline(dst canvas.Canvas, r image.Rectangle, clr color.Color) {
 	const thickness = 2
 	dst.DrawRect(r.Min.X, r.Min.Y, r.Dx(), thickness, clr)
 	dst.DrawRect(r.Min.X, r.Max.Y-thickness, r.Dx(), thickness, clr)

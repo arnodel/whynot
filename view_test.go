@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
@@ -108,7 +109,7 @@ type drawnText struct {
 	x, y int
 }
 
-var _ Canvas = (*recordingCanvas)(nil)
+var _ canvas.Canvas = (*recordingCanvas)(nil)
 
 // out is where c's draw calls are recorded.
 func (c *recordingCanvas) out() *recordingCanvas {
@@ -132,7 +133,7 @@ func (c *recordingCanvas) DrawRect(x, y, w, h int, clr color.Color) {
 	out := c.out()
 	out.rects = append(out.rects, drawnRect{x, y, w, h, clr})
 }
-func (c *recordingCanvas) Clip(r image.Rectangle) Canvas {
+func (c *recordingCanvas) Clip(r image.Rectangle) canvas.Canvas {
 	out := c.out()
 	clipped := r.Intersect(c.bounds)
 	out.clips = append(out.clips, clipped)

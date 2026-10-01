@@ -6,7 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/canvas"
 )
 
 // minScrollbarThumbHeight mirrors cmd/whynot's own 20px-at-1x minimum.
@@ -44,9 +44,9 @@ func (p *Panel) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 	return image.Rect(p.bounds.Max.X-width, y, p.bounds.Max.X, y+height), true
 }
 
-func (p *Panel) drawScrollbar(canvas whynot.Canvas) {
+func (p *Panel) drawScrollbar(dst canvas.Canvas) {
 	if r, ok := p.scrollbarThumbRect(); ok {
-		canvas.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), p.scrollbarColor())
+		dst.DrawRect(r.Min.X, r.Min.Y, r.Dx(), r.Dy(), p.scrollbarColor())
 	}
 }
 

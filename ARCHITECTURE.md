@@ -13,12 +13,13 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
 | Path | What it is |
 |---|---|
-| repo root | the library (package `whynot`) - parsing, layout, and the `Canvas`/`Panel`/`Interaction` interfaces/types; no rendering backend dependency |
-| `ebitenrenderer/` | implements `whynot.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
-| `giorenderer/` | implements `whynot.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
+| repo root | the library (package `whynot`) - parsing, layout, and the `Panel`/`Interaction` interfaces/types; no rendering backend dependency |
+| `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
+| `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
 | `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
 | `images/` | the image contract: `Source` (src → `AsyncImage`), `AsyncImage` (a key and a fetch) and the default `FileSource` |
 | `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, through an `images.Source`) and animated GIF decoding |
+| `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
 | `chromahighlight/` | implements `whynot.Highlighter` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
@@ -50,7 +51,7 @@ flowchart TD
         C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
         G -. "ctx.Styles resolves\nMargins / TextStyle / Color / ..." .-> D
     end
-    subgraph L3["Layer 3 — Canvas boundary (canvas.go)"]
+    subgraph L3["Layer 3 — Canvas boundary (canvas/)"]
         D -- "DrawBlockLayout(box, dst, x, y, now)" --> E["Canvas calls\n(DrawText, DrawImage)"]
     end
     subgraph L4["ebitenrenderer — a Canvas implementation"]
@@ -163,7 +164,7 @@ mutated, which is what makes the memoization described next safe.
 
 ### Layer 3 — the `Canvas` boundary
 
-`Canvas` ([canvas.go](canvas.go)) is the sole interface between
+`canvas.Canvas` ([canvas](canvas)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 `DrawImage`, `DrawRect`, and `Clip`, which returns a `Canvas` restricted to a
 rectangle (used by `ScrollBox`, [hscroll.go](hscroll.go), for blocks that

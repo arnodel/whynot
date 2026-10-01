@@ -16,7 +16,7 @@ import (
 // giorenderer.Renderer.glyphFor uses for colored glyphs (Gio has no
 // raster-mask-as-clip primitive to tint at draw time, so color has to
 // be baked into the bitmap). Kept private to this package rather than
-// added to whynot.Canvas or giorenderer: it's a toolbar-only need, not
+// added to canvas.Canvas or giorenderer: it's a toolbar-only need, not
 // a document-rendering one - see browser package's own doc comment.
 type tintedIconKey struct {
 	img image.Image

@@ -1,4 +1,4 @@
-// Package ebitenrenderer implements whynot.Canvas on top of ebiten. It's
+// Package ebitenrenderer implements canvas.Canvas on top of ebiten. It's
 // the only place in the module outside cmd/whynot that depends on ebiten -
 // the core whynot package (parsing, layout, and the Canvas interface
 // itself) has no rendering backend dependency at all.
@@ -13,7 +13,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/canvas"
 )
 
 // Renderer owns resources - loaded images and, per font.Face, the glyph
@@ -77,7 +77,7 @@ type Canvas struct {
 	renderer *Renderer
 }
 
-var _ whynot.Canvas = (*Canvas)(nil)
+var _ canvas.Canvas = (*Canvas)(nil)
 
 func (c *Canvas) Bounds() image.Rectangle {
 	return c.dst.Bounds()
@@ -110,7 +110,7 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 
 // Clip draws through a sub-image, which ebiten clips to while keeping
 // the parent's coordinates.
-func (c *Canvas) Clip(r image.Rectangle) whynot.Canvas {
+func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
 	return &Canvas{dst: c.dst.SubImage(r.Intersect(c.Bounds())).(*ebiten.Image), renderer: c.renderer}
 }
 
@@ -119,7 +119,7 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 }
 
 // DrawImage scales the loaded image from its native pixel size to
-// width/height (usually not the same size - see whynot.Canvas's own
+// width/height (usually not the same size - see canvas.Canvas's own
 // doc comment) with linear filtering, so a zoomed-in image is smoothly
 // scaled rather than drawn blocky (ebiten's default nearest-neighbor
 // filter) or, worse, at the wrong size entirely.

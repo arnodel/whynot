@@ -1,11 +1,13 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/styling"
 	"image"
 	"image/color"
 	"math"
 	"time"
+
+	"github.com/arnodel/whynot/canvas"
+	"github.com/arnodel/whynot/internal/styling"
 )
 
 // Horizontal scrolling for blocks wider than the width they're laid out
@@ -113,7 +115,7 @@ func (b *ScrollBox) HitTest(p image.Point) (Hit, image.Point) {
 	return hit, offset.Sub(shift)
 }
 
-func (b *ScrollBox) drawContents(dst Canvas, x, y int, now time.Duration) {
+func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	box := image.Rect(x, y, x+b.width, y+b.inner.Bounds().Dy())
 	offset := b.offset()
 	clipped := dst.Clip(box)
@@ -141,7 +143,7 @@ func (b *ScrollBox) drawContents(dst Canvas, x, y int, now time.Duration) {
 
 // drawFades fades each edge of box that has content hidden past it into
 // the page background, with stepped transparency.
-func (b *ScrollBox) drawFades(dst Canvas, box image.Rectangle, offset int) {
+func (b *ScrollBox) drawFades(dst canvas.Canvas, box image.Rectangle, offset int) {
 	r, g, bl, _ := b.background.RGBA()
 	width := int(hscrollFadeWidth * b.scale)
 	step := max(1, width/hscrollFadeSteps)

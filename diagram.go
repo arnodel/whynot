@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"time"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/imagecache"
@@ -93,7 +94,7 @@ func (b *diagramBox) Source() Source {
 	return b.inner.Source()
 }
 
-func (b *diagramBox) drawContents(dst Canvas, x, y int, now time.Duration) {
+func (b *diagramBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	b.inner.drawContents(dst, x, y, now)
 }
 
@@ -152,7 +153,7 @@ func (b *imageLayout) Source() Source {
 	return b.source
 }
 
-func (b *imageLayout) drawContents(dst Canvas, x, y int, now time.Duration) {
+func (b *imageLayout) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	w, h := b.bounds.Dx(), b.bounds.Dy()
 	dst.DrawRect(x, y, w, h, color.White)
 	imgX, imgY := x+b.inset, y+b.inset

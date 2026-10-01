@@ -3,6 +3,8 @@ package whynot
 import (
 	"image"
 	"time"
+
+	"github.com/arnodel/whynot/canvas"
 )
 
 // LineBox is one line of inline content, each part at a precomputed x.
@@ -124,7 +126,7 @@ func (b *LineBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.bounds.Max.X-left, b.bounds.Dy())
 }
 
-func (b *LineBox) drawContents(dst Canvas, x, y int, now time.Duration) {
+func (b *LineBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	y -= b.bounds.Min.Y
 	for i, part := range b.parts {
 		part.DrawInline(dst, x+b.xs[i], y, now)
