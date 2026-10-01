@@ -8,7 +8,9 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
@@ -673,7 +675,7 @@ type fakeCodeBlockPlugin struct {
 	name           string
 	handles        map[string]bool
 	canHandleCalls *int
-	image          func(language, code string) AsyncImage
+	image          func(language, code string) images.AsyncImage
 }
 
 func (p fakeCodeBlockPlugin) CanHandle(language string) bool {
@@ -683,20 +685,20 @@ func (p fakeCodeBlockPlugin) CanHandle(language string) bool {
 	return p.handles[language]
 }
 
-func (p fakeCodeBlockPlugin) Image(language, code string) AsyncImage {
+func (p fakeCodeBlockPlugin) Image(language, code string) images.AsyncImage {
 	return p.image(language, code)
 }
 
 // TestParseWithCodeBlockPlugin checks that a fenced code block in a
 // language the plugin handles compiles via NewDiagramBlock instead of a
-// plain CodeBlock - with the plugin's own AsyncImage, and a fallback
+// plain CodeBlock - with the plugin's own images.AsyncImage, and a fallback
 // that's exactly what today's highlighter/plain-text rendering would
 // have produced.
 func TestParseWithCodeBlockPlugin(t *testing.T) {
-	wantImg := AsyncImage{Key: "diagram-key"}
+	wantImg := images.AsyncImage{Key: "diagram-key"}
 	plugin := fakeCodeBlockPlugin{
 		handles: map[string]bool{"mermaid": true},
-		image: func(language, code string) AsyncImage {
+		image: func(language, code string) images.AsyncImage {
 			if language != "mermaid" || code != "graph TD; A-->B;\n" {
 				t.Errorf("Image(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
 			}
@@ -750,7 +752,7 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 	second := fakeCodeBlockPlugin{
 		handles:        map[string]bool{"mermaid": true},
 		canHandleCalls: &secondCalls,
-		image:          func(language, code string) AsyncImage { return AsyncImage{Key: "k"} },
+		image:          func(language, code string) images.AsyncImage { return images.AsyncImage{Key: "k"} },
 	}
 	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
 	doc := Parse(source, WithCodeBlockPlugin(first), WithCodeBlockPlugin(second))
@@ -1108,7 +1110,7 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	// and falls back to text ("(loading image…)"), which needs both.
 	ctx := RenderingContext{
 		Scale:        2,
-		ImageCache:   newImageCache(FileImageSource{}),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1136,7 +1138,7 @@ func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
 	ctx := RenderingContext{
 		Scale:        1,
-		ImageCache:   newImageCache(FileImageSource{}),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1183,7 +1185,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       styleSheet,
-		ImageCache:   newImageCache(FileImageSource{}),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	fallbackNode := (*ast.Node)(nil).AddChild(ast.TagImage).AddChild(ast.TagUnsupported)
 
@@ -1225,7 +1227,7 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 	img := &InlineImage{src: "testdata/animated.gif"} // 64x64
 	ctx := RenderingContext{
 		Scale:        2,
-		ImageCache:   newImageCache(FileImageSource{}),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1237,7 +1239,7 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
 	if box.anim == nil {
-		t.Fatal("anim = nil, want the decoded images.Animation")
+		t.Fatal("anim = nil, want the decoded imagecache.Animation")
 	}
 	if box.img != nil {
 		t.Errorf("img = %v, want nil for an animated GIF", box.img)

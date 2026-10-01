@@ -434,12 +434,12 @@ backend-agnostic app layer [`cmd/giowhynot`](cmd/giowhynot) is built on
 too, sharing this exact behavior rather than reimplementing it (its own
 toolbar and input handling are Gio-native instead - see
 [above](#embed-a-markdown-viewer-in-your-game)). Image loading follows
-the same split, one layer further in: the library defines `ImageSource`
+the same split, one layer further in: the library defines `images.Source`
 (defaulting to a plain local file open) and owns caching the result
 (an image cache - an image is resolved, fetched, and decoded at most once,
 however many times it's asked for, however many rendering backends ask
 for it); `browser` supplies the file-or-`http(s)`,
-resolved-against-the-document's-location `ImageSource`, via
+resolved-against-the-document's-location `images.Source`, via
 `WithImageSource`.
 
 ## Features
@@ -476,7 +476,7 @@ by implementation order now that most of the list is done.
 
 **Images**
 - [x] PNG/JPEG/GIF, including animated GIFs (disposal-correct compositing, always
-      looping) - resolved and loaded via a pluggable `ImageSource`, fetched and decoded
+      looping) - resolved and loaded via a pluggable `images.Source`, fetched and decoded
       at most once per image regardless of how many times it's asked for; alt text is
       captured from arbitrary inline content, per CommonMark
 - [x] Loading never blocks rendering - a still-pending image shows a placeholder at its

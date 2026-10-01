@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/imagecache"
 )
 
 // View renders a Document onto a Canvas. It owns the layout cache (rebuilt
@@ -30,7 +32,7 @@ type View struct {
 	width int
 	scale float64
 
-	// imageCacheMark is the images.Cache.ChangedSince mark from the last
+	// imageCacheMark is the imagecache.Cache.ChangedSince mark from the last
 	// time Layout checked for image state changes.
 	imageCacheMark uint64
 
@@ -44,14 +46,14 @@ type View struct {
 // parameter.
 type ViewOption func(*View)
 
-// WithImageSource overrides the ImageSource NewView otherwise defaults
-// to (FileImageSource) - e.g. for an embedder that wants images
+// WithImageSource overrides the images.Source NewView otherwise defaults
+// to (images.FileSource) - e.g. for an embedder that wants images
 // resolved relative to a document's own location, or fetched over
-// http(s), the way cmd/whynot does. Wrapped in an images.Cache, so each
+// http(s), the way cmd/whynot does. Wrapped in an image cache, so each
 // image is resolved and fetched only once for the life of the View.
-func WithImageSource(s ImageSource) ViewOption {
+func WithImageSource(s images.Source) ViewOption {
 	return func(v *View) {
-		v.ctx.ImageCache = newImageCache(s)
+		v.ctx.ImageCache = imagecache.NewCache(s)
 	}
 }
 
@@ -64,7 +66,7 @@ func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleShe
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
-			ImageCache:   newImageCache(FileImageSource{}),
+			ImageCache:   imagecache.NewCache(images.FileSource{}),
 			hscroll:      newHScrollState(),
 		},
 	}
@@ -368,7 +370,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 
 // invalidateChangedImages is Layout's response to an unchanged
 // width/scale: an image may have settled since the last call (see
-// images.Cache) and need picking up. Only slots waiting on an image that
+// imagecache.Cache) and need picking up. Only slots waiting on an image that
 // changed are invalidated.
 func (v *View) invalidateChangedImages() {
 	if !v.stack.laidOut() || v.ctx.ImageCache == nil {

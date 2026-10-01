@@ -1,11 +1,13 @@
 package whynot
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/images"
 	"image"
 	"image/color"
 	"time"
+
+	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/imagecache"
 )
 
 // NewDiagramBlock returns a Block that renders img's image once it
@@ -13,7 +15,7 @@ import (
 // that would've rendered without a plugin - while it's still pending or
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See CodeBlockPlugin.
-func NewDiagramBlock(node *ast.Node, img AsyncImage, fallback Block) Block {
+func NewDiagramBlock(node *ast.Node, img images.AsyncImage, fallback Block) Block {
 	return &diagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), img: img, fallback: fallback}
 }
 
@@ -27,7 +29,7 @@ type diagramBlock struct {
 	// Its only job is giving the ready image's frame a StyleSheet.
 	// BorderColor to resolve (ast.TagCodeBlock, node's own tag, has none).
 	imageNode *ast.Node
-	img       AsyncImage
+	img       images.AsyncImage
 	fallback  Block
 }
 
@@ -41,13 +43,13 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 	if ctx.ImageCache == nil {
 		return b.fallback.GetBlockLayout(ctx, width)
 	}
-	result := ctx.ImageCache.LoadImage(b.img.Key, b.img.Fetch)
-	if result.Status != images.Ready {
+	result := ctx.ImageCache.LoadImage(b.img)
+	if result.Status != imagecache.Ready {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
 		// so View.invalidateChangedImages revisits this slot once the
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
-		// later Pending/Ready, per images.Cache's own retry timer), even
+		// later Pending/Ready, per imagecache.Cache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
 		return &diagramBox{inner: b.fallback.GetBlockLayout(ctx, width), pendingKey: b.img.Key}
 	}
@@ -129,7 +131,7 @@ func (b *diagramBox) PendingImages() []string {
 // interactive.
 type imageLayout struct {
 	img    image.Image
-	anim   *images.Animation
+	anim   *imagecache.Animation
 	bounds image.Rectangle // outer bounds - the frame and diagramPadding "matting" both live inside this, not added on top of it
 	// inset is frameThickness plus the scaled diagramPadding - the
 	// distance from bounds' own edge in to where the image itself

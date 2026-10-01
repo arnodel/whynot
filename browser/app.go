@@ -26,6 +26,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/chromahighlight"
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/kroki"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -238,7 +239,7 @@ func (a *App) OnLinkHover(dest string) {
 
 // NewView parses source, loaded from location, into a View - bundling
 // the options every call site needs together: the current StyleSheet,
-// an ImageSource that resolves an image's src against location the
+// an images.Source that resolves an image's src against location the
 // same way ResolveLink resolves a link's href (so a relative or
 // http(s) image works regardless of where its document came from), a
 // chromahighlight.Highlighter for syntax-colored code blocks, and a
@@ -247,7 +248,7 @@ func (a *App) OnLinkHover(dest string) {
 // are bundled alongside it, not fetched, so it gets welcomeImageSource
 // instead of the general fetch-based one.
 func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
-	imageSource := whynot.ImageSource(docImageSource{base: location})
+	imageSource := images.Source(docImageSource{base: location})
 	if location.Scheme == "whynot" {
 		imageSource = welcomeImageSource{}
 	}

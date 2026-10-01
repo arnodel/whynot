@@ -4,7 +4,6 @@
 package whynot_test
 
 import (
-	"io"
 	"os"
 	"testing"
 
@@ -13,17 +12,10 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/internal/images"
+	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
-
-// fileImageCache loads image srcs as file paths, like whynot's default
-// FileImageSource.
-func fileImageCache() *images.Cache {
-	return images.NewCache(func(src string) (string, images.Fetch, error) {
-		return src, func() (io.ReadCloser, error) { return os.Open(src) }, nil
-	})
-}
 
 func benchmarkGetBlockLayout(b *testing.B, path string) {
 	source, err := os.ReadFile(path)
@@ -35,7 +27,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	const width = 1024
 
@@ -71,7 +63,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	box := block.GetBlockLayout(ctx, 1024)
 
@@ -104,7 +96,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -146,7 +138,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -188,7 +180,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	const width = 1024
 
@@ -228,7 +220,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   fileImageCache(),
+		ImageCache:   imagecache.NewCache(images.FileSource{}),
 	}
 	const width = 1024
 	const viewportHeight = 768

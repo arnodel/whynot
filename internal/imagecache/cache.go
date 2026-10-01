@@ -1,7 +1,7 @@
-// Package images loads the images a document shows: an asynchronous
-// cache that fetches and decodes each image once, and decoding of
-// animated GIFs.
-package images
+// Package imagecache loads the images a document shows through an
+// images.Source: an asynchronous cache that fetches and decodes each
+// image once, and decoding of animated GIFs.
+package imagecache
 
 import (
 	"bytes"
@@ -11,18 +11,9 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/arnodel/whynot/images"
 )
-
-// Fetch produces an image's encoded bytes, in any format image.Decode
-// has registered. It may be slow: the cache calls it at most once per
-// key, on a background goroutine.
-type Fetch func() (io.ReadCloser, error)
-
-// Resolver turns an image's src (an image's literal Markdown
-// destination) into the key the cache identifies it by, and the Fetch
-// that loads it. It's called on every Load, so it should be cheap: the
-// slow work belongs in the Fetch.
-type Resolver func(src string) (key string, fetch Fetch, err error)
 
 // Status is an image's state within a Cache.
 type Status int
@@ -93,7 +84,7 @@ const defaultRetryDelay = 10 * time.Second
 // codebase, which is only ever touched from ebiten's single game-loop
 // goroutine and has no need to be.
 type Cache struct {
-	resolve    Resolver
+	source     images.Source
 	retryDelay time.Duration
 
 	mu      sync.Mutex
@@ -117,33 +108,34 @@ type cacheEntry struct {
 	boundsRevealedAt uint64
 }
 
-// NewCache returns a Cache that resolves the srcs passed to Load with
-// resolve.
-func NewCache(resolve Resolver) *Cache {
+// NewCache returns a Cache loading the srcs passed to Load through
+// source.
+func NewCache(source images.Source) *Cache {
 	return &Cache{
-		resolve:    resolve,
+		source:     source,
 		retryDelay: defaultRetryDelay,
 		cache:      map[string]*cacheEntry{},
 	}
 }
 
-// Load resolves src and returns its current state, starting a fetch in
-// the background on a genuine miss, or on a failed entry old enough to
-// retry - never blocking on the fetch itself. resolved is the key src
-// resolved to, or src itself when resolving failed - InlineImage's
-// fallback text names it in a missing- or broken-image message.
+// Load resolves src through the Source and returns its current state,
+// starting a fetch in the background on a genuine miss, or on a failed
+// entry old enough to retry - never blocking on the fetch itself.
+// resolved is the AsyncImage's Key, or src itself when the Source
+// failed - InlineImage's fallback text names it in a missing- or
+// broken-image message.
 func (c *Cache) Load(src string) (resolved string, result Result) {
-	key, fetch, err := c.resolve(src)
+	img, err := c.source.Image(src)
 	if err != nil {
 		return src, Result{Status: Failed, Err: err}
 	}
-	return key, c.LoadImage(key, fetch)
+	return img.Key, c.LoadImage(img)
 }
 
-// LoadImage is Load for an image that needs no resolving, identified
-// by key and loaded by fetch - e.g. a CodeBlockPlugin's diagram, whose
-// fetch might be a POST rather than a GET.
-func (c *Cache) LoadImage(key string, fetch Fetch) Result {
+// LoadImage is Load for an image that needs no resolving - e.g. a code
+// block plugin's diagram, whose fetch might be a POST rather than a GET.
+func (c *Cache) LoadImage(img images.AsyncImage) Result {
+	key := img.Key
 	c.mu.Lock()
 	entry, ok := c.cache[key]
 	start := !ok || (entry.status == Failed && time.Since(entry.lastAttempt) > c.retryDelay)
@@ -155,7 +147,7 @@ func (c *Cache) LoadImage(key string, fetch Fetch) Result {
 	c.mu.Unlock()
 
 	if start {
-		go c.fetchAndDecode(key, fetch)
+		go c.fetchAndDecode(key, img.Fetch)
 	}
 	return result
 }
@@ -192,7 +184,7 @@ func (c *Cache) ChangedSince(mark uint64) (changed []Change, newMark uint64) {
 // (DecodeConfig's own format name, already read to get here) decodes
 // every frame via decodeAnimatedGIF instead of image.Decode's
 // single-frame result.
-func (c *Cache) fetchAndDecode(key string, fetch Fetch) {
+func (c *Cache) fetchAndDecode(key string, fetch func() (io.ReadCloser, error)) {
 	rc, err := fetch()
 	if err != nil {
 		c.setFailed(key, err)
