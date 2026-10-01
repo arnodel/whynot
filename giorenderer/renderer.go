@@ -60,9 +60,9 @@ func New() *Renderer {
 }
 
 // NewCanvas returns a Canvas that records drawing operations into ops,
-// reporting bounds for Bounds() - Gio has no sub-image concept to derive
-// it from, unlike ebitenrenderer's ebiten.Image.SubImage. Shares this
-// Renderer's caches with every other Canvas it creates.
+// clipped to bounds - Gio has no sub-image concept to derive them from,
+// unlike ebitenrenderer's ebiten.Image.SubImage. Shares this Renderer's
+// caches with every other Canvas it creates.
 func (r *Renderer) NewCanvas(ops *op.Ops, bounds image.Rectangle) *Canvas {
 	return &Canvas{ops: ops, bounds: bounds, renderer: r}
 }
@@ -116,21 +116,16 @@ type Canvas struct {
 	ops      *op.Ops
 	bounds   image.Rectangle
 	renderer *Renderer
-	// clipped is set on a Canvas from Clip: every draw is then wrapped in
-	// a clip to bounds. Gio has no sub-image to draw into instead.
-	clipped bool
 }
 
 // Clip returns a Canvas whose draws are clipped to r within c's bounds.
 func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
-	return &Canvas{ops: c.ops, bounds: r.Intersect(c.bounds), renderer: c.renderer, clipped: true}
+	return &Canvas{ops: c.ops, bounds: r.Intersect(c.bounds), renderer: c.renderer}
 }
 
-// pushClip applies c's clip, if any, until the returned func is called.
+// pushClip clips to c's bounds until the returned func is called: Gio
+// has no sub-image to draw into instead, so every draw is wrapped in one.
 func (c *Canvas) pushClip() func() {
-	if !c.clipped {
-		return func() {}
-	}
 	return clip.Rect(c.bounds).Push(c.ops).Pop
 }
 
