@@ -1,5 +1,9 @@
 package whynot
 
+import (
+	"github.com/arnodel/whynot/internal/engine"
+)
+
 // compiler compiles Markdown source into a Block/ast.Node tree - structure
 // only, no appearance. See Parse.
 type compiler struct {
@@ -25,7 +29,7 @@ type compiler struct {
 	// headings and soleImages accumulate the Document fields of the same
 	// names as top-level blocks are compiled.
 	headings   []TOCEntry
-	soleImages map[Block]string
+	soleImages map[engine.Block]string
 }
 
 // pluginFor returns the first registered CodeBlockPlugin that handles

@@ -122,3 +122,12 @@ func Basic() *styling.Basic {
 		},
 	}
 }
+
+// NoViewMargin returns Basic with its ViewMargin zeroed, for tests that
+// check exact slot indices and heights: the default margin would shift
+// every index by the leading margin slot.
+func NoViewMargin() *styling.Basic {
+	s := Basic()
+	s.ViewMargin = styling.Margins{}
+	return s
+}

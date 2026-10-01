@@ -11,3 +11,6 @@ type StyleSheet interface {
 	// StyleSheet can only be made by packages in this module.
 	Styles() styling.Styles
 }
+
+// Margins is the space around a block, in logical (unscaled) pixels.
+type Margins = styling.Margins

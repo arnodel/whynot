@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"fmt"
@@ -15,36 +15,36 @@ type Inline interface {
 	// GetBlockLayout receives (see naturalWidthMeasure) - only
 	// InlineImage uses it (see fitWidth), every other implementation
 	// ignores it.
-	GetInlineLayout(ctx RenderingContext, width int) InlineLayout
+	GetInlineLayout(ctx Context, width int) InlineLayout
 }
 
 type InlineText struct {
-	text string
-	node *ast.Node
+	Text    string
+	ASTNode *ast.Node
 
-	// glued - see InlineLayout.Glued's doc comment. Set by the compiler
+	// Glued - see InlineLayout.Glued's doc comment. Set by the compiler
 	// (compiler.appendString/pendingSpace) from whether the
 	// source actually had whitespace immediately before this item;
 	// false (the zero value) for every InlineText built directly rather
 	// than through the compiler, matching the old always-space behavior.
-	glued bool
+	Glued bool
 }
 
 var _ Inline = (*InlineText)(nil)
 
 func (t *InlineText) Node() *ast.Node {
-	return t.node
+	return t.ASTNode
 }
 
-func (t *InlineText) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
-	face := ctx.selectFace(ctx.ResolvedTextStyle(t.node))
+func (t *InlineText) GetInlineLayout(ctx Context, width int) InlineLayout {
+	face := ctx.selectFace(ctx.ResolvedTextStyle(t.ASTNode))
 	return &TextBox{
-		Text:            t.text,
+		Text:            t.Text,
 		Face:            face,
-		Color:           ctx.ResolvedColor(t.node),
-		StrikeThickness: int(ctx.ScaledStrikeThickness(t.node)),
-		LineHeight:      ctx.Styles.LineHeight(t.node),
-		glued:           t.glued,
+		Color:           ctx.ResolvedColor(t.ASTNode),
+		StrikeThickness: int(ctx.ScaledStrikeThickness(t.ASTNode)),
+		LineHeight:      ctx.Styles.LineHeight(t.ASTNode),
+		glued:           t.Glued,
 		source:          t,
 	}
 }
@@ -67,52 +67,52 @@ const (
 // itself never does - most fonts, including the bundled Go fonts, don't
 // have it.
 type TaskCheckbox struct {
-	checked bool
-	node    *ast.Node
+	Checked bool
+	ASTNode *ast.Node
 }
 
 var _ Inline = (*TaskCheckbox)(nil)
 
 func (c *TaskCheckbox) Node() *ast.Node {
-	return c.node
+	return c.ASTNode
 }
 
-func (c *TaskCheckbox) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
-	face := ctx.selectFace(ctx.ResolvedTextStyle(c.node))
+func (c *TaskCheckbox) GetInlineLayout(ctx Context, width int) InlineLayout {
+	face := ctx.selectFace(ctx.ResolvedTextStyle(c.ASTNode))
 	r := rune(checkboxUnchecked)
-	if c.checked {
+	if c.Checked {
 		r = checkboxChecked
 	}
 	if _, ok := face.GlyphAdvance(r); ok {
 		return &TextBox{
 			Text:       string(r),
 			Face:       face,
-			Color:      ctx.ResolvedColor(c.node),
-			LineHeight: ctx.Styles.LineHeight(c.node),
+			Color:      ctx.ResolvedColor(c.ASTNode),
+			LineHeight: ctx.Styles.LineHeight(c.ASTNode),
 			source:     c,
 		}
 	}
-	return newCheckboxBox(c.checked, face, ctx.ResolvedColor(c.node), c)
+	return newCheckboxBox(c.Checked, face, ctx.ResolvedColor(c.ASTNode), c)
 }
 
 type InlineImage struct {
-	src   string
-	alt   string
-	title string
-	node  *ast.Node
-	// fallbackNode is a ast.TagUnsupported child of node - see the compile.go
+	Src     string
+	Alt     string
+	Title   string
+	ASTNode *ast.Node
+	// FallbackNode is a ast.TagUnsupported child of node - see the compile.go
 	// KindImage case for why it's precomputed once, at parse time,
 	// rather than created on demand here.
-	fallbackNode *ast.Node
+	FallbackNode *ast.Node
 
-	// glued - see InlineLayout.Glued's doc comment and InlineText.glued.
-	glued bool
+	// Glued - see InlineLayout.Glued's doc comment and InlineText.Glued.
+	Glued bool
 }
 
 var _ Inline = (*InlineImage)(nil)
 
 func (i *InlineImage) Node() *ast.Node {
-	return i.node
+	return i.ASTNode
 }
 
 // GetInlineLayout resolves, fetches, and decodes src via ctx.ImageCache
@@ -123,7 +123,7 @@ func (i *InlineImage) Node() *ast.Node {
 // Otherwise there are three outcomes:
 //
 //   - Ready: the decoded image, scaled by ctx.Scale like every other
-//     sized quantity in the layout system (RenderingContext.ScaledMargins
+//     sized quantity in the layout system (Context.ScaledMargins
 //     and friends), so images grow and shrink along with zoom/DPI
 //     instead of staying pixel-locked - then capped to width, preserving
 //     aspect ratio, if that scaled size would still be wider (see
@@ -143,32 +143,32 @@ func (i *InlineImage) Node() *ast.Node {
 //     stamped with which src it's standing in for, so
 //     View.invalidateChangedImages knows to revisit it once that
 //     changes.
-func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLayout {
+func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
 	cache := ctx.ImageCache
 	if cache == nil {
-		return i.fallback(fmt.Sprintf("(image not loaded: %s)", i.src)).GetInlineLayout(ctx, width)
+		return i.fallback(fmt.Sprintf("(image not loaded: %s)", i.Src)).GetInlineLayout(ctx, width)
 	}
-	resolved, result := cache.Load(i.src)
+	resolved, result := cache.Load(i.Src)
 	switch result.Status {
 	case imagecache.Ready:
 		return &ImageBox{
-			img:    result.Image,
-			anim:   result.Animation,
-			bounds: fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
-			glued:  i.glued,
+			Img:    result.Image,
+			Anim:   result.Animation,
+			Rect:   FitWidth(scaleRect(result.Bounds, ctx.Scale), width),
+			glued:  i.Glued,
 			source: i,
 		}
 	case imagecache.Pending:
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
-				bounds:           fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
-				placeholderColor: ctx.Styles.BorderColor(i.node),
-				pending:          []string{resolved},
-				glued:            i.glued,
+				Rect:             FitWidth(scaleRect(result.Bounds, ctx.Scale), width),
+				placeholderColor: ctx.Styles.BorderColor(i.ASTNode),
+				Pending:          []string{resolved},
+				glued:            i.Glued,
 				source:           i,
 			}
 		}
-		box := (&InlineText{text: "(loading image…)", node: i.node, glued: i.glued}).GetInlineLayout(ctx, width).(*TextBox)
+		box := (&InlineText{Text: "(loading image…)", ASTNode: i.ASTNode, Glued: i.Glued}).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
 	default: // imagecache.Failed
@@ -181,19 +181,19 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 // fallback is what's shown in place of an image that isn't displayed -
 // alt text if the Markdown gave any, else title, else message.
 func (i *InlineImage) fallback(message string) *InlineText {
-	text := i.alt
+	text := i.Alt
 	if text == "" {
-		text = i.title
+		text = i.Title
 	}
 	if text == "" {
 		text = message
 	}
-	return &InlineText{text: text, node: i.fallbackNode, glued: i.glued}
+	return &InlineText{Text: text, ASTNode: i.FallbackNode, Glued: i.Glued}
 }
 
 // scaleRect scales r (typically an image's native pixel bounds) by
 // scale, the way every other sized quantity in the layout system is
-// scaled (RenderingContext.ScaledMargins and friends).
+// scaled (Context.ScaledMargins and friends).
 func scaleRect(r image.Rectangle, scale float64) image.Rectangle {
 	return image.Rectangle{Max: image.Pt(
 		int(float64(r.Dx())*scale),
@@ -201,13 +201,13 @@ func scaleRect(r image.Rectangle, scale float64) image.Rectangle {
 	)}
 }
 
-// fitWidth scales r down, preserving aspect ratio, so its width never
+// FitWidth scales r down, preserving aspect ratio, so its width never
 // exceeds width - CSS's max-width: 100%, applied to an inline image.
 // width <= 0 means unbounded (e.g. TableBlock's natural-width
 // measurement pass, naturalWidthMeasure); r already fitting is the same
 // case either way, returned unchanged. Never scales up - a small image
 // stays its own size regardless of how much room is available.
-func fitWidth(r image.Rectangle, width int) image.Rectangle {
+func FitWidth(r image.Rectangle, width int) image.Rectangle {
 	if width <= 0 || r.Dx() <= width {
 		return r
 	}

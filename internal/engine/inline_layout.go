@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -320,23 +320,23 @@ func (b *CheckboxBox) PendingImages() []string {
 }
 
 type ImageBox struct {
-	// img is the already-decoded image imagecache.Cache.Load returned -
+	// Img is the already-decoded image imagecache.Cache.Load returned -
 	// carried forward from InlineImage.GetInlineLayout so DrawInline
 	// can pass it straight to Canvas.DrawImage, which never fetches or
 	// decodes anything itself. nil while the image is still pending but
 	// its dimensions are already known - bounds is still the correct,
 	// final (scaled) size, so DrawInline draws a placeholder rect
-	// instead, and nothing needs to reflow once img is filled in later.
-	// anim is set instead of img for an animated GIF - exactly one of
+	// instead, and nothing needs to reflow once Img is filled in later.
+	// anim is set instead of Img for an animated GIF - exactly one of
 	// the two is non-nil on a settled ImageBox.
-	img              image.Image
-	anim             *imagecache.Animation
-	bounds           image.Rectangle
+	Img              image.Image
+	Anim             *imagecache.Animation
+	Rect             image.Rectangle
 	placeholderColor color.Color
 
-	// pending is the one resolved src this box is still waiting on,
+	// Pending is the one resolved src this box is still waiting on,
 	// while img == nil - see PendingImages.
-	pending []string
+	Pending []string
 
 	// glued - see InlineLayout.Glued's doc comment and TextBox.glued.
 	glued bool
@@ -352,11 +352,11 @@ func (b *ImageBox) Source() Source {
 }
 
 func (b *ImageBox) BoundsAndAdvance() (image.Rectangle, int) {
-	return b.bounds, b.bounds.Dx()
+	return b.Rect, b.Rect.Dx()
 }
 
 func (b *ImageBox) Bounds() image.Rectangle {
-	return b.bounds
+	return b.Rect
 }
 
 func (b *ImageBox) SpaceWidth() int {
@@ -369,12 +369,12 @@ func (b *ImageBox) Glued() bool {
 
 func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	switch {
-	case b.anim != nil:
-		dst.DrawImage(b.anim.CurrentFrame(now), x, y, b.bounds.Dx(), b.bounds.Dy())
-	case b.img != nil:
-		dst.DrawImage(b.img, x, y, b.bounds.Dx(), b.bounds.Dy())
+	case b.Anim != nil:
+		dst.DrawImage(b.Anim.CurrentFrame(now), x, y, b.Rect.Dx(), b.Rect.Dy())
+	case b.Img != nil:
+		dst.DrawImage(b.Img, x, y, b.Rect.Dx(), b.Rect.Dy())
 	default:
-		dst.DrawRect(x, y, b.bounds.Dx(), b.bounds.Dy(), b.placeholderColor)
+		dst.DrawRect(x, y, b.Rect.Dx(), b.Rect.Dy(), b.placeholderColor)
 	}
 }
 
@@ -383,7 +383,7 @@ func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
 }
 
 func (b *ImageBox) PendingImages() []string {
-	return b.pending
+	return b.Pending
 }
 
 // hitIfInside is the HitTest of a leaf InlineLayout: a hit on the box

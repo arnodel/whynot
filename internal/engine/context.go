@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image/color"
@@ -14,7 +14,7 @@ import (
 	"github.com/arnodel/whynot/internal/styling"
 )
 
-type RenderingContext struct {
+type Context struct {
 	Scale        float64
 	FaceSelector fonts.FaceSelector
 	Styles       styling.Styles
@@ -31,9 +31,9 @@ type RenderingContext struct {
 	// its source code block.
 	ImageCache *imagecache.Cache
 
-	// hscroll is the View's horizontal scrolling state, shared with the
+	// HScroll is the View's horizontal scrolling state, shared with the
 	// ScrollBoxes laid out under this context; nil outside a View.
-	hscroll *hscrollState
+	HScroll *HScrollState
 
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never
@@ -52,7 +52,7 @@ type RenderingContext struct {
 // TextStyle/Color have no scaled equivalent: font size is scaled by the
 // dpi selectFace passes, and color doesn't scale at all.
 
-func (c RenderingContext) ScaledMargins(m Marginer) Margins {
+func (c Context) ScaledMargins(m Marginer) Margins {
 	margins := m.Margins(c)
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale
@@ -61,7 +61,7 @@ func (c RenderingContext) ScaledMargins(m Marginer) Margins {
 	return margins
 }
 
-func (c RenderingContext) ScaledViewMargins() Margins {
+func (c Context) ScaledViewMargins() Margins {
 	margins := c.Styles.ViewMargins()
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale
@@ -70,15 +70,15 @@ func (c RenderingContext) ScaledViewMargins() Margins {
 	return margins
 }
 
-func (c RenderingContext) ScaledStrikeThickness(node *ast.Node) float64 {
+func (c Context) ScaledStrikeThickness(node *ast.Node) float64 {
 	return c.Styles.StrikeThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledThematicBreakThickness(node *ast.Node) float64 {
+func (c Context) ScaledThematicBreakThickness(node *ast.Node) float64 {
 	return c.Styles.ThematicBreakThickness(node) * c.Scale
 }
 
-func (c RenderingContext) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
+func (c Context) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
 	g := c.Styles.BlockquoteGeometry(node)
 	return styling.BlockquoteGeometry{
 		Indent:   g.Indent * c.Scale,
@@ -86,7 +86,7 @@ func (c RenderingContext) ScaledBlockquoteGeometry(node *ast.Node) styling.Block
 	}
 }
 
-func (c RenderingContext) ScaledTableGeometry(node *ast.Node) styling.TableGeometry {
+func (c Context) ScaledTableGeometry(node *ast.Node) styling.TableGeometry {
 	g := c.Styles.TableGeometry(node)
 	return styling.TableGeometry{
 		FrameThickness:      g.FrameThickness * c.Scale,
@@ -103,7 +103,7 @@ func (c RenderingContext) ScaledTableGeometry(node *ast.Node) styling.TableGeome
 // weight (from Strong) and an italic style (from Emphasis). Walks one step
 // past the root (node == nil) so StyleSheet's baseline contribution can
 // fill in any field nothing along the way ever claimed.
-func (c RenderingContext) ResolvedTextStyle(node *ast.Node) fonts.TextStyle {
+func (c Context) ResolvedTextStyle(node *ast.Node) fonts.TextStyle {
 	var result fonts.TextStyle
 	var resolved styling.TextStyleField
 	for n := node; ; n = n.Parent {
@@ -132,7 +132,7 @@ func (c RenderingContext) ResolvedTextStyle(node *ast.Node) fonts.TextStyle {
 // ResolvedColor walks node's ancestry (node itself first) for the nearest
 // non-nil Color contribution - mirrors CSS's `color`, which inherits down
 // from the nearest ancestor that sets it.
-func (c RenderingContext) ResolvedColor(node *ast.Node) color.Color {
+func (c Context) ResolvedColor(node *ast.Node) color.Color {
 	if node.HasAncestor(c.HighlightNode) {
 		return c.Styles.HighlightColor()
 	}
@@ -159,7 +159,7 @@ var (
 // Scale × 72, so zooming magnifies a font's design rather than changing
 // its point size. If the FaceSelector fails, it falls back to the bundled
 // Go fonts, logging the first failure.
-func (c RenderingContext) selectFace(style fonts.TextStyle) font.Face {
+func (c Context) selectFace(style fonts.TextStyle) font.Face {
 	dpi := c.Scale * 72
 	face, err := c.FaceSelector.SelectFace(style, dpi)
 	if err == nil {

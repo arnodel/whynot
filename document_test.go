@@ -58,7 +58,7 @@ func TestDocumentSoleImages(t *testing.T) {
 	if len(doc.soleImages) != 1 {
 		t.Fatalf("soleImages = %v, want exactly one entry", doc.soleImages)
 	}
-	if src, ok := doc.soleImages[doc.root.blocks[0]]; !ok || src != "a.png" {
+	if src, ok := doc.soleImages[doc.root.Blocks[0]]; !ok || src != "a.png" {
 		t.Errorf("soleImages[first block] = %q, %v, want %q, true", src, ok, "a.png")
 	}
 }

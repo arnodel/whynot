@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"github.com/arnodel/whynot/internal/ast"
@@ -21,15 +21,15 @@ type Source interface {
 
 type Block interface {
 	Source
-	GetBlockLayout(ctx RenderingContext, width int) BlockLayout
-	Margins(ctx RenderingContext) Margins
+	GetBlockLayout(ctx Context, width int) BlockLayout
+	Margins(ctx Context) Margins
 }
 
 // Marginer is anything that reports its own logical (unscaled) Margins -
-// every Block satisfies it, but it's kept narrow so RenderingContext.
+// every Block satisfies it, but it's kept narrow so Context.
 // ScaledMargins doesn't need the rest of the Block interface.
 type Marginer interface {
-	Margins(ctx RenderingContext) Margins
+	Margins(ctx Context) Margins
 }
 
 // WithoutMargins satisfies Block's Margins() with a zero value, for a Block
@@ -37,7 +37,7 @@ type Marginer interface {
 // wrapping it in a MarginBlock, as the compiler does for most blocks.
 type WithoutMargins struct{}
 
-func (WithoutMargins) Margins(ctx RenderingContext) Margins {
+func (WithoutMargins) Margins(ctx Context) Margins {
 	return Margins{}
 }
 
@@ -52,12 +52,12 @@ func (WithoutMargins) Margins(ctx RenderingContext) Margins {
 // caller, scales the result via ctx.ScaledMargins).
 type MarginBlock struct {
 	Block
-	node *ast.Node
+	MarginNode *ast.Node
 }
 
-func (b *MarginBlock) Margins(ctx RenderingContext) Margins {
+func (b *MarginBlock) Margins(ctx Context) Margins {
 	inner := b.Block.Margins(ctx)
-	own := ctx.Styles.Margins(b.node)
+	own := ctx.Styles.Margins(b.MarginNode)
 	return Margins{
 		Top:    math.Max(inner.Top, own.Top),
 		Bottom: math.Max(inner.Bottom, own.Bottom),
@@ -80,20 +80,20 @@ func (b *MarginBlock) Node() *ast.Node {
 // spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
 	WithoutMargins
-	node *ast.Node
+	ASTNode *ast.Node
 }
 
 var _ Block = (*ThematicBreakBlock)(nil)
 
 func (b *ThematicBreakBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+func (b *ThematicBreakBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	return &RuleBox{
 		width:     width,
-		thickness: int(ctx.ScaledThematicBreakThickness(b.node)),
-		color:     ctx.Styles.BorderColor(b.node),
+		thickness: int(ctx.ScaledThematicBreakThickness(b.ASTNode)),
+		color:     ctx.Styles.BorderColor(b.ASTNode),
 		source:    b,
 	}
 }
@@ -108,72 +108,72 @@ func (b *ThematicBreakBlock) GetBlockLayout(ctx RenderingContext, width int) Blo
 // at compile time rather than rebuilt on every GetBlockLayout call.
 type BlockquoteBlock struct {
 	WithoutMargins
-	inner Block
-	node  *ast.Node
+	Inner   Block
+	ASTNode *ast.Node
 }
 
 var _ Block = (*BlockquoteBlock)(nil)
 
 func (b *BlockquoteBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-func (b *BlockquoteBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	geom := ctx.ScaledBlockquoteGeometry(b.node)
+func (b *BlockquoteBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	geom := ctx.ScaledBlockquoteGeometry(b.ASTNode)
 	indent := int(geom.Indent)
 	return &BlockquoteBox{
 		width:    width,
-		indent:   indent,
+		Indent:   indent,
 		barWidth: int(geom.BarWidth),
-		barColor: ctx.Styles.BorderColor(b.node),
-		inner:    b.inner.GetBlockLayout(ctx, width-indent),
+		barColor: ctx.Styles.BorderColor(b.ASTNode),
+		Inner:    b.Inner.GetBlockLayout(ctx, width-indent),
 		source:   b,
 	}
 }
 
 type CodeBlock struct {
 	WithoutMargins
-	// lines is one slice per visual line, each holding that line's spans -
+	// Lines is one slice per visual line, each holding that line's spans -
 	// usually a single element (one InlineText for the whole line), but
 	// more than one when a Highlighter has split the line into classified
 	// tokens (see highlightLines).
-	lines [][]Inline
-	node  *ast.Node
+	Lines   [][]Inline
+	ASTNode *ast.Node
 }
 
 var _ Block = (*CodeBlock)(nil)
 
 func (b *CodeBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-func (b *CodeBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	lineBoxes := make([]BlockLayout, len(b.lines))
-	for i, parts := range b.lines {
-		lineBoxes[i] = newLineBox(inlineLayouts(ctx, width, parts), true)
+func (b *CodeBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	lineBoxes := make([]BlockLayout, len(b.Lines))
+	for i, parts := range b.Lines {
+		lineBoxes[i] = NewLineBox(inlineLayouts(ctx, width, parts), true)
 	}
 	// Lines never wrap, so a long one scrolls sideways instead.
-	return scrollIfWider(ctx, b, &StackBox{slots: preResolvedSlots(lineBoxes), source: b}, width)
+	return scrollIfWider(ctx, b, &StackBox{Slots: preResolvedSlots(lineBoxes), source: b}, width)
 }
 
 type TextBlock struct {
 	WithoutMargins
-	parts []Inline
-	node  *ast.Node
+	Parts   []Inline
+	ASTNode *ast.Node
 }
 
 var _ Block = (*TextBlock)(nil)
 
 func (b *TextBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-func (b *TextBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	return &StackBox{slots: preResolvedSlots(wrapLines(inlineLayouts(ctx, width, b.parts), width)), source: b}
+func (b *TextBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	return &StackBox{Slots: preResolvedSlots(wrapLines(inlineLayouts(ctx, width, b.Parts), width)), source: b}
 }
 
 // inlineLayouts lays out each of parts at wrap width width.
-func inlineLayouts(ctx RenderingContext, width int, parts []Inline) []InlineLayout {
+func inlineLayouts(ctx Context, width int, parts []Inline) []InlineLayout {
 	boxes := make([]InlineLayout, len(parts))
 	for i, part := range parts {
 		boxes[i] = part.GetInlineLayout(ctx, width)
@@ -189,59 +189,59 @@ func inlineLayouts(ctx RenderingContext, width int, parts []Inline) []InlineLayo
 // business claiming indentation whether or not there's a trailing part.
 type ListItemHeadBlock struct {
 	WithoutMargins
-	marker Inline
-	parts  []Inline
-	node   *ast.Node
+	Marker  Inline
+	Parts   []Inline
+	ASTNode *ast.Node
 }
 
 var _ Block = (*ListItemHeadBlock)(nil)
 
 func (b *ListItemHeadBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-func (b *ListItemHeadBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	marker := &ListItemMarkerBox{Marker: b.marker.GetInlineLayout(ctx, width)}
-	boxes := append([]InlineLayout{marker}, inlineLayouts(ctx, width, b.parts)...)
-	return &StackBox{slots: preResolvedSlots(wrapLines(boxes, width)), source: b}
+func (b *ListItemHeadBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	marker := &ListItemMarkerBox{Marker: b.Marker.GetInlineLayout(ctx, width)}
+	boxes := append([]InlineLayout{marker}, inlineLayouts(ctx, width, b.Parts)...)
+	return &StackBox{Slots: preResolvedSlots(wrapLines(boxes, width)), source: b}
 }
 
-type cellAlignment int
+type CellAlignment int
 
 const (
-	alignNone cellAlignment = iota
-	alignLeft
-	alignRight
-	alignCenter
+	AlignNone CellAlignment = iota
+	AlignLeft
+	AlignRight
+	AlignCenter
 )
 
-type tableCell struct {
-	content   *TextBlock
-	alignment cellAlignment
+type TableCell struct {
+	Content   *TextBlock
+	Alignment CellAlignment
 }
 
 // TableBlock is a GFM table. header and each row in rows hold one
 // tableCell per column.
 type TableBlock struct {
 	WithoutMargins
-	header []tableCell
-	rows   [][]tableCell
-	node   *ast.Node
+	Header  []TableCell
+	Rows    [][]TableCell
+	ASTNode *ast.Node
 }
 
 var _ Block = (*TableBlock)(nil)
 
 func (b *TableBlock) Node() *ast.Node {
-	return b.node
+	return b.ASTNode
 }
 
-// naturalWidthMeasure is an effectively-unbounded width passed to a
+// NaturalWidthMeasure is an effectively-unbounded width passed to a
 // cell's GetBlockLayout purely to measure its natural (unwrapped) width via the
 // resulting BlockLayout's Bounds() - large enough that no realistic cell content
 // would ever wrap against it.
-const naturalWidthMeasure = 1 << 20
+const NaturalWidthMeasure = 1 << 20
 
-// resolveColumnWidths decides each column's final width from its natural
+// ResolveColumnWidths decides each column's final width from its natural
 // (unwrapped) width, given the total width available for all columns
 // combined (gaps and the frame are the caller's concern, not this
 // function's). Deliberately isolated from measuring natural widths and
@@ -259,7 +259,7 @@ const naturalWidthMeasure = 1 << 20
 // Checked as sum*(N-K+1) < available (exact with integers, and avoids
 // assuming the condition is monotonic in K - it isn't, in general, since
 // the sum grows and the divisor shrinks as K grows).
-func resolveColumnWidths(natural []int, available int) []int {
+func ResolveColumnWidths(natural []int, available int) []int {
 	n := len(natural)
 	order := make([]int, n)
 	for i := range order {
@@ -299,21 +299,21 @@ func resolveColumnWidths(natural []int, available int) []int {
 	return result
 }
 
-func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	geom := ctx.ScaledTableGeometry(b.node)
+func (b *TableBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	geom := ctx.ScaledTableGeometry(b.ASTNode)
 	frameThickness := int(geom.FrameThickness)
 	columnGap := int(geom.ColumnGap)
 	rowGap := int(geom.RowGap)
 	headerGap := int(geom.HeaderGap)
 	columnRuleThickness := max(1, int(geom.ColumnRuleThickness))
 
-	numCols := len(b.header)
-	rows := append([][]tableCell{b.header}, b.rows...)
+	numCols := len(b.Header)
+	rows := append([][]TableCell{b.Header}, b.Rows...)
 
 	natural := make([]int, numCols)
 	for _, row := range rows {
 		for c, cell := range row {
-			if w := cell.content.GetBlockLayout(ctx, naturalWidthMeasure).Bounds().Dx(); w > natural[c] {
+			if w := cell.Content.GetBlockLayout(ctx, NaturalWidthMeasure).Bounds().Dx(); w > natural[c] {
 				natural[c] = w
 			}
 		}
@@ -328,7 +328,7 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 	// which is exactly numCols*columnGap.
 	edgeGap := columnGap / 2
 	available := width - 2*frameThickness - numCols*columnGap
-	columnWidths := resolveColumnWidths(natural, available)
+	columnWidths := ResolveColumnWidths(natural, available)
 
 	// columnWidths is the wrap constraint given to each cell, not
 	// necessarily what it actually renders at: word-wrapped text rarely
@@ -345,7 +345,7 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 		rowBoxes := make([]BlockLayout, numCols)
 		rowHeight := 0
 		for c, cell := range row {
-			contentBox := cell.content.GetBlockLayout(ctx, columnWidths[c])
+			contentBox := cell.Content.GetBlockLayout(ctx, columnWidths[c])
 			rowBoxes[c] = contentBox
 			if h := contentBox.Bounds().Dy(); h > rowHeight {
 				rowHeight = h
@@ -378,10 +378,10 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 			contentBox := rawCells[r][c]
 			contentWidth := contentBox.Bounds().Dx()
 			xOffset := 0
-			switch cell.alignment {
-			case alignCenter:
+			switch cell.Alignment {
+			case AlignCenter:
 				xOffset = (effectiveWidths[c] - contentWidth) / 2
-			case alignRight:
+			case AlignRight:
 				xOffset = effectiveWidths[c] - contentWidth
 			}
 			rowCells[c] = NewContainerBox(contentBox, effectiveWidths[c], rowHeights[r], xOffset, 0)
@@ -414,14 +414,14 @@ func (b *TableBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout
 		frameThickness:      frameThickness,
 		columnGap:           columnGap,
 		columnRuleThickness: columnRuleThickness,
-		frameColor:          ctx.Styles.BorderColor(b.node),
+		frameColor:          ctx.Styles.BorderColor(b.ASTNode),
 		cells:               cells,
 		source:              b,
 	}, width)
 }
 
 type StackBlock struct {
-	blocks []Block
+	Blocks []Block
 }
 
 var _ Block = (*StackBlock)(nil)
@@ -439,13 +439,13 @@ func (b *StackBlock) Node() *ast.Node {
 // edges. Left/Right are zero: as a stack of blocks arranged vertically,
 // StackBlock has no notion of a horizontal edge to derive from a child -
 // only whatever wraps it (see MarginBlock) has a real Left/Right.
-func (b *StackBlock) Margins(ctx RenderingContext) Margins {
-	if len(b.blocks) == 0 {
+func (b *StackBlock) Margins(ctx Context) Margins {
+	if len(b.Blocks) == 0 {
 		return Margins{}
 	}
 	return Margins{
-		Top:    b.blocks[0].Margins(ctx).Top,
-		Bottom: b.blocks[len(b.blocks)-1].Margins(ctx).Bottom,
+		Top:    b.Blocks[0].Margins(ctx).Top,
+		Bottom: b.Blocks[len(b.Blocks)-1].Margins(ctx).Bottom,
 	}
 }
 
@@ -455,32 +455,32 @@ func (b *StackBlock) Margins(ctx RenderingContext) Margins {
 // re-derive gap sizes and widths up front; the expensive part (actually
 // laying out each block's content) only happens for slots something later
 // asks for, e.g. those near a scroll anchor.
-func (b *StackBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
-	return b.stackLayout(&ctx, width)
+func (b *StackBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
+	return b.StackLayout(&ctx, width)
 }
 
-// stackLayout is GetBlockLayout with its concrete result type, laying out
+// StackLayout is GetBlockLayout with its concrete result type, laying out
 // slots against *ctx when they're first needed (see StackBox.ctx).
-func (b *StackBlock) stackLayout(ctx *RenderingContext, width int) *StackBox {
-	slots := make([]stackSlot, 0, len(b.blocks))
+func (b *StackBlock) StackLayout(ctx *Context, width int) *StackBox {
+	slots := make([]StackSlot, 0, len(b.Blocks))
 	bottomMargin := 0
-	for i, block := range b.blocks {
+	for i, block := range b.Blocks {
 		margins := ctx.ScaledMargins(block)
 		if i > 0 {
 			gap := max(bottomMargin, int(margins.Top))
 			if gap > 0 {
-				slots = append(slots, stackSlot{box: NewEmptyBox(width, gap)})
+				slots = append(slots, StackSlot{Box: NewEmptyBox(width, gap)})
 			}
 		}
 		leftMargin := int(margins.Left)
 		rightMargin := int(margins.Right)
-		slots = append(slots, stackSlot{
-			block:      block,
-			width:      width - leftMargin - rightMargin,
+		slots = append(slots, StackSlot{
+			Block:      block,
+			Width:      width - leftMargin - rightMargin,
 			leftMargin: leftMargin,
 			wrap:       leftMargin > 0 || rightMargin > 0,
 		})
 		bottomMargin = int(margins.Bottom)
 	}
-	return &StackBox{slots: slots, ctx: ctx, width: width}
+	return &StackBox{Slots: slots, Ctx: ctx, Width: width}
 }

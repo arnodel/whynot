@@ -116,7 +116,7 @@ type App struct {
 	// this first, since that's the TOC, not the document, while it's set.
 	tocDocView *whynot.View
 
-	// start is when the app began, for whynot.RenderingContext.Time
+	// start is when the app began, for View.Layout's now
 	// (elapsed time since rendering started - what an animated GIF's
 	// current frame is picked from). Only ever compared to itself via
 	// elapsed(), never to a wall-clock timestamp.

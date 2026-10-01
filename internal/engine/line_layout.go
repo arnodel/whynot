@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -22,10 +22,10 @@ type LineBox struct {
 
 var _ BlockLayout = (*LineBox)(nil)
 
-// newLineBox places parts on a single line, never wrapping. glue abuts
+// NewLineBox places parts on a single line, never wrapping. glue abuts
 // parts with no gap between them - for parts that are already contiguous
 // slices of one string, whitespace included (CodeBlock's token spans).
-func newLineBox(parts []InlineLayout, glue bool) *LineBox {
+func NewLineBox(parts []InlineLayout, glue bool) *LineBox {
 	l := lineBuilder{glue: glue}
 	for _, part := range parts {
 		l.add(part)

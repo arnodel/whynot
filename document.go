@@ -1,19 +1,23 @@
 package whynot
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/arnodel/whynot/internal/engine"
+)
 
 // Document is a parsed Markdown document: its Block tree plus what the
 // compiler recorded about its top-level structure along the way. Built by
 // Parse, immutable afterward, and renderable by any number of Views.
 type Document struct {
-	root *StackBlock
+	root *engine.StackBlock
 
 	// headings is every top-level heading, in document order.
 	headings []TOCEntry
 
 	// soleImages maps each top-level text block consisting of a single
 	// image to that image's src - what View prefetches ahead of scrolling.
-	soleImages map[Block]string
+	soleImages map[engine.Block]string
 }
 
 // TOCEntry is one heading of a Document - enough to build a table of
@@ -25,7 +29,7 @@ type TOCEntry struct {
 }
 
 // Root returns the document's Block tree, ready for GetBlockLayout.
-func (d *Document) Root() Block {
+func (d *Document) Root() engine.Block {
 	return d.root
 }
 

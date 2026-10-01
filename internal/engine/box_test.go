@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -22,11 +23,11 @@ type sourceBlock struct {
 	node *ast.Node
 }
 
-func (b *sourceBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+func (b *sourceBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	panic("not implemented")
 }
-func (b *sourceBlock) Margins(ctx RenderingContext) Margins { panic("not implemented") }
-func (b *sourceBlock) Node() *ast.Node                      { return b.node }
+func (b *sourceBlock) Margins(ctx Context) Margins { panic("not implemented") }
+func (b *sourceBlock) Node() *ast.Node             { return b.node }
 
 func TestRuleBoxHitTest(t *testing.T) {
 	src := &sourceBlock{node: &ast.Node{Tag: ast.TagThematicBreak}}
@@ -75,7 +76,7 @@ func TestBlockquoteBoxHitTest(t *testing.T) {
 	quoteSrc := &sourceBlock{node: &ast.Node{Tag: ast.TagBlockquote}}
 	contentSrc := &sourceBlock{node: &ast.Node{Tag: ast.TagParagraph}}
 	content := &RuleBox{width: 80, thickness: 10, source: contentSrc}
-	b := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: content, source: quoteSrc}
+	b := &BlockquoteBox{width: 100, Indent: 16, barWidth: 3, Inner: content, source: quoteSrc}
 
 	if hit, offset := b.HitTest(image.Pt(1, 1)); hit == nil || hit.Source().Node().Tag != ast.TagBlockquote {
 		t.Errorf("bar hit = %v, want Blockquote", hit)
@@ -90,7 +91,7 @@ func TestBlockquoteBoxHitTest(t *testing.T) {
 
 	// A gap inside the content area (EmptyBox always declines) falls
 	// back to the blockquote itself rather than reporting no match.
-	empty := &BlockquoteBox{width: 100, indent: 16, barWidth: 3, inner: NewEmptyBox(80, 10), source: quoteSrc}
+	empty := &BlockquoteBox{width: 100, Indent: 16, barWidth: 3, Inner: NewEmptyBox(80, 10), source: quoteSrc}
 	if hit, _ := empty.HitTest(image.Pt(50, 1)); hit == nil || hit.Source().Node().Tag != ast.TagBlockquote {
 		t.Errorf("gap-in-content hit = %v, want fallback Blockquote", hit)
 	}
@@ -135,12 +136,12 @@ func TestTableBoxHitTest(t *testing.T) {
 }
 
 func TestTextBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := &InlineText{text: "hi", node: &ast.Node{Tag: ast.TagParagraph}}
+	src := &InlineText{Text: "hi", ASTNode: &ast.Node{Tag: ast.TagParagraph}}
 	b := &TextBox{Text: "hi", Face: face, source: src}
 
 	bounds, _ := b.BoundsAndAdvance()
@@ -167,7 +168,7 @@ func TestTextBoxHitTest(t *testing.T) {
 // InlineText.GetInlineLayout) reproduces the bare Ascent+Descent bounds
 // from before LineHeight existed.
 func TestTextBoxLineHeight(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
@@ -194,13 +195,13 @@ func TestTextBoxLineHeight(t *testing.T) {
 // to check the same actual position - a point at the "naive" x should
 // not match.
 func TestListItemMarkerBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerSrc := &InlineText{text: "•", node: &ast.Node{Tag: ast.TagListItem}}
-	markerBox := &TextBox{Text: markerSrc.text, Face: face, source: markerSrc}
+	markerSrc := &InlineText{Text: "•", ASTNode: &ast.Node{Tag: ast.TagListItem}}
+	markerBox := &TextBox{Text: markerSrc.Text, Face: face, source: markerSrc}
 	marker := &ListItemMarkerBox{Marker: markerBox}
 
 	markerBounds, advance := markerBox.BoundsAndAdvance()
@@ -233,16 +234,16 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 // content as landmarks rather than hardcoded pixel offsets, so this
 // doesn't depend on exact font metrics.
 func TestLineBoxHitTest(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
-	src1 := &InlineText{text: "aa", node: &ast.Node{Tag: ast.TagEmphasis}}
-	src2 := &InlineText{text: "bb", node: &ast.Node{Tag: ast.TagStrong}}
+	src1 := &InlineText{Text: "aa", ASTNode: &ast.Node{Tag: ast.TagEmphasis}}
+	src2 := &InlineText{Text: "bb", ASTNode: &ast.Node{Tag: ast.TagStrong}}
 	b1 := &TextBox{Text: "aa", Face: face, source: src1}
 	b2 := &TextBox{Text: "bb", Face: face, source: src2}
-	line := newLineBox([]InlineLayout{b1, b2}, false)
+	line := NewLineBox([]InlineLayout{b1, b2}, false)
 
 	bounds := line.Bounds()
 	midY := (bounds.Min.Y + bounds.Max.Y) / 2
@@ -273,14 +274,14 @@ func TestLineBoxHitTest(t *testing.T) {
 // TestLineBoxBoundsIndentedText checks that Bounds() doesn't crop away a
 // line's leading indentation - see the comment on LineBox.Bounds.
 func TestLineBoxBoundsIndentedText(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Long enough that the gap can't be mistaken for rounding noise.
 	text := "                                        return 42"
-	line := newLineBox([]InlineLayout{&TextBox{Text: text, Face: face}}, false)
+	line := NewLineBox([]InlineLayout{&TextBox{Text: text, Face: face}}, false)
 
 	raw := line.bounds
 	if got, want := line.Bounds().Dx(), raw.Max.X; got != want {
@@ -294,7 +295,7 @@ func TestLineBoxBoundsIndentedText(t *testing.T) {
 // word directly abutting a code span in the source, with no whitespace
 // between them: "a(`b`)").
 func TestLineBoxGluedNoGap(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
@@ -303,12 +304,12 @@ func TestLineBoxGluedNoGap(t *testing.T) {
 	_, aAdvance := a.BoundsAndAdvance()
 	b := &TextBox{Text: "b", Face: face}
 
-	glued := newLineBox([]InlineLayout{a, &TextBox{Text: "b", Face: face, glued: true}}, false)
+	glued := NewLineBox([]InlineLayout{a, &TextBox{Text: "b", Face: face, glued: true}}, false)
 	if got := glued.xs[1]; got != aAdvance {
 		t.Errorf("glued part at x=%d, want %d (right after a's advance, no gap)", got, aAdvance)
 	}
 
-	spaced := newLineBox([]InlineLayout{a, b}, false)
+	spaced := NewLineBox([]InlineLayout{a, b}, false)
 	if got := spaced.xs[1]; got <= aAdvance {
 		t.Errorf("spaced part at x=%d, want > %d (an ordinary gap should be added)", got, aAdvance)
 	}
@@ -319,7 +320,7 @@ func TestLineBoxGluedNoGap(t *testing.T) {
 // otherwise be the natural wrap point - mirroring how a single oversized
 // word already overflows the line today rather than being split.
 func TestWrapLinesGluedBoundaryUnbreakable(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
@@ -349,14 +350,14 @@ func TestWrapLinesGluedBoundaryUnbreakable(t *testing.T) {
 // indented code line, because Bounds() under-reported its width - see
 // the comment on LineBox.Bounds.
 func TestStackBoxHitTestIndentedLine(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
 	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := "                                        return 42"
-	src := &InlineText{text: text, node: &ast.Node{Tag: ast.TagCodeBlock}}
-	line := newLineBox([]InlineLayout{&TextBox{Text: text, Face: face, source: src}}, false)
+	src := &InlineText{Text: text, ASTNode: &ast.Node{Tag: ast.TagCodeBlock}}
+	line := NewLineBox([]InlineLayout{&TextBox{Text: text, Face: face, source: src}}, false)
 	stack := stackOf(line)
 
 	// Derived from the raw bounds, not line.Bounds() itself - a point
@@ -406,7 +407,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 	src := &sourceBlock{node: &ast.Node{Tag: ast.TagParagraph}}
 
 	outOfBounds := &StackBox{
-		slots:  preResolvedSlots([]BlockLayout{&RuleBox{width: 50, thickness: 10}}),
+		Slots:  preResolvedSlots([]BlockLayout{&RuleBox{width: 50, thickness: 10}}),
 		source: src,
 	}
 	if hit, offset := outOfBounds.HitTest(image.Pt(80, 5)); hit == nil || hit.Source().Node().Tag != ast.TagParagraph {
@@ -416,7 +417,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 	}
 
 	declining := &StackBox{
-		slots:  preResolvedSlots([]BlockLayout{NewEmptyBox(50, 10)}),
+		Slots:  preResolvedSlots([]BlockLayout{NewEmptyBox(50, 10)}),
 		source: src,
 	}
 	if hit, offset := declining.HitTest(image.Pt(10, 5)); hit == nil || hit.Source().Node().Tag != ast.TagParagraph {
@@ -430,7 +431,7 @@ func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
 // slots - for tests that just want a StackBox with known children and
 // don't need to exercise lazy building via Block.
 func stackOf(boxes ...BlockLayout) *StackBox {
-	return &StackBox{slots: preResolvedSlots(boxes)}
+	return &StackBox{Slots: preResolvedSlots(boxes)}
 }
 
 func TestStackBoxNormalizeCursor(t *testing.T) {
@@ -441,20 +442,20 @@ func TestStackBoxNormalizeCursor(t *testing.T) {
 	)
 
 	cases := []struct {
-		c    stackCursor
-		want stackCursor
+		c    StackCursor
+		want StackCursor
 	}{
-		{c: stackCursor{0, 0}, want: stackCursor{0, 0}},
-		{c: stackCursor{0, 9}, want: stackCursor{0, 9}},
-		{c: stackCursor{0, 10}, want: stackCursor{1, 0}},
-		{c: stackCursor{1, 5}, want: stackCursor{1, 5}},
-		{c: stackCursor{1, -7}, want: stackCursor{0, 3}},
-		{c: stackCursor{2, -35}, want: stackCursor{0, 0}},
-		{c: stackCursor{0, 17}, want: stackCursor{1, 7}},
-		{c: stackCursor{1, 20}, want: stackCursor{2, 0}},
-		{c: stackCursor{0, 60}, want: stackCursor{2, 30}},
-		{c: stackCursor{0, 1000}, want: stackCursor{2, 30}},
-		{c: stackCursor{2, 30}, want: stackCursor{2, 30}},
+		{c: StackCursor{0, 0}, want: StackCursor{0, 0}},
+		{c: StackCursor{0, 9}, want: StackCursor{0, 9}},
+		{c: StackCursor{0, 10}, want: StackCursor{1, 0}},
+		{c: StackCursor{1, 5}, want: StackCursor{1, 5}},
+		{c: StackCursor{1, -7}, want: StackCursor{0, 3}},
+		{c: StackCursor{2, -35}, want: StackCursor{0, 0}},
+		{c: StackCursor{0, 17}, want: StackCursor{1, 7}},
+		{c: StackCursor{1, 20}, want: StackCursor{2, 0}},
+		{c: StackCursor{0, 60}, want: StackCursor{2, 30}},
+		{c: StackCursor{0, 1000}, want: StackCursor{2, 30}},
+		{c: StackCursor{2, 30}, want: StackCursor{2, 30}},
 	}
 
 	for _, tc := range cases {
@@ -467,8 +468,8 @@ func TestStackBoxNormalizeCursor(t *testing.T) {
 
 func TestStackBoxNormalizeCursorEmpty(t *testing.T) {
 	stack := &StackBox{}
-	got := stack.normalizeCursor(stackCursor{0, 5})
-	if got != (stackCursor{0, 0}) {
+	got := stack.normalizeCursor(StackCursor{0, 5})
+	if got != (StackCursor{0, 0}) {
 		t.Errorf("normalizeCursor on an empty StackBox = %+v, want {0, 0}", got)
 	}
 }
@@ -484,9 +485,9 @@ func TestStackBoxNormalizeCursorIdempotent(t *testing.T) {
 	)
 
 	for index := 0; index < 3; index++ {
-		h := stack.boxAt(index).Bounds().Dy()
+		h := stack.BoxAt(index).Bounds().Dy()
 		for offset := 0; offset < h; offset++ {
-			c := stackCursor{index: index, offset: float64(offset)}
+			c := StackCursor{Index: index, Offset: float64(offset)}
 			got := stack.normalizeCursor(c)
 			if got != c {
 				t.Errorf("normalizeCursor(%+v) (already canonical) = %+v, want unchanged", c, got)
@@ -506,13 +507,13 @@ func TestStackBoxMoveCursor(t *testing.T) {
 	)
 
 	cases := []struct {
-		c    stackCursor
+		c    StackCursor
 		dy   float64
-		want stackCursor
+		want StackCursor
 	}{
-		{c: stackCursor{0, 5}, dy: 10, want: stackCursor{1, 5}},
-		{c: stackCursor{1, 5}, dy: -12, want: stackCursor{0, 3}},
-		{c: stackCursor{2, 30}, dy: 100, want: stackCursor{2, 30}},
+		{c: StackCursor{0, 5}, dy: 10, want: StackCursor{1, 5}},
+		{c: StackCursor{1, 5}, dy: -12, want: StackCursor{0, 3}},
+		{c: StackCursor{2, 30}, dy: 100, want: StackCursor{2, 30}},
 	}
 
 	for _, tc := range cases {
@@ -524,12 +525,12 @@ func TestStackBoxMoveCursor(t *testing.T) {
 }
 
 func TestImageBoxPendingImages(t *testing.T) {
-	ready := &ImageBox{img: image.NewRGBA(image.Rect(0, 0, 1, 1)), bounds: image.Rect(0, 0, 1, 1)}
+	ready := &ImageBox{Img: image.NewRGBA(image.Rect(0, 0, 1, 1)), Rect: image.Rect(0, 0, 1, 1)}
 	if got := ready.PendingImages(); got != nil {
 		t.Errorf("ready ImageBox.PendingImages() = %v, want nil", got)
 	}
 
-	pending := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
+	pending := &ImageBox{Rect: image.Rect(0, 0, 1, 1), Pending: []string{"x.png"}}
 	if got := pending.PendingImages(); len(got) != 1 || got[0] != "x.png" {
 		t.Errorf("pending ImageBox.PendingImages() = %v, want [x.png]", got)
 	}
@@ -541,8 +542,8 @@ func TestImageBoxPendingImages(t *testing.T) {
 // nothing.
 func TestLineBoxPendingImagesAggregates(t *testing.T) {
 	settled := &TextBox{Face: goRegularFace(t)}
-	pending := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
-	line := newLineBox([]InlineLayout{settled, pending}, false)
+	pending := &ImageBox{Rect: image.Rect(0, 0, 1, 1), Pending: []string{"x.png"}}
+	line := NewLineBox([]InlineLayout{settled, pending}, false)
 
 	got := line.PendingImages()
 	if len(got) != 1 || got[0] != "x.png" {
@@ -557,12 +558,12 @@ func TestLineBoxPendingImagesAggregates(t *testing.T) {
 // never resolved at all.
 func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 	settled := &EmptyBox{}
-	pendingImage := &ImageBox{bounds: image.Rect(0, 0, 1, 1), pending: []string{"x.png"}}
-	pending := newLineBox([]InlineLayout{pendingImage}, false) // slots hold BlockLayout, not InlineLayout
-	stack := &StackBox{slots: []stackSlot{
-		{box: settled},
-		{box: pending},
-		{block: &sourceBlock{}}, // unresolved: box is nil
+	pendingImage := &ImageBox{Rect: image.Rect(0, 0, 1, 1), Pending: []string{"x.png"}}
+	pending := NewLineBox([]InlineLayout{pendingImage}, false) // slots hold BlockLayout, not InlineLayout
+	stack := &StackBox{Slots: []StackSlot{
+		{Box: settled},
+		{Box: pending},
+		{Block: &sourceBlock{}}, // unresolved: box is nil
 	}}
 
 	got := stack.PendingImages()
@@ -577,7 +578,7 @@ func TestStackBoxPendingImagesSkipsUnresolvedSlots(t *testing.T) {
 // zero-width-but-real-height slot (e.g. a blank highlighted code line)
 // must not silently lose its height contribution.
 func TestStackBoxBoundsCountsZeroWidthSlot(t *testing.T) {
-	stack := &StackBox{slots: preResolvedSlots([]BlockLayout{
+	stack := &StackBox{Slots: preResolvedSlots([]BlockLayout{
 		NewEmptyBox(50, 20),
 		NewEmptyBox(0, 20), // zero width, real height - the blank-line case
 		NewEmptyBox(50, 20),
@@ -598,20 +599,20 @@ func TestImageBoxDrawInlineAnimated(t *testing.T) {
 		[]image.Image{f0, f1},
 		[]time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
 	)
-	box := &ImageBox{anim: anim, bounds: image.Rect(0, 0, 4, 4)}
-	dst := &recordingCanvas{}
+	box := &ImageBox{Anim: anim, Rect: image.Rect(0, 0, 4, 4)}
+	dst := &canvastest.Recorder{}
 
 	box.DrawInline(dst, 0, 0, 0)
 	box.DrawInline(dst, 0, 0, 15*time.Millisecond)
 
-	if len(dst.images) != 2 {
-		t.Fatalf("got %d DrawImage calls, want 2", len(dst.images))
+	if len(dst.Images) != 2 {
+		t.Fatalf("got %d DrawImage calls, want 2", len(dst.Images))
 	}
-	if dst.images[0] != f0 {
-		t.Errorf("frame at now=0 = %v, want f0", dst.images[0])
+	if dst.Images[0] != f0 {
+		t.Errorf("frame at now=0 = %v, want f0", dst.Images[0])
 	}
-	if dst.images[1] != f1 {
-		t.Errorf("frame at now=15ms = %v, want f1", dst.images[1])
+	if dst.Images[1] != f1 {
+		t.Errorf("frame at now=15ms = %v, want f1", dst.Images[1])
 	}
 }
 
@@ -658,9 +659,9 @@ func goRegularFace(t *testing.T) font.Face {
 // existed), so GetInlineLayout must fall back to CheckboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
-	ctx := RenderingContext{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	for _, checked := range []bool{false, true} {
-		c := &TaskCheckbox{checked: checked, node: &ast.Node{Tag: ast.TagListItem}}
+		c := &TaskCheckbox{Checked: checked, ASTNode: &ast.Node{Tag: ast.TagListItem}}
 		layout := c.GetInlineLayout(ctx, 100)
 		cb, ok := layout.(*CheckboxBox)
 		if !ok {
@@ -680,7 +681,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		Face: goRegularFace(t),
 		has:  map[rune]bool{checkboxUnchecked: true, checkboxChecked: true},
 	}
-	ctx := RenderingContext{Scale: 1, FaceSelector: fixedFaceSelector{face: fake}, Styles: stylingtest.Basic()}
+	ctx := Context{Scale: 1, FaceSelector: fixedFaceSelector{face: fake}, Styles: stylingtest.Basic()}
 
 	cases := []struct {
 		checked bool
@@ -690,7 +691,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 		{true, checkboxChecked},
 	}
 	for _, c := range cases {
-		box := &TaskCheckbox{checked: c.checked, node: &ast.Node{Tag: ast.TagListItem}}
+		box := &TaskCheckbox{Checked: c.checked, ASTNode: &ast.Node{Tag: ast.TagListItem}}
 		layout := box.GetInlineLayout(ctx, 100)
 		tb, ok := layout.(*TextBox)
 		if !ok {
@@ -706,7 +707,7 @@ func TestTaskCheckboxUsesGlyphWhenAvailable(t *testing.T) {
 // (Min.Y < 0, Max.Y == 0), the same convention TextBox's glyph path
 // follows, so a checkbox aligns with surrounding text either way.
 func TestCheckboxBoxBounds(t *testing.T) {
-	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ast.Node{Tag: ast.TagListItem}})
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{ASTNode: &ast.Node{Tag: ast.TagListItem}})
 	bounds, advance := b.BoundsAndAdvance()
 	if bounds.Min.Y >= 0 || bounds.Max.Y != 0 {
 		t.Errorf("bounds = %v, want Min.Y < 0 and Max.Y == 0", bounds)
@@ -721,24 +722,24 @@ func TestCheckboxBoxBounds(t *testing.T) {
 // checked draws those same 4 edges plus one filled interior rect.
 func TestCheckboxBoxDrawInline(t *testing.T) {
 	face := goRegularFace(t)
-	unchecked := newCheckboxBox(false, face, color.White, &TaskCheckbox{node: &ast.Node{Tag: ast.TagListItem}})
-	dst := &recordingCanvas{}
+	unchecked := newCheckboxBox(false, face, color.White, &TaskCheckbox{ASTNode: &ast.Node{Tag: ast.TagListItem}})
+	dst := &canvastest.Recorder{}
 	unchecked.DrawInline(dst, 0, 0, 0)
-	if len(dst.rects) != 4 {
-		t.Errorf("unchecked issued %d DrawRect calls, want 4 (just the border)", len(dst.rects))
+	if len(dst.Rects) != 4 {
+		t.Errorf("unchecked issued %d DrawRect calls, want 4 (just the border)", len(dst.Rects))
 	}
 
-	checked := newCheckboxBox(true, face, color.White, &TaskCheckbox{node: &ast.Node{Tag: ast.TagListItem}})
-	dst = &recordingCanvas{}
+	checked := newCheckboxBox(true, face, color.White, &TaskCheckbox{ASTNode: &ast.Node{Tag: ast.TagListItem}})
+	dst = &canvastest.Recorder{}
 	checked.DrawInline(dst, 0, 0, 0)
-	if len(dst.rects) != 5 {
-		t.Errorf("checked issued %d DrawRect calls, want 5 (border + interior fill)", len(dst.rects))
+	if len(dst.Rects) != 5 {
+		t.Errorf("checked issued %d DrawRect calls, want 5 (border + interior fill)", len(dst.Rects))
 	}
 }
 
 // TestCheckboxBoxHitTest checks hit-testing against the box's own footprint.
 func TestCheckboxBoxHitTest(t *testing.T) {
-	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{node: &ast.Node{Tag: ast.TagListItem}})
+	b := newCheckboxBox(false, goRegularFace(t), color.White, &TaskCheckbox{ASTNode: &ast.Node{Tag: ast.TagListItem}})
 	bounds, _ := b.BoundsAndAdvance()
 
 	hit, offset := b.HitTest(image.Pt(bounds.Min.X, bounds.Min.Y), 0, 0)
@@ -761,17 +762,17 @@ func TestCheckboxBoxHitTest(t *testing.T) {
 func TestLineBoxListMarkerBoundsMatchDrawing(t *testing.T) {
 	face := goRegularFace(t)
 	word := &TextBox{Text: "word", Face: face}
-	line := newLineBox([]InlineLayout{
+	line := NewLineBox([]InlineLayout{
 		&ListItemMarkerBox{Marker: &TextBox{Text: "-", Face: face}},
 		word,
 	}, false)
-	dst := &recordingCanvas{bounds: image.Rect(-100, -100, 1000, 1000)}
+	dst := &canvastest.Recorder{Area: image.Rect(-100, -100, 1000, 1000)}
 	DrawBlockLayout(line, dst, 0, 0, 0)
 
 	var wordX = -1
-	for _, dt := range dst.texts {
-		if dt.s == "word" {
-			wordX = dt.x
+	for _, dt := range dst.Texts {
+		if dt.S == "word" {
+			wordX = dt.X
 		}
 	}
 	wordBounds, _ := word.BoundsAndAdvance()
