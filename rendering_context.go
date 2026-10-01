@@ -10,6 +10,7 @@ import (
 
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/images"
 	"github.com/arnodel/whynot/internal/styling"
 )
 
@@ -24,11 +25,11 @@ type RenderingContext struct {
 	HighlightNode *ast.Node
 
 	// ImageCache resolves, fetches, and decodes images, caching the
-	// result - see ImageCache. NewView always sets one (FileImageSource
+	// result - see images.Cache. NewView always sets one (FileImageSource
 	// unless overridden via WithImageSource). If nil, images aren't
 	// loaded at all: an image renders as its alt text, and a diagram as
 	// its source code block.
-	ImageCache *ImageCache
+	ImageCache *images.Cache
 
 	// hscroll is the View's horizontal scrolling state, shared with the
 	// ScrollBoxes laid out under this context; nil outside a View.
@@ -37,7 +38,7 @@ type RenderingContext struct {
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never
 	// compared against a wall-clock timestamp), set every View.Layout
-	// call. The one consumer today is AnimatedImage.CurrentFrame,
+	// call. The one consumer today is images.Animation.CurrentFrame,
 	// reached via DrawInline - kept here rather than read from a direct
 	// time.Now() call so frame selection stays a pure, deterministic
 	// function of its inputs, easy to test without any real waiting.

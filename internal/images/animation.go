@@ -1,4 +1,4 @@
-package whynot
+package images
 
 import (
 	"image"
@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-// AnimatedImage holds every frame of a decoded GIF, already composited
+// Animation holds every frame of a decoded GIF, already composited
 // to full-canvas, disposal-correct frames (see decodeAnimatedGIF).
 // CurrentFrame is a pure function of now (elapsed time since rendering
-// started - RenderingContext.Time) and the animation's own total
+// started) and the animation's own total
 // duration - there's no per-animation "start" to track: now is already
 // "time since start", so a looping animation just always shows
 // whichever frame now % total currently lands in, as if it had been
@@ -20,21 +20,30 @@ import (
 // real waiting, and no clock-skew concerns between decode time and
 // draw time to reason about, since nothing is stamped at decode time.
 // Always loops forever.
-type AnimatedImage struct {
+type Animation struct {
 	frames []image.Image
 	delays []time.Duration
 	total  time.Duration
 }
 
+// NewAnimation returns an Animation showing each frame for its delay.
+func NewAnimation(frames []image.Image, delays []time.Duration) *Animation {
+	var total time.Duration
+	for _, d := range delays {
+		total += d
+	}
+	return &Animation{frames: frames, delays: delays, total: total}
+}
+
 // Bounds is every frame's shared size - GIF frames may individually be
 // smaller (see decodeAnimatedGIF), but every composited frame here is
 // full-canvas.
-func (a *AnimatedImage) Bounds() image.Rectangle {
+func (a *Animation) Bounds() image.Rectangle {
 	return a.frames[0].Bounds()
 }
 
 // CurrentFrame returns whichever frame now lands in, looping forever.
-func (a *AnimatedImage) CurrentFrame(now time.Duration) image.Image {
+func (a *Animation) CurrentFrame(now time.Duration) image.Image {
 	if len(a.frames) <= 1 || a.total <= 0 {
 		return a.frames[0]
 	}
@@ -75,10 +84,10 @@ const minGIFFrameDelay = 100 * time.Millisecond
 //   - DisposalPrevious: restore the canvas to its state from just
 //     before this frame was drawn, before the next one.
 //
-// A single-frame GIF decodes fine too (an AnimatedImage of one frame,
+// A single-frame GIF decodes fine too (an Animation of one frame,
 // CurrentFrame always returning it) - no separate "is this actually
 // animated" branch needed upstream.
-func decodeAnimatedGIF(r io.Reader) (*AnimatedImage, error) {
+func decodeAnimatedGIF(r io.Reader) (*Animation, error) {
 	g, err := gif.DecodeAll(r)
 	if err != nil {
 		return nil, err
@@ -96,7 +105,6 @@ func decodeAnimatedGIF(r io.Reader) (*AnimatedImage, error) {
 
 	frames := make([]image.Image, len(g.Image))
 	delays := make([]time.Duration, len(g.Image))
-	var total time.Duration
 	var beforeThisFrame *image.RGBA
 
 	for i, frame := range g.Image {
@@ -120,7 +128,6 @@ func decodeAnimatedGIF(r io.Reader) (*AnimatedImage, error) {
 			delay = time.Duration(g.Delay[i]) * 10 * time.Millisecond
 		}
 		delays[i] = delay
-		total += delay
 
 		switch disposal {
 		case gif.DisposalBackground:
@@ -130,5 +137,5 @@ func decodeAnimatedGIF(r io.Reader) (*AnimatedImage, error) {
 		}
 	}
 
-	return &AnimatedImage{frames: frames, delays: delays, total: total}, nil
+	return NewAnimation(frames, delays), nil
 }

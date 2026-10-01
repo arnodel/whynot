@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/images"
 	"image"
 	"image/color"
 	"time"
@@ -40,13 +41,13 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 	if ctx.ImageCache == nil {
 		return b.fallback.GetBlockLayout(ctx, width)
 	}
-	result := ctx.ImageCache.LoadImage(b.img)
-	if result.Status != ImageReady {
+	result := ctx.ImageCache.LoadImage(b.img.Key, b.img.Fetch)
+	if result.Status != images.Ready {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
 		// so View.invalidateChangedImages revisits this slot once the
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
-		// later Pending/Ready, per ImageCache's own retry timer), even
+		// later Pending/Ready, per images.Cache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
 		return &diagramBox{inner: b.fallback.GetBlockLayout(ctx, width), pendingKey: b.img.Key}
 	}
@@ -128,7 +129,7 @@ func (b *diagramBox) PendingImages() []string {
 // interactive.
 type imageLayout struct {
 	img    image.Image
-	anim   *AnimatedImage
+	anim   *images.Animation
 	bounds image.Rectangle // outer bounds - the frame and diagramPadding "matting" both live inside this, not added on top of it
 	// inset is frameThickness plus the scaled diagramPadding - the
 	// distance from bounds' own edge in to where the image itself

@@ -30,7 +30,7 @@ type View struct {
 	width int
 	scale float64
 
-	// imageCacheMark is the ImageCache.ChangedSince mark from the last
+	// imageCacheMark is the images.Cache.ChangedSince mark from the last
 	// time Layout checked for image state changes.
 	imageCacheMark uint64
 
@@ -47,11 +47,11 @@ type ViewOption func(*View)
 // WithImageSource overrides the ImageSource NewView otherwise defaults
 // to (FileImageSource) - e.g. for an embedder that wants images
 // resolved relative to a document's own location, or fetched over
-// http(s), the way cmd/whynot does. Wrapped in an ImageCache, so each
+// http(s), the way cmd/whynot does. Wrapped in an images.Cache, so each
 // image is resolved and fetched only once for the life of the View.
 func WithImageSource(s ImageSource) ViewOption {
 	return func(v *View) {
-		v.ctx.ImageCache = NewImageCache(s)
+		v.ctx.ImageCache = newImageCache(s)
 	}
 }
 
@@ -64,7 +64,7 @@ func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleShe
 		ctx: RenderingContext{
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
-			ImageCache:   NewImageCache(FileImageSource{}),
+			ImageCache:   newImageCache(FileImageSource{}),
 			hscroll:      newHScrollState(),
 		},
 	}
@@ -368,7 +368,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 
 // invalidateChangedImages is Layout's response to an unchanged
 // width/scale: an image may have settled since the last call (see
-// ImageCache) and need picking up. Only slots waiting on an image that
+// images.Cache) and need picking up. Only slots waiting on an image that
 // changed are invalidated.
 func (v *View) invalidateChangedImages() {
 	if !v.stack.laidOut() || v.ctx.ImageCache == nil {

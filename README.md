@@ -436,7 +436,7 @@ toolbar and input handling are Gio-native instead - see
 [above](#embed-a-markdown-viewer-in-your-game)). Image loading follows
 the same split, one layer further in: the library defines `ImageSource`
 (defaulting to a plain local file open) and owns caching the result
-(`ImageCache` - an image is resolved, fetched, and decoded at most once,
+(an image cache - an image is resolved, fetched, and decoded at most once,
 however many times it's asked for, however many rendering backends ask
 for it); `browser` supplies the file-or-`http(s)`,
 resolved-against-the-document's-location `ImageSource`, via

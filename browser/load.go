@@ -128,7 +128,7 @@ func looksLikeHost(s string) bool {
 // way LoadDocument does - so a relative or http(s) image works
 // regardless of where its document came from. Resolving (cheap, no I/O)
 // is kept separate from the actual fetch (the returned AsyncImage's own
-// Fetch) so whynot.ImageCache can cache by the resolved identifier
+// Fetch) so whynot's image cache can cache by the resolved identifier
 // without re-resolving-and-fetching on every call - only a genuine
 // cache miss ever calls Fetch.
 type docImageSource struct {

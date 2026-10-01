@@ -5,6 +5,7 @@ import (
 	"image"
 
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/images"
 )
 
 type Inline interface {
@@ -117,8 +118,8 @@ func (i *InlineImage) Node() *ast.Node {
 // GetInlineLayout resolves, fetches, and decodes src via ctx.ImageCache
 // (letting the embedder decide the resolution/fetch policy - relative
 // to a document's location, over http(s), from an archive, whatever it
-// needs) - never blocking, since ImageCache.Load never does. With no
-// ImageCache, the image isn't loaded and its fallback text is shown.
+// needs) - never blocking, since images.Cache.Load never does. With no
+// image cache, the image isn't loaded and its fallback text is shown.
 // Otherwise there are three outcomes:
 //
 //   - Ready: the decoded image, scaled by ctx.Scale like every other
@@ -130,7 +131,7 @@ func (i *InlineImage) Node() *ast.Node {
 //     so an image dropped into a document at its own native resolution
 //     doesn't overflow the page.
 //   - Pending with bounds already known (the header-peek in
-//     ImageCache.fetchAndDecode beat the caller here): an ImageBox at
+//     images.Cache.fetchAndDecode beat the caller here): an ImageBox at
 //     the correct, final (scaled and width-capped) size, but with no
 //     image yet - DrawInline draws a placeholder instead, and nothing
 //     needs to reflow once the real pixels arrive later.
@@ -149,7 +150,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 	}
 	resolved, result := cache.Load(i.src)
 	switch result.Status {
-	case ImageReady:
+	case images.Ready:
 		return &ImageBox{
 			img:    result.Image,
 			anim:   result.Animation,
@@ -157,7 +158,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 			glued:  i.glued,
 			source: i,
 		}
-	case ImagePending:
+	case images.Pending:
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
 				bounds:           fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
@@ -170,7 +171,7 @@ func (i *InlineImage) GetInlineLayout(ctx RenderingContext, width int) InlineLay
 		box := (&InlineText{text: "(loading image…)", node: i.node, glued: i.glued}).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box
-	default: // ImageFailed
+	default: // images.Failed
 		box := i.fallback(fmt.Sprintf("(image not found: %s)", resolved)).GetInlineLayout(ctx, width).(*TextBox)
 		box.pending = []string{resolved}
 		return box

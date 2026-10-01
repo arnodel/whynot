@@ -10,7 +10,7 @@ import (
 // Canvas is the draw destination for a BlockLayout/InlineLayout tree - the boundary
 // between layout (which never depends on a rendering backend) and actual
 // drawing (which necessarily does). DrawImage receives an already-decoded,
-// backend-agnostic image.Image - whynot.ImageCache owns resolving,
+// backend-agnostic image.Image - whynot's image cache owns resolving,
 // fetching, and decoding (see InlineImage.GetInlineLayout), so a Canvas
 // implementation never fetches anything itself; its own job is purely
 // whatever backend-specific conversion drawing it needs (e.g. uploading

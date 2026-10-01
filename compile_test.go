@@ -1079,7 +1079,7 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 }
 
 // TestImageGetInlineLayoutWithoutImageCache checks that with no
-// ImageCache the image isn't loaded at all: it renders as its alt text,
+// image cache the image isn't loaded at all: it renders as its alt text,
 // with nothing pending to revisit.
 func TestImageGetInlineLayoutWithoutImageCache(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg", alt: "a cat"}
@@ -1108,7 +1108,7 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 	// and falls back to text ("(loading image…)"), which needs both.
 	ctx := RenderingContext{
 		Scale:        2,
-		ImageCache:   NewImageCache(FileImageSource{}),
+		ImageCache:   newImageCache(FileImageSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1136,7 +1136,7 @@ func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
 	img := &InlineImage{src: "testdata/cat.jpeg"} // 400x600
 	ctx := RenderingContext{
 		Scale:        1,
-		ImageCache:   NewImageCache(FileImageSource{}),
+		ImageCache:   newImageCache(FileImageSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1183,7 +1183,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       styleSheet,
-		ImageCache:   NewImageCache(FileImageSource{}),
+		ImageCache:   newImageCache(FileImageSource{}),
 	}
 	fallbackNode := (*ast.Node)(nil).AddChild(ast.TagImage).AddChild(ast.TagUnsupported)
 
@@ -1225,7 +1225,7 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 	img := &InlineImage{src: "testdata/animated.gif"} // 64x64
 	ctx := RenderingContext{
 		Scale:        2,
-		ImageCache:   NewImageCache(FileImageSource{}),
+		ImageCache:   newImageCache(FileImageSource{}),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
@@ -1237,7 +1237,7 @@ func TestImageGetInlineLayoutAnimated(t *testing.T) {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, naturalWidthMeasure))
 	}
 	if box.anim == nil {
-		t.Fatal("anim = nil, want the decoded AnimatedImage")
+		t.Fatal("anim = nil, want the decoded images.Animation")
 	}
 	if box.img != nil {
 		t.Errorf("img = %v, want nil for an animated GIF", box.img)

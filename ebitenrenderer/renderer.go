@@ -23,7 +23,7 @@ import (
 // every frame.
 type Renderer struct {
 	// imageCache holds each image.Image's ebiten-specific conversion,
-	// keyed by the image.Image's own identity - whynot.ImageCache
+	// keyed by the image.Image's own identity - whynot's image cache
 	// already guarantees the same resolved src yields the same decoded
 	// image.Image every time GetInlineLayout asks for it, so this
 	// package never fetches or decodes anything itself; it only

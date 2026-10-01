@@ -1,4 +1,4 @@
-package whynot
+package images
 
 import (
 	"bytes"
@@ -170,7 +170,7 @@ func TestDecodeAnimatedGIFZeroDelayUsesMinimum(t *testing.T) {
 // than global palette, none of which the synthetic compositing test
 // above exercises directly.
 func TestDecodeAnimatedGIFRealFile(t *testing.T) {
-	f, err := os.Open("testdata/homer_animated_gif.gif")
+	f, err := os.Open("../../testdata/homer_animated_gif.gif")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,11 +206,10 @@ func TestAnimatedImageCurrentFrame(t *testing.T) {
 	f0 := image.NewUniform(color.Black)
 	f1 := image.NewUniform(color.White)
 	f2 := image.NewUniform(color.Gray{0x80})
-	anim := &AnimatedImage{
-		frames: []image.Image{f0, f1, f2},
-		delays: []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 30 * time.Millisecond},
-		total:  60 * time.Millisecond,
-	}
+	anim := NewAnimation(
+		[]image.Image{f0, f1, f2},
+		[]time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 30 * time.Millisecond},
+	)
 
 	cases := []struct {
 		now  time.Duration

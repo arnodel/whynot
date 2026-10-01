@@ -3,6 +3,7 @@ package whynot
 import (
 	"bytes"
 	"errors"
+	"github.com/arnodel/whynot/internal/images"
 	"image"
 	"image/color"
 	"io"
@@ -50,7 +51,7 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: NewImageCache(FileImageSource{})}
+	ctx := RenderingContext{ImageCache: newImageCache(FileImageSource{})}
 
 	box := block.GetBlockLayout(ctx, 300)
 	wantBounds := fallback.GetBlockLayout(ctx, 300).Bounds()
@@ -69,7 +70,7 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 // TestDiagramBlockFailedShowsFallbackAndReportsPending checks that a
 // failed fetch is treated exactly like a pending one from
 // GetBlockLayout's own contract - the fallback is shown, and the key is
-// still reported so a later retry (see ImageCache's own retry delay)
+// still reported so a later retry (see images.Cache's own retry delay)
 // still gets picked up by View.invalidateChangedImages.
 func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 	img := AsyncImage{
@@ -78,7 +79,7 @@ func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: NewImageCache(FileImageSource{})}
+	ctx := RenderingContext{ImageCache: newImageCache(FileImageSource{})}
 
 	box := waitForDiagramFailed(t, block, img, ctx, 300)
 	wantBounds := fallback.GetBlockLayout(ctx, 300).Bounds()
@@ -91,7 +92,7 @@ func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 }
 
 // TestDiagramBlockWithoutImageCacheShowsFallback checks that with no
-// ImageCache the diagram isn't rendered at all: the fallback is shown,
+// image cache the diagram isn't rendered at all: the fallback is shown,
 // with nothing pending to revisit.
 func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
 	img := AsyncImage{
@@ -118,13 +119,13 @@ func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
 // TestDiagramBlockFailedShowsFallbackAndReportsPending), so it can't be
 // distinguished from "still fetching" by PendingImages() alone; poll
 // the cache directly (by the same key/AsyncImage the block itself uses)
-// until it reports ImageFailed instead.
+// until it reports images.Failed instead.
 func waitForDiagramFailed(t *testing.T, block Block, img AsyncImage, ctx RenderingContext, width int) BlockLayout {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		box := block.GetBlockLayout(ctx, width)
-		if result := ctx.ImageCache.LoadImage(img); result.Status == ImageFailed {
+		if result := ctx.ImageCache.LoadImage(img.Key, img.Fetch); result.Status == images.Failed {
 			return box
 		}
 		if time.Now().After(deadline) {
@@ -146,7 +147,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: NewImageCache(FileImageSource{}), Styles: noMarginStyleSheet(), Scale: 1}
+	ctx := RenderingContext{ImageCache: newImageCache(FileImageSource{}), Styles: noMarginStyleSheet(), Scale: 1}
 
 	box := waitForDiagramSettled(t, block, ctx, 300)
 	if box.Bounds() == (fallback.GetBlockLayout(ctx, 300).Bounds()) {

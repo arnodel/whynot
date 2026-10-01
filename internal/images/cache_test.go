@@ -1,4 +1,4 @@
-package whynot
+package images
 
 import (
 	"bytes"
@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// countingImageSource wraps a fixed image (or a fixed error) behind an
-// ImageSource that counts how many times Image was called (resolveCalls
-// - Image itself plays Resolve's old role: cheap, called on every Load)
-// and how many times the AsyncImage it returned was actually fetched
+// countingImageSource wraps a fixed image (or a fixed error) behind a
+// Resolver (resolve) that counts how many times it was called
+// (resolveCalls - cheap, called on every Load) and how many times the
+// Fetch it returned was actually called
 // (openCalls - only on a genuine cache miss). open, if set, is called
 // instead of the default (returning data/openErr directly) - for tests
 // that need to control exactly when the fetch returns.
@@ -29,12 +29,12 @@ type countingImageSource struct {
 	openCalls    int
 }
 
-func (s *countingImageSource) Image(src string) (AsyncImage, error) {
+func (s *countingImageSource) resolve(src string) (string, Fetch, error) {
 	s.resolveCalls++
 	if s.resolveErr != nil {
-		return AsyncImage{}, s.resolveErr
+		return "", nil, s.resolveErr
 	}
-	return AsyncImage{Key: s.resolved, Fetch: func() (io.ReadCloser, error) {
+	return s.resolved, func() (io.ReadCloser, error) {
 		s.openCalls++
 		if s.open != nil {
 			return s.open()
@@ -43,7 +43,7 @@ func (s *countingImageSource) Image(src string) (AsyncImage, error) {
 			return nil, s.openErr
 		}
 		return io.NopCloser(bytes.NewReader(s.data)), nil
-	}}, nil
+	}, nil
 }
 
 func onePixelPNG(t *testing.T) []byte {
@@ -60,12 +60,12 @@ func onePixelPNG(t *testing.T) []byte {
 // runs on its own goroutine, so a test using a real (or realistically
 // delayed) ImageSource needs to give it a moment rather than checking
 // the very first, necessarily-still-pending result.
-func waitForSettled(t *testing.T, cache *ImageCache, src string) ImageResult {
+func waitForSettled(t *testing.T, cache *Cache, src string) Result {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		_, result := cache.Load(src)
-		if result.Status != ImagePending {
+		if result.Status != Pending {
 			return result
 		}
 		if time.Now().After(deadline) {
@@ -88,10 +88,10 @@ func TestImageCacheLoadDoesNotBlock(t *testing.T) {
 			return io.NopCloser(bytes.NewReader(onePixelPNG(t))), nil
 		},
 	}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 	defer close(release)
 
-	done := make(chan ImageResult, 1)
+	done := make(chan Result, 1)
 	go func() {
 		_, result := cache.Load("src.png")
 		done <- result
@@ -99,8 +99,8 @@ func TestImageCacheLoadDoesNotBlock(t *testing.T) {
 
 	select {
 	case result := <-done:
-		if result.Status != ImagePending {
-			t.Errorf("Status = %v, want ImagePending", result.Status)
+		if result.Status != Pending {
+			t.Errorf("Status = %v, want Pending", result.Status)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Load blocked instead of returning immediately")
@@ -109,18 +109,18 @@ func TestImageCacheLoadDoesNotBlock(t *testing.T) {
 
 // TestImageCacheLoadFetchesOnce checks that repeated Load calls for the
 // same src only resolve/fetch/decode once - the whole point of
-// ImageCache: every layout rebuild (a resize, a zoom change, a theme
+// Cache: every layout rebuild (a resize, a zoom change, a theme
 // change, even just hovering a different link elsewhere in the
 // document) calls GetInlineLayout, hence Load, again for every image in
 // the document, and none of that should touch the network or disk
 // again once an image has already been loaded.
 func TestImageCacheLoadFetchesOnce(t *testing.T) {
 	source := &countingImageSource{resolved: "resolved.png", data: onePixelPNG(t)}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 
 	first := waitForSettled(t, cache, "src.png")
-	if first.Status != ImageReady || first.Image == nil {
-		t.Fatalf("first Load settled to %+v, want ImageReady with an image", first)
+	if first.Status != Ready || first.Image == nil {
+		t.Fatalf("first Load settled to %+v, want Ready with an image", first)
 	}
 
 	for i := 0; i < 4; i++ {
@@ -128,8 +128,8 @@ func TestImageCacheLoadFetchesOnce(t *testing.T) {
 		if resolved != "resolved.png" {
 			t.Errorf("Load #%d: resolved = %q, want %q", i, resolved, "resolved.png")
 		}
-		if result.Status != ImageReady || result.Image == nil {
-			t.Errorf("Load #%d: result = %+v, want the cached ImageReady result", i, result)
+		if result.Status != Ready || result.Image == nil {
+			t.Errorf("Load #%d: result = %+v, want the cached Ready result", i, result)
 		}
 	}
 	if source.resolveCalls < 5 {
@@ -161,15 +161,15 @@ func TestImageCacheHeaderPeekRevealsBoundsEarly(t *testing.T) {
 			return io.NopCloser(r), nil
 		},
 	}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		_, result := cache.Load("src.png")
-		if result.Status == ImagePending && result.Bounds != (image.Rectangle{}) {
+		if result.Status == Pending && result.Bounds != (image.Rectangle{}) {
 			break // bounds revealed - success, before we ever release the rest
 		}
-		if result.Status != ImagePending {
+		if result.Status != Pending {
 			t.Fatalf("settled to %+v before bounds were ever revealed as pending", result)
 		}
 		if time.Now().After(deadline) {
@@ -180,8 +180,8 @@ func TestImageCacheHeaderPeekRevealsBoundsEarly(t *testing.T) {
 
 	close(release)
 	final := waitForSettled(t, cache, "src.png")
-	if final.Status != ImageReady {
-		t.Errorf("final status = %v, want ImageReady", final.Status)
+	if final.Status != Ready {
+		t.Errorf("final status = %v, want Ready", final.Status)
 	}
 }
 
@@ -204,15 +204,15 @@ func (r blockingReader) Read(p []byte) (int, error) {
 // staying broken for the rest of the session.
 func TestImageCacheLoadRetriesFailureAfterDelay(t *testing.T) {
 	source := &countingImageSource{resolved: "resolved.png", openErr: errors.New("boom")}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 	cache.retryDelay = 10 * time.Millisecond
 
 	first := waitForSettled(t, cache, "src.png")
-	if first.Status != ImageFailed {
-		t.Fatalf("first settle = %+v, want ImageFailed", first)
+	if first.Status != Failed {
+		t.Fatalf("first settle = %+v, want Failed", first)
 	}
-	if _, result := cache.Load("src.png"); result.Status != ImageFailed {
-		t.Fatalf("immediate retry = %+v, want the still-cached ImageFailed (no retry yet)", result)
+	if _, result := cache.Load("src.png"); result.Status != Failed {
+		t.Fatalf("immediate retry = %+v, want the still-cached Failed (no retry yet)", result)
 	}
 	if source.openCalls != 1 {
 		t.Fatalf("openCalls = %d, want 1 before the retry delay elapses", source.openCalls)
@@ -220,8 +220,8 @@ func TestImageCacheLoadRetriesFailureAfterDelay(t *testing.T) {
 
 	time.Sleep(20 * time.Millisecond)
 	second := waitForSettled(t, cache, "src.png")
-	if second.Status != ImageFailed {
-		t.Fatalf("retry settle = %+v, want ImageFailed again (source still fails)", second)
+	if second.Status != Failed {
+		t.Fatalf("retry settle = %+v, want Failed again (source still fails)", second)
 	}
 	if source.openCalls != 2 {
 		t.Errorf("openCalls = %d, want 2 (one retry after the delay elapsed)", source.openCalls)
@@ -234,7 +234,7 @@ func TestImageCacheLoadRetriesFailureAfterDelay(t *testing.T) {
 // first time.
 func TestImageCacheChangedSince(t *testing.T) {
 	source := &countingImageSource{resolved: "resolved.png", data: onePixelPNG(t)}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 
 	changes, mark := cache.ChangedSince(0)
 	if len(changes) != 0 {
@@ -267,13 +267,12 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 		byLiteral: map[string]string{"a.png": "resolved-a.png", "b.png": "resolved-b.png"},
 		data:      pixel,
 	}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 
 	resultA := waitForSettled(t, cache, "a.png")
 	resultB := waitForSettled(t, cache, "b.png")
-	imgA, _ := source.Image("a.png")
-	imgB, _ := source.Image("b.png")
-	resolvedA, resolvedB := imgA.Key, imgB.Key
+	resolvedA, _, _ := source.resolve("a.png")
+	resolvedB, _, _ := source.resolve("b.png")
 	if resolvedA == resolvedB {
 		t.Fatalf("both resolved to %q, want distinct identifiers", resolvedA)
 	}
@@ -286,46 +285,42 @@ func TestImageCacheLoadDistinguishesResolvedSrc(t *testing.T) {
 }
 
 // waitForSettledImage is waitForSettled's LoadImage counterpart.
-func waitForSettledImage(t *testing.T, cache *ImageCache, img AsyncImage) ImageResult {
+func waitForSettledImage(t *testing.T, cache *Cache, key string, fetch Fetch) Result {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		result := cache.LoadImage(img)
-		if result.Status != ImagePending {
+		result := cache.LoadImage(key, fetch)
+		if result.Status != Pending {
 			return result
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("LoadImage(%q) still pending after 2s", img.Key)
+			t.Fatalf("LoadImage(%q) still pending after 2s", key)
 		}
 		time.Sleep(time.Millisecond)
 	}
 }
 
 // TestImageCacheLoadImageFetchesOnce mirrors TestImageCacheLoadFetchesOnce
-// for LoadImage - the path a CodeBlockPlugin's AsyncImage drives (see
-// NewDiagramBlock), which has no ImageSource to resolve/dedupe through,
-// only whatever Key its AsyncImage reports.
+// for LoadImage - the path a diagram drives, which has nothing to resolve,
+// only its own key.
 func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
 	pixel := onePixelPNG(t)
 	var fetchCalls int
-	img := AsyncImage{
-		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
-			fetchCalls++
-			return io.NopCloser(bytes.NewReader(pixel)), nil
-		},
+	fetch := func() (io.ReadCloser, error) {
+		fetchCalls++
+		return io.NopCloser(bytes.NewReader(pixel)), nil
 	}
-	cache := NewImageCache(FileImageSource{})
+	cache := NewCache(nil)
 
-	first := waitForSettledImage(t, cache, img)
-	if first.Status != ImageReady || first.Image == nil {
-		t.Fatalf("first LoadImage settled to %+v, want ImageReady with an image", first)
+	first := waitForSettledImage(t, cache, "diagram-key", fetch)
+	if first.Status != Ready || first.Image == nil {
+		t.Fatalf("first LoadImage settled to %+v, want Ready with an image", first)
 	}
 
 	for i := 0; i < 4; i++ {
-		result := cache.LoadImage(img)
-		if result.Status != ImageReady || result.Image == nil {
-			t.Errorf("LoadImage #%d: result = %+v, want the cached ImageReady result", i, result)
+		result := cache.LoadImage("diagram-key", fetch)
+		if result.Status != Ready || result.Image == nil {
+			t.Errorf("LoadImage #%d: result = %+v, want the cached Ready result", i, result)
 		}
 	}
 	if fetchCalls != 1 {
@@ -341,14 +336,11 @@ func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
 // cache keyed by string.
 func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
 	pixel := onePixelPNG(t)
-	cache := NewImageCache(FileImageSource{})
+	cache := NewCache(nil)
 
 	_, mark := cache.ChangedSince(0)
-	waitForSettledImage(t, cache, AsyncImage{
-		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(pixel)), nil
-		},
+	waitForSettledImage(t, cache, "diagram-key", func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(pixel)), nil
 	})
 
 	changes, _ := cache.ChangedSince(mark)
@@ -362,7 +354,7 @@ func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
 
 // twoFrameGIF returns the encoded bytes of a minimal 2-frame animated
 // GIF, for tests that just need "a real animated GIF", not specific
-// pixel content (see animated_image_test.go for compositing
+// pixel content (see animation_test.go for compositing
 // correctness).
 func twoFrameGIF(t *testing.T) []byte {
 	t.Helper()
@@ -387,21 +379,21 @@ func twoFrameGIF(t *testing.T) []byte {
 }
 
 // TestImageCacheDecodesAnimatedGIF checks that a GIF source produces
-// an ImageResult with Animation set (not Image) - ImageCache picks the
+// an Result with Animation set (not Image) - Cache picks the
 // decode path by the format name image.DecodeConfig already reports.
 func TestImageCacheDecodesAnimatedGIF(t *testing.T) {
 	source := &countingImageSource{resolved: "resolved.gif", data: twoFrameGIF(t)}
-	cache := NewImageCache(source)
+	cache := NewCache(source.resolve)
 
 	result := waitForSettled(t, cache, "src.gif")
-	if result.Status != ImageReady {
-		t.Fatalf("status = %v, want ImageReady", result.Status)
+	if result.Status != Ready {
+		t.Fatalf("status = %v, want Ready", result.Status)
 	}
 	if result.Image != nil {
 		t.Errorf("Image = %v, want nil for an animated GIF", result.Image)
 	}
 	if result.Animation == nil {
-		t.Fatal("Animation = nil, want a decoded AnimatedImage")
+		t.Fatal("Animation = nil, want a decoded Animation")
 	}
 	if len(result.Animation.frames) != 2 {
 		t.Errorf("got %d frames, want 2", len(result.Animation.frames))
@@ -417,10 +409,10 @@ type stubMultiImageSource struct {
 	openCalls int
 }
 
-func (s *stubMultiImageSource) Image(src string) (AsyncImage, error) {
+func (s *stubMultiImageSource) resolve(src string) (string, Fetch, error) {
 	resolved := s.byLiteral[src]
-	return AsyncImage{Key: resolved, Fetch: func() (io.ReadCloser, error) {
+	return resolved, func() (io.ReadCloser, error) {
 		s.openCalls++
 		return io.NopCloser(bytes.NewReader(s.data)), nil
-	}}, nil
+	}, nil
 }
