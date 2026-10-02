@@ -58,6 +58,13 @@ func (b *scaledHeightBlock) Node() *ast.Node {
 	return nil
 }
 
+// hitAt is View.hitTest without the slot: the hit itself and where its
+// Bounds() go, for tests that check what was hit, not just where.
+func hitAt(v *View, x, y int) (engine.Hit, image.Point) {
+	hit, offset, _ := v.hitTest(x, y)
+	return hit, offset
+}
+
 // testDocument wraps blocks as a Document, bypassing Parse.
 func testDocument(blocks ...engine.Block) *Document {
 	return &Document{root: &engine.StackBlock{Blocks: blocks}}
@@ -263,7 +270,7 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 	// The content's own top-left corner, shifted into the View's
 	// coordinate space by the margin, should land on real content.
 	p := image.Pt(20+content.Min.X, 10+content.Min.Y)
-	hit, offset := v.HitTest(p.X, p.Y)
+	hit, offset := hitAt(v, p.X, p.Y)
 	if hit == nil {
 		t.Fatalf("hit at the content's own top-left %v = nil, want a match", p)
 	}
@@ -272,7 +279,7 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 	}
 
 	// Same y, but inside the left margin gutter (x well short of 20).
-	if hit, _ := v.HitTest(5, p.Y); hit != nil {
+	if hit, _ := hitAt(v, 5, p.Y); hit != nil {
 		t.Errorf("hit inside the left margin = %v, want a miss", hit)
 	}
 }
@@ -379,6 +386,30 @@ func TestViewLayoutReanchor(t *testing.T) {
 // scans a coarse grid over the whole rendered document and just checks
 // that *some* point resolves to each expected tag - a topological
 // check, not a geometric one.
+// TestViewHitTestRectangle checks the public HitTest: the rectangle of
+// the content under the point, in Draw's coordinates, or ok=false off
+// any content.
+func TestViewHitTestRectangle(t *testing.T) {
+	style := stylingtest.Basic()
+	style.ViewMargin = styling.Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
+	v := NewView(Parse([]byte("hello")), fonts.NewGoSelector(), style)
+	v.Layout(300, 1000, 1, 0)
+
+	content := v.stack.Box.BoxAt(1).Bounds()
+	p := image.Pt(20+content.Min.X, 10+content.Min.Y)
+	hit, offset := hitAt(v, p.X, p.Y)
+	if hit == nil {
+		t.Fatalf("no hit at %v", p)
+	}
+	r, ok := v.HitTest(p.X, p.Y)
+	if want := hit.Bounds().Add(offset); !ok || r != want {
+		t.Errorf("HitTest(%v) = %v, %v; want %v, true", p, r, ok, want)
+	}
+	if r, ok := v.HitTest(5, p.Y); ok {
+		t.Errorf("HitTest in the left margin = %v, true; want a miss", r)
+	}
+}
+
 func TestViewHitTestEndToEnd(t *testing.T) {
 	source := []byte(`# Heading
 
@@ -408,7 +439,7 @@ code line
 	found := map[ast.Tag]bool{}
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x += 2 {
-			hit, _ := v.HitTest(x, y)
+			hit, _ := hitAt(v, x, y)
 			if hit == nil {
 				continue
 			}
@@ -440,7 +471,7 @@ func findTag(v *View, tag ast.Tag) (x, y int, ok bool) {
 	height := v.stack.Box.Bounds().Dy()
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < v.width; x += 2 {
-			if hit, _ := v.HitTest(x, y); hit != nil {
+			if hit, _ := hitAt(v, x, y); hit != nil {
 				if n := hit.Source().Node(); n != nil && n.Tag == tag {
 					return x, y, true
 				}
@@ -476,7 +507,7 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 		t.Errorf("Hover(x, y) = %q, %v, want %q, true", dest, ok, "url")
 	}
 
-	hit, _ := v.HitTest(x, y)
+	hit, _ := hitAt(v, x, y)
 	if hit == nil {
 		t.Fatal("hit at the link's own position = nil after the hover rebuild")
 	}
@@ -532,7 +563,7 @@ func TestViewScrollToAnchor(t *testing.T) {
 		t.Fatal(`ScrollToAnchor("second") = false, want true`)
 	}
 
-	hit, _ := v.HitTest(0, 0)
+	hit, _ := hitAt(v, 0, 0)
 	if hit == nil {
 		t.Fatal("hit at the top of the viewport after ScrollToAnchor = nil")
 	}
@@ -733,7 +764,7 @@ func findTwoLinks(t *testing.T, v *View) (x1, y1, x2, y2 int) {
 	found := 0
 	for y := 0; y < height && found < 2; y += 2 {
 		for x := 0; x < v.width && found < 2; x += 2 {
-			hit, _ := v.HitTest(x, y)
+			hit, _ := hitAt(v, x, y)
 			if hit == nil {
 				continue
 			}
@@ -832,7 +863,7 @@ func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
 	// get stuck, despite the rebuild in between.
 	v.Hover(x2, y2)
 
-	hit, _ := v.HitTest(x1, y1)
+	hit, _ := hitAt(v, x1, y1)
 	text, ok := hit.(*engine.TextBox)
 	if !ok {
 		t.Fatalf("hit at link one's position = %T, want *TextBox", hit)

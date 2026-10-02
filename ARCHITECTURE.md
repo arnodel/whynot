@@ -389,7 +389,9 @@ determines the loop position.
 `View.HitTest(x, y)` ([view.go](view.go)) answers "what's at this
 position" in the same coordinate space `Draw`'s own `(x, y)` places
 content's origin into - the query counterpart to `Draw`, resolving a
-point instead of painting one. Like `Draw`, it's cursor-relative
+point instead of painting one. Publicly it returns just the hit's
+rectangle; inside the module (`View.hitTest`) it returns the `Hit`
+itself, which is what link hovering and clicking use. Like `Draw`, it's cursor-relative
 ([block_layout.go](internal/engine/block_layout.go)'s `normalizeCursor`), so a query far from the current
 scroll position doesn't force-build every slot in between.
 
@@ -401,7 +403,7 @@ It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
   `Inline` implements it, including `StackBlock`, which reports `nil`
   since it aggregates unrelated children with no identity of its own.
 - `Hit` ([block_layout.go](internal/engine/block_layout.go)) is `Bounds() image.Rectangle` + `Source()
-  Source` - what `HitTest` returns. Every `BlockLayout`/`InlineLayout`
+  Source` - what the internal hit test returns. Every `BlockLayout`/`InlineLayout`
   satisfies it directly (no separate wrapper type), so a caller gets the
   actual matched box back - useful for type-asserting to its concrete
   type for anything beyond the node itself (e.g. a `*TextBox`'s resolved

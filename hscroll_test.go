@@ -101,11 +101,11 @@ func TestScrollBoxHitTestFollowsOffset(t *testing.T) {
 		tb, ok := hit.(*engine.TextBox)
 		return ok && strings.TrimSpace(tb.Text) == "short"
 	}
-	if hit, _ := v.HitTest(p.X, p.Y); !isShort(hit) {
+	if hit, _ := hitAt(v, p.X, p.Y); !isShort(hit) {
 		t.Fatalf("HitTest on the second line = %T, want the \"short\" text", hit)
 	}
 	v.ScrollHorizontal(p.X, p.Y, -200)
-	if hit, _ := v.HitTest(p.X, p.Y); isShort(hit) {
+	if hit, _ := hitAt(v, p.X, p.Y); isShort(hit) {
 		t.Error("HitTest still finds \"short\" after scrolling it out of view")
 	}
 }

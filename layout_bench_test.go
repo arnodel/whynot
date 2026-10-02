@@ -23,7 +23,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source).Root()
+	block := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
@@ -59,7 +59,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source).Root()
+	block := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
@@ -92,7 +92,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source).Root()
+	block := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
@@ -134,7 +134,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source).Root()
+	block := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
@@ -176,7 +176,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	block := whynot.Parse(source).Root()
+	block := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
@@ -216,7 +216,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	if err != nil {
 		b.Fatal(err)
 	}
-	rawBlock := whynot.Parse(source).Root()
+	rawBlock := whynot.DocumentRoot(whynot.Parse(source))
 	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
