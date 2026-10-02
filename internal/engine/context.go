@@ -52,7 +52,7 @@ type Context struct {
 // TextStyle/Color have no scaled equivalent: font size is scaled by the
 // dpi selectFace passes, and color doesn't scale at all.
 
-func (c Context) ScaledMargins(m Marginer) Margins {
+func (c Context) ScaledMargins(m Marginer) styling.Margins {
 	margins := m.Margins(c)
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale
@@ -61,7 +61,7 @@ func (c Context) ScaledMargins(m Marginer) Margins {
 	return margins
 }
 
-func (c Context) ScaledViewMargins() Margins {
+func (c Context) ScaledViewMargins() styling.Margins {
 	margins := c.Styles.ViewMargins()
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale

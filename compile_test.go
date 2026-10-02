@@ -12,6 +12,7 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
@@ -523,7 +524,7 @@ func TestParseLooseList(t *testing.T) {
 		if got := textOf(t, head.Parts); !stringsEqual(got, []string{wantWords[i]}) {
 			t.Errorf("item %d words = %v, want [%s]", i, got, wantWords[i])
 		}
-		if got := headBlock.Margins(ctx); got != (engine.Margins{Top: 10, Bottom: 10}) {
+		if got := headBlock.Margins(ctx); got != (styling.Margins{Top: 10, Bottom: 10}) {
 			t.Errorf("item %d head margins = %+v, want {Top: 10, Bottom: 10} (paragraphStyle)", i, got)
 		}
 	}
@@ -562,7 +563,7 @@ func TestParseLooseListMultiParagraphItem(t *testing.T) {
 	if got := textOf(t, second.Parts); !stringsEqual(got, []string{"second", "paragraph"}) {
 		t.Errorf("second paragraph words = %v, want [second paragraph]", got)
 	}
-	if got := itemStack.Blocks[1].Margins(ctx); got != (engine.Margins{Top: 10, Bottom: 10}) {
+	if got := itemStack.Blocks[1].Margins(ctx); got != (styling.Margins{Top: 10, Bottom: 10}) {
 		t.Errorf("second paragraph margins = %+v, want {Top: 10, Bottom: 10}", got)
 	}
 }
@@ -785,7 +786,7 @@ func TestParseThematicBreak(t *testing.T) {
 
 	styleSheet := stylingtest.Basic()
 	ctx := engine.Context{Scale: 1, Styles: styleSheet}
-	if got := wrapper.Margins(ctx); got != (engine.Margins{Top: 20, Bottom: 20}) {
+	if got := wrapper.Margins(ctx); got != (styling.Margins{Top: 20, Bottom: 20}) {
 		t.Errorf("Margins(ctx) = %+v, want {Top: 20, Bottom: 20}", got)
 	}
 	box := rule.GetBlockLayout(ctx, 100)

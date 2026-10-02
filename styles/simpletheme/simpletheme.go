@@ -34,19 +34,19 @@ var (
 // pixels. Each TextStyle only sets its non-zero fields, inheriting the
 // rest from the enclosing element, and ultimately from BaseTextStyle.
 type Theme struct {
-	ParagraphMargins   whynot.Margins
+	ParagraphMargins   Margins
 	ParagraphTextStyle TextStyle
 
 	// HeadingMargins and HeadingTextStyles are indexed by heading level
 	// minus one: index 0 is a level 1 heading (#).
-	HeadingMargins    [6]whynot.Margins
+	HeadingMargins    [6]Margins
 	HeadingTextStyles [6]TextStyle
 
-	ListMargins       whynot.Margins
-	ListItemMargins   whynot.Margins
+	ListMargins       Margins
+	ListItemMargins   Margins
 	ListItemTextStyle TextStyle
 
-	CodeBlockMargins   whynot.Margins
+	CodeBlockMargins   Margins
 	CodeBlockTextStyle TextStyle
 	CodeBlockColor     color.Color
 
@@ -59,16 +59,16 @@ type Theme struct {
 	EmphasisTextStyle TextStyle
 	StrongTextStyle   TextStyle
 
-	ThematicBreakMargins whynot.Margins
+	ThematicBreakMargins Margins
 	ThematicBreakColor   color.Color
 
 	LinkColor color.Color
 
-	BlockquoteMargins  whynot.Margins
+	BlockquoteMargins  Margins
 	BlockquoteBarColor color.Color
 
 	TableCellTextStyle TextStyle
-	TableMargins       whynot.Margins
+	TableMargins       Margins
 	TableFrameColor    color.Color
 
 	// ImagePlaceholderColor fills the space of an image that's still
@@ -84,7 +84,7 @@ type Theme struct {
 	// BackgroundColor fills the whole view.
 	BackgroundColor color.Color
 	// ViewMargins is the space between the view's edge and the document.
-	ViewMargins whynot.Margins
+	ViewMargins Margins
 	// HighlightColor is the text color of a hovered link.
 	HighlightColor color.Color
 
@@ -96,6 +96,11 @@ type Theme struct {
 	// LineHeight is the space a line of text takes, as a multiple of its
 	// font's natural height: 1.2 adds 20%. Zero means 1.2.
 	LineHeight float64
+}
+
+// Margins is the space around a block, in logical (unscaled) pixels.
+type Margins struct {
+	Top, Bottom, Left, Right float64
 }
 
 // ScrollbarColors is a scrollbar thumb's color when idle, hovered, and
@@ -166,10 +171,10 @@ const (
 func Dark() *Theme {
 	gray := color.RGBA{0x80, 0x80, 0x80, 0xFF}
 	return &Theme{
-		ParagraphMargins:   whynot.Margins{Top: 10, Bottom: 10},
+		ParagraphMargins:   Margins{Top: 10, Bottom: 10},
 		ParagraphTextStyle: TextStyle{Size: 16},
 
-		HeadingMargins: [6]whynot.Margins{
+		HeadingMargins: [6]Margins{
 			{Top: 30, Bottom: 10},
 			{Top: 26, Bottom: 10},
 			{Top: 22, Bottom: 10},
@@ -188,11 +193,11 @@ func Dark() *Theme {
 			{Size: 20, Weight: WeightBold, Family: Proportional},
 		},
 
-		ListMargins:       whynot.Margins{Top: 10, Bottom: 10},
-		ListItemMargins:   whynot.Margins{Top: 5, Bottom: 5, Left: 40},
+		ListMargins:       Margins{Top: 10, Bottom: 10},
+		ListItemMargins:   Margins{Top: 5, Bottom: 5, Left: 40},
 		ListItemTextStyle: TextStyle{Size: 16},
 
-		CodeBlockMargins:   whynot.Margins{Top: 20, Bottom: 20, Left: 20},
+		CodeBlockMargins:   Margins{Top: 20, Bottom: 20, Left: 20},
 		CodeBlockTextStyle: TextStyle{Size: 16, Family: Monospace},
 		// A neutral gray: a whole block in an accent color reads as garish
 		// and fights with syntax colors inside it.
@@ -207,16 +212,16 @@ func Dark() *Theme {
 		EmphasisTextStyle: TextStyle{Style: StyleItalic},
 		StrongTextStyle:   TextStyle{Weight: WeightBold},
 
-		ThematicBreakMargins: whynot.Margins{Top: 20, Bottom: 20},
+		ThematicBreakMargins: Margins{Top: 20, Bottom: 20},
 		ThematicBreakColor:   gray,
 
 		LinkColor: color.RGBA{0x66, 0xB2, 0xFF, 0xFF},
 
-		BlockquoteMargins:  whynot.Margins{Top: 10, Bottom: 10},
+		BlockquoteMargins:  Margins{Top: 10, Bottom: 10},
 		BlockquoteBarColor: gray,
 
 		TableCellTextStyle: TextStyle{Size: 16},
-		TableMargins:       whynot.Margins{Top: 10, Bottom: 10},
+		TableMargins:       Margins{Top: 10, Bottom: 10},
 		TableFrameColor:    gray,
 
 		ImagePlaceholderColor: gray,
@@ -225,7 +230,7 @@ func Dark() *Theme {
 		BaseTextStyle: TextStyle{Size: 16},
 
 		BackgroundColor: color.Black,
-		ViewMargins:     whynot.Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
+		ViewMargins:     Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
 		HighlightColor:  color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
 
 		ScrollbarColors: ScrollbarColors{
@@ -300,16 +305,18 @@ var (
 // afterwards doesn't affect it.
 func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b := &styling.Basic{Dims: dims}
-	b.ParagraphMargins = t.ParagraphMargins
+	b.ParagraphMargins = styling.Margins(t.ParagraphMargins)
 	b.ParagraphTextStyle = t.ParagraphTextStyle.partial()
-	b.HeadingMargins = t.HeadingMargins
+	for i, m := range t.HeadingMargins {
+		b.HeadingMargins[i] = styling.Margins(m)
+	}
 	for i, s := range t.HeadingTextStyles {
 		b.HeadingTextStyles[i] = s.partial()
 	}
-	b.ListMargins = t.ListMargins
-	b.ListItemMargins = t.ListItemMargins
+	b.ListMargins = styling.Margins(t.ListMargins)
+	b.ListItemMargins = styling.Margins(t.ListItemMargins)
 	b.ListItemTextStyle = t.ListItemTextStyle.partial()
-	b.CodeBlockMargins = t.CodeBlockMargins
+	b.CodeBlockMargins = styling.Margins(t.CodeBlockMargins)
 	b.CodeBlockTextStyle = t.CodeBlockTextStyle.partial()
 	b.CodeBlockColor = t.CodeBlockColor
 	b.UnsupportedColor = t.UnsupportedColor
@@ -317,19 +324,19 @@ func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b.CodeSpanColor = t.CodeSpanColor
 	b.EmphasisTextStyle = t.EmphasisTextStyle.partial()
 	b.StrongTextStyle = t.StrongTextStyle.partial()
-	b.ThematicBreakMargins = t.ThematicBreakMargins
+	b.ThematicBreakMargins = styling.Margins(t.ThematicBreakMargins)
 	b.ThematicBreakColor = t.ThematicBreakColor
 	b.LinkColor = t.LinkColor
-	b.BlockquoteMargins = t.BlockquoteMargins
+	b.BlockquoteMargins = styling.Margins(t.BlockquoteMargins)
 	b.BlockquoteBarColor = t.BlockquoteBarColor
 	b.TableCellTextStyle = t.TableCellTextStyle.partial()
-	b.TableMargins = t.TableMargins
+	b.TableMargins = styling.Margins(t.TableMargins)
 	b.TableFrameColor = t.TableFrameColor
 	b.ImagePlaceholderColor = t.ImagePlaceholderColor
 	b.TextColor = t.TextColor
 	b.BaseTextStyle = t.BaseTextStyle.over(defaultBaseTextStyle)
 	b.Background = t.BackgroundColor
-	b.ViewMargin = t.ViewMargins
+	b.ViewMargin = styling.Margins(t.ViewMargins)
 	b.Highlight = t.HighlightColor
 	b.Scrollbar = styling.ScrollbarColors(t.ScrollbarColors)
 	b.Syntax = styling.SyntaxColors(t.SyntaxColors)
