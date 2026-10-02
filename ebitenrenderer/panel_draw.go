@@ -9,14 +9,16 @@ import (
 	"github.com/arnodel/whynot/canvas"
 )
 
-// minScrollbarThumbHeight mirrors cmd/whynot's own 20px-at-1x minimum.
-const minScrollbarThumbHeight = 20
+// Scrollbar thumb dimensions, in logical (unscaled) pixels.
+const (
+	scrollbarWidth          = 6
+	minScrollbarThumbHeight = 20
+)
 
 // scrollbarThumbRect returns the scrollbar thumb's rectangle in screen
-// space - see cmd/whynot/draw.go's scrollbarThumbRect for the full
-// reasoning (thumb width from ScaledViewMargins, DocumentBounds/
-// VisibleViewBounds ratio, minimum height clamp); this is that same
-// logic in bounds-relative terms instead of the whole window.
+// space, along bounds' right edge: its position and height are the
+// visible part of the document (VisibleViewBounds) as a share of the
+// whole (DocumentBounds), with a minimum height so it stays grabbable.
 func (p *Panel) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 	trackHeight := p.bounds.Dy()
 	doc := p.view.DocumentBounds()
@@ -25,11 +27,7 @@ func (p *Panel) scrollbarThumbRect() (r image.Rectangle, ok bool) {
 		return image.Rectangle{}, false
 	}
 
-	margin := p.view.ScaledViewMargins()
-	width := int(margin.Right * 0.3)
-	if width < 1 {
-		width = 1
-	}
+	width := max(1, int(scrollbarWidth*p.scale))
 	minHeight := int(minScrollbarThumbHeight * p.scale)
 
 	y := p.bounds.Min.Y + visible.Min.Y*trackHeight/doc.Dy()

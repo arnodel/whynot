@@ -13,6 +13,7 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
@@ -26,8 +27,8 @@ type sourceBlock struct {
 func (b *sourceBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	panic("not implemented")
 }
-func (b *sourceBlock) Margins(ctx Context) Margins { panic("not implemented") }
-func (b *sourceBlock) Node() *ast.Node             { return b.node }
+func (b *sourceBlock) Margins(ctx Context) styling.Margins { panic("not implemented") }
+func (b *sourceBlock) Node() *ast.Node                     { return b.node }
 
 func TestRuleBoxHitTest(t *testing.T) {
 	src := &sourceBlock{node: &ast.Node{Tag: ast.TagThematicBreak}}

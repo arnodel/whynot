@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling"
 )
 
 // fixedHeightBlock always lays out to a fixed height regardless of width,
@@ -20,8 +21,8 @@ func (b *fixedHeightBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	return NewEmptyBox(width, b.height)
 }
 
-func (b *fixedHeightBlock) Margins(ctx Context) Margins {
-	return Margins{}
+func (b *fixedHeightBlock) Margins(ctx Context) styling.Margins {
+	return styling.Margins{}
 }
 
 func (b *fixedHeightBlock) Node() *ast.Node {

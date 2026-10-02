@@ -1,14 +1,12 @@
 package engine
 
 import (
-	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/styling"
 	"math"
 	"sort"
-)
 
-// Margins is the space around a block, in logical (unscaled) pixels.
-type Margins = styling.Margins
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/styling"
+)
 
 // Source is the common ground between Block and Inline: something with
 // a semantic identity in the compiled ast.Node tree. Leaf boxes expose
@@ -22,14 +20,14 @@ type Source interface {
 type Block interface {
 	Source
 	GetBlockLayout(ctx Context, width int) BlockLayout
-	Margins(ctx Context) Margins
+	Margins(ctx Context) styling.Margins
 }
 
 // Marginer is anything that reports its own logical (unscaled) Margins -
 // every Block satisfies it, but it's kept narrow so Context.
 // ScaledMargins doesn't need the rest of the Block interface.
 type Marginer interface {
-	Margins(ctx Context) Margins
+	Margins(ctx Context) styling.Margins
 }
 
 // WithoutMargins satisfies Block's Margins() with a zero value, for a Block
@@ -37,8 +35,8 @@ type Marginer interface {
 // wrapping it in a MarginBlock, as the compiler does for most blocks.
 type WithoutMargins struct{}
 
-func (WithoutMargins) Margins(ctx Context) Margins {
-	return Margins{}
+func (WithoutMargins) Margins(ctx Context) styling.Margins {
+	return styling.Margins{}
 }
 
 // MarginBlock adds margins to an existing Block, collapsing Top/Bottom with
@@ -55,10 +53,10 @@ type MarginBlock struct {
 	MarginNode *ast.Node
 }
 
-func (b *MarginBlock) Margins(ctx Context) Margins {
+func (b *MarginBlock) Margins(ctx Context) styling.Margins {
 	inner := b.Block.Margins(ctx)
 	own := ctx.Styles.Margins(b.MarginNode)
-	return Margins{
+	return styling.Margins{
 		Top:    math.Max(inner.Top, own.Top),
 		Bottom: math.Max(inner.Bottom, own.Bottom),
 		Left:   own.Left,
@@ -439,11 +437,11 @@ func (b *StackBlock) Node() *ast.Node {
 // edges. Left/Right are zero: as a stack of blocks arranged vertically,
 // StackBlock has no notion of a horizontal edge to derive from a child -
 // only whatever wraps it (see MarginBlock) has a real Left/Right.
-func (b *StackBlock) Margins(ctx Context) Margins {
+func (b *StackBlock) Margins(ctx Context) styling.Margins {
 	if len(b.Blocks) == 0 {
-		return Margins{}
+		return styling.Margins{}
 	}
-	return Margins{
+	return styling.Margins{
 		Top:    b.Blocks[0].Margins(ctx).Top,
 		Bottom: b.Blocks[len(b.Blocks)-1].Margins(ctx).Bottom,
 	}

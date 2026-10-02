@@ -184,17 +184,6 @@ func (v *View) ScrollbarColor(hover, pressed bool) color.Color {
 	return v.ctx.Styles.ScrollbarColor(hover, pressed)
 }
 
-// ScaledViewMargins returns the View's current effective margin between
-// its viewport edge and its content, in real screen pixels (already
-// multiplied by the zoom/DPI scale most recently passed to Layout) -
-// the same value Draw and HitTest use internally to place content,
-// exposed so an embedder positioning something else relative to the
-// View (e.g. a scrollbar drawn beside it) can stay in exact agreement
-// with it.
-func (v *View) ScaledViewMargins() Margins {
-	return v.ctx.ScaledViewMargins()
-}
-
 // DocumentBounds returns the document's estimated extent, origin at
 // (0, 0): width is the last Layout width; height is the current best
 // estimate of the total, exact once every slot has been laid out. A
