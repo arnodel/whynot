@@ -1,4 +1,11 @@
-package whynot
+// Package markdown is whynot's Markdown compiler: it parses source with
+// goldmark and builds the engine's block and inline tree, alongside the
+// semantic ast.Node tree they refer to (Compile). Fenced code blocks go
+// through the codeblocks.Plugin given for them.
+//
+// It only builds structure: appearance comes later, from a View's
+// StyleSheet, and layout and drawing are the engine's job.
+package markdown
 
 import (
 	"github.com/arnodel/whynot/codeblocks"
@@ -26,9 +33,9 @@ type compiler struct {
 	// cell), since there's nothing for the first item there to glue to.
 	pendingSpace bool
 
-	// headings and soleImages accumulate the Document fields of the same
+	// headings and soleImages accumulate the Result fields of the same
 	// names as top-level blocks are compiled.
-	headings   []TOCEntry
+	headings   []Heading
 	soleImages map[engine.Block]string
 }
 
@@ -50,17 +57,4 @@ func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
 	}
 	c.pluginCache[language] = ps
 	return ps
-}
-
-// ParseOption customizes Parse - see WithCodeBlockPlugin.
-type ParseOption func(*compiler)
-
-// WithCodeBlockPlugin registers a plugin that parses fenced code blocks
-// in the languages it handles, e.g. to color them or render them as
-// diagrams. Call it once per plugin: plugins are tried in registration
-// order (see codeblocks.Plugin).
-func WithCodeBlockPlugin(p codeblocks.Plugin) ParseOption {
-	return func(c *compiler) {
-		c.codeBlockPlugins = append(c.codeBlockPlugins, p)
-	}
 }

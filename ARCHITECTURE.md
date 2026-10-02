@@ -13,7 +13,8 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
 | Path | What it is |
 |---|---|
-| repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Interaction`, `StyleSheet`; also the Markdown compiler for now; no rendering backend dependency |
+| repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Interaction`, `StyleSheet`; no rendering backend dependency |
+| `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks; `whynot.Parse` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
@@ -46,7 +47,7 @@ flowchart TD
     subgraph L0["Layer 0 — Parse (goldmark, external)"]
         A["[]byte source"] --> B["gmast.Node tree"]
     end
-    subgraph L1["Layer 1 — Semantic tree (markdown.go, compile.go, block.go, internal/ast)"]
+    subgraph L1["Layer 1 — Semantic tree (internal/markdown, internal/engine/block.go, internal/ast)"]
         B --> C["Block / Inline tree\n(TextBlock, ListItemHeadBlock, CodeBlock, ThematicBreakBlock,\nBlockquoteBlock, TableBlock, StackBlock, MarginBlock,\nInlineText, InlineImage)"]
         B --> G["ast.Node tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ast.Node into it)"]
     end
@@ -108,8 +109,8 @@ outside our control; it's the source of truth for document structure.
 
 ### Layer 1 — Semantic tree (`Block` / `Inline` + `ast.Node`)
 
-`Parse`'s `compiler` ([compile.go](compile.go); its state and the
-`ParseOption`s that configure it in [markdown.go](markdown.go)) walks the
+The compiler ([internal/markdown](internal/markdown), reached through
+`Parse` in [parse.go](parse.go), which passes it the code-block plugins) walks the
 goldmark tree once and produces two parallel trees: a `Block`/`Inline` tree
 ([block.go](internal/engine/block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
@@ -134,7 +135,7 @@ adjacent-margin collapsing `GetBlockLayout` applies between siblings, extended t
 its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
 correctly with the outermost child instead of stacking on top of it.
 
-Built once per document, by `Parse` ([compile.go](compile.go)), and never
+Built once per document, by `Parse` (`markdown.Compile`), and never
 rebuilt — `Block`s are immutable for the life of the program. `Parse`
 returns a `Document` ([document.go](document.go)): the root `StackBlock`
 plus what the compiler recorded about top-level blocks while building it
@@ -449,7 +450,7 @@ callers only query points already within their own rendered viewport.
 
 ## Graceful degradation for unsupported Markdown
 
-`compileBlock`/`appendInline` ([compile.go](compile.go)) don't
+`compileBlock`/`appendInline` ([compile.go](internal/markdown/compile.go)) don't
 `panic` on a goldmark node kind they have no case for - see
 `compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
 warning and render the construct as text/a code block tagged

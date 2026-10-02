@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"fmt"
@@ -11,15 +11,36 @@ import (
 	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
 
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
 
-// Parse compiles Markdown source into a Document ready to render with a
-// View. Parse only builds structure: all appearance (fonts, colors,
-// margins, ...) comes from the View's StyleSheet, so the same Document
-// can be shown in different styles without parsing it again.
-func Parse(source []byte, opts ...ParseOption) *Document {
+// Result is a compiled document: its block tree, and what the compiler
+// recorded about its top-level structure along the way.
+type Result struct {
+	// Root holds the top-level blocks.
+	Root *engine.StackBlock
+
+	// Headings is every top-level heading, in document order.
+	Headings []Heading
+
+	// SoleImages maps each top-level text block consisting of a single
+	// image to that image's src.
+	SoleImages map[engine.Block]string
+}
+
+// Heading is a top-level heading of a compiled document.
+type Heading struct {
+	ID    string // the heading's anchor id
+	Level int    // 1-6
+	Text  string
+}
+
+// Compile compiles Markdown source into its block tree, with plugins
+// (in priority order) parsing fenced code blocks. It only builds
+// structure: appearance comes later, from a View's StyleSheet.
+func Compile(source []byte, plugins []codeblocks.Plugin) *Result {
 	p := parser.New(
 		parser.WithExtensions(
 			extension.TaskListItemParser,
@@ -38,15 +59,12 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 		parser.WithAutoHeadingID(),
 	)
 	node := p.Parse(source)
-	c := compiler{source: source}
-	for _, opt := range opts {
-		opt(&c)
-	}
+	c := compiler{source: source, codeBlockPlugins: plugins}
 	// A nil parent ast.Node is what marks a block as top-level.
-	return &Document{
-		root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
-		headings:   c.headings,
-		soleImages: c.soleImages,
+	return &Result{
+		Root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
+		Headings:   c.headings,
+		SoleImages: c.soleImages,
 	}
 }
 
@@ -146,8 +164,8 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block 
 
 // compileTextBlock compiles a paragraph or heading, whose ast.Node the
 // caller has already created. A top-level one is also recorded in the
-// Document: a heading as a TOCEntry, and one whose only content is an
-// image as a soleImages entry.
+// Result: a heading as a Heading, and one whose only content is an
+// image as a SoleImages entry.
 func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel bool) engine.Block {
 	items := c.compileInlines(node, astNode)
 	block := &engine.MarginBlock{Block: &engine.TextBlock{Parts: items, ASTNode: astNode}, MarginNode: astNode}
@@ -156,7 +174,7 @@ func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel
 		return block
 	}
 	if astNode.Tag >= ast.TagHeading1 && astNode.Tag <= ast.TagHeading6 {
-		c.headings = append(c.headings, TOCEntry{
+		c.headings = append(c.headings, Heading{
 			ID:    astNode.ID,
 			Level: int(astNode.Tag-ast.TagHeading1) + 1,
 			Text:  plainText(items),

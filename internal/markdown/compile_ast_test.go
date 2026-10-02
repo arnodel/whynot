@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"slices"
@@ -18,8 +18,8 @@ func wantPath(t *testing.T, got ast.Path, want ast.Path) {
 }
 
 func TestASTParagraphPath(t *testing.T) {
-	doc := Parse([]byte("Hello"))
-	stack := doc.root
+	doc := parse([]byte("Hello"))
+	stack := doc.Root
 	wrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.Blocks[0])
@@ -32,8 +32,8 @@ func TestASTParagraphPath(t *testing.T) {
 // distinct headings (including ones needing de-duplication) get
 // distinct ids.
 func TestASTHeadingID(t *testing.T) {
-	doc := Parse([]byte("# Hello World\n\n## Hello World\n"))
-	stack := doc.root
+	doc := parse([]byte("# Hello World\n\n## Hello World\n"))
+	stack := doc.Root
 
 	first := stack.Blocks[0].(*engine.MarginBlock).MarginNode
 	second := stack.Blocks[1].(*engine.MarginBlock).MarginNode
@@ -56,8 +56,8 @@ func TestASTHeadingPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		source := []byte(headingMarkdown(tc.level) + " Title")
-		doc := Parse(source)
-		stack := doc.root
+		doc := parse(source)
+		stack := doc.Root
 		wrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 		if !ok {
 			t.Fatalf("level %d: block = %T, want *MarginBlock", tc.level, stack.Blocks[0])
@@ -78,8 +78,8 @@ func headingMarkdown(level int) string {
 // through nested lists: the innermost item's head should show the full
 // List/ListItem chain down to it, not just its immediate parent.
 func TestASTNestedListItemPath(t *testing.T) {
-	doc := Parse([]byte("- one\n  - nested"))
-	stack := doc.root
+	doc := parse([]byte("- one\n  - nested"))
+	stack := doc.Root
 	list := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 
 	outerItemWrapper, ok := list.Blocks[0].(*engine.MarginBlock)
@@ -98,8 +98,8 @@ func TestASTNestedListItemPath(t *testing.T) {
 }
 
 func TestASTBlockquotePath(t *testing.T) {
-	doc := Parse([]byte("> quoted text"))
-	stack := doc.root
+	doc := parse([]byte("> quoted text"))
+	stack := doc.Root
 	bqWrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.Blocks[0])
@@ -119,8 +119,8 @@ func TestASTBlockquotePath(t *testing.T) {
 }
 
 func TestASTTableCellPath(t *testing.T) {
-	doc := Parse([]byte("| A | B |\n|---|---|\n| x | y |\n"))
-	stack := doc.root
+	doc := parse([]byte("| A | B |\n|---|---|\n| x | y |\n"))
+	stack := doc.Root
 	wrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.Blocks[0])
@@ -136,8 +136,8 @@ func TestASTTableCellPath(t *testing.T) {
 }
 
 func TestASTThematicBreakPath(t *testing.T) {
-	doc := Parse([]byte("---"))
-	stack := doc.root
+	doc := parse([]byte("---"))
+	stack := doc.Root
 	wrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.Blocks[0])
@@ -154,8 +154,8 @@ func TestASTThematicBreakPath(t *testing.T) {
 // introduce their own ast.Node, nested under the paragraph's, and that
 // plain text at the same level doesn't pick up a sibling span's tag.
 func TestASTInlineNestingPath(t *testing.T) {
-	doc := Parse([]byte("plain **bold *and italic*** [a link](https://example.com) `code`"))
-	stack := doc.root
+	doc := parse([]byte("plain **bold *and italic*** [a link](https://example.com) `code`"))
+	stack := doc.Root
 	wrapper := stack.Blocks[0].(*engine.MarginBlock)
 	para := wrapper.Block.(*engine.TextBlock)
 
@@ -188,8 +188,8 @@ func TestASTInlineNestingPath(t *testing.T) {
 }
 
 func TestASTStrikethroughPath(t *testing.T) {
-	doc := Parse([]byte("~~gone~~"))
-	stack := doc.root
+	doc := parse([]byte("~~gone~~"))
+	stack := doc.Root
 	wrapper := stack.Blocks[0].(*engine.MarginBlock)
 	para := wrapper.Block.(*engine.TextBlock)
 	text := para.Parts[0].(*engine.InlineText)
@@ -202,8 +202,8 @@ func TestASTStrikethroughPath(t *testing.T) {
 // node kind that crashed compilation entirely - produces no block of
 // its own.
 func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
-	doc := Parse([]byte("[a link][ref]\n\n[ref]: https://example.com \"title\"\n"))
-	stack := doc.root
+	doc := parse([]byte("[a link][ref]\n\n[ref]: https://example.com \"title\"\n"))
+	stack := doc.Root
 	if len(stack.Blocks) != 1 {
 		t.Fatalf("len(blocks) = %d, want 1 (the reference definition should produce no block)", len(stack.Blocks))
 	}
@@ -223,8 +223,8 @@ func TestASTLinkReferenceDefinitionIsInvisible(t *testing.T) {
 // renderer - produces no block of its own, rather than showing as
 // ast.TagUnsupported.
 func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
-	doc := Parse([]byte("Before.\n\n<!-- ignore -->\n\nAfter.\n"))
-	stack := doc.root
+	doc := parse([]byte("Before.\n\n<!-- ignore -->\n\nAfter.\n"))
+	stack := doc.Root
 	if len(stack.Blocks) != 2 {
 		t.Fatalf("len(blocks) = %d, want 2 (the comment should produce no block)", len(stack.Blocks))
 	}
@@ -245,8 +245,8 @@ func TestASTHTMLCommentBlockIsInvisible(t *testing.T) {
 // comment --> mid-paragraph is dropped rather than shown as
 // ast.TagUnsupported text.
 func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
-	doc := Parse([]byte("before <!-- ignore --> after\n"))
-	stack := doc.root
+	doc := parse([]byte("before <!-- ignore --> after\n"))
+	stack := doc.Root
 	para := stack.Blocks[0].(*engine.MarginBlock).Block.(*engine.TextBlock)
 
 	for _, part := range para.Parts {
@@ -261,8 +261,8 @@ func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
 // ast.TagUnsupported code block showing its own source, rather than
 // panicking and taking down the whole document.
 func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {
-	doc := Parse([]byte("<div>\n  <p>raw</p>\n</div>\n"))
-	stack := doc.root
+	doc := parse([]byte("<div>\n  <p>raw</p>\n</div>\n"))
+	stack := doc.Root
 	if len(stack.Blocks) != 1 {
 		t.Fatalf("len(blocks) = %d, want 1", len(stack.Blocks))
 	}
@@ -288,8 +288,8 @@ func TestASTUnsupportedInlineHTMLShowsSource(t *testing.T) {
 	// <span> and </span> are each their own RawHTML node - CommonMark
 	// doesn't pair inline HTML tags - so two separate ast.TagUnsupported
 	// runs are expected, one per tag.
-	doc := Parse([]byte("before <span>x</span> after\n"))
-	stack := doc.root
+	doc := parse([]byte("before <span>x</span> after\n"))
+	stack := doc.Root
 	para := stack.Blocks[0].(*engine.MarginBlock).Block.(*engine.TextBlock)
 
 	var unsupported []string

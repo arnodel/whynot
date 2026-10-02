@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"strings"
