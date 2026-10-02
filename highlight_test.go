@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/engine"
 )
 
 // fakeHighlighter is a Highlighter test double whose Highlight method is
@@ -17,15 +18,15 @@ func (h fakeHighlighter) Highlight(language, code string) []HighlightSpan {
 	return h.highlight(language, code)
 }
 
-func lineTexts(t *testing.T, line []Inline) []string {
+func lineTexts(t *testing.T, line []engine.Inline) []string {
 	t.Helper()
 	texts := make([]string, len(line))
 	for i, part := range line {
-		text, ok := part.(*InlineText)
+		text, ok := part.(*engine.InlineText)
 		if !ok {
 			t.Fatalf("part %d = %T, want *InlineText", i, part)
 		}
-		texts[i] = text.text
+		texts[i] = text.Text
 	}
 	return texts
 }
@@ -59,14 +60,14 @@ func TestHighlightLinesMultipleSpansPerLine(t *testing.T) {
 	if got := lineTexts(t, lines[0]); len(got) != 2 || got[0] != "func" || got[1] != " f() {" {
 		t.Fatalf("lines[0] texts = %#v", got)
 	}
-	keywordNode := lines[0][0].(*InlineText).node
+	keywordNode := lines[0][0].(*engine.InlineText).ASTNode
 	if keywordNode == blockNode {
 		t.Fatalf("keyword span reused the block's own node, want a ast.TagCodeKeyword child")
 	}
 	if keywordNode.Tag != ast.TagCodeKeyword {
 		t.Fatalf("keyword node tag = %v, want ast.TagCodeKeyword", keywordNode.Tag)
 	}
-	plainNode := lines[0][1].(*InlineText).node
+	plainNode := lines[0][1].(*engine.InlineText).ASTNode
 	if plainNode != blockNode {
 		t.Fatalf("plain span node = %v, want the block's own node (no child allocated)", plainNode)
 	}
@@ -94,12 +95,12 @@ func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
 		t.Fatalf("lines[2] texts = %#v", got)
 	}
 	for i := 0; i < 2; i++ {
-		if lines[i][0].(*InlineText).node.Tag != ast.TagCodeComment {
-			t.Fatalf("lines[%d] node tag = %v, want ast.TagCodeComment", i, lines[i][0].(*InlineText).node.Tag)
+		if lines[i][0].(*engine.InlineText).ASTNode.Tag != ast.TagCodeComment {
+			t.Fatalf("lines[%d] node tag = %v, want ast.TagCodeComment", i, lines[i][0].(*engine.InlineText).ASTNode.Tag)
 		}
 	}
-	if lines[2][0].(*InlineText).node != blockNode {
-		t.Fatalf("lines[2] node = %v, want the block's own node", lines[2][0].(*InlineText).node)
+	if lines[2][0].(*engine.InlineText).ASTNode != blockNode {
+		t.Fatalf("lines[2] node = %v, want the block's own node", lines[2][0].(*engine.InlineText).ASTNode)
 	}
 }
 
@@ -121,7 +122,7 @@ func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 		if len(lines[i]) != 1 {
 			t.Fatalf("lines[%d] = %#v, want exactly 1 part", i, lines[i])
 		}
-		if got := lines[i][0].(*InlineText).text; got != want {
+		if got := lines[i][0].(*engine.InlineText).Text; got != want {
 			t.Errorf("lines[%d] text = %q, want %q", i, got, want)
 		}
 	}
@@ -144,7 +145,7 @@ func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
 	if len(lines[1]) != 1 {
 		t.Fatalf("blank line parts = %#v, want exactly 1 part", lines[1])
 	}
-	if got := lines[1][0].(*InlineText).text; got != "" {
+	if got := lines[1][0].(*engine.InlineText).Text; got != "" {
 		t.Errorf("blank line text = %q, want empty", got)
 	}
 }

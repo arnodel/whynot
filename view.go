@@ -9,6 +9,7 @@ import (
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
@@ -24,10 +25,10 @@ import (
 // from the embedding game's own layout/resize callback).
 type View struct {
 	doc *Document
-	ctx RenderingContext
+	ctx engine.Context
 
 	// stack is the laid-out document and the scroll position within it.
-	stack documentStack
+	stack engine.DocumentStack
 
 	// width and scale are what stack was last laid out at.
 	width int
@@ -64,11 +65,11 @@ func WithImageSource(s images.Source) ViewOption {
 func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
-		ctx: RenderingContext{
+		ctx: engine.Context{
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
-			hscroll:      newHScrollState(),
+			HScroll:      engine.NewHScrollState(),
 		},
 	}
 	for _, opt := range opts {
@@ -88,11 +89,11 @@ func (v *View) Document() *Document {
 // position, or nothing has been laid out yet. Only reads each slot's
 // Block, never laying anything out.
 func (v *View) CurrentHeadingID() (id string, ok bool) {
-	if !v.stack.laidOut() {
+	if !v.stack.LaidOut() {
 		return "", false
 	}
-	for i := min(v.stack.cursor.index, v.stack.len()-1); i >= 0; i-- {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
+	for i := min(v.stack.Cursor.Index, v.stack.Len()-1); i >= 0; i-- {
+		if n := nodeOf(v.stack.BlockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
 			return n.ID, true
 		}
 	}
@@ -100,7 +101,7 @@ func (v *View) CurrentHeadingID() (id string, ok bool) {
 }
 
 // nodeOf returns block's ast.Node, or nil for a nil block (a spacer slot).
-func nodeOf(block Block) *ast.Node {
+func nodeOf(block engine.Block) *ast.Node {
 	if block == nil {
 		return nil
 	}
@@ -113,26 +114,26 @@ func nodeOf(block Block) *ast.Node {
 // ebiten.Wheel()'s dy passed straight through, so callers don't need to
 // negate it.
 func (v *View) Scroll(dy float64) {
-	if v.stack.laidOut() {
-		v.stack.scroll(-dy)
+	if v.stack.LaidOut() {
+		v.stack.Scroll(-dy)
 	}
 }
 
 // ScrollPosition is an opaque snapshot of a View's scroll position,
 // captured by ScrollPosition and restored by RestoreScrollPosition.
 type ScrollPosition struct {
-	cursor stackCursor
+	cursor engine.StackCursor
 }
 
 // ScrollPosition captures the View's current scroll position.
 func (v *View) ScrollPosition() ScrollPosition {
-	return ScrollPosition{cursor: v.stack.cursor}
+	return ScrollPosition{cursor: v.stack.Cursor}
 }
 
 // RestoreScrollPosition restores a position captured earlier by
 // ScrollPosition - only meaningful on the same View it was taken from.
 func (v *View) RestoreScrollPosition(p ScrollPosition) {
-	v.stack.cursor = p.cursor
+	v.stack.Cursor = p.cursor
 }
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id
@@ -145,12 +146,12 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 // blockquote or list won't be. Only reads each slot's Block, never laying
 // anything out beyond the target.
 func (v *View) ScrollToAnchor(id string) bool {
-	if !v.stack.laidOut() {
+	if !v.stack.LaidOut() {
 		return false
 	}
-	for i := range v.stack.len() {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id {
-			v.stack.scrollToSlot(i)
+	for i := range v.stack.Len() {
+		if n := nodeOf(v.stack.BlockAt(i)); n != nil && n.ID == id {
+			v.stack.ScrollToSlot(i)
 			return true
 		}
 	}
@@ -164,8 +165,8 @@ func (v *View) ScrollToAnchor(id string) bool {
 // from the live estimate every call, so a jump into not-yet-laid-out
 // territory corrects toward whatever ratio the caller asks for next.
 func (v *View) ScrollToRatio(ratio float64) {
-	if v.stack.laidOut() {
-		v.stack.scrollToRatio(ratio)
+	if v.stack.LaidOut() {
+		v.stack.ScrollToRatio(ratio)
 	}
 }
 
@@ -200,20 +201,20 @@ func (v *View) ScaledViewMargins() Margins {
 // caller scales the ratio between this and VisibleViewBounds to build its
 // own scrollbar.
 func (v *View) DocumentBounds() image.Rectangle {
-	if !v.stack.laidOut() {
+	if !v.stack.LaidOut() {
 		return image.Rectangle{}
 	}
-	return image.Rect(0, 0, v.width, int(v.stack.totalHeight()))
+	return image.Rect(0, 0, v.width, int(v.stack.TotalHeight()))
 }
 
 // VisibleViewBounds returns the sub-rectangle of DocumentBounds
 // currently visible for a viewport of viewportSize (the same size
 // passed to Draw's dst).
 func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
-	if !v.stack.laidOut() || v.stack.cursor.index >= v.stack.len() {
+	if !v.stack.LaidOut() || v.stack.Cursor.Index >= v.stack.Len() {
 		return image.Rectangle{}
 	}
-	top, bottom := v.stack.visibleRange(viewportSize.Y)
+	top, bottom := v.stack.VisibleRange(viewportSize.Y)
 	return image.Rect(0, int(top), viewportSize.X, int(bottom))
 }
 
@@ -228,15 +229,15 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 func (v *View) Draw(dst canvas.Canvas, x, y int) {
 	bounds := dst.Bounds()
 	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.Styles.BackgroundColor())
-	if !v.stack.laidOut() {
+	if !v.stack.LaidOut() {
 		return
 	}
-	if v.ctx.hscroll != nil {
-		v.ctx.hscroll.beginFrame(image.Pt(x, y))
+	if v.ctx.HScroll != nil {
+		v.ctx.HScroll.BeginFrame(image.Pt(x, y))
 	}
 	// The top/bottom ViewMargins are spacer slots in the stack (see
 	// rebuild); only Left needs applying here.
-	v.stack.box.DrawFrom(dst, v.stack.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
+	v.stack.Box.DrawFrom(dst, v.stack.Cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
 }
 
 // HitTest identifies what's at document position (x, y) - the same
@@ -249,7 +250,7 @@ func (v *View) Draw(dst canvas.Canvas, x, y int) {
 // Known imprecision: a position above the very start of the document
 // resolves as if it landed on the first slot rather than missing. Callers
 // only ever pass points within their own rendered viewport.
-func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
+func (v *View) HitTest(x, y int) (hit engine.Hit, offset image.Point) {
 	hit, offset, _ = v.hitTest(x, y)
 	return hit, offset
 }
@@ -257,27 +258,27 @@ func (v *View) HitTest(x, y int) (hit Hit, offset image.Point) {
 // hitTest is HitTest's real implementation, additionally reporting
 // which top-level slot y resolved to (meaningful only when hit is
 // non-nil).
-func (v *View) hitTest(x, y int) (hit Hit, offset image.Point, slot int) {
-	if !v.stack.laidOut() {
+func (v *View) hitTest(x, y int) (hit engine.Hit, offset image.Point, slot int) {
+	if !v.stack.LaidOut() {
 		return nil, image.Point{}, 0
 	}
 	left := int(v.ctx.ScaledViewMargins().Left)
-	c := v.stack.at(y)
-	if c.index < 0 || c.index >= v.stack.len() {
+	c := v.stack.At(y)
+	if c.Index < 0 || c.Index >= v.stack.Len() {
 		return nil, image.Point{}, 0
 	}
-	box := v.stack.box.boxAt(c.index)
-	local := image.Pt(x-left, int(c.offset))
+	box := v.stack.Box.BoxAt(c.Index)
+	local := image.Pt(x-left, int(c.Offset))
 	if !local.In(box.Bounds()) {
-		return nil, image.Point{}, c.index
+		return nil, image.Point{}, c.Index
 	}
 	hit, offset = box.HitTest(local)
 	if hit == nil {
-		return nil, image.Point{}, c.index
+		return nil, image.Point{}, c.Index
 	}
 	// Shift back from box's own local frame into the frame (x, y) arrived
 	// in, undoing both the left-margin shift and the cursor-relative y.
-	return hit, offset.Add(image.Pt(left, y-int(c.offset))), c.index
+	return hit, offset.Add(image.Pt(left, y-int(c.Offset))), c.Index
 }
 
 // linkNodeAt returns the ast.Node of the link at document position
@@ -300,8 +301,8 @@ func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 // Hover also reports the link under (x, y), same as LinkAt, so a caller
 // handling a click at the same position doesn't need a second HitTest.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
-	if v.ctx.hscroll != nil {
-		v.ctx.hscroll.hover(image.Pt(x, y), v.ctx.Time)
+	if v.ctx.HScroll != nil {
+		v.ctx.HScroll.Hover(image.Pt(x, y), v.ctx.Time)
 	}
 	return v.hoverLink(x, y)
 }
@@ -310,12 +311,12 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
 	if node != v.ctx.HighlightNode {
-		if v.ctx.HighlightNode != nil && v.stack.laidOut() {
-			v.stack.invalidate(v.highlightSlot)
+		if v.ctx.HighlightNode != nil && v.stack.LaidOut() {
+			v.stack.Invalidate(v.highlightSlot)
 		}
 		v.ctx.HighlightNode = node
 		if node != nil {
-			v.stack.invalidate(slot)
+			v.stack.Invalidate(slot)
 		}
 	}
 	if node == nil {
@@ -331,7 +332,7 @@ func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 // start, matching Scroll's convention for dy. Reports whether there was
 // such a block. Works from what the last Draw drew.
 func (v *View) ScrollHorizontal(x, y int, dx float64) bool {
-	return v.ctx.hscroll != nil && v.ctx.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time)
+	return v.ctx.HScroll != nil && v.ctx.HScroll.ScrollAt(image.Pt(x, y), dx, v.ctx.Time)
 }
 
 // LinkAt reports the destination URL of the link at document position
@@ -348,7 +349,7 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
 // * 72), and now - elapsed time since rendering started, the embedder's
-// own reference point (see RenderingContext.Time), stored on every call
+// own reference point (see engine.Context.Time), stored on every call
 // since animated images need fresh time to animate. Cheap to call every
 // frame: the layout is only rebuilt when width or scale change.
 //
@@ -365,7 +366,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 		v.scale = scale
 		v.rebuild()
 	}
-	v.stack.preLayout(height)
+	v.stack.PreLayout(height)
 	v.prefetchImageSources(height)
 }
 
@@ -374,7 +375,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 // imagecache.Cache) and need picking up. Only slots waiting on an image that
 // changed are invalidated.
 func (v *View) invalidateChangedImages() {
-	if !v.stack.laidOut() || v.ctx.ImageCache == nil {
+	if !v.stack.LaidOut() || v.ctx.ImageCache == nil {
 		return
 	}
 	changes, mark := v.ctx.ImageCache.ChangedSince(v.imageCacheMark)
@@ -386,7 +387,7 @@ func (v *View) invalidateChangedImages() {
 	for _, c := range changes {
 		changed[c.Src] = true
 	}
-	v.stack.invalidateWhere(func(box BlockLayout) bool {
+	v.stack.InvalidateWhere(func(box engine.BlockLayout) bool {
 		for _, src := range box.PendingImages() {
 			if changed[src] {
 				return true
@@ -407,10 +408,10 @@ const prefetchImageSourceHeightRadius = 20000
 // scrolls into view. An image mixed into running text is loaded when its
 // slot is laid out.
 func (v *View) prefetchImageSources(viewportHeight int) {
-	if !v.stack.laidOut() || v.ctx.ImageCache == nil {
+	if !v.stack.LaidOut() || v.ctx.ImageCache == nil {
 		return
 	}
-	v.stack.forEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block Block) {
+	v.stack.ForEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block engine.Block) {
 		if src, ok := v.doc.soleImages[block]; ok {
 			v.ctx.ImageCache.Load(src)
 		}
@@ -423,7 +424,7 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 // nothing has been laid out yet, the first Layout call picks s up.
 func (v *View) SetStyleSheet(s StyleSheet) {
 	v.ctx.Styles = s.Styles()
-	if v.stack.laidOut() {
+	if v.stack.LaidOut() {
 		v.rebuild()
 	}
 }
@@ -438,7 +439,7 @@ func (v *View) SetStyleSheet(s StyleSheet) {
 func (v *View) rebuild() {
 	margin := v.ctx.ScaledViewMargins()
 	contentWidth := max(0, v.width-int(margin.Left)-int(margin.Right))
-	box := v.doc.root.stackLayout(&v.ctx, contentWidth)
-	box.addSpacers(int(margin.Top), int(margin.Bottom))
-	v.stack.setBox(box)
+	box := v.doc.root.StackLayout(&v.ctx, contentWidth)
+	box.AddSpacers(int(margin.Top), int(margin.Bottom))
+	v.stack.SetBox(box)
 }

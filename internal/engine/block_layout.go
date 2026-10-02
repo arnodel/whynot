@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -34,7 +34,7 @@ type BlockLayout interface {
 	Bounds() image.Rectangle
 	Source() Source
 	// drawContents' now is elapsed time since rendering started
-	// (RenderingContext.Time) - unused by most implementations, read
+	// (Context.Time) - unused by most implementations, read
 	// only by whatever ends up drawing an animated image (see
 	// ImageBox.DrawInline via InlineLayout).
 	drawContents(dst canvas.Canvas, x, y int, now time.Duration)
@@ -62,28 +62,28 @@ func DrawBlockLayout(box BlockLayout, dst canvas.Canvas, x, y int, now time.Dura
 	box.drawContents(dst, x, y, now)
 }
 
-// stackSlot is a StackBox child that's either already resolved (box set -
+// StackSlot is a StackBox child that's either already resolved (box set -
 // true of gap spacers, which are cheap enough to build eagerly) or needs
 // building from a Block on first access (block set). A content slot's
 // width is already margin-reduced if wrap is set.
-type stackSlot struct {
-	box   BlockLayout
-	block Block
+type StackSlot struct {
+	Box   BlockLayout
+	Block Block
 
-	width      int
+	Width      int
 	leftMargin int
 	wrap       bool
 }
 
 type StackBox struct {
-	slots []stackSlot
+	Slots []StackSlot
 
-	// ctx is what unresolved slots are laid out with, when first needed.
+	// Ctx is what unresolved slots are laid out with, when first needed.
 	// For a View's top-level StackBox this is the View's own live context,
 	// so a change that only affects slots laid out from then on (e.g. the
 	// hovered link) needs no rebuild, just invalidating the affected slots.
-	ctx   *RenderingContext
-	width int
+	Ctx   *Context
+	Width int
 
 	// source is the single Block this StackBox's slots were all built
 	// from - e.g. a paragraph's wrapped lines - or nil when the slots
@@ -100,10 +100,10 @@ type StackBox struct {
 // paragraph's lines: line-breaking is inherently a whole-paragraph
 // computation, so there's nothing to defer per-line the way there is per
 // top-level block in StackBlock.GetBlockLayout).
-func preResolvedSlots(boxes []BlockLayout) []stackSlot {
-	slots := make([]stackSlot, len(boxes))
+func preResolvedSlots(boxes []BlockLayout) []StackSlot {
+	slots := make([]StackSlot, len(boxes))
 	for i, box := range boxes {
-		slots[i] = stackSlot{box: box}
+		slots[i] = StackSlot{Box: box}
 	}
 	return slots
 }
@@ -112,8 +112,8 @@ func (b *StackBox) Bounds() image.Rectangle {
 	if !b.boundsComputed {
 		var bounds image.Rectangle
 		y := 0
-		for i := range b.slots {
-			box := b.boxAt(i)
+		for i := range b.Slots {
+			box := b.BoxAt(i)
 			boxBounds := box.Bounds()
 			bounds = bounds.Union(boxBounds.Add(image.Pt(0, y)))
 			y += boxBounds.Dy()
@@ -147,49 +147,49 @@ func (b *StackBox) Source() Source {
 // that top-level aggregate itself.
 func (b *StackBox) PendingImages() []string {
 	var pending []string
-	for i := range b.slots {
-		if b.slots[i].box == nil {
+	for i := range b.Slots {
+		if b.Slots[i].Box == nil {
 			continue
 		}
-		pending = append(pending, b.slots[i].box.PendingImages()...)
+		pending = append(pending, b.Slots[i].Box.PendingImages()...)
 	}
 	return pending
 }
 
-// boxAt returns the child at index i, building it from its Block and
+// BoxAt returns the child at index i, building it from its Block and
 // memoizing the result on first access if it isn't already resolved. A
 // caller that only ever asks for slots near a scroll cursor only ever
 // pays to build those.
-func (b *StackBox) boxAt(i int) BlockLayout {
-	slot := &b.slots[i]
-	if slot.box == nil {
-		inner := slot.block.GetBlockLayout(*b.ctx, slot.width)
+func (b *StackBox) BoxAt(i int) BlockLayout {
+	slot := &b.Slots[i]
+	if slot.Box == nil {
+		inner := slot.Block.GetBlockLayout(*b.Ctx, slot.Width)
 		if slot.wrap {
-			slot.box = NewContainerBox(inner, b.width, inner.Bounds().Dy(), slot.leftMargin, 0)
+			slot.Box = NewContainerBox(inner, b.Width, inner.Bounds().Dy(), slot.leftMargin, 0)
 		} else {
-			slot.box = inner
+			slot.Box = inner
 		}
 	}
-	return slot.box
+	return slot.Box
 }
 
 // invalidate discards slot i's layout; boxAt rebuilds it when next needed.
 func (b *StackBox) invalidate(i int) {
-	if i < 0 || i >= len(b.slots) {
+	if i < 0 || i >= len(b.Slots) {
 		return
 	}
-	b.slots[i].box = nil
+	b.Slots[i].Box = nil
 	b.boundsComputed = false
 }
 
-// addSpacers surrounds b's slots with empty slots of the given heights,
+// AddSpacers surrounds b's slots with empty slots of the given heights,
 // omitting a zero-height one.
-func (b *StackBox) addSpacers(top, bottom int) {
+func (b *StackBox) AddSpacers(top, bottom int) {
 	if top > 0 {
-		b.slots = append([]stackSlot{{box: NewEmptyBox(b.width, top)}}, b.slots...)
+		b.Slots = append([]StackSlot{{Box: NewEmptyBox(b.Width, top)}}, b.Slots...)
 	}
 	if bottom > 0 {
-		b.slots = append(b.slots, stackSlot{box: NewEmptyBox(b.width, bottom)})
+		b.Slots = append(b.Slots, StackSlot{Box: NewEmptyBox(b.Width, bottom)})
 	}
 	b.boundsComputed = false
 }
@@ -211,8 +211,8 @@ func (b *StackBox) addSpacers(top, bottom int) {
 // genuine miss instead, same as before Source existed.
 func (b *StackBox) HitTest(p image.Point) (Hit, image.Point) {
 	y := 0
-	for i := range b.slots {
-		box := b.boxAt(i)
+	for i := range b.Slots {
+		box := b.BoxAt(i)
 		h := box.Bounds().Dy()
 		if p.Y < y+h {
 			local := image.Pt(p.X, p.Y-y)
@@ -231,16 +231,16 @@ func (b *StackBox) HitTest(p image.Point) (Hit, image.Point) {
 	return nil, image.Point{}
 }
 
-// stackCursor is a position within a StackBox: which slot, and how far
+// StackCursor is a position within a StackBox: which slot, and how far
 // into it. Like a text cursor, it's only meaningful relative to the
 // specific StackBox it was resolved against - the same (index, offset)
 // pair means something different for a different StackBox. offset is
 // float64 so scroll deltas can accumulate sub-pixel amounts directly;
 // DrawFrom truncates to a pixel only right before it becomes a screen
 // coordinate.
-type stackCursor struct {
-	index  int
-	offset float64
+type StackCursor struct {
+	Index  int
+	Offset float64
 }
 
 // normalizeCursor adjusts c so that 0 <= offset < boxAt(index)'s height,
@@ -253,32 +253,32 @@ type stackCursor struct {
 // height(lastIndex)) - offset equal to the height, not less than it -
 // rather than reporting an ever-growing out-of-range offset. normalizeCursor
 // is idempotent everywhere except exactly that clamped value.
-func (b *StackBox) normalizeCursor(c stackCursor) stackCursor {
-	if len(b.slots) == 0 {
-		return stackCursor{}
+func (b *StackBox) normalizeCursor(c StackCursor) StackCursor {
+	if len(b.Slots) == 0 {
+		return StackCursor{}
 	}
-	index, offset := c.index, c.offset
+	index, offset := c.Index, c.Offset
 
 	for offset < 0 && index > 0 {
 		index--
-		offset += float64(b.boxAt(index).Bounds().Dy())
+		offset += float64(b.BoxAt(index).Bounds().Dy())
 	}
 	if offset < 0 {
 		// Walked back to the very first slot and it's still negative:
 		// this position is above the top of the document.
-		return stackCursor{}
+		return StackCursor{}
 	}
 
 	for {
-		h := float64(b.boxAt(index).Bounds().Dy())
+		h := float64(b.BoxAt(index).Bounds().Dy())
 		if offset < h {
-			return stackCursor{index: index, offset: offset}
+			return StackCursor{Index: index, Offset: offset}
 		}
-		if index == len(b.slots)-1 {
+		if index == len(b.Slots)-1 {
 			// Walked to the very last slot and offset is still at or past
 			// its bottom edge: this position is past the end of the
 			// document. Clamp - see the invariant exception above.
-			return stackCursor{index: index, offset: h}
+			return StackCursor{Index: index, Offset: h}
 		}
 		offset -= h
 		index++
@@ -292,26 +292,26 @@ func (b *StackBox) normalizeCursor(c stackCursor) stackCursor {
 // isn't a move like this (offset is recomputed from a ratio through a
 // slot's new height, not shifted from its old value), so it calls
 // normalizeCursor directly instead.
-func (b *StackBox) moveCursor(c stackCursor, dy float64) stackCursor {
-	return b.normalizeCursor(stackCursor{index: c.index, offset: c.offset + dy})
+func (b *StackBox) moveCursor(c StackCursor, dy float64) StackCursor {
+	return b.normalizeCursor(StackCursor{Index: c.Index, Offset: c.Offset + dy})
 }
 
 func (b *StackBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
-	b.DrawFrom(dst, stackCursor{}, x, y, now)
+	b.DrawFrom(dst, StackCursor{}, x, y, now)
 }
 
 // DrawFrom draws starting at c, so that c's position lands at (x, y) on
 // dst - unlike DrawBlockLayout, it never calls Bounds() on the whole tree first,
 // and never resolves or draws slots before c.index. Intended for View to
 // call at the scroll cursor.
-func (b *StackBox) DrawFrom(dst canvas.Canvas, c stackCursor, x, y int, now time.Duration) {
-	if c.index < 0 || c.index >= len(b.slots) {
+func (b *StackBox) DrawFrom(dst canvas.Canvas, c StackCursor, x, y int, now time.Duration) {
+	if c.Index < 0 || c.Index >= len(b.Slots) {
 		return
 	}
 	viewport := dst.Bounds()
-	y -= int(c.offset)
-	for i := c.index; i < len(b.slots); i++ {
-		box := b.boxAt(i)
+	y -= int(c.Offset)
+	for i := c.Index; i < len(b.Slots); i++ {
+		box := b.BoxAt(i)
 		childBounds := box.Bounds()
 		if childBounds.Add(image.Pt(x, y)).Min.Y > viewport.Max.Y {
 			// This child, and every one after it, starts below the
@@ -408,10 +408,10 @@ func (b *ContainerBox) PendingImages() []string {
 // width) to the right of it - the visual marker for a `>` blockquote.
 type BlockquoteBox struct {
 	width    int
-	indent   int
+	Indent   int
 	barWidth int
 	barColor color.Color
-	inner    BlockLayout
+	Inner    BlockLayout
 
 	// source is the BlockquoteBlock this box was built from - see Source.
 	source Block
@@ -424,16 +424,16 @@ func (b *BlockquoteBox) Source() Source {
 }
 
 func (b *BlockquoteBox) Bounds() image.Rectangle {
-	return image.Rect(0, 0, b.width, b.inner.Bounds().Dy())
+	return image.Rect(0, 0, b.width, b.Inner.Bounds().Dy())
 }
 
 func (b *BlockquoteBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
-	dst.DrawRect(x, y, b.barWidth, b.inner.Bounds().Dy(), b.barColor)
-	DrawBlockLayout(b.inner, dst, x+b.indent, y, now)
+	dst.DrawRect(x, y, b.barWidth, b.Inner.Bounds().Dy(), b.barColor)
+	DrawBlockLayout(b.Inner, dst, x+b.Indent, y, now)
 }
 
 func (b *BlockquoteBox) PendingImages() []string {
-	return b.inner.PendingImages()
+	return b.Inner.PendingImages()
 }
 
 // HitTest treats the whole indent strip (bar plus any padding before
@@ -443,9 +443,9 @@ func (b *BlockquoteBox) PendingImages() []string {
 // implementation degrades gracefully on an out-of-bounds point, so
 // there's no need to bounds-check before delegating.
 func (b *BlockquoteBox) HitTest(p image.Point) (Hit, image.Point) {
-	if p.X >= b.indent {
-		if hit, offset := b.inner.HitTest(image.Pt(p.X-b.indent, p.Y)); hit != nil {
-			return hit, offset.Add(image.Pt(b.indent, 0))
+	if p.X >= b.Indent {
+		if hit, offset := b.Inner.HitTest(image.Pt(p.X-b.Indent, p.Y)); hit != nil {
+			return hit, offset.Add(image.Pt(b.Indent, 0))
 		}
 	}
 	return b, image.Point{}

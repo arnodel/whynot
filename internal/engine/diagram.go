@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -17,10 +17,10 @@ import (
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See CodeBlockPlugin.
 func NewDiagramBlock(node *ast.Node, img images.AsyncImage, fallback Block) Block {
-	return &diagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), img: img, fallback: fallback}
+	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Img: img, Fallback: fallback}
 }
 
-type diagramBlock struct {
+type DiagramBlock struct {
 	WithoutMargins
 	node *ast.Node
 	// imageNode is a ast.TagImage child of node, precomputed once here
@@ -30,21 +30,21 @@ type diagramBlock struct {
 	// Its only job is giving the ready image's frame a StyleSheet.
 	// BorderColor to resolve (ast.TagCodeBlock, node's own tag, has none).
 	imageNode *ast.Node
-	img       images.AsyncImage
-	fallback  Block
+	Img       images.AsyncImage
+	Fallback  Block
 }
 
-var _ Block = (*diagramBlock)(nil)
+var _ Block = (*DiagramBlock)(nil)
 
-func (b *diagramBlock) Node() *ast.Node {
+func (b *DiagramBlock) Node() *ast.Node {
 	return b.node
 }
 
-func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayout {
+func (b *DiagramBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	if ctx.ImageCache == nil {
-		return b.fallback.GetBlockLayout(ctx, width)
+		return b.Fallback.GetBlockLayout(ctx, width)
 	}
-	result := ctx.ImageCache.LoadImage(b.img)
+	result := ctx.ImageCache.LoadImage(b.Img)
 	if result.Status != imagecache.Ready {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
@@ -52,7 +52,7 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
 		// later Pending/Ready, per imagecache.Cache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
-		return &diagramBox{inner: b.fallback.GetBlockLayout(ctx, width), pendingKey: b.img.Key}
+		return &diagramBox{inner: b.Fallback.GetBlockLayout(ctx, width), pendingKey: b.Img.Key}
 	}
 
 	frameThickness := int(ctx.ScaledThematicBreakThickness(b.imageNode))
@@ -61,7 +61,7 @@ func (b *diagramBlock) GetBlockLayout(ctx RenderingContext, width int) BlockLayo
 	if availableWidth < 0 {
 		availableWidth = 0
 	}
-	imgBounds := fitWidth(scaleRect(result.Bounds, ctx.Scale), availableWidth)
+	imgBounds := FitWidth(scaleRect(result.Bounds, ctx.Scale), availableWidth)
 	return &diagramBox{inner: &imageLayout{
 		img:            result.Image,
 		anim:           result.Animation,

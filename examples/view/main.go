@@ -51,7 +51,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	// The last argument is elapsed time since rendering started - only
-	// animated images actually need it (see whynot.RenderingContext.Time).
+	// animated images actually need it (see View.Layout).
 	g.view.Layout(outsideWidth, outsideHeight, 1, time.Since(g.start))
 	return outsideWidth, outsideHeight
 }

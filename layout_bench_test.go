@@ -13,6 +13,7 @@ import (
 	"github.com/arnodel/whynot/ebitenrenderer"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -23,7 +24,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 		b.Fatal(err)
 	}
 	block := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -59,7 +60,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 		b.Fatal(err)
 	}
 	block := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -92,7 +93,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 		b.Fatal(err)
 	}
 	block := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -107,11 +108,11 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
+	engine.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
+		engine.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 
@@ -134,7 +135,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 		b.Fatal(err)
 	}
 	block := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -149,11 +150,11 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
+	engine.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
+		engine.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 
@@ -176,7 +177,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 		b.Fatal(err)
 	}
 	block := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -188,11 +189,11 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 	totalHeight := box.Bounds().Dy()
 	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, totalHeight))
 
-	whynot.DrawBlockLayout(box, dst, 0, 0, 0) // warm caches
+	engine.DrawBlockLayout(box, dst, 0, 0, 0) // warm caches
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		whynot.DrawBlockLayout(box, dst, 0, 0, 0)
+		engine.DrawBlockLayout(box, dst, 0, 0, 0)
 	}
 }
 
@@ -216,7 +217,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		b.Fatal(err)
 	}
 	rawBlock := whynot.Parse(source).Root()
-	ctx := whynot.RenderingContext{
+	ctx := engine.Context{
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
@@ -240,7 +241,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		box := rawBlock.GetBlockLayout(ctx, width) // fresh tree: no slot laid out yet
 		b.StartTimer()
 
-		whynot.DrawBlockLayout(box, dst, 0, offsetY, 0)
+		engine.DrawBlockLayout(box, dst, 0, offsetY, 0)
 	}
 }
 

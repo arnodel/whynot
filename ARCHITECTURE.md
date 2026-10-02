@@ -13,7 +13,8 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
 | Path | What it is |
 |---|---|
-| repo root | the library (package `whynot`) - parsing, layout, and the `Panel`/`Interaction` interfaces/types; no rendering backend dependency |
+| repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Interaction`, `StyleSheet`; also the Markdown compiler for now; no rendering backend dependency |
+| `internal/engine/` | layout and drawing: block and inline types with their layouts, line layout, `Context`, the document stack, sideways-scrolling blocks, diagram blocks |
 | `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
 | `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
@@ -65,7 +66,7 @@ and 2. Layer 1's `ast.Node` tree records only structure - each node's semantic t
 `TagHeading1`..`6`, `TagEmphasis`, `TagLink`, ...) and its parent - no
 appearance. Layer 2 resolves that tag ancestry against the context's
 `styling.Styles` ([styles.go](internal/styling/styles.go)) - `Margins`,
-`TextStyle` (via `RenderingContext.ResolvedTextStyle`, merging
+`TextStyle` (via `engine.Context.ResolvedTextStyle`, merging
 contributions across ancestry so e.g. `Strong` nested inside `Emphasis`
 picks up both), `Color`/`BorderColor`, `StrikeThickness`, `LineHeight`,
 table/blockquote geometry - during `GetBlockLayout`/`GetInlineLayout`, so the same parsed document can
@@ -108,7 +109,7 @@ outside our control; it's the source of truth for document structure.
 `Parse`'s `compiler` ([compile.go](compile.go); its state and the
 `ParseOption`s that configure it in [markdown.go](markdown.go)) walks the
 goldmark tree once and produces two parallel trees: a `Block`/`Inline` tree
-([block.go](block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
+([block.go](internal/engine/block.go)) - `TextBlock`, `ListItemHeadBlock`, `CodeBlock`,
 `ThematicBreakBlock`, `BlockquoteBlock`, `TableBlock`, `StackBlock` for
 blocks; `InlineText`, `InlineImage` for inline content - and an `ast.Node`
 tree ([internal/ast](internal/ast)) giving each one a semantic tag (`TagParagraph`,
@@ -142,12 +143,12 @@ rediscover them by inspecting the `Block` tree's shape. Any number of
 
 ### Layer 2 — Layout tree (`BlockLayout` / `InlineLayout`)
 
-`Block.GetBlockLayout(ctx, width)` ([block.go](block.go)) / `Inline.GetInlineLayout(ctx)`
-([inline.go](inline.go)) take a concrete pixel `width` and a
-`RenderingContext` ([rendering_context.go](rendering_context.go); DPI scale,
+`Block.GetBlockLayout(ctx, width)` ([block.go](internal/engine/block.go)) / `Inline.GetInlineLayout(ctx)`
+([inline.go](internal/engine/inline.go)) take a concrete pixel `width` and a
+`engine.Context` ([context.go](internal/engine/context.go); DPI scale,
 font face cache, and `Styles`) and produce a `BlockLayout` /
-`InlineLayout` tree ([block_layout.go](block_layout.go),
-[inline_layout.go](inline_layout.go)): `TextBox`,
+`InlineLayout` tree ([block_layout.go](internal/engine/block_layout.go),
+[inline_layout.go](internal/engine/inline_layout.go)): `TextBox`,
 `ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
 margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 (margin spacer). This is where appearance actually gets resolved -
@@ -155,7 +156,7 @@ margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
 `.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
 dimensional constants, scaled by DPI in one step) - all read against each
 `Block`/`Inline`'s own `*ast.Node`. Line-wrapping happens here
-(`wrapLines`, [line_layout.go](line_layout.go)), as does font selection (`ctx.SelectFace`, given the
+(`wrapLines`, [line_layout.go](internal/engine/line_layout.go)), as does font selection (`ctx.selectFace`, given the
 resolved `TextStyle`) and glyph measurement (`font.BoundString`).
 
 Rebuilt only when `width` or DPI scale change (see `View.Layout` below) —
@@ -167,7 +168,7 @@ mutated, which is what makes the memoization described next safe.
 `canvas.Canvas` ([canvas](canvas)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 `DrawImage`, `DrawRect`, and `Clip`, which returns a `Canvas` restricted to a
-rectangle (used by `ScrollBox`, [hscroll.go](hscroll.go), for blocks that
+rectangle (used by `ScrollBox`, [hscroll.go](internal/engine/hscroll.go), for blocks that
 scroll sideways). `DrawImage` takes an already-decoded `image.Image`, not a
 source path — resolving, fetching, and decoding an image is entirely
 the library's own concern (`imagecache.Cache`, see "Image loading" below), so
@@ -176,7 +177,7 @@ job is purely backend-specific conversion (e.g. uploading a texture),
 which it's free to cache keyed by the `image.Image`'s own identity,
 since the same resolved image comes back from the image cache every time.
 
-`DrawBlockLayout(box, dst, x, y, now)` ([block_layout.go](block_layout.go)) is the *only* way a
+`DrawBlockLayout(box, dst, x, y, now)` ([block_layout.go](internal/engine/block_layout.go)) is the *only* way a
 `BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
 skips `drawContents` (the type-specific drawing logic) entirely if they
 don't overlap. Every `BlockLayout` implementation gets that off-screen skip for
@@ -205,20 +206,20 @@ re-rasterizing the same glyph every frame.
 ## `View`: tying the layers together with the right lifecycle
 
 [view.go](view.go)'s `View` is what a caller actually uses. It holds the
-`Document` it renders, the `RenderingContext`, and interaction state (the
+`Document` it renders, the `engine.Context`, and interaction state (the
 hovered link), and decides *when* to lay out again: only in `Layout` when
 `width` or `scale` actually change, or on `SetStyleSheet` — not on every
 `Draw` call.
 
-The laid-out document itself is a `documentStack`
-([document_stack.go](document_stack.go)), which outlives any one layout
+The laid-out document itself is an `engine.DocumentStack`
+([document_stack.go](internal/engine/document_stack.go)), which outlives any one layout
 tree and owns:
 
 - the top-level `StackBox`, replaced wholesale on each rebuild. Its `ctx`
   points at the `View`'s own context, so a change that affects only
   appearance of slots laid out from then on (the hovered link) needs no
   rebuild, just `StackBox.invalidate` on the affected slots
-- the scroll position, as a `stackCursor{index, offset}` ([block_layout.go](block_layout.go)):
+- the scroll position, as a `StackCursor{Index, Offset}` ([block_layout.go](internal/engine/block_layout.go)):
   which top-level entry is at the top of the viewport, and how far
   (in pixels) into it — and viewport culling via `DrawFrom` in `Draw`
 - **resize anchoring**: when a rebuild changes every block's height, the
@@ -232,10 +233,10 @@ tree and owns:
 Both the `BlockLayout` tree and drawing are **lazy**, anchored at the scroll
 cursor rather than the top of the document:
 
-- `StackBlock.GetBlockLayout` builds only a skeleton of `stackSlot`s (margins
+- `StackBlock.GetBlockLayout` builds only a skeleton of `StackSlot`s (margins
   resolved to gap sizes — proportional to block *count*, not content).
   Each slot's own `Block.GetBlockLayout` — the expensive part, including text
-  measurement — only runs when `StackBox.boxAt(i)` is asked for that slot,
+  measurement — only runs when `StackBox.BoxAt(i)` is asked for that slot,
   and the result is memoized.
 - `StackBox.normalizeCursor(cursor)` adjusts a cursor so its offset falls within
   its slot's height, walking to neighboring slots only as far as needed —
@@ -302,7 +303,7 @@ returns immediately with whatever's currently known (`imagecache.Pending`,
 `imagecache.Ready`, or `imagecache.Failed`), never waiting on I/O itself. A cache
 entry's dimensions are often known before the rest of the fetch/decode
 completes (`fetchAndDecode` peeks the header via `image.DecodeConfig`
-through a `TeeReader`), so `InlineImage.GetInlineLayout` ([inline.go](inline.go))
+through a `TeeReader`), so `InlineImage.GetInlineLayout` ([inline.go](internal/engine/inline.go))
 can lay out an `ImageBox` at its final, correctly-scaled size even
 while still `imagecache.Pending` — `ImageBox.DrawInline` draws a placeholder
 rect instead of pixels until the real image lands, so nothing reflows
@@ -326,7 +327,7 @@ happens at an already-known, already-laid-out size), it's handled
 surgically rather than through a full rebuild — only that one slot is
 invalidated (`StackBox.invalidate`), and only if the scroll cursor is
 anchored inside it does its offset get re-derived by ratio through the
-new height (`documentStack.reanchor`). A changed slot *before* the cursor -
+new height (`DocumentStack.reanchor`). A changed slot *before* the cursor -
 already scrolled past - is invalidated the same way but re-resolved
 immediately, right there, rather than left lazy: nothing ever walks
 backward over an earlier slot again on its own, so a lazily-invalidated
@@ -335,7 +336,7 @@ forever.
 
 `View.Layout` also does two kinds of prefetching every call, both
 scoped to a margin around the current scroll cursor rather than the
-whole document (`documentStack.preLayout`, [document_stack.go](document_stack.go), and `View.prefetchImageSources`) -
+whole document (`DocumentStack.PreLayout`, [document_stack.go](internal/engine/document_stack.go), and `View.prefetchImageSources`) -
 this exists because an image resolving to a much bigger real size than
 the small placeholder that was estimating it, right as the scroll
 cursor reaches it, is exactly the scenario that can make a
@@ -347,7 +348,7 @@ builds a scrollbar from these numbers). Getting a slot's real size known *before
 cursor arrives, not right as it does, avoids the surprise instead of
 smoothing over it after the fact:
 
-- `documentStack.preLayout` fully resolves slots (`StackBox.boxAt`) within a
+- `DocumentStack.PreLayout` fully resolves slots (`StackBox.BoxAt`) within a
   few thousand pixels of the visible viewport, in both directions,
   time-budgeted (a couple of milliseconds per `Layout` call) rather
   than all at once - a big jump (`ScrollToRatio`, `ScrollToAnchor`, a
@@ -358,7 +359,7 @@ smoothing over it after the fact:
   slot's `Block` up in the `Document`'s record of standalone images
   (no `GetBlockLayout` call) and kicks off
   `imagecache.Cache.Load` early, giving a slow network fetch a head start
-  cheaply, deliberately not sharing `documentStack.preLayout`'s smaller,
+  cheaply, deliberately not sharing `DocumentStack.PreLayout`'s smaller,
   CPU-time-budgeted radius.
 
 Neither guarantees the jump is impossible - a pathologically slow fetch
@@ -375,7 +376,7 @@ exactly one of the two. `decodeAnimatedGIF` composites every frame to a
 full-canvas `image.Image` up front, honoring each frame's disposal
 method (many real-world GIFs only encode each frame's changed region).
 Picking the current frame never affects bounds (every frame shares one
-size), so it's handled entirely on the *draw* side: `RenderingContext.Time`
+size), so it's handled entirely on the *draw* side: `engine.Context.Time`
 (elapsed time since the embedder started rendering, set every
 `View.Layout` call) is threaded as a `now time.Duration` parameter
 through `drawContents`/`DrawInline`, and `imagecache.Animation.CurrentFrame(now)`
@@ -389,17 +390,17 @@ determines the loop position.
 position" in the same coordinate space `Draw`'s own `(x, y)` places
 content's origin into - the query counterpart to `Draw`, resolving a
 point instead of painting one. Like `Draw`, it's cursor-relative
-([block_layout.go](block_layout.go)'s `normalizeCursor`), so a query far from the current
+([block_layout.go](internal/engine/block_layout.go)'s `normalizeCursor`), so a query far from the current
 scroll position doesn't force-build every slot in between.
 
 It's built on two small interfaces alongside `BlockLayout`/`InlineLayout`:
 
-- `Source` ([block.go](block.go)) is `Node() *ast.Node` - the common
+- `Source` ([block.go](internal/engine/block.go)) is `Node() *ast.Node` - the common
   ground between `Block` and `Inline`, letting a resolved position trace
   back to its origin in the semantic tree (Layer 1). Every `Block`/
   `Inline` implements it, including `StackBlock`, which reports `nil`
   since it aggregates unrelated children with no identity of its own.
-- `Hit` ([block_layout.go](block_layout.go)) is `Bounds() image.Rectangle` + `Source()
+- `Hit` ([block_layout.go](internal/engine/block_layout.go)) is `Bounds() image.Rectangle` + `Source()
   Source` - what `HitTest` returns. Every `BlockLayout`/`InlineLayout`
   satisfies it directly (no separate wrapper type), so a caller gets the
   actual matched box back - useful for type-asserting to its concrete
@@ -483,7 +484,7 @@ or misreport `Content-Type` for a perfectly good Markdown file.
 These are real, understood, and not yet fixed:
 
 - **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
-  jump, including while sitting still.** `documentStack.preLayout` (see "Image
+  jump, including while sitting still.** `DocumentStack.PreLayout` (see "Image
   loading" above) resolves real slots beyond the visible viewport in the
   background, on every `Layout` call, regardless of whether the user is
   scrolling - and `DocumentBounds`' total, so a scrollbar's own size and

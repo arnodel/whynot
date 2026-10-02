@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"image"
@@ -18,7 +18,7 @@ import (
 // Dimensions of a ScrollBox's edge fades and scrollbar, in logical
 // (unscaled) pixels.
 const (
-	hscrollFadeWidth     = 24
+	HScrollFadeWidth     = 24
 	hscrollFadeSteps     = 8
 	hscrollBarThickness  = 6
 	hscrollBarInset      = 2
@@ -28,8 +28,8 @@ const (
 // How long a revealed scrollbar - by scrolling its block, or moving the
 // pointer over it - stays fully visible after that, then fades out.
 const (
-	hscrollRevealHold = 600 * time.Millisecond
-	hscrollRevealFade = 300 * time.Millisecond
+	HScrollRevealHold = 600 * time.Millisecond
+	HScrollRevealFade = 300 * time.Millisecond
 )
 
 // ScrollBox shows a window, width wide, onto content that's wider,
@@ -44,7 +44,7 @@ type ScrollBox struct {
 	source Block
 	// state is the View's; nil outside a View, where the box never
 	// scrolls but still clips.
-	state      *hscrollState
+	state      *HScrollState
 	scale      float64
 	background color.Color
 	styles     styling.Styles
@@ -54,7 +54,7 @@ var _ BlockLayout = (*ScrollBox)(nil)
 
 // scrollIfWider returns inner wrapped in a ScrollBox if it's wider than
 // width, and inner itself otherwise.
-func scrollIfWider(ctx RenderingContext, source Block, inner BlockLayout, width int) BlockLayout {
+func scrollIfWider(ctx Context, source Block, inner BlockLayout, width int) BlockLayout {
 	if width <= 0 || inner.Bounds().Dx() <= width {
 		return inner
 	}
@@ -62,7 +62,7 @@ func scrollIfWider(ctx RenderingContext, source Block, inner BlockLayout, width 
 		inner:      inner,
 		width:      width,
 		source:     source,
-		state:      ctx.hscroll,
+		state:      ctx.HScroll,
 		scale:      ctx.Scale,
 		background: ctx.Styles.BackgroundColor(),
 		styles:     ctx.Styles,
@@ -125,16 +125,16 @@ func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration)
 	if b.state == nil {
 		return
 	}
-	b.state.record(hscrollArea{
-		source:       b.source,
-		box:          box,
-		visible:      clipped.Bounds(),
-		contentWidth: b.contentWidth(),
+	b.state.record(HScrollArea{
+		Source:       b.source,
+		Box:          box,
+		Visible:      clipped.Bounds(),
+		ContentWidth: b.contentWidth(),
 		scale:        b.scale,
 	})
-	if opacity := b.state.barOpacity(b.source, now); opacity > 0 {
+	if opacity := b.state.BarOpacity(b.source, now); opacity > 0 {
 		thumb := hscrollThumb(box, clipped.Bounds(), b.contentWidth(), offset, b.scale)
-		pressed := b.state.dragging == b.source
+		pressed := b.state.Dragging == b.source
 		c := color.NRGBAModel.Convert(b.styles.ScrollbarColor(b.state.barHovered || pressed, pressed)).(color.NRGBA)
 		c.A = uint8(float64(c.A) * opacity)
 		dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(), c)
@@ -145,7 +145,7 @@ func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration)
 // the page background, with stepped transparency.
 func (b *ScrollBox) drawFades(dst canvas.Canvas, box image.Rectangle, offset int) {
 	r, g, bl, _ := b.background.RGBA()
-	width := int(hscrollFadeWidth * b.scale)
+	width := int(HScrollFadeWidth * b.scale)
 	step := max(1, width/hscrollFadeSteps)
 	for i := range hscrollFadeSteps {
 		// Opaque-ish at the edge, fading toward the content.
@@ -177,139 +177,139 @@ func hscrollThumb(box, visible image.Rectangle, contentWidth, offset int, scale 
 	return image.Rect(x, bottom-int(hscrollBarThickness*scale), x+thumbWidth, bottom)
 }
 
-// hscrollState is a View's horizontal scrolling state, shared with its
-// ScrollBoxes through RenderingContext.
-type hscrollState struct {
+// HScrollState is a View's horizontal scrolling state, shared with its
+// ScrollBoxes through Context.
+type HScrollState struct {
 	// offsets holds each scrolled block's offset, keyed by source Block
 	// so it survives relayout.
 	offsets map[Block]float64
 
-	// areas is where each ScrollBox was drawn by the last View.Draw, in
+	// Areas is where each ScrollBox was drawn by the last View.Draw, in
 	// View coordinates (relative to origin, that Draw's x, y), innermost
 	// last. Input is matched against these, so a ScrollBox needs no
 	// separate hit-testing path.
-	areas  []hscrollArea
+	Areas  []HScrollArea
 	origin image.Point
 
 	hovered    Block       // whose box is under the pointer, or nil
 	barHovered bool        // whether the pointer is on hovered's scrollbar
 	pointer    image.Point // where hover last saw the pointer
-	dragging   Block       // whose scrollbar is being dragged, or nil
+	Dragging   Block       // whose scrollbar is being dragged, or nil
 	grab       int         // pointer x minus thumb x, while dragging
 
-	// revealed's scrollbar shows until revealUntil (in RenderingContext.
+	// revealed's scrollbar shows until revealUntil (in Context.
 	// Time's clock), fading out at the end - see reveal.
 	revealed    Block
 	revealUntil time.Duration
 }
 
-// hscrollArea is where a ScrollBox was drawn, in View coordinates.
-type hscrollArea struct {
-	source       Block
-	box          image.Rectangle // the whole box
-	visible      image.Rectangle // box clipped to what was actually drawn
-	contentWidth int
+// HScrollArea is where a ScrollBox was drawn, in View coordinates.
+type HScrollArea struct {
+	Source       Block
+	Box          image.Rectangle // the whole box
+	Visible      image.Rectangle // box clipped to what was actually drawn
+	ContentWidth int
 	scale        float64
 }
 
-func newHScrollState() *hscrollState {
-	return &hscrollState{offsets: make(map[Block]float64)}
+func NewHScrollState() *HScrollState {
+	return &HScrollState{offsets: make(map[Block]float64)}
 }
 
-// beginFrame forgets the last frame's areas before a View.Draw at origin.
-func (s *hscrollState) beginFrame(origin image.Point) {
-	s.areas = s.areas[:0]
+// BeginFrame forgets the last frame's areas before a View.Draw at origin.
+func (s *HScrollState) BeginFrame(origin image.Point) {
+	s.Areas = s.Areas[:0]
 	s.origin = origin
 }
 
 // record notes an area drawn this frame, given in the Canvas's
 // coordinates.
-func (s *hscrollState) record(a hscrollArea) {
-	a.box = a.box.Sub(s.origin)
-	a.visible = a.visible.Sub(s.origin)
-	s.areas = append(s.areas, a)
+func (s *HScrollState) record(a HScrollArea) {
+	a.Box = a.Box.Sub(s.origin)
+	a.Visible = a.Visible.Sub(s.origin)
+	s.Areas = append(s.Areas, a)
 }
 
-// areaAt returns the innermost area visible at p.
-func (s *hscrollState) areaAt(p image.Point) (hscrollArea, bool) {
-	for i := len(s.areas) - 1; i >= 0; i-- {
-		if p.In(s.areas[i].visible) {
-			return s.areas[i], true
+// AreaAt returns the innermost area visible at p.
+func (s *HScrollState) AreaAt(p image.Point) (HScrollArea, bool) {
+	for i := len(s.Areas) - 1; i >= 0; i-- {
+		if p.In(s.Areas[i].Visible) {
+			return s.Areas[i], true
 		}
 	}
-	return hscrollArea{}, false
+	return HScrollArea{}, false
 }
 
 // areaOf returns source's area from the last frame.
-func (s *hscrollState) areaOf(source Block) (hscrollArea, bool) {
-	for _, a := range s.areas {
-		if a.source == source {
+func (s *HScrollState) areaOf(source Block) (HScrollArea, bool) {
+	for _, a := range s.Areas {
+		if a.Source == source {
 			return a, true
 		}
 	}
-	return hscrollArea{}, false
+	return HScrollArea{}, false
 }
 
-func (s *hscrollState) offset(a hscrollArea) int {
-	return clampOffset(s.offsets[a.source], a.contentWidth-a.box.Dx())
+func (s *HScrollState) offset(a HScrollArea) int {
+	return clampOffset(s.offsets[a.Source], a.ContentWidth-a.Box.Dx())
 }
 
-func (s *hscrollState) thumb(a hscrollArea) image.Rectangle {
-	return hscrollThumb(a.box, a.visible, a.contentWidth, s.offset(a), a.scale)
+func (s *HScrollState) Thumb(a HScrollArea) image.Rectangle {
+	return hscrollThumb(a.Box, a.Visible, a.ContentWidth, s.offset(a), a.scale)
 }
 
 // barZone is the strip along the bottom of a's box that counts as its
 // scrollbar for the pointer: the thumb's track, with a little slack.
-func (s *hscrollState) barZone(a hscrollArea) image.Rectangle {
-	thumb := s.thumb(a)
-	return image.Rect(a.box.Min.X, thumb.Min.Y-int(hscrollBarInset*a.scale), a.box.Max.X, a.visible.Max.Y)
+func (s *HScrollState) barZone(a HScrollArea) image.Rectangle {
+	thumb := s.Thumb(a)
+	return image.Rect(a.Box.Min.X, thumb.Min.Y-int(hscrollBarInset*a.scale), a.Box.Max.X, a.Visible.Max.Y)
 }
 
-// hover updates which box, and whether its scrollbar, is under p at now.
+// Hover updates which box, and whether its scrollbar, is under p at now.
 // Moving over a box reveals its scrollbar; a resting pointer lets it fade.
 // The box being dragged stays hovered until the drag ends.
-func (s *hscrollState) hover(p image.Point, now time.Duration) {
+func (s *HScrollState) Hover(p image.Point, now time.Duration) {
 	moved := p != s.pointer
 	s.pointer = p
-	if s.dragging != nil {
+	if s.Dragging != nil {
 		return
 	}
-	a, ok := s.areaAt(p)
+	a, ok := s.AreaAt(p)
 	if !ok {
-		s.unhover()
+		s.Unhover()
 		return
 	}
-	s.hovered = a.source
+	s.hovered = a.Source
 	s.barHovered = p.In(s.barZone(a))
 	if moved {
-		s.reveal(a.source, now)
+		s.Reveal(a.Source, now)
 	}
 }
 
-// unhover forgets any hovered box, without revealing anything.
-func (s *hscrollState) unhover() {
+// Unhover forgets any hovered box, without revealing anything.
+func (s *HScrollState) Unhover() {
 	s.hovered, s.barHovered = nil, false
 }
 
-// scrollAt scrolls the box at p by dx (positive moves the content right,
+// ScrollAt scrolls the box at p by dx (positive moves the content right,
 // revealing its start) at now, reporting whether there was one.
-func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) bool {
-	a, ok := s.areaAt(p)
+func (s *HScrollState) ScrollAt(p image.Point, dx float64, now time.Duration) bool {
+	a, ok := s.AreaAt(p)
 	if !ok {
 		return false
 	}
-	s.offsets[a.source] = clampOffsetF(s.offsets[a.source]-dx, a.contentWidth-a.box.Dx())
-	s.reveal(a.source, now)
+	s.offsets[a.Source] = clampOffsetF(s.offsets[a.Source]-dx, a.ContentWidth-a.Box.Dx())
+	s.Reveal(a.Source, now)
 	return true
 }
 
-// beginDrag starts dragging the scrollbar at p, if there is one.
-func (s *hscrollState) beginDrag(p image.Point) bool {
-	a, ok := s.areaAt(p)
+// BeginDrag starts dragging the scrollbar at p, if there is one.
+func (s *HScrollState) BeginDrag(p image.Point) bool {
+	a, ok := s.AreaAt(p)
 	if !ok || !p.In(s.barZone(a)) {
 		return false
 	}
-	thumb := s.thumb(a)
+	thumb := s.Thumb(a)
 	if p.X < thumb.Min.X || p.X >= thumb.Max.X {
 		// Pressed on the track, not the thumb: grab the thumb's middle
 		// there, so it jumps under the pointer.
@@ -317,64 +317,64 @@ func (s *hscrollState) beginDrag(p image.Point) bool {
 	} else {
 		s.grab = p.X - thumb.Min.X
 	}
-	s.dragging, s.hovered, s.barHovered = a.source, a.source, true
-	s.dragTo(p.X)
+	s.Dragging, s.hovered, s.barHovered = a.Source, a.Source, true
+	s.DragTo(p.X)
 	return true
 }
 
-// dragTo moves the dragged scrollbar's thumb to follow pointer x.
-func (s *hscrollState) dragTo(x int) {
-	a, ok := s.areaOf(s.dragging)
+// DragTo moves the dragged scrollbar's thumb to follow pointer x.
+func (s *HScrollState) DragTo(x int) {
+	a, ok := s.areaOf(s.Dragging)
 	if !ok {
 		return
 	}
-	thumb := s.thumb(a)
-	track := a.box.Dx() - thumb.Dx()
+	thumb := s.Thumb(a)
+	track := a.Box.Dx() - thumb.Dx()
 	if track <= 0 {
 		return
 	}
-	ratio := float64(x-s.grab-a.box.Min.X) / float64(track)
-	maxOffset := a.contentWidth - a.box.Dx()
-	s.offsets[a.source] = clampOffsetF(ratio*float64(maxOffset), maxOffset)
+	ratio := float64(x-s.grab-a.Box.Min.X) / float64(track)
+	maxOffset := a.ContentWidth - a.Box.Dx()
+	s.offsets[a.Source] = clampOffsetF(ratio*float64(maxOffset), maxOffset)
 }
 
-// endDrag ends a scrollbar drag at now; the scrollbar then fades out
+// EndDrag ends a scrollbar drag at now; the scrollbar then fades out
 // like after any other scroll, unless the pointer stays on it.
-func (s *hscrollState) endDrag(now time.Duration) {
-	s.reveal(s.dragging, now)
-	s.dragging = nil
+func (s *HScrollState) EndDrag(now time.Duration) {
+	s.Reveal(s.Dragging, now)
+	s.Dragging = nil
 }
 
-// scrollSource scrolls source's box by dx, as scrollAt does, wherever it
+// ScrollSource scrolls source's box by dx, as scrollAt does, wherever it
 // is now - for a touch pan, which sticks to the block it started on.
-func (s *hscrollState) scrollSource(source Block, dx float64) {
+func (s *HScrollState) ScrollSource(source Block, dx float64) {
 	if a, ok := s.areaOf(source); ok {
-		s.offsets[source] = clampOffsetF(s.offsets[source]-dx, a.contentWidth-a.box.Dx())
+		s.offsets[source] = clampOffsetF(s.offsets[source]-dx, a.ContentWidth-a.Box.Dx())
 	}
 }
 
-// reveal shows source's scrollbar from now, fading out after
+// Reveal shows source's scrollbar from now, fading out after
 // hscrollRevealHold.
-func (s *hscrollState) reveal(source Block, now time.Duration) {
+func (s *HScrollState) Reveal(source Block, now time.Duration) {
 	s.revealed = source
-	s.revealUntil = now + hscrollRevealHold + hscrollRevealFade
+	s.revealUntil = now + HScrollRevealHold + HScrollRevealFade
 }
 
-// barOpacity is how visible source's scrollbar is at now, from 0
+// BarOpacity is how visible source's scrollbar is at now, from 0
 // (hidden) to 1: fully while being dragged or pointed at, and otherwise
 // for a while after it's revealed (see reveal).
-func (s *hscrollState) barOpacity(source Block, now time.Duration) float64 {
+func (s *HScrollState) BarOpacity(source Block, now time.Duration) float64 {
 	switch {
-	case s.dragging == source, s.hovered == source && s.barHovered:
+	case s.Dragging == source, s.hovered == source && s.barHovered:
 		return 1
 	case s.revealed != source || now >= s.revealUntil:
 		return 0
 	}
-	return min(1, float64(s.revealUntil-now)/float64(hscrollRevealFade))
+	return min(1, float64(s.revealUntil-now)/float64(HScrollRevealFade))
 }
 
-// animating reports whether a revealed scrollbar is still showing at
+// Animating reports whether a revealed scrollbar is still showing at
 // now, so frames must keep coming for it to fade out.
-func (s *hscrollState) animating(now time.Duration) bool {
+func (s *HScrollState) Animating(now time.Duration) bool {
 	return s.revealed != nil && now < s.revealUntil
 }

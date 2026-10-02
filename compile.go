@@ -2,7 +2,6 @@ package whynot
 
 import (
 	"fmt"
-	"github.com/arnodel/whynot/internal/ast"
 	"log"
 	"strings"
 	"unicode"
@@ -11,6 +10,9 @@ import (
 	"github.com/yuin/goldmark/v2/extension"
 	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
+
+	"github.com/arnodel/whynot/internal/ast"
+	"github.com/arnodel/whynot/internal/engine"
 )
 
 // Parse compiles Markdown source into a Document ready to render with a
@@ -42,7 +44,7 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 	}
 	// A nil parent ast.Node is what marks a block as top-level.
 	return &Document{
-		root:       &StackBlock{blocks: c.compileBlocks(node.FirstChild(), nil)},
+		root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
 		headings:   c.headings,
 		soleImages: c.soleImages,
 	}
@@ -50,8 +52,8 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 
 // compileBlocks compiles first and its following siblings under parent,
 // dropping any that compile to nothing.
-func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []Block {
-	var blocks []Block
+func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []engine.Block {
+	var blocks []engine.Block
 	for node := first; node != nil; node = node.NextSibling() {
 		if _, ok := node.(gmast.BlockNode); !ok {
 			continue
@@ -65,7 +67,7 @@ func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []Block {
 
 // compileInlines compiles node's children as a fresh run of inline
 // content - a paragraph, heading, list item head or table cell.
-func (c *compiler) compileInlines(node gmast.Node, astNode *ast.Node) []Inline {
+func (c *compiler) compileInlines(node gmast.Node, astNode *ast.Node) []engine.Inline {
 	c.pendingSpace = true
 	return c.appendChildren(nil, node, astNode)
 }
@@ -74,7 +76,7 @@ func (c *compiler) compileInlines(node gmast.Node, astNode *ast.Node) []Inline {
 // replaced with - see the KindCodeBlock case below.
 const codeBlockTabExpansion = "    "
 
-func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) Block {
+func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block {
 	switch node.Kind() {
 	case gmast.KindParagraph:
 		return c.compileTextBlock(node, parent.AddChild(ast.TagParagraph), parent == nil)
@@ -87,13 +89,13 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) Block {
 	case gmast.KindList:
 		list := node.(*gmast.List)
 		astNode := parent.AddChild(ast.TagList)
-		var items []Block
+		var items []engine.Block
 		index := 0
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 			items = append(items, c.compileListItem(child, list, index, astNode))
 			index++
 		}
-		return &MarginBlock{Block: &StackBlock{blocks: items}, node: astNode}
+		return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: items}, MarginNode: astNode}
 	case gmast.KindCodeBlock:
 		astNode := parent.AddChild(ast.TagCodeBlock)
 		cb := node.(*gmast.CodeBlock)
@@ -116,21 +118,21 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) Block {
 			// highlightLines' identical join) - joining with "" avoids
 			// doubling them up.
 			code := strings.Join(rawLines, "")
-			fallback := &CodeBlock{lines: lines, node: astNode}
-			return &MarginBlock{Block: NewDiagramBlock(astNode, plugin.Image(language, code), fallback), node: astNode}
+			fallback := &engine.CodeBlock{Lines: lines, ASTNode: astNode}
+			return &engine.MarginBlock{Block: engine.NewDiagramBlock(astNode, plugin.Image(language, code), fallback), MarginNode: astNode}
 		}
-		return &MarginBlock{Block: &CodeBlock{lines: lines, node: astNode}, node: astNode}
+		return &engine.MarginBlock{Block: &engine.CodeBlock{Lines: lines, ASTNode: astNode}, MarginNode: astNode}
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(ast.TagThematicBreak)
-		return &MarginBlock{
-			Block: &ThematicBreakBlock{node: astNode},
-			node:  astNode,
+		return &engine.MarginBlock{
+			Block:      &engine.ThematicBreakBlock{ASTNode: astNode},
+			MarginNode: astNode,
 		}
 	case gmast.KindBlockquote:
 		astNode := parent.AddChild(ast.TagBlockquote)
-		return &MarginBlock{
-			Block: &BlockquoteBlock{inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode)), node: astNode},
-			node:  astNode,
+		return &engine.MarginBlock{
+			Block:      &engine.BlockquoteBlock{Inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode)), ASTNode: astNode},
+			MarginNode: astNode,
 		}
 	case extast.KindTable:
 		return c.compileTable(node, parent)
@@ -154,9 +156,9 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) Block {
 // caller has already created. A top-level one is also recorded in the
 // Document: a heading as a TOCEntry, and one whose only content is an
 // image as a soleImages entry.
-func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel bool) Block {
+func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel bool) engine.Block {
 	items := c.compileInlines(node, astNode)
-	block := &MarginBlock{Block: &TextBlock{parts: items, node: astNode}, node: astNode}
+	block := &engine.MarginBlock{Block: &engine.TextBlock{Parts: items, ASTNode: astNode}, MarginNode: astNode}
 
 	if !topLevel {
 		return block
@@ -169,11 +171,11 @@ func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel
 		})
 	}
 	if len(items) == 1 {
-		if img, ok := items[0].(*InlineImage); ok {
+		if img, ok := items[0].(*engine.InlineImage); ok {
 			if c.soleImages == nil {
-				c.soleImages = make(map[Block]string)
+				c.soleImages = make(map[engine.Block]string)
 			}
-			c.soleImages[block] = img.src
+			c.soleImages[block] = img.Src
 		}
 	}
 	return block
@@ -181,11 +183,11 @@ func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel
 
 // plainText joins items' words with single spaces; anything but an
 // *InlineText (e.g. an image) contributes nothing.
-func plainText(items []Inline) string {
+func plainText(items []engine.Inline) string {
 	var words []string
 	for _, item := range items {
-		if it, ok := item.(*InlineText); ok {
-			words = append(words, it.text)
+		if it, ok := item.(*engine.InlineText); ok {
+			words = append(words, it.Text)
 		}
 	}
 	return strings.Join(words, " ")
@@ -196,24 +198,24 @@ func plainText(items []Inline) string {
 // whole document, it logs a warning and renders the construct as a
 // code block in StyleSheet.UnsupportedColor, showing its raw source
 // where possible so the gap is visible rather than silently dropped.
-func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ast.Node) Block {
+func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ast.Node) engine.Block {
 	astNode := parent.AddChild(ast.TagUnsupported)
 	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
 
-	var items []Inline
+	var items []engine.Inline
 	if html, ok := node.(*gmast.HTMLBlock); ok {
 		for _, seg := range html.Value.Segments() {
-			items = append(items, &InlineText{text: string(seg.Bytes(c.source)), node: astNode})
+			items = append(items, &engine.InlineText{Text: string(seg.Bytes(c.source)), ASTNode: astNode})
 		}
 	}
 	if len(items) == 0 {
-		items = []Inline{&InlineText{text: fmt.Sprintf("(unsupported: %s)", node.Kind()), node: astNode}}
+		items = []engine.Inline{&engine.InlineText{Text: fmt.Sprintf("(unsupported: %s)", node.Kind()), ASTNode: astNode}}
 	}
-	lines := make([][]Inline, len(items))
+	lines := make([][]engine.Inline, len(items))
 	for i, item := range items {
-		lines[i] = []Inline{item}
+		lines[i] = []engine.Inline{item}
 	}
-	return &MarginBlock{Block: &CodeBlock{lines: lines, node: astNode}, node: astNode}
+	return &engine.MarginBlock{Block: &engine.CodeBlock{Lines: lines, ASTNode: astNode}, MarginNode: astNode}
 }
 
 // headingTag maps a heading level (1-6) to its ast.Tag - safe because
@@ -223,13 +225,13 @@ func headingTag(level int) ast.Tag {
 }
 
 // compileListItem compiles the item at index (0-based) in list.
-func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ast.Node) Block {
+func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ast.Node) engine.Block {
 	itemNode := parent.AddChild(ast.TagListItem)
-	var marker Inline
+	var marker engine.Inline
 	if status, ok := extension.TaskStatusOf(node); ok {
-		marker = &TaskCheckbox{checked: status == extension.TaskStatusCompleted, node: itemNode}
+		marker = &engine.TaskCheckbox{Checked: status == extension.TaskStatusCompleted, ASTNode: itemNode}
 	} else {
-		marker = &InlineText{text: listMarker(list, index), node: itemNode}
+		marker = &engine.InlineText{Text: listMarker(list, index), ASTNode: itemNode}
 	}
 
 	// A leading Paragraph is the item's own text, flowed with the marker
@@ -238,17 +240,17 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 	// paragraphs - stacks below as trailing block content. An item with no
 	// leading paragraph has no parts, so the marker ends up on a line of
 	// its own.
-	var parts []Inline
+	var parts []engine.Inline
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
 		parts = c.compileInlines(next, itemNode)
 		next = next.NextSibling()
 	}
 
-	head := Block(&ListItemHeadBlock{
-		marker: marker,
-		parts:  parts,
-		node:   itemNode,
+	head := engine.Block(&engine.ListItemHeadBlock{
+		Marker:  marker,
+		Parts:   parts,
+		ASTNode: itemNode,
 	})
 	if !list.IsTight {
 		// Loose items get real paragraph spacing on their own leading text
@@ -262,9 +264,9 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 		// own margins should resolve as a paragraph's (matching what this
 		// looked like before StyleSheet), distinct from itemNode's tag,
 		// which the marker/parts' own inline styling still uses.
-		head = &MarginBlock{Block: head, node: itemNode.AddChild(ast.TagParagraph)}
+		head = &engine.MarginBlock{Block: head, MarginNode: itemNode.AddChild(ast.TagParagraph)}
 	}
-	blocks := []Block{head}
+	blocks := []engine.Block{head}
 
 	if trailingBlocks := c.compileBlocks(next, itemNode); len(trailingBlocks) > 0 {
 		blocks = append(blocks, wrapBlocks(trailingBlocks))
@@ -276,7 +278,7 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 	// only one, which would lose these margins for the common
 	// no-trailing-content tight case (ListItemHeadBlock's own Margins() is
 	// zero then).
-	return &MarginBlock{Block: &StackBlock{blocks: blocks}, node: itemNode}
+	return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: blocks}, MarginNode: itemNode}
 }
 
 // listMarker is the marker text for the item at index (0-based) in list:
@@ -292,35 +294,35 @@ func listMarker(list *gmast.List, index int) string {
 // compileTable compiles a Table node. The header is mandatory (GFM
 // requires it); the body is not - a table can legitimately have zero
 // data rows, in which case Table has no TableBody child at all.
-func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) Block {
+func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) engine.Block {
 	astNode := parent.AddChild(ast.TagTable)
 	headerNode := node.FirstChild()
 	header := c.compileTableRow(headerNode, astNode)
 
-	var rows [][]tableCell
+	var rows [][]engine.TableCell
 	if bodyNode := headerNode.NextSibling(); bodyNode != nil {
 		for row := bodyNode.FirstChild(); row != nil; row = row.NextSibling() {
 			rows = append(rows, c.compileTableRow(row, astNode))
 		}
 	}
 
-	return &MarginBlock{
-		Block: &TableBlock{header: header, rows: rows, node: astNode},
-		node:  astNode,
+	return &engine.MarginBlock{
+		Block:      &engine.TableBlock{Header: header, Rows: rows, ASTNode: astNode},
+		MarginNode: astNode,
 	}
 }
 
 // compileTableRow compiles the cells of a TableHeader or a TableRow -
 // both have TableCell children directly, no intermediate node, so one
 // method handles both despite the different AST kinds.
-func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []tableCell {
-	var cells []tableCell
+func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []engine.TableCell {
+	var cells []engine.TableCell
 	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
 		tc := cellNode.(*extast.TableCell)
 		cellNode := parent.AddChild(ast.TagTableCell)
-		cells = append(cells, tableCell{
-			content:   &TextBlock{parts: c.compileInlines(tc, cellNode), node: cellNode},
-			alignment: tableCellAlignment(tc.Alignment),
+		cells = append(cells, engine.TableCell{
+			Content:   &engine.TextBlock{Parts: c.compileInlines(tc, cellNode), ASTNode: cellNode},
+			Alignment: tableCellAlignment(tc.Alignment),
 		})
 	}
 	return cells
@@ -335,7 +337,7 @@ var spanTags = map[gmast.NodeKind]ast.Tag{
 }
 
 // appendChildren appends node's inline children, under astNode.
-func (c *compiler) appendChildren(items []Inline, node gmast.Node, astNode *ast.Node) []Inline {
+func (c *compiler) appendChildren(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
 	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
 		items = c.appendInline(items, child, astNode)
 	}
@@ -347,8 +349,8 @@ func (c *compiler) appendChildren(items []Inline, node gmast.Node, astNode *ast.
 // the constructs that get their own ast.Tag, and threaded straight through
 // everywhere else. Appearance (font, color, strike) is never resolved
 // here - each produced Inline just carries the ast.Node it was created
-// under, resolved later by RenderingContext against a StyleSheet.
-func (c *compiler) appendInline(items []Inline, node gmast.Node, astNode *ast.Node) []Inline {
+// under, resolved later by engine.Context against a StyleSheet.
+func (c *compiler) appendInline(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
 	if tag, ok := spanTags[node.Kind()]; ok {
 		return c.appendChildren(items, node, astNode.AddChild(tag))
 	}
@@ -374,19 +376,19 @@ func (c *compiler) appendInline(items []Inline, node gmast.Node, astNode *ast.No
 		imageNode := astNode.AddChild(ast.TagImage)
 		glued := !c.pendingSpace
 		c.pendingSpace = false
-		return append(items, &InlineImage{
-			src:   imgNode.Destination.Value(c.source),
-			alt:   altText(imgNode, c.source),
-			title: imgNode.Title.Value(c.source),
-			node:  imageNode,
+		return append(items, &engine.InlineImage{
+			Src:     imgNode.Destination.Value(c.source),
+			Alt:     altText(imgNode, c.source),
+			Title:   imgNode.Title.Value(c.source),
+			ASTNode: imageNode,
 			// fallbackNode is precomputed once, here, rather than
 			// on demand inside GetInlineLayout - a layout-time
 			// "does the image load" check can run many times
 			// (every resize/zoom/reload), and ast.Node.AddChild
 			// isn't idempotent, so mutating the tree there would
 			// grow a new child every time instead of reusing one.
-			fallbackNode: imageNode.AddChild(ast.TagUnsupported),
-			glued:        glued,
+			FallbackNode: imageNode.AddChild(ast.TagUnsupported),
+			Glued:        glued,
 		})
 	case gmast.KindLink:
 		linkNode := astNode.AddChild(ast.TagLink)
@@ -408,7 +410,7 @@ func (c *compiler) appendInline(items []Inline, node gmast.Node, astNode *ast.No
 // block-level box, so the raw source (where available) is spliced into
 // the surrounding paragraph as ordinary words, styled in
 // StyleSheet.UnsupportedColor via ast.TagUnsupported.
-func (c *compiler) appendUnsupportedInline(items []Inline, node gmast.Node, astNode *ast.Node) []Inline {
+func (c *compiler) appendUnsupportedInline(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
 	text := fmt.Sprintf("(unsupported: %s)", node.Kind())
 	if raw, ok := node.(*gmast.RawHTML); ok {
 		text = raw.Value.Value(c.source)
@@ -427,27 +429,27 @@ func (c *compiler) appendUnsupportedInline(items []Inline, node gmast.Node, astN
 // tableCellAlignment translates goldmark's own alignment enum to
 // whynot's - see cellAlignment's doc comment for why they're kept
 // distinct.
-func tableCellAlignment(a extast.Alignment) cellAlignment {
+func tableCellAlignment(a extast.Alignment) engine.CellAlignment {
 	switch a {
 	case extast.AlignLeft:
-		return alignLeft
+		return engine.AlignLeft
 	case extast.AlignRight:
-		return alignRight
+		return engine.AlignRight
 	case extast.AlignCenter:
-		return alignCenter
+		return engine.AlignCenter
 	default:
-		return alignNone
+		return engine.AlignNone
 	}
 }
 
 // wrapBlocks returns blocks[0] directly if there's exactly one, or a
 // StackBlock of all of them otherwise - for a Block field that holds "one
 // or more" blocks without unconditionally wrapping a single child.
-func wrapBlocks(blocks []Block) Block {
+func wrapBlocks(blocks []engine.Block) engine.Block {
 	if len(blocks) == 1 {
 		return blocks[0]
 	}
-	return &StackBlock{blocks: blocks}
+	return &engine.StackBlock{Blocks: blocks}
 }
 
 // altText flattens an image's child nodes - CommonMark allows arbitrary
@@ -489,12 +491,12 @@ const nbsp = ' '
 // needed at all (a whitespace-only Text node between two non-text
 // siblings, e.g. "**a** *b*", produces zero items of its own here but
 // still needs to un-glue whatever comes next).
-func (c *compiler) appendString(items []Inline, s string, node *ast.Node) []Inline {
+func (c *compiler) appendString(items []engine.Inline, s string, node *ast.Node) []engine.Inline {
 	runes := []rune(s)
 	for i := 0; i < len(runes); {
 		switch r := runes[i]; {
 		case r == nbsp:
-			items = append(items, &InlineText{text: string(nbsp), node: node, glued: !c.pendingSpace})
+			items = append(items, &engine.InlineText{Text: string(nbsp), ASTNode: node, Glued: !c.pendingSpace})
 			c.pendingSpace = false
 			i++
 		case unicode.IsSpace(r):
@@ -505,7 +507,7 @@ func (c *compiler) appendString(items []Inline, s string, node *ast.Node) []Inli
 			for i < len(runes) && runes[i] != nbsp && !unicode.IsSpace(runes[i]) {
 				i++
 			}
-			items = append(items, &InlineText{text: string(runes[start:i]), node: node, glued: !c.pendingSpace})
+			items = append(items, &engine.InlineText{Text: string(runes[start:i]), ASTNode: node, Glued: !c.pendingSpace})
 			c.pendingSpace = false
 		}
 	}

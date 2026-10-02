@@ -1,4 +1,4 @@
-package whynot
+package engine
 
 import (
 	"bytes"
@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
 // waitForDiagramSettled polls block.GetBlockLayout(ctx, width) until its
@@ -18,7 +20,7 @@ import (
 // deadline passes - fetchAndDecode always runs on its own goroutine, so
 // a test can't assume the very first GetBlockLayout call already
 // reflects a settled result.
-func waitForDiagramSettled(t *testing.T, block Block, ctx RenderingContext, width int) BlockLayout {
+func waitForDiagramSettled(t *testing.T, block Block, ctx Context, width int) BlockLayout {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -53,7 +55,7 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: imagecache.NewCache(images.FileSource{})}
+	ctx := Context{ImageCache: imagecache.NewCache(images.FileSource{})}
 
 	box := block.GetBlockLayout(ctx, 300)
 	wantBounds := fallback.GetBlockLayout(ctx, 300).Bounds()
@@ -81,7 +83,7 @@ func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: imagecache.NewCache(images.FileSource{})}
+	ctx := Context{ImageCache: imagecache.NewCache(images.FileSource{})}
 
 	box := waitForDiagramFailed(t, block, img, ctx, 300)
 	wantBounds := fallback.GetBlockLayout(ctx, 300).Bounds()
@@ -105,9 +107,9 @@ func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
 		},
 	}
 	fallback := &fixedHeightBlock{height: 42}
-	box := NewDiagramBlock(nil, img, fallback).GetBlockLayout(RenderingContext{}, 300)
+	box := NewDiagramBlock(nil, img, fallback).GetBlockLayout(Context{}, 300)
 
-	if want := fallback.GetBlockLayout(RenderingContext{}, 300).Bounds(); box.Bounds() != want {
+	if want := fallback.GetBlockLayout(Context{}, 300).Bounds(); box.Bounds() != want {
 		t.Errorf("Bounds() = %v, want fallback's own %v", box.Bounds(), want)
 	}
 	if pending := box.PendingImages(); len(pending) != 0 {
@@ -122,7 +124,7 @@ func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
 // distinguished from "still fetching" by PendingImages() alone; poll
 // the cache directly (by the same key/images.AsyncImage the block itself uses)
 // until it reports imagecache.Failed instead.
-func waitForDiagramFailed(t *testing.T, block Block, img images.AsyncImage, ctx RenderingContext, width int) BlockLayout {
+func waitForDiagramFailed(t *testing.T, block Block, img images.AsyncImage, ctx Context, width int) BlockLayout {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -149,7 +151,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
-	ctx := RenderingContext{ImageCache: imagecache.NewCache(images.FileSource{}), Styles: noMarginStyleSheet(), Scale: 1}
+	ctx := Context{ImageCache: imagecache.NewCache(images.FileSource{}), Styles: stylingtest.NoViewMargin(), Scale: 1}
 
 	box := waitForDiagramSettled(t, block, ctx, 300)
 	if box.Bounds() == (fallback.GetBlockLayout(ctx, 300).Bounds()) {
@@ -159,20 +161,20 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 		t.Error("HitTest once ready = non-nil, want it to decline (a diagram isn't interactive)")
 	}
 
-	canvas := &recordingCanvas{bounds: image.Rect(0, 0, 300, 300)}
+	canvas := &canvastest.Recorder{Area: image.Rect(0, 0, 300, 300)}
 	DrawBlockLayout(box, canvas, 0, 0, 0)
-	if len(canvas.images) != 1 {
-		t.Fatalf("DrawBlockLayout drew %d image(s), want 1", len(canvas.images))
+	if len(canvas.Images) != 1 {
+		t.Fatalf("DrawBlockLayout drew %d image(s), want 1", len(canvas.Images))
 	}
 	// A white backdrop (drawn before the image) plus a 4-sided frame
 	// (drawn after) - see imageLayout's own doc comment for why: a
 	// diagram's own colors assume a light backdrop, and Kroki's output
 	// is transparent where nothing is drawn.
-	if len(canvas.rects) < 5 {
-		t.Fatalf("DrawBlockLayout drew %d rect(s), want at least 5 (a white backdrop + 4-sided frame)", len(canvas.rects))
+	if len(canvas.Rects) < 5 {
+		t.Fatalf("DrawBlockLayout drew %d rect(s), want at least 5 (a white backdrop + 4-sided frame)", len(canvas.Rects))
 	}
-	if canvas.rects[0].color != color.White {
-		t.Errorf("first rect drawn = %v, want a white backdrop drawn before the image", canvas.rects[0].color)
+	if canvas.Rects[0].Color != color.White {
+		t.Errorf("first rect drawn = %v, want a white backdrop drawn before the image", canvas.Rects[0].Color)
 	}
 
 	// The image itself must sit inset from the outer (white+frame)
@@ -181,7 +183,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	// own.
 	wantInset := int(ctx.ScaledThematicBreakThickness(nil)) + int(ctx.Styles.DiagramPadding(nil)*ctx.Scale)
 	wantImageRect := image.Rect(wantInset, wantInset, box.Bounds().Dx()-wantInset, box.Bounds().Dy()-wantInset)
-	if canvas.imageRects[0] != wantImageRect {
-		t.Errorf("image drawn at %v, want %v (inset %d on every side)", canvas.imageRects[0], wantImageRect, wantInset)
+	if canvas.ImageRects[0] != wantImageRect {
+		t.Errorf("image drawn at %v, want %v (inset %d on every side)", canvas.ImageRects[0], wantImageRect, wantInset)
 	}
 }
