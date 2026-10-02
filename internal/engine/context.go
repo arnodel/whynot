@@ -31,9 +31,14 @@ type Context struct {
 	// its source code block.
 	ImageCache *imagecache.Cache
 
-	// HScroll is the View's horizontal scrolling state, shared with the
-	// ScrollBoxes laid out under this context; nil outside a View.
-	HScroll HScroller
+	// ScrollOffset is how far source's content is scrolled along axis,
+	// unclamped: a ScrollBox clamps it to its content. Scroll state is the
+	// View's; nil means nothing ever scrolls.
+	ScrollOffset func(source Block, axis Axis) float64
+
+	// Scrollbar is called as each ScrollBox is drawn, with where its
+	// scrollbar would go; nil means no scrollbars.
+	Scrollbar ScrollbarFunc
 
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never

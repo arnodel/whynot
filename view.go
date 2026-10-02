@@ -28,7 +28,8 @@ type View struct {
 	ctx engine.Context
 
 	// hscroll is the sideways scrolling state of the View's code blocks
-	// and tables; ctx.HScroll is this same value, for drawing them.
+	// and tables, and draws their scrollbars: ctx's ScrollOffset and
+	// Scrollbar hooks call it.
 	hscroll *hscrollState
 
 	// stack is the laid-out document and the scroll position within it.
@@ -67,16 +68,18 @@ func WithImageSource(s images.Source) ViewOption {
 // in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
 // once Layout has been called to establish a width.
 func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
-	hscroll := newHScrollState()
 	v := &View{
 		doc: doc,
 		ctx: engine.Context{
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
-			HScroll:      hscroll,
 		},
-		hscroll: hscroll,
+		hscroll: newHScrollState(),
+	}
+	v.ctx.ScrollOffset = v.hscroll.scrollOffset
+	v.ctx.Scrollbar = func(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration) {
+		v.hscroll.drawScrollbar(dst, r, now, v.ctx.Scale, v.ctx.Styles)
 	}
 	for _, opt := range opts {
 		opt(v)

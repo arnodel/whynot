@@ -12,6 +12,6 @@
 //
 // State is not its job: the scroll position, sideways offsets, hover and
 // scrollbar timing belong to whynot.View, which hands drawing what it
-// needs through Context (e.g. HScroller). Neither is parsing Markdown,
+// needs through Context (the ScrollOffset and Scrollbar hooks). Neither is parsing Markdown,
 // input handling, or the public API.
 package engine

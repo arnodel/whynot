@@ -14,7 +14,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | Path | What it is |
 |---|---|
 | repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Interaction`, `StyleSheet`; also the Markdown compiler for now; no rendering backend dependency |
-| `internal/engine/` | layout and drawing: block and inline types with their layouts, line layout, `Context`, the document stack, sideways-scrolling blocks, diagram blocks |
+| `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
 | `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
@@ -211,8 +211,8 @@ hovered link), and decides *when* to lay out again: only in `Layout` when
 `width` or `scale` actually change, or on `SetStyleSheet` — not on every
 `Draw` call.
 
-The laid-out document itself is an `engine.DocumentStack`
-([document_stack.go](internal/engine/document_stack.go)), which outlives any one layout
+The laid-out document itself is the View's `documentStack`
+([document_stack.go](document_stack.go)), which outlives any one layout
 tree and owns:
 
 - the top-level `StackBox`, replaced wholesale on each rebuild. Its `ctx`
@@ -327,7 +327,7 @@ happens at an already-known, already-laid-out size), it's handled
 surgically rather than through a full rebuild — only that one slot is
 invalidated (`StackBox.invalidate`), and only if the scroll cursor is
 anchored inside it does its offset get re-derived by ratio through the
-new height (`DocumentStack.reanchor`). A changed slot *before* the cursor -
+new height (`documentStack.reanchor`). A changed slot *before* the cursor -
 already scrolled past - is invalidated the same way but re-resolved
 immediately, right there, rather than left lazy: nothing ever walks
 backward over an earlier slot again on its own, so a lazily-invalidated
@@ -336,7 +336,7 @@ forever.
 
 `View.Layout` also does two kinds of prefetching every call, both
 scoped to a margin around the current scroll cursor rather than the
-whole document (`DocumentStack.PreLayout`, [document_stack.go](internal/engine/document_stack.go), and `View.prefetchImageSources`) -
+whole document (`documentStack.preLayout`, [document_stack.go](document_stack.go), and `View.prefetchImageSources`) -
 this exists because an image resolving to a much bigger real size than
 the small placeholder that was estimating it, right as the scroll
 cursor reaches it, is exactly the scenario that can make a
@@ -348,7 +348,7 @@ builds a scrollbar from these numbers). Getting a slot's real size known *before
 cursor arrives, not right as it does, avoids the surprise instead of
 smoothing over it after the fact:
 
-- `DocumentStack.PreLayout` fully resolves slots (`StackBox.BoxAt`) within a
+- `documentStack.preLayout` fully resolves slots (`StackBox.BoxAt`) within a
   few thousand pixels of the visible viewport, in both directions,
   time-budgeted (a couple of milliseconds per `Layout` call) rather
   than all at once - a big jump (`ScrollToRatio`, `ScrollToAnchor`, a
@@ -359,7 +359,7 @@ smoothing over it after the fact:
   slot's `Block` up in the `Document`'s record of standalone images
   (no `GetBlockLayout` call) and kicks off
   `imagecache.Cache.Load` early, giving a slow network fetch a head start
-  cheaply, deliberately not sharing `DocumentStack.PreLayout`'s smaller,
+  cheaply, deliberately not sharing `documentStack.preLayout`'s smaller,
   CPU-time-budgeted radius.
 
 Neither guarantees the jump is impossible - a pathologically slow fetch
@@ -486,7 +486,7 @@ or misreport `Content-Type` for a perfectly good Markdown file.
 These are real, understood, and not yet fixed:
 
 - **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
-  jump, including while sitting still.** `DocumentStack.PreLayout` (see "Image
+  jump, including while sitting still.** `documentStack.preLayout` (see "Image
   loading" above) resolves real slots beyond the visible viewport in the
   background, on every `Layout` call, regardless of whether the user is
   scrolling - and `DocumentBounds`' total, so a scrollbar's own size and

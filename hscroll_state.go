@@ -2,9 +2,12 @@ package whynot
 
 import (
 	"image"
+	"image/color"
 	"time"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/internal/engine"
+	"github.com/arnodel/whynot/internal/styling"
 )
 
 // How long a revealed scrollbar - by scrolling its block, or moving the
@@ -14,21 +17,35 @@ const (
 	hscrollRevealFade = 300 * time.Millisecond
 )
 
+// Scrollbar thumb dimensions, in logical (unscaled) pixels.
+const (
+	scrollbarThickness = 6
+	scrollbarInset     = 2
+	scrollbarMinThumb  = 24
+)
+
+// drawnRegion is a scroll region as drawn by the last View.Draw, in View
+// coordinates, with the scale it was drawn at.
+type drawnRegion struct {
+	engine.ScrollRegion
+	scale float64
+}
+
 // hscrollState is a View's horizontal scrolling state: each block's
-// offset, and the hover, drag and reveal state of their scrollbars. The
-// ScrollBoxes laid out for the View draw with it, as their
-// engine.HScroller.
+// offset, and the hover, drag and reveal state of their scrollbars. It
+// provides the engine's ScrollOffset and Scrollbar hooks, so it also
+// decides how those scrollbars look.
 type hscrollState struct {
 	// offsets holds each scrolled block's offset, keyed by source Block
 	// so it survives relayout.
 	offsets map[engine.Block]float64
 
-	// areas is where each ScrollBox was drawn by the last View.Draw, in
+	// regions is where each ScrollBox was drawn by the last View.Draw, in
 	// View coordinates (relative to origin, that Draw's x, y), innermost
 	// last. Input is matched against these, so a ScrollBox needs no
 	// separate hit-testing path.
-	areas  []engine.HScrollArea
-	origin image.Point
+	regions []drawnRegion
+	origin  image.Point
 
 	hovered    engine.Block // whose box is under the pointer, or nil
 	barHovered bool         // whether the pointer is on hovered's scrollbar
@@ -42,63 +59,100 @@ type hscrollState struct {
 	revealUntil time.Duration
 }
 
-var _ engine.HScroller = (*hscrollState)(nil)
-
 func newHScrollState() *hscrollState {
 	return &hscrollState{offsets: make(map[engine.Block]float64)}
 }
 
-// Offset implements engine.HScroller.
-func (s *hscrollState) Offset(source engine.Block) float64 {
+// scrollOffset is the engine's ScrollOffset hook: only sideways
+// scrolling is kept here.
+func (s *hscrollState) scrollOffset(source engine.Block, axis engine.Axis) float64 {
+	if axis != engine.Horizontal {
+		return 0
+	}
 	return s.offsets[source]
 }
 
-// Drawn implements engine.HScroller, noting an area drawn this frame.
-func (s *hscrollState) Drawn(a engine.HScrollArea) {
-	a.Box = a.Box.Sub(s.origin)
-	a.Visible = a.Visible.Sub(s.origin)
-	s.areas = append(s.areas, a)
+// drawScrollbar is the engine's Scrollbar hook, for a region drawn at
+// scale with styles: it notes the region for input, and draws its thumb
+// as visible as barOpacity says.
+func (s *hscrollState) drawScrollbar(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration, scale float64, styles styling.Styles) {
+	thumb := regionThumb(r, r.Offset, scale)
+	r.Box = r.Box.Sub(s.origin)
+	r.Visible = r.Visible.Sub(s.origin)
+	s.regions = append(s.regions, drawnRegion{r, scale})
+
+	opacity := s.barOpacity(r.Source, now)
+	if opacity <= 0 {
+		return
+	}
+	pressed := s.dragging == r.Source
+	hover := pressed || s.hovered == r.Source && s.barHovered
+	c := color.NRGBAModel.Convert(styles.ScrollbarColor(hover, pressed)).(color.NRGBA)
+	c.A = uint8(float64(c.A) * opacity)
+	dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(), c)
 }
 
-// Bar implements engine.HScroller.
-func (s *hscrollState) Bar(source engine.Block, now time.Duration) (opacity float64, hover, pressed bool) {
-	pressed = s.dragging == source
-	hover = pressed || s.hovered == source && s.barHovered
-	return s.barOpacity(source, now), hover, pressed
+// regionThumb is the scrollbar thumb of r with its content scrolled to
+// offset, at scale. It sits along the bottom of the visible part, so a
+// box taller than the viewport still shows it.
+func regionThumb(r engine.ScrollRegion, offset int, scale float64) image.Rectangle {
+	w := r.Box.Dx()
+	thumbWidth := min(w, max(w*w/r.ContentSize, int(scrollbarMinThumb*scale)))
+	x := r.Box.Min.X
+	if maxOffset := r.MaxOffset(); maxOffset > 0 {
+		x += offset * (w - thumbWidth) / maxOffset
+	}
+	bottom := min(r.Box.Max.Y, r.Visible.Max.Y) - int(scrollbarInset*scale)
+	return image.Rect(x, bottom-int(scrollbarThickness*scale), x+thumbWidth, bottom)
 }
 
-// beginFrame forgets the last frame's areas before a View.Draw at origin.
+// beginFrame forgets the last frame's regions before a View.Draw at
+// origin.
 func (s *hscrollState) beginFrame(origin image.Point) {
-	s.areas = s.areas[:0]
+	s.regions = s.regions[:0]
 	s.origin = origin
 }
 
-// areaAt returns the innermost area visible at p.
-func (s *hscrollState) areaAt(p image.Point) (engine.HScrollArea, bool) {
-	for i := len(s.areas) - 1; i >= 0; i-- {
-		if p.In(s.areas[i].Visible) {
-			return s.areas[i], true
+// regionAt returns the innermost region visible at p.
+func (s *hscrollState) regionAt(p image.Point) (drawnRegion, bool) {
+	for i := len(s.regions) - 1; i >= 0; i-- {
+		if p.In(s.regions[i].Visible) {
+			return s.regions[i], true
 		}
 	}
-	return engine.HScrollArea{}, false
+	return drawnRegion{}, false
 }
 
-// areaOf returns source's area from the last frame.
-func (s *hscrollState) areaOf(source engine.Block) (engine.HScrollArea, bool) {
-	for _, a := range s.areas {
-		if a.Source == source {
-			return a, true
+// regionOf returns source's region from the last frame.
+func (s *hscrollState) regionOf(source engine.Block) (drawnRegion, bool) {
+	for _, r := range s.regions {
+		if r.Source == source {
+			return r, true
 		}
 	}
-	return engine.HScrollArea{}, false
+	return drawnRegion{}, false
 }
 
-func (s *hscrollState) offset(a engine.HScrollArea) int {
-	return int(a.Clamp(s.offsets[a.Source]))
+// clamp limits offset to what r's content allows.
+func clamp(r drawnRegion, offset float64) float64 {
+	return max(0, min(float64(r.MaxOffset()), offset))
 }
 
-func (s *hscrollState) thumb(a engine.HScrollArea) image.Rectangle {
-	return a.Thumb(s.offset(a))
+// offset is r's current offset, which input may have changed since r
+// was drawn.
+func (s *hscrollState) offset(r drawnRegion) int {
+	return int(clamp(r, s.offsets[r.Source]))
+}
+
+func (s *hscrollState) thumb(r drawnRegion) image.Rectangle {
+	return regionThumb(r.ScrollRegion, s.offset(r), r.scale)
+}
+
+// barZone is the strip along the bottom of r's box that counts as its
+// scrollbar for the pointer: the thumb's track, with a little slack.
+func (s *hscrollState) barZone(r drawnRegion) image.Rectangle {
+	thumb := s.thumb(r)
+	return image.Rect(r.Box.Min.X, thumb.Min.Y-int(scrollbarInset*r.scale), r.Box.Max.X, r.Visible.Max.Y)
 }
 
 // hover updates which box, and whether its scrollbar, is under p at now.
@@ -110,13 +164,13 @@ func (s *hscrollState) hover(p image.Point, now time.Duration) {
 	if s.dragging != nil {
 		return
 	}
-	a, ok := s.areaAt(p)
+	a, ok := s.regionAt(p)
 	if !ok {
 		s.unhover()
 		return
 	}
 	s.hovered = a.Source
-	s.barHovered = p.In(a.BarZone(s.offset(a)))
+	s.barHovered = p.In(s.barZone(a))
 	if moved {
 		s.reveal(a.Source, now)
 	}
@@ -130,19 +184,19 @@ func (s *hscrollState) unhover() {
 // scrollAt scrolls the box at p by dx (positive moves the content right,
 // revealing its start) at now, reporting whether there was one.
 func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) bool {
-	a, ok := s.areaAt(p)
+	a, ok := s.regionAt(p)
 	if !ok {
 		return false
 	}
-	s.offsets[a.Source] = a.Clamp(s.offsets[a.Source] - dx)
+	s.offsets[a.Source] = clamp(a, s.offsets[a.Source]-dx)
 	s.reveal(a.Source, now)
 	return true
 }
 
 // beginDrag starts dragging the scrollbar at p, if there is one.
 func (s *hscrollState) beginDrag(p image.Point) bool {
-	a, ok := s.areaAt(p)
-	if !ok || !p.In(a.BarZone(s.offset(a))) {
+	a, ok := s.regionAt(p)
+	if !ok || !p.In(s.barZone(a)) {
 		return false
 	}
 	thumb := s.thumb(a)
@@ -160,7 +214,7 @@ func (s *hscrollState) beginDrag(p image.Point) bool {
 
 // dragTo moves the dragged scrollbar's thumb to follow pointer x.
 func (s *hscrollState) dragTo(x int) {
-	a, ok := s.areaOf(s.dragging)
+	a, ok := s.regionOf(s.dragging)
 	if !ok {
 		return
 	}
@@ -170,7 +224,7 @@ func (s *hscrollState) dragTo(x int) {
 		return
 	}
 	ratio := float64(x-s.grab-a.Box.Min.X) / float64(track)
-	s.offsets[a.Source] = a.Clamp(ratio * float64(a.MaxOffset()))
+	s.offsets[a.Source] = clamp(a, ratio*float64(a.MaxOffset()))
 }
 
 // endDrag ends a scrollbar drag at now; the scrollbar then fades out
@@ -183,8 +237,8 @@ func (s *hscrollState) endDrag(now time.Duration) {
 // scrollSource scrolls source's box by dx, as scrollAt does, wherever it
 // is now - for a touch pan, which sticks to the block it started on.
 func (s *hscrollState) scrollSource(source engine.Block, dx float64) {
-	if a, ok := s.areaOf(source); ok {
-		s.offsets[source] = a.Clamp(s.offsets[source] - dx)
+	if a, ok := s.regionOf(source); ok {
+		s.offsets[source] = clamp(a, s.offsets[source]-dx)
 	}
 }
 

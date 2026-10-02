@@ -109,7 +109,7 @@ func (in *Interaction) TouchStart(cx, cy int, now time.Time) {
 	case !p.In(in.Bounds):
 		in.touchAxis = touchNone
 	case in.hscroll() != nil:
-		if a, ok := in.hscroll().areaAt(p.Sub(in.Bounds.Min)); ok {
+		if a, ok := in.hscroll().regionAt(p.Sub(in.Bounds.Min)); ok {
 			in.touchTarget = a.Source
 			in.touchAxis = touchUndecided
 			return

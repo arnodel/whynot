@@ -14,7 +14,7 @@ import (
 
 // hscrollTestView returns a View of a document with one code block much
 // wider than width, laid out and drawn once, and the code block's area.
-func hscrollTestView(t *testing.T, width int) (*View, engine.HScrollArea) {
+func hscrollTestView(t *testing.T, width int) (*View, drawnRegion) {
 	t.Helper()
 	// Filler after the code block, so the page itself can scroll too.
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
@@ -22,10 +22,10 @@ func hscrollTestView(t *testing.T, width int) (*View, engine.HScrollArea) {
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
 	v.Layout(width, 400, 1, 0)
 	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, width, 400)}, 0, 0)
-	if len(v.hscroll.areas) != 1 {
-		t.Fatalf("got %d scrollable areas after Draw, want 1 (the code block)", len(v.hscroll.areas))
+	if len(v.hscroll.regions) != 1 {
+		t.Fatalf("got %d scrollable areas after Draw, want 1 (the code block)", len(v.hscroll.regions))
 	}
-	return v, v.hscroll.areas[0]
+	return v, v.hscroll.regions[0]
 }
 
 // drawnTextX draws v and returns where the text starting with prefix was
@@ -77,7 +77,7 @@ func TestViewScrollHorizontal(t *testing.T) {
 		t.Errorf("text at x=%d after scrolling far back, want %d (clamped at the start)", got, before)
 	}
 	v.ScrollHorizontal(at.X, at.Y, -1e6)
-	maxOffset := area.ContentWidth - area.Box.Dx()
+	maxOffset := area.ContentSize - area.Box.Dx()
 	if got := drawnTextX(t, v, "wide"); got != before-maxOffset {
 		t.Errorf("text at x=%d after scrolling far forward, want %d (clamped at the end)", got, before-maxOffset)
 	}
@@ -199,7 +199,7 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
 	v.Layout(300, 400, 1, 0)
 	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 400)}, 0, 0)
-	area := v.hscroll.areas[0]
+	area := v.hscroll.regions[0]
 	if area.Box.Max.Y <= 400 {
 		t.Fatalf("test setup: code block ends at y=%d, want below the 400px viewport", area.Box.Max.Y)
 	}
