@@ -3,92 +3,30 @@ package whynot
 import (
 	"strings"
 
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
-
-// Highlighter classifies a code block's source into consecutive typed
-// spans, used to color it token-by-token instead of as one flat run.
-// Parse has no highlighter by default - every code block then renders
-// in its StyleSheet's single code color.
-type Highlighter interface {
-	// Highlight splits code (a whole fenced/indented block's source,
-	// potentially multiple lines) into consecutive spans whose Text
-	// concatenates back to code exactly. language is the fence's own
-	// info string (e.g. "go"), "" if there was none (including every
-	// indented code block, which has no fence to carry one).
-	// Implementations are free to return a single TokenPlain span
-	// covering all of code (e.g. an unrecognized language) - equivalent
-	// to no highlighting for that block.
-	Highlight(language, code string) []HighlightSpan
-}
-
-// HighlightSpan is one classified run of a Highlighter's output.
-type HighlightSpan struct {
-	Text  string
-	Class TokenClass
-}
-
-// TokenClass is a small, whynot-level classification of a syntax token -
-// deliberately much coarser than a real highlighting library's own token
-// taxonomy (chroma alone has ~50 TokenTypes): StyleSheet only needs enough
-// categories to assign a handful of distinct colors, not to reproduce a
-// library's full type system.
-type TokenClass int
-
-const (
-	TokenPlain TokenClass = iota // no special color - inherits the block's own CodeBlockColor
-	TokenKeyword
-	// TokenType is a type name - a builtin primitive type and a declared
-	// custom type/class name share this one class, so e.g. int and a
-	// user-defined struct read as the same kind of thing. A Highlighter
-	// isn't expected to recognize every usage of a type, only what it
-	// can tell from syntax (typically its declaration).
-	TokenType
-	// TokenFunction is a function/method name - same expectation as
-	// TokenType: recognize what's clear from syntax (a declaration, and
-	// often a call), not necessarily every usage.
-	TokenFunction
-	TokenString
-	TokenNumber
-	TokenComment
-)
-
-// CodeBlockPlugin lets a caller replace how a fenced code block in a
-// recognized language renders - e.g. a ```mermaid fence as a diagram
-// (see the kroki package) instead of its raw/highlighted
-// diagram-definition text. Checked before Highlighter, and only for a
-// language CanHandle recognizes. A plugin only produces an image; laying
-// it out is whynot's job, the same for every plugin.
-type CodeBlockPlugin interface {
-	// CanHandle reports whether this plugin handles fenced code blocks
-	// written in language.
-	CanHandle(language string) bool
-	// Image starts rendering a fenced code block CanHandle has already
-	// approved, returning an images.AsyncImage that resolves once it's ready.
-	Image(language, code string) images.AsyncImage
-}
 
 // tokenClassTags maps a Highlighter's TokenClass to the ast.Tag whose
 // Styles.Color contribution renders it - TokenPlain deliberately has
 // no entry: a plain span reuses its enclosing code block's own ast.Node
 // directly rather than getting a child node of its own, inheriting
 // CodeBlockColor the same way untouched code text always has.
-var tokenClassTags = map[TokenClass]ast.Tag{
-	TokenKeyword:  ast.TagCodeKeyword,
-	TokenType:     ast.TagCodeType,
-	TokenFunction: ast.TagCodeFunction,
-	TokenString:   ast.TagCodeString,
-	TokenNumber:   ast.TagCodeNumber,
-	TokenComment:  ast.TagCodeComment,
+var tokenClassTags = map[codeblocks.TokenClass]ast.Tag{
+	codeblocks.TokenKeyword:  ast.TagCodeKeyword,
+	codeblocks.TokenType:     ast.TagCodeType,
+	codeblocks.TokenFunction: ast.TagCodeFunction,
+	codeblocks.TokenString:   ast.TagCodeString,
+	codeblocks.TokenNumber:   ast.TagCodeNumber,
+	codeblocks.TokenComment:  ast.TagCodeComment,
 }
 
 // codeBlockLines returns the per-visual-line Inline spans for a fenced
 // or indented code block's rawLines - highlighted via c.highlighter if
 // one's configured and it behaves (see highlightLines), else one plain
 // InlineText per line. Used both for an ordinary CodeBlock and as a
-// CodeBlockPlugin's fallback content (see compile.go's KindCodeBlock
+// codeblocks.Plugin's fallback content (see compile.go's KindCodeBlock
 // case) - identical either way, since a plugin's fallback is exactly
 // what today's non-plugin rendering already is.
 func (c *compiler) codeBlockLines(astNode *ast.Node, language string, rawLines []string) [][]engine.Inline {
@@ -116,7 +54,7 @@ func (c *compiler) codeBlockLines(astNode *ast.Node, language string, rawLines [
 // nil if h's output doesn't reproduce exactly len(rawLines) lines (a
 // misbehaving Highlighter), so the caller can fall back to plain,
 // unhighlighted rendering instead.
-func highlightLines(h Highlighter, blockNode *ast.Node, language string, rawLines []string) [][]engine.Inline {
+func highlightLines(h codeblocks.Highlighter, blockNode *ast.Node, language string, rawLines []string) [][]engine.Inline {
 	if len(rawLines) == 0 {
 		return [][]engine.Inline{}
 	}

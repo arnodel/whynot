@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
@@ -587,13 +588,13 @@ func TestParseCodeBlockExpandsTabs(t *testing.T) {
 // WithSyntaxHighlighter option into the KindCodeBlock case, producing
 // classified child nodes for spans the Highlighter labels.
 func TestParseWithSyntaxHighlighter(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
 		if language != "go" {
 			t.Errorf("language = %q, want %q", language, "go")
 		}
-		return []HighlightSpan{
-			{Text: "func", Class: TokenKeyword},
-			{Text: " f()", Class: TokenPlain},
+		return []codeblocks.HighlightSpan{
+			{Text: "func", Class: codeblocks.TokenKeyword},
+			{Text: " f()", Class: codeblocks.TokenPlain},
 		}
 	}}
 	doc := Parse([]byte("```go\nfunc f()\n```"), WithSyntaxHighlighter(h))

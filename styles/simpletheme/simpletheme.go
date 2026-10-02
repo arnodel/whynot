@@ -110,7 +110,7 @@ type ScrollbarColors struct {
 }
 
 // SyntaxColors is the color of each kind of code token (see
-// whynot.TokenClass).
+// codeblocks.TokenClass).
 type SyntaxColors struct {
 	Keyword  color.Color
 	Type     color.Color

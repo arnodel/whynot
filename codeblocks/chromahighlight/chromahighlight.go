@@ -1,4 +1,4 @@
-// Package chromahighlight implements whynot.Highlighter on top of
+// Package chromahighlight implements codeblocks.Highlighter on top of
 // github.com/alecthomas/chroma/v2. Split out from the core whynot package
 // to keep chroma's dependency weight (~200 embedded language lexer
 // definitions) out of the core library's dependency graph - the same
@@ -9,20 +9,20 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/codeblocks"
 )
 
-// Highlighter implements whynot.Highlighter using chroma's lexers.
+// Highlighter implements codeblocks.Highlighter using chroma's lexers.
 type Highlighter struct{}
 
-var _ whynot.Highlighter = Highlighter{}
+var _ codeblocks.Highlighter = Highlighter{}
 
 // Highlight looks up a lexer for language (falling back to a plain-text
 // lexer if none matches, so an unrecognized language degrades to
 // unhighlighted code rather than an error), coalesces adjacent
 // same-type tokens (so real code doesn't produce one span per character),
 // and classifies each token via classify.
-func (Highlighter) Highlight(language, code string) []whynot.HighlightSpan {
+func (Highlighter) Highlight(language, code string) []codeblocks.HighlightSpan {
 	lexer := lexers.Get(language)
 	if lexer == nil {
 		lexer = lexers.Fallback
@@ -30,11 +30,11 @@ func (Highlighter) Highlight(language, code string) []whynot.HighlightSpan {
 	lexer = chroma.Coalesce(lexer)
 	iter, err := lexer.Tokenise(nil, code)
 	if err != nil {
-		return []whynot.HighlightSpan{{Text: code, Class: whynot.TokenPlain}}
+		return []codeblocks.HighlightSpan{{Text: code, Class: codeblocks.TokenPlain}}
 	}
-	var spans []whynot.HighlightSpan
+	var spans []codeblocks.HighlightSpan
 	for token := iter(); token != chroma.EOF; token = iter() {
-		spans = append(spans, whynot.HighlightSpan{Text: token.Value, Class: classify(token.Type)})
+		spans = append(spans, codeblocks.HighlightSpan{Text: token.Value, Class: classify(token.Type)})
 	}
 	return spans
 }
@@ -57,23 +57,23 @@ func (Highlighter) Highlight(language, code string) []whynot.HighlightSpan {
 // A lexer only sees syntax, not real type/binding information, so
 // TokenType and TokenFunction can usually recognize a declaration but
 // not every later usage of the same name - see their own doc comments.
-func classify(t chroma.TokenType) whynot.TokenClass {
+func classify(t chroma.TokenType) codeblocks.TokenClass {
 	switch t {
 	case chroma.KeywordType, chroma.NameClass:
-		return whynot.TokenType
+		return codeblocks.TokenType
 	case chroma.NameFunction, chroma.NameFunctionMagic:
-		return whynot.TokenFunction
+		return codeblocks.TokenFunction
 	}
 	switch t.SubCategory() {
 	case chroma.Keyword:
-		return whynot.TokenKeyword
+		return codeblocks.TokenKeyword
 	case chroma.LiteralString:
-		return whynot.TokenString
+		return codeblocks.TokenString
 	case chroma.LiteralNumber:
-		return whynot.TokenNumber
+		return codeblocks.TokenNumber
 	case chroma.Comment, chroma.CommentPreproc:
-		return whynot.TokenComment
+		return codeblocks.TokenComment
 	default:
-		return whynot.TokenPlain
+		return codeblocks.TokenPlain
 	}
 }

@@ -3,6 +3,7 @@ package whynot
 import (
 	"testing"
 
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
@@ -11,10 +12,10 @@ import (
 // swapped in per test case, so each test can control exactly what spans
 // come back without needing a real tokenizer.
 type fakeHighlighter struct {
-	highlight func(language, code string) []HighlightSpan
+	highlight func(language, code string) []codeblocks.HighlightSpan
 }
 
-func (h fakeHighlighter) Highlight(language, code string) []HighlightSpan {
+func (h fakeHighlighter) Highlight(language, code string) []codeblocks.HighlightSpan {
 	return h.highlight(language, code)
 }
 
@@ -32,7 +33,7 @@ func lineTexts(t *testing.T, line []engine.Inline) []string {
 }
 
 func TestHighlightLinesEmpty(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
 		t.Fatalf("Highlight called with no lines")
 		return nil
 	}}
@@ -43,13 +44,13 @@ func TestHighlightLinesEmpty(t *testing.T) {
 }
 
 func TestHighlightLinesMultipleSpansPerLine(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
 		if code != "func f() {" {
 			t.Fatalf("code = %q", code)
 		}
-		return []HighlightSpan{
-			{Text: "func", Class: TokenKeyword},
-			{Text: " f() {", Class: TokenPlain},
+		return []codeblocks.HighlightSpan{
+			{Text: "func", Class: codeblocks.TokenKeyword},
+			{Text: " f() {", Class: codeblocks.TokenPlain},
 		}
 	}}
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
@@ -74,10 +75,10 @@ func TestHighlightLinesMultipleSpansPerLine(t *testing.T) {
 }
 
 func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
-		return []HighlightSpan{
-			{Text: "/* a\nb */", Class: TokenComment},
-			{Text: "\nrest", Class: TokenPlain},
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
+		return []codeblocks.HighlightSpan{
+			{Text: "/* a\nb */", Class: codeblocks.TokenComment},
+			{Text: "\nrest", Class: codeblocks.TokenPlain},
 		}
 	}}
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
@@ -109,8 +110,8 @@ func TestHighlightLinesSpanCrossingMultipleLines(t *testing.T) {
 // KindCodeBlock case), so highlightLines must concatenate them verbatim
 // rather than inserting an extra "\n" between them.
 func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
-		return []HighlightSpan{{Text: code, Class: TokenPlain}}
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
+		return []codeblocks.HighlightSpan{{Text: code, Class: codeblocks.TokenPlain}}
 	}}
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	rawLines := []string{"line one\n", "line two\n", "line three\n"}
@@ -133,8 +134,8 @@ func TestHighlightLinesRawLinesAlreadyCarryNewlines(t *testing.T) {
 // parts slice empty - LineBox indexes parts[0] unconditionally, so this
 // crashed rendering. Every line must end up with at least one part.
 func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
-		return []HighlightSpan{{Text: code, Class: TokenPlain}}
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
+		return []codeblocks.HighlightSpan{{Text: code, Class: codeblocks.TokenPlain}}
 	}}
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	rawLines := []string{"func f() {\n", "\n", "}\n"}
@@ -151,10 +152,10 @@ func TestHighlightLinesBlankLineGetsAPart(t *testing.T) {
 }
 
 func TestHighlightLinesMismatchedLineCountFallsBack(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []HighlightSpan {
+	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
 		// Only reproduces one line's worth of newlines, though rawLines
 		// below has two - a misbehaving Highlighter.
-		return []HighlightSpan{{Text: "just one line", Class: TokenPlain}}
+		return []codeblocks.HighlightSpan{{Text: "just one line", Class: codeblocks.TokenPlain}}
 	}}
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	lines := highlightLines(h, blockNode, "", []string{"line one", "line two"})

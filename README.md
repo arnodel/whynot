@@ -348,7 +348,7 @@ By default, a fenced or indented code block renders in one flat, neutral color
 (`simpletheme.Theme`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
 eye-catching accent color instead (`CodeSpanColor`), since a small isolated word in
 prose reads fine as an accent while a whole block of it would fight with any
-syntax-highlighted spans inside it. Passing a `whynot.Highlighter` - `Highlight(language,
+syntax-highlighted spans inside it. Passing a `codeblocks.Highlighter` - `Highlight(language,
 code string) []HighlightSpan`, classifying the block's source into consecutive typed
 spans - colors it token-by-token instead, via `whynot.Parse`'s
 `whynot.WithSyntaxHighlighter` option:
@@ -358,7 +358,7 @@ doc := whynot.Parse(source, whynot.WithSyntaxHighlighter(chromahighlight.Highlig
 view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
 ```
 
-`chromahighlight` (`github.com/arnodel/whynot/chromahighlight`, a separate package to
+`chromahighlight` (`github.com/arnodel/whynot/codeblocks/chromahighlight`, a separate package to
 keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of the core
 library's dependency graph) implements `Highlighter` on top of chroma, picking a lexer
 from the fence's own language string (falling back to unhighlighted, flat-color
@@ -461,7 +461,7 @@ by implementation order now that most of the list is done.
 
 **Block structures**
 - [x] Fenced and indented code blocks
-- [x] Syntax highlighting for code blocks (opt-in, via `whynot.Highlighter` -
+- [x] Syntax highlighting for code blocks (opt-in, via `codeblocks.Highlighter` -
       `chromahighlight` provides a `chroma`-backed implementation)
 - [x] Blockquotes, including nested ones
 - [x] Thematic breaks (`---`)

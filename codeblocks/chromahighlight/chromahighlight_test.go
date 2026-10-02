@@ -6,32 +6,32 @@ import (
 
 	"github.com/alecthomas/chroma/v2"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/codeblocks"
 )
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		name string
 		tok  chroma.TokenType
-		want whynot.TokenClass
+		want codeblocks.TokenClass
 	}{
-		{"keyword", chroma.Keyword, whynot.TokenKeyword},
-		{"keyword subtype", chroma.KeywordReserved, whynot.TokenKeyword},
-		{"keyword type (builtin type)", chroma.KeywordType, whynot.TokenType},
-		{"name class (declared type/class)", chroma.NameClass, whynot.TokenType},
-		{"name function (declared/called function)", chroma.NameFunction, whynot.TokenFunction},
-		{"name function magic (dunder method)", chroma.NameFunctionMagic, whynot.TokenFunction},
-		{"string", chroma.LiteralString, whynot.TokenString},
-		{"string subtype", chroma.LiteralStringDouble, whynot.TokenString},
-		{"number", chroma.LiteralNumber, whynot.TokenNumber},
-		{"number subtype", chroma.LiteralNumberInteger, whynot.TokenNumber},
-		{"comment", chroma.Comment, whynot.TokenComment},
-		{"comment preproc", chroma.CommentPreproc, whynot.TokenComment},
-		{"name", chroma.Name, whynot.TokenPlain},
-		{"name builtin (shared between builtin functions and, in some lexers, types)", chroma.NameBuiltin, whynot.TokenPlain},
-		{"operator", chroma.Operator, whynot.TokenPlain},
-		{"punctuation", chroma.Punctuation, whynot.TokenPlain},
-		{"text", chroma.Text, whynot.TokenPlain},
+		{"keyword", chroma.Keyword, codeblocks.TokenKeyword},
+		{"keyword subtype", chroma.KeywordReserved, codeblocks.TokenKeyword},
+		{"keyword type (builtin type)", chroma.KeywordType, codeblocks.TokenType},
+		{"name class (declared type/class)", chroma.NameClass, codeblocks.TokenType},
+		{"name function (declared/called function)", chroma.NameFunction, codeblocks.TokenFunction},
+		{"name function magic (dunder method)", chroma.NameFunctionMagic, codeblocks.TokenFunction},
+		{"string", chroma.LiteralString, codeblocks.TokenString},
+		{"string subtype", chroma.LiteralStringDouble, codeblocks.TokenString},
+		{"number", chroma.LiteralNumber, codeblocks.TokenNumber},
+		{"number subtype", chroma.LiteralNumberInteger, codeblocks.TokenNumber},
+		{"comment", chroma.Comment, codeblocks.TokenComment},
+		{"comment preproc", chroma.CommentPreproc, codeblocks.TokenComment},
+		{"name", chroma.Name, codeblocks.TokenPlain},
+		{"name builtin (shared between builtin functions and, in some lexers, types)", chroma.NameBuiltin, codeblocks.TokenPlain},
+		{"operator", chroma.Operator, codeblocks.TokenPlain},
+		{"punctuation", chroma.Punctuation, codeblocks.TokenPlain},
+		{"text", chroma.Text, codeblocks.TokenPlain},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -47,10 +47,10 @@ func TestClassify(t *testing.T) {
 // Category(), because Category() collapses LiteralString and
 // LiteralNumber into one indistinguishable Literal bucket.
 func TestClassifyDistinguishesStringFromNumber(t *testing.T) {
-	if got := classify(chroma.LiteralString); got != whynot.TokenString {
+	if got := classify(chroma.LiteralString); got != codeblocks.TokenString {
 		t.Errorf("classify(LiteralString) = %v, want TokenString", got)
 	}
-	if got := classify(chroma.LiteralNumber); got != whynot.TokenNumber {
+	if got := classify(chroma.LiteralNumber); got != codeblocks.TokenNumber {
 		t.Errorf("classify(LiteralNumber) = %v, want TokenNumber", got)
 	}
 }
@@ -59,10 +59,10 @@ func TestClassifyDistinguishesStringFromNumber(t *testing.T) {
 // name (chroma.KeywordType) gets its own TokenType color rather than
 // falling into the same bucket as a plain chroma.Keyword.
 func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
-	if got := classify(chroma.KeywordType); got != whynot.TokenType {
+	if got := classify(chroma.KeywordType); got != codeblocks.TokenType {
 		t.Errorf("classify(KeywordType) = %v, want TokenType", got)
 	}
-	if got := classify(chroma.Keyword); got != whynot.TokenKeyword {
+	if got := classify(chroma.Keyword); got != codeblocks.TokenKeyword {
 		t.Errorf("classify(Keyword) = %v, want TokenKeyword", got)
 	}
 }
@@ -72,10 +72,10 @@ func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
 // silently falling through to TokenPlain (it has no SubCategory()
 // bucket of its own).
 func TestClassifyDistinguishesFunctionFromPlain(t *testing.T) {
-	if got := classify(chroma.NameFunction); got != whynot.TokenFunction {
+	if got := classify(chroma.NameFunction); got != codeblocks.TokenFunction {
 		t.Errorf("classify(NameFunction) = %v, want TokenFunction", got)
 	}
-	if got := classify(chroma.Name); got != whynot.TokenPlain {
+	if got := classify(chroma.Name); got != codeblocks.TokenPlain {
 		t.Errorf("classify(Name) = %v, want TokenPlain", got)
 	}
 }
@@ -89,15 +89,15 @@ func TestHighlightGo(t *testing.T) {
 	for _, span := range spans {
 		got.WriteString(span.Text)
 		switch span.Class {
-		case whynot.TokenKeyword:
+		case codeblocks.TokenKeyword:
 			sawKeyword = true
-		case whynot.TokenType:
+		case codeblocks.TokenType:
 			sawType = true
-		case whynot.TokenFunction:
+		case codeblocks.TokenFunction:
 			sawFunction = true
-		case whynot.TokenString:
+		case codeblocks.TokenString:
 			sawString = true
-		case whynot.TokenComment:
+		case codeblocks.TokenComment:
 			sawComment = true
 		}
 	}
@@ -134,7 +134,7 @@ func TestHighlightUnrecognizedLanguage(t *testing.T) {
 	if spans[0].Text != code {
 		t.Errorf("spans[0].Text = %q, want %q", spans[0].Text, code)
 	}
-	if spans[0].Class != whynot.TokenPlain {
+	if spans[0].Class != codeblocks.TokenPlain {
 		t.Errorf("spans[0].Class = %v, want TokenPlain", spans[0].Class)
 	}
 }

@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/chromahighlight"
+	"github.com/arnodel/whynot/codeblocks/chromahighlight"
+	"github.com/arnodel/whynot/codeblocks/kroki"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
-	"github.com/arnodel/whynot/kroki"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 

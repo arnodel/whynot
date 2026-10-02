@@ -1,4 +1,4 @@
-// Package kroki implements whynot.CodeBlockPlugin on top of kroki.io's
+// Package kroki implements codeblocks.Plugin on top of kroki.io's
 // hosted diagram-rendering service (https://kroki.io), so a fenced code
 // block in a recognized diagram language renders as an actual diagram
 // instead of its raw/highlighted definition text.
@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/images"
 )
 
@@ -19,7 +19,7 @@ import (
 // has its own BaseURL (e.g. a self-hosted instance).
 const defaultBaseURL = "https://kroki.io"
 
-// Renderer implements whynot.CodeBlockPlugin, rendering recognized
+// Renderer implements codeblocks.Plugin, rendering recognized
 // fenced-code-block languages via Kroki's POST .../{type}/png endpoint
 // - no output-size control (Kroki renders at whatever the underlying
 // tool's native resolution is), but that's fine: whynot's own fitWidth
@@ -31,7 +31,7 @@ type Renderer struct {
 	BaseURL string
 }
 
-var _ whynot.CodeBlockPlugin = Renderer{}
+var _ codeblocks.Plugin = Renderer{}
 
 // diagramTypes maps a fenced code block's language to Kroki's own
 // diagram-type slug - currently just mermaid, the one this package was
