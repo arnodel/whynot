@@ -92,9 +92,8 @@ type PanelOption func(*Panel)
 // WithScrollbar enables Panel's own scrollbar thumb along its bounds'
 // right edge, draggable - omitted by default so a panel that never
 // needs one pays no cost tracking drag state or hit-testing a rect
-// that was never drawn. Colour/width aren't configured here - they come
-// from the View's StyleSheet (View.ScrollbarColor) and
-// ScaledViewMargins, exactly as cmd/whynot's scrollbar already does.
+// that was never drawn. Its colour comes from the View's StyleSheet
+// (View.ScrollbarColor).
 func WithScrollbar() PanelOption {
 	return func(p *Panel) { p.scrollbarEnabled = true }
 }

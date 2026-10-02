@@ -16,6 +16,7 @@ import (
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
@@ -30,8 +31,8 @@ func (b *fixedHeightBlock) GetBlockLayout(ctx engine.Context, width int) engine.
 	return engine.NewEmptyBox(width, b.height)
 }
 
-func (b *fixedHeightBlock) Margins(ctx engine.Context) engine.Margins {
-	return engine.Margins{}
+func (b *fixedHeightBlock) Margins(ctx engine.Context) styling.Margins {
+	return styling.Margins{}
 }
 
 func (b *fixedHeightBlock) Node() *ast.Node {
@@ -49,8 +50,8 @@ func (b *scaledHeightBlock) GetBlockLayout(ctx engine.Context, width int) engine
 	return engine.NewEmptyBox(width, int(float64(width)*b.scale))
 }
 
-func (b *scaledHeightBlock) Margins(ctx engine.Context) engine.Margins {
-	return engine.Margins{}
+func (b *scaledHeightBlock) Margins(ctx engine.Context) styling.Margins {
+	return styling.Margins{}
 }
 
 func (b *scaledHeightBlock) Node() *ast.Node {
@@ -167,10 +168,10 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 	block := Parse([]byte("first\n\nsecond"))
 	small := stylingtest.Basic()
 	small.ParagraphTextStyle.Size = 10
-	small.ViewMargin = engine.Margins{}
+	small.ViewMargin = styling.Margins{}
 	big := stylingtest.Basic()
 	big.ParagraphTextStyle.Size = 40
-	big.ViewMargin = engine.Margins{}
+	big.ViewMargin = styling.Margins{}
 
 	v := &View{doc: block, ctx: engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: small}}
 	v.Layout(200, 1000, 1, 0)
@@ -203,7 +204,7 @@ func TestViewSetStyleSheetReanchorsScroll(t *testing.T) {
 // that a zero margin (the common case in other tests) adds none.
 func TestViewRebuildInsertsMarginSlots(t *testing.T) {
 	style := stylingtest.Basic()
-	style.ViewMargin = engine.Margins{Top: 10, Bottom: 15}
+	style.ViewMargin = styling.Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
 		ctx: engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: style},
@@ -230,7 +231,7 @@ func TestViewRebuildInsertsMarginSlots(t *testing.T) {
 // the tree, so it's reachable by scrolling exactly like any other slot.
 func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 	style := stylingtest.Basic()
-	style.ViewMargin = engine.Margins{Top: 10, Bottom: 15}
+	style.ViewMargin = styling.Margins{Top: 10, Bottom: 15}
 	v := &View{
 		doc: testDocument(&fixedHeightBlock{height: 30}),
 		ctx: engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: style},
@@ -250,7 +251,7 @@ func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 // the same coordinate space the query arrived in.
 func TestViewHitTestAppliesMargin(t *testing.T) {
 	style := stylingtest.Basic()
-	style.ViewMargin = engine.Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
+	style.ViewMargin = styling.Margins{Top: 10, Bottom: 10, Left: 20, Right: 20}
 	v := NewView(Parse([]byte("hello")), fonts.NewGoSelector(), style)
 	v.Layout(300, 1000, 1, 0)
 
@@ -282,7 +283,7 @@ func TestViewHitTestAppliesMargin(t *testing.T) {
 // carry it, so Draw has to apply it directly.
 func TestViewDrawAppliesLeftMargin(t *testing.T) {
 	style := stylingtest.Basic()
-	style.ViewMargin = engine.Margins{Left: 20}
+	style.ViewMargin = styling.Margins{Left: 20}
 	v := NewView(Parse([]byte("---")), fonts.NewGoSelector(), style)
 	v.Layout(300, 1000, 1, 0)
 
@@ -1366,8 +1367,8 @@ func (b *slowBlock) GetBlockLayout(ctx engine.Context, width int) engine.BlockLa
 	return engine.NewEmptyBox(width, b.height)
 }
 
-func (b *slowBlock) Margins(ctx engine.Context) engine.Margins { return engine.Margins{} }
-func (b *slowBlock) Node() *ast.Node                           { return nil }
+func (b *slowBlock) Margins(ctx engine.Context) styling.Margins { return styling.Margins{} }
+func (b *slowBlock) Node() *ast.Node                            { return nil }
 
 // TestViewPreLayoutNearbyRespectsTimeBudget checks that documentStack.preLayout
 // stops resolving once preLayoutTimeBudget is spent, rather than
