@@ -1,5 +1,5 @@
-// Command chromahighlight is a runnable example of whynot.WithSyntaxHighlighter
-// backed by chromahighlight.Highlighter (github.com/alecthomas/chroma/v2).
+// Command chromahighlight is a runnable example of a code-block plugin:
+// chromahighlight.Plugin (github.com/alecthomas/chroma/v2) coloring code.
 // Fenced code blocks in a recognized language render token-by-token in the
 // active StyleSheet's SyntaxColors palette; an unrecognized language (or a
 // plain indented block, which has no fence to name one) falls back to the
@@ -24,7 +24,7 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Syntax highlighting example\n\n")
 	b.WriteString("Fenced code blocks below are colored token-by-token via\n")
-	b.WriteString("`chromahighlight.Highlighter`, keyword/type/function/string/number/comment\n")
+	b.WriteString("`chromahighlight.Plugin`, keyword/type/function/string/number/comment\n")
 	b.WriteString("each in its own color from the active `StyleSheet`'s `SyntaxColors`.\n\n")
 
 	b.WriteString("## Go\n\n```go\n")
@@ -97,7 +97,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func main() {
 	g := &game{
 		view: whynot.NewView(
-			whynot.Parse([]byte(exampleDoc()), whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{})),
+			whynot.Parse([]byte(exampleDoc()), whynot.WithCodeBlockPlugin(chromahighlight.Plugin{})),
 			fonts.NewGoSelector(),
 			simpletheme.DarkStyleSheet,
 		),

@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/styling"
@@ -100,28 +101,31 @@ func TestBasicTextStyleNilNode(t *testing.T) {
 func TestBasicColor(t *testing.T) {
 	s := stylingtest.Basic()
 	cases := []struct {
-		tag  ast.Tag
-		want color.Color
+		tag   ast.Tag
+		class string
+		want  color.Color
 	}{
-		{ast.TagCodeBlock, color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
-		{ast.TagCodeSpan, color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
-		{ast.TagLink, color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
-		{ast.TagCodeKeyword, color.RGBA{0xC5, 0x86, 0xF2, 0xFF}},
-		{ast.TagCodeType, color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}},
-		{ast.TagCodeFunction, color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}},
-		{ast.TagCodeString, color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}},
-		{ast.TagCodeNumber, color.RGBA{0xF2, 0xB0, 0x66, 0xFF}},
-		{ast.TagCodeComment, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
-		{ast.TagParagraph, nil},
-		{ast.TagHeading1, nil},
-		{ast.TagBlockquote, nil},
-		{ast.TagTable, nil},
-		{ast.TagThematicBreak, nil},
+		{ast.TagCodeBlock, "", color.RGBA{0xD4, 0xD4, 0xD4, 0xFF}},
+		{ast.TagCodeSpan, "", color.RGBA{0xFF, 0xFF, 0x80, 0xFF}},
+		{ast.TagLink, "", color.RGBA{0x66, 0xB2, 0xFF, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassKeyword, color.RGBA{0xC5, 0x86, 0xF2, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassType, color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassFunction, color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassString, color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassNumber, color.RGBA{0xF2, 0xB0, 0x66, 0xFF}},
+		{ast.TagCodeToken, codeblocks.ClassComment, color.RGBA{0x80, 0x80, 0x80, 0xFF}},
+		// An unknown class has no opinion: it shows in its block's color.
+		{ast.TagCodeToken, "decorator", nil},
+		{ast.TagParagraph, "", nil},
+		{ast.TagHeading1, "", nil},
+		{ast.TagBlockquote, "", nil},
+		{ast.TagTable, "", nil},
+		{ast.TagThematicBreak, "", nil},
 	}
 	for _, tc := range cases {
-		node := &ast.Node{Tag: tc.tag}
+		node := &ast.Node{Tag: tc.tag, Class: tc.class}
 		if got := s.Color(node); got != tc.want {
-			t.Errorf("Color(tag=%v) = %v, want %v", tc.tag, got, tc.want)
+			t.Errorf("Color(tag=%v, class=%q) = %v, want %v", tc.tag, tc.class, got, tc.want)
 		}
 	}
 }

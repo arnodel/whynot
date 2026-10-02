@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/styling"
 )
@@ -82,13 +83,13 @@ func Basic() *styling.Basic {
 		// tuned for a dark background won't read well on light and vice
 		// versa, the same reason TextColor/LinkColor/CodeBlockColor/
 		// CodeSpanColor differ between the two themes.
-		Syntax: styling.SyntaxColors{
-			Keyword:  color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
-			Type:     color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
-			Function: color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}, // soft yellow-tan
-			String:   color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
-			Number:   color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
-			Comment:  color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
+		TokenColors: map[string]color.Color{
+			codeblocks.ClassKeyword:  color.RGBA{0xC5, 0x86, 0xF2, 0xFF}, // soft violet
+			codeblocks.ClassType:     color.RGBA{0x4E, 0xC9, 0xB0, 0xFF}, // soft teal
+			codeblocks.ClassFunction: color.RGBA{0xDC, 0xDC, 0xAA, 0xFF}, // soft yellow-tan
+			codeblocks.ClassString:   color.RGBA{0x9E, 0xD9, 0x7A, 0xFF}, // soft green
+			codeblocks.ClassNumber:   color.RGBA{0xF2, 0xB0, 0x66, 0xFF}, // soft orange
+			codeblocks.ClassComment:  color.RGBA{0x80, 0x80, 0x80, 0xFF}, // matches the existing mid-grey decoration color
 		},
 
 		BlockquoteMargins:  styling.Margins{Top: 10, Bottom: 10},

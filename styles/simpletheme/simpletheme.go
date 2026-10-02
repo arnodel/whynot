@@ -19,6 +19,7 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/styling"
 )
@@ -89,8 +90,8 @@ type Theme struct {
 	HighlightColor color.Color
 
 	ScrollbarColors ScrollbarColors
-	// SyntaxColors colors code tokens, when a Highlighter is used (see
-	// whynot.WithSyntaxHighlighter).
+	// SyntaxColors colors code tokens, when a code-block plugin
+	// classifies them (see codeblocks.Tokens).
 	SyntaxColors SyntaxColors
 
 	// LineHeight is the space a line of text takes, as a multiple of its
@@ -109,8 +110,9 @@ type ScrollbarColors struct {
 	Idle, Hover, Pressed color.Color
 }
 
-// SyntaxColors is the color of each kind of code token (see
-// codeblocks.TokenClass).
+// SyntaxColors is the color of each conventional class of code token
+// (codeblocks.ClassKeyword and so on). Tokens of other classes, or of
+// these when the color is nil, show in the code block's color.
 type SyntaxColors struct {
 	Keyword  color.Color
 	Type     color.Color
@@ -118,6 +120,19 @@ type SyntaxColors struct {
 	String   color.Color
 	Number   color.Color
 	Comment  color.Color
+}
+
+// byClass maps c's colors to the token classes they color. A nil color
+// acts like a missing class: the token shows in its code block's color.
+func (c SyntaxColors) byClass() map[string]color.Color {
+	return map[string]color.Color{
+		codeblocks.ClassKeyword:  c.Keyword,
+		codeblocks.ClassType:     c.Type,
+		codeblocks.ClassFunction: c.Function,
+		codeblocks.ClassString:   c.String,
+		codeblocks.ClassNumber:   c.Number,
+		codeblocks.ClassComment:  c.Comment,
+	}
 }
 
 // TextStyle is a partial text style: a zero field inherits from the
@@ -339,7 +354,7 @@ func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b.ViewMargin = styling.Margins(t.ViewMargins)
 	b.Highlight = t.HighlightColor
 	b.Scrollbar = styling.ScrollbarColors(t.ScrollbarColors)
-	b.Syntax = styling.SyntaxColors(t.SyntaxColors)
+	b.TokenColors = t.SyntaxColors.byClass()
 	b.Dims.LineHeight = t.LineHeight
 	if b.Dims.LineHeight == 0 {
 		b.Dims.LineHeight = defaultLineHeight

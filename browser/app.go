@@ -241,9 +241,10 @@ func (a *App) OnLinkHover(dest string) {
 // the options every call site needs together: the current StyleSheet,
 // an images.Source that resolves an image's src against location the
 // same way ResolveLink resolves a link's href (so a relative or
-// http(s) image works regardless of where its document came from), a
-// chromahighlight.Highlighter for syntax-colored code blocks, and a
-// kroki.Renderer so a ```mermaid fence renders as an actual diagram.
+// http(s) image works regardless of where its document came from), and
+// two code-block plugins: kroki.Renderer first, so a ```mermaid fence
+// renders as an actual diagram, then chromahighlight.Plugin for
+// syntax-colored code (and a diagram's source while it loads).
 // The welcome page is the one exception for images: its own (if any)
 // are bundled alongside it, not fetched, so it gets welcomeImageSource
 // instead of the general fetch-based one.
@@ -253,8 +254,8 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 		imageSource = welcomeImageSource{}
 	}
 	doc := whynot.Parse(source,
-		whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}),
 		whynot.WithCodeBlockPlugin(kroki.Renderer{}),
+		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 	)
 	return whynot.NewView(
 		doc,

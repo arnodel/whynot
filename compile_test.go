@@ -584,20 +584,20 @@ func TestParseCodeBlockExpandsTabs(t *testing.T) {
 	}
 }
 
-// TestParseWithSyntaxHighlighter checks that Parse threads a
-// WithSyntaxHighlighter option into the KindCodeBlock case, producing
-// classified child nodes for spans the Highlighter labels.
-func TestParseWithSyntaxHighlighter(t *testing.T) {
-	h := fakeHighlighter{highlight: func(language, code string) []codeblocks.HighlightSpan {
+// TestParseWithTokensPlugin checks that Parse threads a plugin's Tokens
+// into the KindCodeBlock case, producing classified child nodes for the
+// spans it labels.
+func TestParseWithTokensPlugin(t *testing.T) {
+	p := fakePlugin{parse: func(language, code string) codeblocks.Content {
 		if language != "go" {
 			t.Errorf("language = %q, want %q", language, "go")
 		}
-		return []codeblocks.HighlightSpan{
-			{Text: "func", Class: codeblocks.TokenKeyword},
-			{Text: " f()", Class: codeblocks.TokenPlain},
-		}
+		return codeblocks.Tokens{Spans: []codeblocks.Span{
+			{Text: "func", Class: codeblocks.ClassKeyword},
+			{Text: " f()"},
+		}}
 	}}
-	doc := Parse([]byte("```go\nfunc f()\n```"), WithSyntaxHighlighter(h))
+	doc := Parse([]byte("```go\nfunc f()\n```"), WithCodeBlockPlugin(p))
 	stack := doc.root
 	code, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock)
 	if !ok {
@@ -610,8 +610,8 @@ func TestParseWithSyntaxHighlighter(t *testing.T) {
 	if !ok || keyword.Text != "func" {
 		t.Fatalf("lines[0][0] = %#v, want InlineText %q", code.Lines[0][0], "func")
 	}
-	if keyword.ASTNode.Tag != ast.TagCodeKeyword {
-		t.Errorf("keyword node tag = %v, want ast.TagCodeKeyword", keyword.ASTNode.Tag)
+	if keyword.ASTNode.Tag != ast.TagCodeToken || keyword.ASTNode.Class != codeblocks.ClassKeyword {
+		t.Errorf("keyword node = %v %q, want TagCodeToken %q", keyword.ASTNode.Tag, keyword.ASTNode.Class, codeblocks.ClassKeyword)
 	}
 	plain, ok := code.Lines[0][1].(*engine.InlineText)
 	if !ok || plain.Text != " f()" {
@@ -622,40 +622,38 @@ func TestParseWithSyntaxHighlighter(t *testing.T) {
 	}
 }
 
-// fakeCodeBlockPlugin is a CodeBlockPlugin test double - handles is the
-// set of languages CanHandle accepts; canHandleCalls counts how many
-// times CanHandle actually ran, for tests checking the compiler's
-// per-language caching (see pluginFor).
-type fakeCodeBlockPlugin struct {
-	name           string
-	handles        map[string]bool
-	canHandleCalls *int
-	image          func(language, code string) images.AsyncImage
+// fakeImagePlugin is a codeblocks.Plugin test double making Images -
+// handles is the set of languages Handles accepts; handlesCalls counts
+// how many times Handles actually ran, for tests checking the compiler's
+// per-language caching (see pluginsFor).
+type fakeImagePlugin struct {
+	handles      map[string]bool
+	handlesCalls *int
+	image        func(language, code string) images.AsyncImage
 }
 
-func (p fakeCodeBlockPlugin) CanHandle(language string) bool {
-	if p.canHandleCalls != nil {
-		*p.canHandleCalls++
+func (p fakeImagePlugin) Handles(language string) bool {
+	if p.handlesCalls != nil {
+		*p.handlesCalls++
 	}
 	return p.handles[language]
 }
 
-func (p fakeCodeBlockPlugin) Image(language, code string) images.AsyncImage {
-	return p.image(language, code)
+func (p fakeImagePlugin) Parse(language, code string) codeblocks.Content {
+	return codeblocks.Image{AsyncImage: p.image(language, code)}
 }
 
 // TestParseWithCodeBlockPlugin checks that a fenced code block in a
-// language the plugin handles compiles via NewDiagramBlock instead of a
-// plain CodeBlock - with the plugin's own images.AsyncImage, and a fallback
-// that's exactly what today's highlighter/plain-text rendering would
-// have produced.
+// language an image plugin handles compiles via NewDiagramBlock instead
+// of a plain CodeBlock - with the plugin's own images.AsyncImage, and,
+// with no other plugin, the plain source text as fallback.
 func TestParseWithCodeBlockPlugin(t *testing.T) {
 	wantImg := images.AsyncImage{Key: "diagram-key"}
-	plugin := fakeCodeBlockPlugin{
+	plugin := fakeImagePlugin{
 		handles: map[string]bool{"mermaid": true},
 		image: func(language, code string) images.AsyncImage {
 			if language != "mermaid" || code != "graph TD; A-->B;\n" {
-				t.Errorf("Image(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
+				t.Errorf("Parse(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
 			}
 			return wantImg
 		},
@@ -686,7 +684,7 @@ func TestParseWithCodeBlockPlugin(t *testing.T) {
 // that a language no registered plugin handles compiles exactly as it
 // would with no plugin configured at all.
 func TestParseCodeBlockPluginFallsThroughForUnrecognizedLanguage(t *testing.T) {
-	plugin := fakeCodeBlockPlugin{handles: map[string]bool{"mermaid": true}}
+	plugin := fakeImagePlugin{handles: map[string]bool{"mermaid": true}}
 	doc := Parse([]byte("```go\nfunc f()\n```"), WithCodeBlockPlugin(plugin))
 	stack := doc.root
 	if _, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock); !ok {
@@ -695,19 +693,19 @@ func TestParseCodeBlockPluginFallsThroughForUnrecognizedLanguage(t *testing.T) {
 }
 
 // TestParseCodeBlockPluginRegistrationOrderAndCaching checks that with
-// several plugins registered, the first (in registration order) whose
-// CanHandle matches wins, and that CanHandle is called at most once per
+// several plugins registered, the first (in registration order) that
+// handles the language wins, and that Handles is called at most once per
 // plugin per distinct language, however many fences share that language.
 func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 	var firstCalls, secondCalls int
-	first := fakeCodeBlockPlugin{
-		handles:        map[string]bool{"mermaid": false},
-		canHandleCalls: &firstCalls,
+	first := fakeImagePlugin{
+		handles:      map[string]bool{"mermaid": false},
+		handlesCalls: &firstCalls,
 	}
-	second := fakeCodeBlockPlugin{
-		handles:        map[string]bool{"mermaid": true},
-		canHandleCalls: &secondCalls,
-		image:          func(language, code string) images.AsyncImage { return images.AsyncImage{Key: "k"} },
+	second := fakeImagePlugin{
+		handles:      map[string]bool{"mermaid": true},
+		handlesCalls: &secondCalls,
+		image:        func(language, code string) images.AsyncImage { return images.AsyncImage{Key: "k"} },
 	}
 	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
 	doc := Parse(source, WithCodeBlockPlugin(first), WithCodeBlockPlugin(second))
@@ -721,7 +719,7 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 		}
 	}
 	if firstCalls != 1 || secondCalls != 1 {
-		t.Errorf("CanHandle calls = first:%d second:%d, want 1 each (cached after the first \"mermaid\" fence)", firstCalls, secondCalls)
+		t.Errorf("Handles calls = first:%d second:%d, want 1 each (cached after the first \"mermaid\" fence)", firstCalls, secondCalls)
 	}
 }
 

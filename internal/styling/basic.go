@@ -13,19 +13,6 @@ type ScrollbarColors struct {
 	Idle, Hover, Pressed color.Color
 }
 
-// SyntaxColors is the palette a Highlighter's classified tokens draw from
-// (see ast.TagCodeKeyword..ast.TagCodeFunction).
-type SyntaxColors struct {
-	Keyword color.Color
-	// Type is shared by a builtin primitive type and a declared custom
-	// type/class name.
-	Type     color.Color
-	Function color.Color
-	String   color.Color
-	Number   color.Color
-	Comment  color.Color
-}
-
 // Basic is the field-configured Styles implementation behind
 // styles/simpletheme. It also satisfies
 // whynot.StyleSheet (see Styles), so it can be handed to a View directly;
@@ -46,7 +33,7 @@ type Basic struct {
 	CodeBlockTextStyle PartialTextStyle
 	// CodeBlockColor is deliberately a neutral gray rather than an accent
 	// color: a whole block of code in a bright color reads as garish and
-	// fights with syntax-highlighted spans inside it (see SyntaxColors) -
+	// fights with syntax-highlighted spans inside it (see TokenColors) -
 	// unlike CodeSpanColor, a single inline `code` word stays fine as an
 	// accent since it's a small, isolated highlight within prose.
 	CodeBlockColor color.Color
@@ -104,9 +91,9 @@ type Basic struct {
 
 	Scrollbar ScrollbarColors
 
-	// Syntax is the palette a Highlighter's classified code tokens draw
-	// from - see SyntaxColors.
-	Syntax SyntaxColors
+	// TokenColors colors code tokens (ast.TagCodeToken) by their Class.
+	// A token whose class isn't here shows in its code block's color.
+	TokenColors map[string]color.Color
 
 	// Dims holds the dimensions the per-node methods of the same names
 	// return.
@@ -205,18 +192,8 @@ func (s *Basic) Color(node *ast.Node) color.Color {
 		return s.CodeBlockColor
 	case ast.TagCodeSpan:
 		return s.CodeSpanColor
-	case ast.TagCodeKeyword:
-		return s.Syntax.Keyword
-	case ast.TagCodeType:
-		return s.Syntax.Type
-	case ast.TagCodeFunction:
-		return s.Syntax.Function
-	case ast.TagCodeString:
-		return s.Syntax.String
-	case ast.TagCodeNumber:
-		return s.Syntax.Number
-	case ast.TagCodeComment:
-		return s.Syntax.Comment
+	case ast.TagCodeToken:
+		return s.TokenColors[node.Class]
 	case ast.TagUnsupported:
 		return s.UnsupportedColor
 	case ast.TagLink:

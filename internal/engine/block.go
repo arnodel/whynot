@@ -133,7 +133,7 @@ type CodeBlock struct {
 	withoutMargins
 	// Lines is one slice per visual line, each holding that line's spans -
 	// usually a single element (one InlineText for the whole line), but
-	// more than one when a Highlighter has split the line into classified
+	// more than one when a code-block plugin has split the line into classified
 	// tokens (see highlightLines).
 	Lines   [][]Inline
 	ASTNode *ast.Node

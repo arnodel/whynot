@@ -342,31 +342,45 @@ gets, the `FaceSelector` decides what font file actually renders that combinatio
   does. See [`examples/systemfont`](examples/systemfont) for a runnable version - with no
   flags at all, it uses `RegisterPreferredFont` for both families.
 
-## Syntax highlighting
+## Code block plugins: syntax highlighting and diagrams
 
 By default, a fenced or indented code block renders in one flat, neutral color
 (`simpletheme.Theme`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
 eye-catching accent color instead (`CodeSpanColor`), since a small isolated word in
 prose reads fine as an accent while a whole block of it would fight with any
-syntax-highlighted spans inside it. Passing a `codeblocks.Highlighter` - `Highlight(language,
-code string) []HighlightSpan`, classifying the block's source into consecutive typed
-spans - colors it token-by-token instead, via `whynot.Parse`'s
-`whynot.WithSyntaxHighlighter` option:
+syntax-highlighted spans inside it.
+
+A `codeblocks.Plugin` changes how fenced blocks in the languages it handles are shown.
+It answers two questions: `Handles(language)`, and `Parse(language, code)`, which
+returns the block's `Content`:
+
+- `codeblocks.Tokens` - the source split into spans, each with a `Class` such as
+  `"keyword"` or `"string"`, colored by the theme;
+- `codeblocks.Image` - an image to show instead, e.g. a rendered diagram, loaded in the
+  background.
+
+Plugins are passed to `whynot.Parse` in priority order. The first plugin that handles a
+block's language parses it; if it returns an `Image`, the next plugin handling that
+language provides what's shown while the image loads, or if it fails (plain text if
+there's none):
 
 ```go
-doc := whynot.Parse(source, whynot.WithSyntaxHighlighter(chromahighlight.Highlighter{}))
+doc := whynot.Parse(source,
+	whynot.WithCodeBlockPlugin(kroki.Renderer{}),        // ```mermaid fences as diagrams
+	whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}), // syntax coloring
+)
 view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
 ```
 
-`chromahighlight` (`github.com/arnodel/whynot/codeblocks/chromahighlight`, a separate package to
-keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of the core
-library's dependency graph) implements `Highlighter` on top of chroma, picking a lexer
-from the fence's own language string (falling back to unhighlighted, flat-color
-rendering for a language it doesn't recognize, or for an indented block, which has no
-fence to name one). Colors come from the theme's `SyntaxColors` (keyword/type/
-function/string/number/comment), tuned separately for the dark and light themes - not
-from chroma's own named styles. A builtin type (e.g. Go's `int`) and a declared custom
-type/class name share the `type` color, deliberately, and likewise for `function` -
+`chromahighlight` (`github.com/arnodel/whynot/codeblocks/chromahighlight`, a separate
+package to keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of
+the core library's dependency graph) handles every language chroma has a lexer for.
+Token classes are open-ended strings; `codeblocks` names the conventional ones
+(`ClassKeyword`, `ClassType`, `ClassFunction`, `ClassString`, `ClassNumber`,
+`ClassComment`), which `simpletheme`'s `SyntaxColors` colors - tuned separately for the
+dark and light themes, not taken from chroma's own named styles. Any other class shows
+in the code block's color. A builtin type (e.g. Go's `int`) and a declared custom
+type/class name share the `type` class, deliberately, and likewise for `function` -
 though a lexer can only ever recognize a *declaration* this way (and, for some
 languages' lexers, a function *call* too), not necessarily every later *usage*, since
 that needs real type/binding information a lexer doesn't have (see `chromahighlight`'s
@@ -461,8 +475,8 @@ by implementation order now that most of the list is done.
 
 **Block structures**
 - [x] Fenced and indented code blocks
-- [x] Syntax highlighting for code blocks (opt-in, via `codeblocks.Highlighter` -
-      `chromahighlight` provides a `chroma`-backed implementation)
+- [x] Syntax highlighting for code blocks (opt-in, via a `codeblocks.Plugin` -
+      `chromahighlight` provides a `chroma`-backed one)
 - [x] Blockquotes, including nested ones
 - [x] Thematic breaks (`---`)
 - [x] Ordered and unordered lists, tight or loose, nested to any depth, including task

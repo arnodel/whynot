@@ -13,25 +13,25 @@ func TestClassify(t *testing.T) {
 	cases := []struct {
 		name string
 		tok  chroma.TokenType
-		want codeblocks.TokenClass
+		want string
 	}{
-		{"keyword", chroma.Keyword, codeblocks.TokenKeyword},
-		{"keyword subtype", chroma.KeywordReserved, codeblocks.TokenKeyword},
-		{"keyword type (builtin type)", chroma.KeywordType, codeblocks.TokenType},
-		{"name class (declared type/class)", chroma.NameClass, codeblocks.TokenType},
-		{"name function (declared/called function)", chroma.NameFunction, codeblocks.TokenFunction},
-		{"name function magic (dunder method)", chroma.NameFunctionMagic, codeblocks.TokenFunction},
-		{"string", chroma.LiteralString, codeblocks.TokenString},
-		{"string subtype", chroma.LiteralStringDouble, codeblocks.TokenString},
-		{"number", chroma.LiteralNumber, codeblocks.TokenNumber},
-		{"number subtype", chroma.LiteralNumberInteger, codeblocks.TokenNumber},
-		{"comment", chroma.Comment, codeblocks.TokenComment},
-		{"comment preproc", chroma.CommentPreproc, codeblocks.TokenComment},
-		{"name", chroma.Name, codeblocks.TokenPlain},
-		{"name builtin (shared between builtin functions and, in some lexers, types)", chroma.NameBuiltin, codeblocks.TokenPlain},
-		{"operator", chroma.Operator, codeblocks.TokenPlain},
-		{"punctuation", chroma.Punctuation, codeblocks.TokenPlain},
-		{"text", chroma.Text, codeblocks.TokenPlain},
+		{"keyword", chroma.Keyword, codeblocks.ClassKeyword},
+		{"keyword subtype", chroma.KeywordReserved, codeblocks.ClassKeyword},
+		{"keyword type (builtin type)", chroma.KeywordType, codeblocks.ClassType},
+		{"name class (declared type/class)", chroma.NameClass, codeblocks.ClassType},
+		{"name function (declared/called function)", chroma.NameFunction, codeblocks.ClassFunction},
+		{"name function magic (dunder method)", chroma.NameFunctionMagic, codeblocks.ClassFunction},
+		{"string", chroma.LiteralString, codeblocks.ClassString},
+		{"string subtype", chroma.LiteralStringDouble, codeblocks.ClassString},
+		{"number", chroma.LiteralNumber, codeblocks.ClassNumber},
+		{"number subtype", chroma.LiteralNumberInteger, codeblocks.ClassNumber},
+		{"comment", chroma.Comment, codeblocks.ClassComment},
+		{"comment preproc", chroma.CommentPreproc, codeblocks.ClassComment},
+		{"name", chroma.Name, ""},
+		{"name builtin (shared between builtin functions and, in some lexers, types)", chroma.NameBuiltin, ""},
+		{"operator", chroma.Operator, ""},
+		{"punctuation", chroma.Punctuation, ""},
+		{"text", chroma.Text, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -47,57 +47,61 @@ func TestClassify(t *testing.T) {
 // Category(), because Category() collapses LiteralString and
 // LiteralNumber into one indistinguishable Literal bucket.
 func TestClassifyDistinguishesStringFromNumber(t *testing.T) {
-	if got := classify(chroma.LiteralString); got != codeblocks.TokenString {
-		t.Errorf("classify(LiteralString) = %v, want TokenString", got)
+	if got := classify(chroma.LiteralString); got != codeblocks.ClassString {
+		t.Errorf("classify(LiteralString) = %v, want ClassString", got)
 	}
-	if got := classify(chroma.LiteralNumber); got != codeblocks.TokenNumber {
-		t.Errorf("classify(LiteralNumber) = %v, want TokenNumber", got)
+	if got := classify(chroma.LiteralNumber); got != codeblocks.ClassNumber {
+		t.Errorf("classify(LiteralNumber) = %v, want ClassNumber", got)
 	}
 }
 
 // TestClassifyDistinguishesTypeFromKeyword checks that a builtin type
-// name (chroma.KeywordType) gets its own TokenType color rather than
+// name (chroma.KeywordType) gets its own ClassType color rather than
 // falling into the same bucket as a plain chroma.Keyword.
 func TestClassifyDistinguishesTypeFromKeyword(t *testing.T) {
-	if got := classify(chroma.KeywordType); got != codeblocks.TokenType {
-		t.Errorf("classify(KeywordType) = %v, want TokenType", got)
+	if got := classify(chroma.KeywordType); got != codeblocks.ClassType {
+		t.Errorf("classify(KeywordType) = %v, want ClassType", got)
 	}
-	if got := classify(chroma.Keyword); got != codeblocks.TokenKeyword {
-		t.Errorf("classify(Keyword) = %v, want TokenKeyword", got)
+	if got := classify(chroma.Keyword); got != codeblocks.ClassKeyword {
+		t.Errorf("classify(Keyword) = %v, want ClassKeyword", got)
 	}
 }
 
 // TestClassifyDistinguishesFunctionFromPlain checks that
-// chroma.NameFunction gets its own TokenFunction color rather than
-// silently falling through to TokenPlain (it has no SubCategory()
+// chroma.NameFunction gets its own ClassFunction color rather than
+// silently falling through to no class (it has no SubCategory()
 // bucket of its own).
 func TestClassifyDistinguishesFunctionFromPlain(t *testing.T) {
-	if got := classify(chroma.NameFunction); got != codeblocks.TokenFunction {
-		t.Errorf("classify(NameFunction) = %v, want TokenFunction", got)
+	if got := classify(chroma.NameFunction); got != codeblocks.ClassFunction {
+		t.Errorf("classify(NameFunction) = %v, want ClassFunction", got)
 	}
-	if got := classify(chroma.Name); got != codeblocks.TokenPlain {
-		t.Errorf("classify(Name) = %v, want TokenPlain", got)
+	if got := classify(chroma.Name); got != "" {
+		t.Errorf("classify(Name) = %v, want no class", got)
 	}
 }
 
-func TestHighlightGo(t *testing.T) {
+func TestParseGo(t *testing.T) {
 	code := "// comment\nfunc f(n int) string {\n\treturn \"hi\"\n}\n"
-	spans := Highlighter{}.Highlight("go", code)
+	tokens, ok := Plugin{}.Parse("go", code).(codeblocks.Tokens)
+	if !ok {
+		t.Fatalf("Parse = %T, want codeblocks.Tokens", Plugin{}.Parse("go", code))
+	}
+	spans := tokens.Spans
 
 	var got strings.Builder
 	var sawKeyword, sawType, sawFunction, sawString, sawComment bool
 	for _, span := range spans {
 		got.WriteString(span.Text)
 		switch span.Class {
-		case codeblocks.TokenKeyword:
+		case codeblocks.ClassKeyword:
 			sawKeyword = true
-		case codeblocks.TokenType:
+		case codeblocks.ClassType:
 			sawType = true
-		case codeblocks.TokenFunction:
+		case codeblocks.ClassFunction:
 			sawFunction = true
-		case codeblocks.TokenString:
+		case codeblocks.ClassString:
 			sawString = true
-		case codeblocks.TokenComment:
+		case codeblocks.ClassComment:
 			sawComment = true
 		}
 	}
@@ -105,36 +109,31 @@ func TestHighlightGo(t *testing.T) {
 		t.Errorf("concatenated spans = %q, want %q", got.String(), code)
 	}
 	if !sawKeyword {
-		t.Errorf("no TokenKeyword span found in %#v", spans)
+		t.Errorf("no ClassKeyword span found in %#v", spans)
 	}
 	// n's declared type (int) and f's return type (string) are both
 	// builtin types - chroma's Go lexer tags them chroma.KeywordType.
 	if !sawType {
-		t.Errorf("no TokenType span found in %#v", spans)
+		t.Errorf("no ClassType span found in %#v", spans)
 	}
 	// f's own declared name - chroma's Go lexer tags it
 	// chroma.NameFunction.
 	if !sawFunction {
-		t.Errorf("no TokenFunction span found in %#v", spans)
+		t.Errorf("no ClassFunction span found in %#v", spans)
 	}
 	if !sawString {
-		t.Errorf("no TokenString span found in %#v", spans)
+		t.Errorf("no ClassString span found in %#v", spans)
 	}
 	if !sawComment {
-		t.Errorf("no TokenComment span found in %#v", spans)
+		t.Errorf("no ClassComment span found in %#v", spans)
 	}
 }
 
-func TestHighlightUnrecognizedLanguage(t *testing.T) {
-	code := "some text in a language chroma doesn't know"
-	spans := Highlighter{}.Highlight("not-a-real-language", code)
-	if len(spans) != 1 {
-		t.Fatalf("spans = %#v, want a single span", spans)
+func TestHandles(t *testing.T) {
+	if !(Plugin{}).Handles("go") {
+		t.Error(`Handles("go") = false, want true`)
 	}
-	if spans[0].Text != code {
-		t.Errorf("spans[0].Text = %q, want %q", spans[0].Text, code)
-	}
-	if spans[0].Class != codeblocks.TokenPlain {
-		t.Errorf("spans[0].Class = %v, want TokenPlain", spans[0].Class)
+	if (Plugin{}).Handles("not-a-real-language") {
+		t.Error(`Handles("not-a-real-language") = true, want false`)
 	}
 }

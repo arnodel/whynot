@@ -8,17 +8,16 @@ import (
 // compiler compiles Markdown source into a Block/ast.Node tree - structure
 // only, no appearance. See Parse.
 type compiler struct {
-	source      []byte
-	highlighter codeblocks.Highlighter
+	source []byte
 
 	// codeBlockPlugins is every codeblocks.Plugin registered via
 	// WithCodeBlockPlugin, in registration order. pluginCache remembers
-	// which one (if any) handles a given language, populated lazily by
-	// pluginFor - so a document with many fences in the same language
-	// only ever calls CanHandle once per plugin per language, not once
-	// per fence. A cached nil value means "known: none handle it".
+	// which of them handle a given language, populated lazily by
+	// pluginsFor - so a document with many fences in the same language
+	// only calls Handles once per plugin per language, not once per
+	// fence.
 	codeBlockPlugins []codeblocks.Plugin
-	pluginCache      map[string]codeblocks.Plugin
+	pluginCache      map[string][]codeblocks.Plugin
 
 	// pendingSpace is true when a breakable space has been seen in the
 	// source but not yet attached to the next appended Inline item - see
@@ -33,42 +32,33 @@ type compiler struct {
 	soleImages map[engine.Block]string
 }
 
-// pluginFor returns the first registered codeblocks.Plugin that handles
-// language, or nil if none do - resolved once per distinct language and
-// cached from then on.
-func (c *compiler) pluginFor(language string) codeblocks.Plugin {
-	if p, ok := c.pluginCache[language]; ok {
-		return p
+// pluginsFor returns the registered plugins that handle language, in
+// registration order - resolved once per distinct language and cached
+// from then on.
+func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
+	if ps, ok := c.pluginCache[language]; ok {
+		return ps
 	}
 	if c.pluginCache == nil {
-		c.pluginCache = make(map[string]codeblocks.Plugin)
+		c.pluginCache = make(map[string][]codeblocks.Plugin)
 	}
+	var ps []codeblocks.Plugin
 	for _, p := range c.codeBlockPlugins {
-		if p.CanHandle(language) {
-			c.pluginCache[language] = p
-			return p
+		if p.Handles(language) {
+			ps = append(ps, p)
 		}
 	}
-	c.pluginCache[language] = nil
-	return nil
+	c.pluginCache[language] = ps
+	return ps
 }
 
-// ParseOption customizes Parse - see WithSyntaxHighlighter and
-// WithCodeBlockPlugin.
+// ParseOption customizes Parse - see WithCodeBlockPlugin.
 type ParseOption func(*compiler)
 
-// WithSyntaxHighlighter sets the Highlighter Parse uses to color code
-// blocks token-by-token. Unset, code blocks render in one flat color.
-func WithSyntaxHighlighter(h codeblocks.Highlighter) ParseOption {
-	return func(c *compiler) {
-		c.highlighter = h
-	}
-}
-
-// WithCodeBlockPlugin registers one CodeBlockPlugin - callable more
-// than once to register several; a fenced code block's language is
-// matched against them in registration order (see
-// compiler.pluginFor).
+// WithCodeBlockPlugin registers a plugin that parses fenced code blocks
+// in the languages it handles, e.g. to color them or render them as
+// diagrams. Call it once per plugin: plugins are tried in registration
+// order (see codeblocks.Plugin).
 func WithCodeBlockPlugin(p codeblocks.Plugin) ParseOption {
 	return func(c *compiler) {
 		c.codeBlockPlugins = append(c.codeBlockPlugins, p)

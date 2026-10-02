@@ -41,15 +41,21 @@ var diagramTypes = map[string]string{
 	"mermaid": "mermaid",
 }
 
-func (r Renderer) CanHandle(language string) bool {
+// Handles reports whether language is a diagram type Kroki renders.
+func (r Renderer) Handles(language string) bool {
 	_, ok := diagramTypes[language]
 	return ok
 }
 
-// Image builds an AsyncImage directly - no type of kroki's own needed,
+// Parse returns the diagram as an Image, rendered by Kroki.
+func (r Renderer) Parse(language, code string) codeblocks.Content {
+	return codeblocks.Image{AsyncImage: r.image(language, code)}
+}
+
+// image builds an AsyncImage directly - no type of kroki's own needed,
 // since a closure already captures everything Fetch needs (baseURL,
 // diagramType, code).
-func (r Renderer) Image(language, code string) images.AsyncImage {
+func (r Renderer) image(language, code string) images.AsyncImage {
 	diagramType := diagramTypes[language]
 	baseURL := r.baseURL()
 	return images.AsyncImage{

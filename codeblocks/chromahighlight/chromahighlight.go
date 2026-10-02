@@ -1,8 +1,8 @@
-// Package chromahighlight implements codeblocks.Highlighter on top of
-// github.com/alecthomas/chroma/v2. Split out from the core whynot package
-// to keep chroma's dependency weight (~200 embedded language lexer
-// definitions) out of the core library's dependency graph - the same
-// reasoning ebitenrenderer/systemfont are their own packages.
+// Package chromahighlight is a codeblocks.Plugin for syntax highlighting,
+// on top of github.com/alecthomas/chroma/v2. Split out from the core
+// whynot package to keep chroma's dependency weight (~200 embedded
+// language lexer definitions) out of the core library's dependency graph
+// - the same reasoning ebitenrenderer/systemfont are their own packages.
 package chromahighlight
 
 import (
@@ -12,34 +12,39 @@ import (
 	"github.com/arnodel/whynot/codeblocks"
 )
 
-// Highlighter implements codeblocks.Highlighter using chroma's lexers.
-type Highlighter struct{}
+// Plugin is a codeblocks.Plugin that classifies the tokens of code
+// blocks in any language chroma has a lexer for.
+type Plugin struct{}
 
-var _ codeblocks.Highlighter = Highlighter{}
+var _ codeblocks.Plugin = Plugin{}
 
-// Highlight looks up a lexer for language (falling back to a plain-text
-// lexer if none matches, so an unrecognized language degrades to
-// unhighlighted code rather than an error), coalesces adjacent
-// same-type tokens (so real code doesn't produce one span per character),
-// and classifies each token via classify.
-func (Highlighter) Highlight(language, code string) []codeblocks.HighlightSpan {
-	lexer := lexers.Get(language)
-	if lexer == nil {
-		lexer = lexers.Fallback
-	}
-	lexer = chroma.Coalesce(lexer)
-	iter, err := lexer.Tokenise(nil, code)
-	if err != nil {
-		return []codeblocks.HighlightSpan{{Text: code, Class: codeblocks.TokenPlain}}
-	}
-	var spans []codeblocks.HighlightSpan
-	for token := iter(); token != chroma.EOF; token = iter() {
-		spans = append(spans, codeblocks.HighlightSpan{Text: token.Value, Class: classify(token.Type)})
-	}
-	return spans
+// Handles reports whether chroma has a lexer for language.
+func (Plugin) Handles(language string) bool {
+	return lexers.Get(language) != nil
 }
 
-// classify maps a chroma.TokenType to whynot's coarser TokenClass.
+// Parse tokenises code with language's lexer, coalescing adjacent
+// same-type tokens (so real code doesn't produce one span per
+// character), and classifies each token via classify. It declines (nil)
+// if the lexer fails.
+func (Plugin) Parse(language, code string) codeblocks.Content {
+	lexer := lexers.Get(language)
+	if lexer == nil {
+		return nil
+	}
+	iter, err := chroma.Coalesce(lexer).Tokenise(nil, code)
+	if err != nil {
+		return nil
+	}
+	var spans []codeblocks.Span
+	for token := iter(); token != chroma.EOF; token = iter() {
+		spans = append(spans, codeblocks.Span{Text: token.Value, Class: classify(token.Type)})
+	}
+	return codeblocks.Tokens{Spans: spans}
+}
+
+// classify maps a chroma.TokenType to one of codeblocks' conventional,
+// coarser classes, or "" for none.
 //
 // chroma.KeywordType/NameClass and chroma.NameFunction/
 // NameFunctionMagic are checked explicitly, ahead of the SubCategory()
@@ -51,29 +56,29 @@ func (Highlighter) Highlight(language, code string) []codeblocks.HighlightSpan {
 //
 // chroma.NameBuiltin is deliberately left unclassified: some lexers use
 // it for both builtin functions and builtin type names, so mapping it
-// to either TokenFunction or TokenType would sometimes mislabel the
+// to either ClassFunction or ClassType would sometimes mislabel the
 // other.
 //
 // A lexer only sees syntax, not real type/binding information, so
-// TokenType and TokenFunction can usually recognize a declaration but
+// ClassType and ClassFunction can usually recognize a declaration but
 // not every later usage of the same name - see their own doc comments.
-func classify(t chroma.TokenType) codeblocks.TokenClass {
+func classify(t chroma.TokenType) string {
 	switch t {
 	case chroma.KeywordType, chroma.NameClass:
-		return codeblocks.TokenType
+		return codeblocks.ClassType
 	case chroma.NameFunction, chroma.NameFunctionMagic:
-		return codeblocks.TokenFunction
+		return codeblocks.ClassFunction
 	}
 	switch t.SubCategory() {
 	case chroma.Keyword:
-		return codeblocks.TokenKeyword
+		return codeblocks.ClassKeyword
 	case chroma.LiteralString:
-		return codeblocks.TokenString
+		return codeblocks.ClassString
 	case chroma.LiteralNumber:
-		return codeblocks.TokenNumber
+		return codeblocks.ClassNumber
 	case chroma.Comment, chroma.CommentPreproc:
-		return codeblocks.TokenComment
+		return codeblocks.ClassComment
 	default:
-		return codeblocks.TokenPlain
+		return ""
 	}
 }
