@@ -604,7 +604,7 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 func TestViewScrollToRatio(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 100)},
 			{Box: engine.NewEmptyBox(300, 100)},
 			{Box: engine.NewEmptyBox(300, 100)},
@@ -636,7 +636,7 @@ func TestViewScrollToRatio(t *testing.T) {
 func TestViewScrollToRatioClampsOutOfRange(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 100)},
 			{Box: engine.NewEmptyBox(300, 100)},
 		}}},
@@ -938,7 +938,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 func TestViewDocumentBounds(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 10)},
 			{Box: engine.NewEmptyBox(300, 20)},
 			{Box: engine.NewEmptyBox(300, 30)},
@@ -963,7 +963,7 @@ func TestViewDocumentBoundsNilBox(t *testing.T) {
 func TestViewVisibleViewBounds(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 50)},
 			{Box: engine.NewEmptyBox(300, 50)},
 			{Box: engine.NewEmptyBox(300, 50)},
@@ -986,7 +986,7 @@ func TestViewVisibleViewBounds(t *testing.T) {
 func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 50)},
 			{Box: engine.NewEmptyBox(300, 50)},
 		}}, cursor: engine.StackCursor{Index: 1, Offset: 0}},
@@ -1007,7 +1007,7 @@ func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 func TestViewVisibleViewBoundsResolvesRealHeights(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 10)},                  // resolved; average would be 10
 			{Block: &fixedHeightBlock{height: 500}, Width: 300}, // NOT resolved yet - real height 500, far from that average
 		}}},
@@ -1035,7 +1035,7 @@ func TestViewVisibleViewBoundsNilBox(t *testing.T) {
 func TestViewHeightEstimateExtrapolates(t *testing.T) {
 	v := &View{
 		width: 300,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: engine.NewEmptyBox(300, 100)},
 			{Box: engine.NewEmptyBox(300, 300)},
 			{}, // unresolved
@@ -1210,7 +1210,7 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 		ctx:   engine.Context{Scale: 1, ImageCache: cache, FaceSelector: fonts.NewGoSelector()},
 		width: 100,
 		scale: 1,
-		stack: documentStack{box: &engine.StackBox{Ctx: &engine.Context{}, Slots: []engine.StackSlot{
+		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
 			{Box: settledA},
 			{Box: pendingSlot},
 			{Box: settledC},
@@ -1529,7 +1529,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 		scale: 1,
 		stack: documentStack{box: &engine.StackBox{Slots: slots, Width: 100}, cursor: engine.StackCursor{Index: cursorSlotIndex}},
 	}
-	view.stack.box.Ctx = &view.ctx // as rebuild wires it
+	view.stack.box.Context = &view.ctx // as rebuild wires it
 
 	placeholderHeight := view.stack.box.BoxAt(imageSlotIndex).Bounds().Dy() // still pending, no bounds known yet - "(loading image…)" text height
 	view.stack.box.BoxAt(cursorSlotIndex)                                   // resolve the cursor's own slot too, seeding a real estimate

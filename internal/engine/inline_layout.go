@@ -27,8 +27,8 @@ type InlineLayout interface {
 	// next to a code span, or a non-breaking space's own neighbors. A
 	// glued boundary gets no gap and is never a line-break point (see
 	// lineBuilder.gap and wrapLines). Meaningless for an item that's
-	// never anything but a line's first part (ListItemMarkerBox,
-	// CheckboxBox) - never queried there.
+	// never anything but a line's first part (listItemMarkerBox,
+	// checkboxBox) - never queried there.
 	Glued() bool
 	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
 	DrawInline(dst canvas.Canvas, x, y int, now time.Duration)
@@ -164,64 +164,64 @@ func (b *TextBox) PendingImages() []string {
 	return b.pending
 }
 
-// ListItemMarkerBox hangs a list item's marker to the left of the line's
+// listItemMarkerBox hangs a list item's marker to the left of the line's
 // start, so the item's text starts at the line's own x=0.
-type ListItemMarkerBox struct {
+type listItemMarkerBox struct {
 	Marker InlineLayout
 }
 
-var _ InlineLayout = (*ListItemMarkerBox)(nil)
+var _ InlineLayout = (*listItemMarkerBox)(nil)
 
 // BoundsAndAdvance reports no width, and an advance of minus the space
 // width: that cancels the gap lineBuilder inserts before the next part,
 // so the text after the marker starts exactly where the marker box is.
-func (b *ListItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
+func (b *listItemMarkerBox) BoundsAndAdvance() (image.Rectangle, int) {
 	bounds, _ := b.Marker.BoundsAndAdvance()
 	return image.Rect(0, bounds.Min.Y, 0, bounds.Max.Y), -b.Marker.SpaceWidth()
 }
 
-func (b *ListItemMarkerBox) Bounds() image.Rectangle {
+func (b *listItemMarkerBox) Bounds() image.Rectangle {
 	bounds, _ := b.BoundsAndAdvance()
 	return bounds
 }
 
-func (b *ListItemMarkerBox) Source() Source {
+func (b *listItemMarkerBox) Source() Source {
 	return b.Marker.Source()
 }
 
-func (b *ListItemMarkerBox) SpaceWidth() int {
+func (b *listItemMarkerBox) SpaceWidth() int {
 	return b.Marker.SpaceWidth()
 }
 
-// Glued is always false - a ListItemMarkerBox is only ever a line's first
+// Glued is always false - a listItemMarkerBox is only ever a line's first
 // part (ListItemHeadBlock.GetBlockLayout), so it's never queried by the
 // gap/break logic that Glued exists for.
-func (b *ListItemMarkerBox) Glued() bool {
+func (b *listItemMarkerBox) Glued() bool {
 	return false
 }
 
-func (b *ListItemMarkerBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *listItemMarkerBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	b.Marker.DrawInline(dst, b.markerX(x), y, now)
 }
 
 // HitTest checks the marker where DrawInline draws it, hanging to the left
 // of x - not against this box's own zero-width bounds.
-func (b *ListItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+func (b *listItemMarkerBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
 	return b.Marker.HitTest(p, b.markerX(x), y)
 }
 
 // markerX is where the marker is drawn for a box at x: one space width to
 // the left of x, ending there.
-func (b *ListItemMarkerBox) markerX(x int) int {
+func (b *listItemMarkerBox) markerX(x int) int {
 	_, advance := b.Marker.BoundsAndAdvance()
 	return x - advance - b.Marker.SpaceWidth()
 }
 
-func (b *ListItemMarkerBox) PendingImages() []string {
+func (b *listItemMarkerBox) PendingImages() []string {
 	return b.Marker.PendingImages()
 }
 
-// CheckboxBox is a GFM task list item's checkbox marker, drawn with plain
+// checkboxBox is a GFM task list item's checkbox marker, drawn with plain
 // filled rects (Canvas.DrawRect) rather than a font glyph - TaskCheckbox's
 // fallback for a face that doesn't have the ballot-box glyphs (☐/☑; most
 // fonts, including the bundled Go fonts, don't). An outlined square for
@@ -232,7 +232,7 @@ func (b *ListItemMarkerBox) PendingImages() []string {
 // size and zoom together without a separate StyleSheet dimensional
 // constant), and always matches the resolved text color instead of being
 // a fixed-color raster that could clash with a custom StyleSheet.
-type CheckboxBox struct {
+type checkboxBox struct {
 	checked    bool
 	size       int
 	thickness  int
@@ -241,13 +241,13 @@ type CheckboxBox struct {
 	source     Inline
 }
 
-var _ InlineLayout = (*CheckboxBox)(nil)
+var _ InlineLayout = (*checkboxBox)(nil)
 
 // newCheckboxBox sizes the box as a fraction of face's own (already
 // scaled) Ascent - CapHeight/XHeight would give a tighter fit, but some
 // fonts report them as 0 or even negative, so Ascent (always populated)
 // is the reliable choice.
-func newCheckboxBox(checked bool, face font.Face, color color.Color, source Inline) *CheckboxBox {
+func newCheckboxBox(checked bool, face font.Face, color color.Color, source Inline) *checkboxBox {
 	ascent := face.Metrics().Ascent.Ceil()
 	size := int(float64(ascent) * 0.72)
 	if size < 2 {
@@ -258,7 +258,7 @@ func newCheckboxBox(checked bool, face font.Face, color color.Color, source Inli
 		thickness = 1
 	}
 	spaceAdvance, _ := face.GlyphAdvance(' ')
-	return &CheckboxBox{
+	return &checkboxBox{
 		checked:    checked,
 		size:       size,
 		thickness:  thickness,
@@ -268,7 +268,7 @@ func newCheckboxBox(checked bool, face font.Face, color color.Color, source Inli
 	}
 }
 
-func (b *CheckboxBox) Source() Source {
+func (b *checkboxBox) Source() Source {
 	return b.source
 }
 
@@ -276,27 +276,27 @@ func (b *CheckboxBox) Source() Source {
 // -size, Max.Y = 0, matching how a same-sized glyph like □ itself sits),
 // so it lines up with surrounding text the same way TaskCheckbox's glyph
 // path does.
-func (b *CheckboxBox) BoundsAndAdvance() (image.Rectangle, int) {
+func (b *checkboxBox) BoundsAndAdvance() (image.Rectangle, int) {
 	return image.Rect(0, -b.size, b.size, 0), b.size
 }
 
-func (b *CheckboxBox) Bounds() image.Rectangle {
+func (b *checkboxBox) Bounds() image.Rectangle {
 	bounds, _ := b.BoundsAndAdvance()
 	return bounds
 }
 
-func (b *CheckboxBox) SpaceWidth() int {
+func (b *checkboxBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
-// Glued is always false - a CheckboxBox only ever appears as a
-// ListItemMarkerBox's Marker (a list item's task checkbox), so like
-// ListItemMarkerBox itself it's never queried by the gap/break logic.
-func (b *CheckboxBox) Glued() bool {
+// Glued is always false - a checkboxBox only ever appears as a
+// listItemMarkerBox's Marker (a list item's task checkbox), so like
+// listItemMarkerBox itself it's never queried by the gap/break logic.
+func (b *checkboxBox) Glued() bool {
 	return false
 }
 
-func (b *CheckboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *checkboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	top := y - b.size
 	t := b.thickness
 	dst.DrawRect(x, top, b.size, t, b.color)          // top edge
@@ -311,26 +311,26 @@ func (b *CheckboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration)
 	}
 }
 
-func (b *CheckboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
+func (b *checkboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
 	return hitIfInside(b, p, x, y)
 }
 
-func (b *CheckboxBox) PendingImages() []string {
+func (b *checkboxBox) PendingImages() []string {
 	return nil
 }
 
 type ImageBox struct {
-	// Img is the already-decoded image imagecache.Cache.Load returned -
+	// Image is the already-decoded image imagecache.Cache.Load returned -
 	// carried forward from InlineImage.GetInlineLayout so DrawInline
 	// can pass it straight to Canvas.DrawImage, which never fetches or
 	// decodes anything itself. nil while the image is still pending but
 	// its dimensions are already known - bounds is still the correct,
 	// final (scaled) size, so DrawInline draws a placeholder rect
-	// instead, and nothing needs to reflow once Img is filled in later.
-	// anim is set instead of Img for an animated GIF - exactly one of
+	// instead, and nothing needs to reflow once Image is filled in later.
+	// anim is set instead of Image for an animated GIF - exactly one of
 	// the two is non-nil on a settled ImageBox.
-	Img              image.Image
-	Anim             *imagecache.Animation
+	Image            image.Image
+	Animation        *imagecache.Animation
 	Rect             image.Rectangle
 	placeholderColor color.Color
 
@@ -369,10 +369,10 @@ func (b *ImageBox) Glued() bool {
 
 func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	switch {
-	case b.Anim != nil:
-		dst.DrawImage(b.Anim.CurrentFrame(now), x, y, b.Rect.Dx(), b.Rect.Dy())
-	case b.Img != nil:
-		dst.DrawImage(b.Img, x, y, b.Rect.Dx(), b.Rect.Dy())
+	case b.Animation != nil:
+		dst.DrawImage(b.Animation.CurrentFrame(now), x, y, b.Rect.Dx(), b.Rect.Dy())
+	case b.Image != nil:
+		dst.DrawImage(b.Image, x, y, b.Rect.Dx(), b.Rect.Dy())
 	default:
 		dst.DrawRect(x, y, b.Rect.Dx(), b.Rect.Dy(), b.placeholderColor)
 	}

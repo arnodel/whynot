@@ -23,19 +23,19 @@ type Block interface {
 	Margins(ctx Context) styling.Margins
 }
 
-// Marginer is anything that reports its own logical (unscaled) Margins -
+// marginer is anything that reports its own logical (unscaled) Margins -
 // every Block satisfies it, but it's kept narrow so Context.
 // ScaledMargins doesn't need the rest of the Block interface.
-type Marginer interface {
+type marginer interface {
 	Margins(ctx Context) styling.Margins
 }
 
-// WithoutMargins satisfies Block's Margins() with a zero value, for a Block
+// withoutMargins satisfies Block's Margins() with a zero value, for a Block
 // that has no margins of its own. Margins can still be added around it by
 // wrapping it in a MarginBlock, as the compiler does for most blocks.
-type WithoutMargins struct{}
+type withoutMargins struct{}
 
-func (WithoutMargins) Margins(ctx Context) styling.Margins {
+func (withoutMargins) Margins(ctx Context) styling.Margins {
 	return styling.Margins{}
 }
 
@@ -77,7 +77,7 @@ func (b *MarginBlock) Node() *ast.Node {
 // types it has no inline content to lay out - just a color; its vertical
 // spacing comes from whatever MarginBlock wraps it.
 type ThematicBreakBlock struct {
-	WithoutMargins
+	withoutMargins
 	ASTNode *ast.Node
 }
 
@@ -90,7 +90,7 @@ func (b *ThematicBreakBlock) Node() *ast.Node {
 func (b *ThematicBreakBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	return &RuleBox{
 		width:     width,
-		thickness: int(ctx.ScaledThematicBreakThickness(b.ASTNode)),
+		thickness: int(ctx.scaledThematicBreakThickness(b.ASTNode)),
 		color:     ctx.Styles.BorderColor(b.ASTNode),
 		source:    b,
 	}
@@ -105,7 +105,7 @@ func (b *ThematicBreakBlock) GetBlockLayout(ctx Context, width int) BlockLayout 
 // Block - already a StackBlock if there was more than one, resolved once
 // at compile time rather than rebuilt on every GetBlockLayout call.
 type BlockquoteBlock struct {
-	WithoutMargins
+	withoutMargins
 	Inner   Block
 	ASTNode *ast.Node
 }
@@ -117,7 +117,7 @@ func (b *BlockquoteBlock) Node() *ast.Node {
 }
 
 func (b *BlockquoteBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
-	geom := ctx.ScaledBlockquoteGeometry(b.ASTNode)
+	geom := ctx.scaledBlockquoteGeometry(b.ASTNode)
 	indent := int(geom.Indent)
 	return &BlockquoteBox{
 		width:    width,
@@ -130,7 +130,7 @@ func (b *BlockquoteBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 }
 
 type CodeBlock struct {
-	WithoutMargins
+	withoutMargins
 	// Lines is one slice per visual line, each holding that line's spans -
 	// usually a single element (one InlineText for the whole line), but
 	// more than one when a Highlighter has split the line into classified
@@ -155,7 +155,7 @@ func (b *CodeBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 }
 
 type TextBlock struct {
-	WithoutMargins
+	withoutMargins
 	Parts   []Inline
 	ASTNode *ast.Node
 }
@@ -186,7 +186,7 @@ func inlineLayouts(ctx Context, width int, parts []Inline) []InlineLayout {
 // content, e.g. a nested list), not to the head on its own - it has no
 // business claiming indentation whether or not there's a trailing part.
 type ListItemHeadBlock struct {
-	WithoutMargins
+	withoutMargins
 	Marker  Inline
 	Parts   []Inline
 	ASTNode *ast.Node
@@ -199,7 +199,7 @@ func (b *ListItemHeadBlock) Node() *ast.Node {
 }
 
 func (b *ListItemHeadBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
-	marker := &ListItemMarkerBox{Marker: b.Marker.GetInlineLayout(ctx, width)}
+	marker := &listItemMarkerBox{Marker: b.Marker.GetInlineLayout(ctx, width)}
 	boxes := append([]InlineLayout{marker}, inlineLayouts(ctx, width, b.Parts)...)
 	return &StackBox{Slots: preResolvedSlots(wrapLines(boxes, width)), source: b}
 }
@@ -221,7 +221,7 @@ type TableCell struct {
 // TableBlock is a GFM table. header and each row in rows hold one
 // tableCell per column.
 type TableBlock struct {
-	WithoutMargins
+	withoutMargins
 	Header  []TableCell
 	Rows    [][]TableCell
 	ASTNode *ast.Node
@@ -239,7 +239,7 @@ func (b *TableBlock) Node() *ast.Node {
 // would ever wrap against it.
 const NaturalWidthMeasure = 1 << 20
 
-// ResolveColumnWidths decides each column's final width from its natural
+// resolveColumnWidths decides each column's final width from its natural
 // (unwrapped) width, given the total width available for all columns
 // combined (gaps and the frame are the caller's concern, not this
 // function's). Deliberately isolated from measuring natural widths and
@@ -257,7 +257,7 @@ const NaturalWidthMeasure = 1 << 20
 // Checked as sum*(N-K+1) < available (exact with integers, and avoids
 // assuming the condition is monotonic in K - it isn't, in general, since
 // the sum grows and the divisor shrinks as K grows).
-func ResolveColumnWidths(natural []int, available int) []int {
+func resolveColumnWidths(natural []int, available int) []int {
 	n := len(natural)
 	order := make([]int, n)
 	for i := range order {
@@ -298,7 +298,7 @@ func ResolveColumnWidths(natural []int, available int) []int {
 }
 
 func (b *TableBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
-	geom := ctx.ScaledTableGeometry(b.ASTNode)
+	geom := ctx.scaledTableGeometry(b.ASTNode)
 	frameThickness := int(geom.FrameThickness)
 	columnGap := int(geom.ColumnGap)
 	rowGap := int(geom.RowGap)
@@ -326,7 +326,7 @@ func (b *TableBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	// which is exactly numCols*columnGap.
 	edgeGap := columnGap / 2
 	available := width - 2*frameThickness - numCols*columnGap
-	columnWidths := ResolveColumnWidths(natural, available)
+	columnWidths := resolveColumnWidths(natural, available)
 
 	// columnWidths is the wrap constraint given to each cell, not
 	// necessarily what it actually renders at: word-wrapped text rarely
@@ -382,7 +382,7 @@ func (b *TableBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 			case AlignRight:
 				xOffset = effectiveWidths[c] - contentWidth
 			}
-			rowCells[c] = NewContainerBox(contentBox, effectiveWidths[c], rowHeights[r], xOffset, 0)
+			rowCells[c] = newContainerBox(contentBox, effectiveWidths[c], rowHeights[r], xOffset, 0)
 		}
 		cells[r] = rowCells
 	}
@@ -406,7 +406,7 @@ func (b *TableBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 
 	// Columns shrink to fit width, but a cell holding a word too long to
 	// wrap can still make the table wider: it scrolls sideways then.
-	return scrollIfWider(ctx, b, &TableBox{
+	return scrollIfWider(ctx, b, &tableBox{
 		columnOffsets:       columnOffsets,
 		rowOffsets:          rowOffsets,
 		frameThickness:      frameThickness,
@@ -480,5 +480,5 @@ func (b *StackBlock) StackLayout(ctx *Context, width int) *StackBox {
 		})
 		bottomMargin = int(margins.Bottom)
 	}
-	return &StackBox{Slots: slots, Ctx: ctx, Width: width}
+	return &StackBox{Slots: slots, Context: ctx, Width: width}
 }

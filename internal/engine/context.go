@@ -50,14 +50,14 @@ type Context struct {
 	Time time.Duration
 }
 
-// The methods below read c.Styles (or, for ScaledMargins, a Marginer -
+// The methods below read c.Styles (or, for ScaledMargins, a marginer -
 // typically a Block) and scale the result by c.Scale in one step - layout
 // code should always go through these rather than calling Margins/the
 // StyleSheet directly, so scaling can't be forgotten or applied twice.
 // TextStyle/Color have no scaled equivalent: font size is scaled by the
 // dpi selectFace passes, and color doesn't scale at all.
 
-func (c Context) ScaledMargins(m Marginer) styling.Margins {
+func (c Context) ScaledMargins(m marginer) styling.Margins {
 	margins := m.Margins(c)
 	margins.Left *= c.Scale
 	margins.Right *= c.Scale
@@ -75,15 +75,15 @@ func (c Context) ScaledViewMargins() styling.Margins {
 	return margins
 }
 
-func (c Context) ScaledStrikeThickness(node *ast.Node) float64 {
+func (c Context) scaledStrikeThickness(node *ast.Node) float64 {
 	return c.Styles.StrikeThickness(node) * c.Scale
 }
 
-func (c Context) ScaledThematicBreakThickness(node *ast.Node) float64 {
+func (c Context) scaledThematicBreakThickness(node *ast.Node) float64 {
 	return c.Styles.ThematicBreakThickness(node) * c.Scale
 }
 
-func (c Context) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
+func (c Context) scaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeometry {
 	g := c.Styles.BlockquoteGeometry(node)
 	return styling.BlockquoteGeometry{
 		Indent:   g.Indent * c.Scale,
@@ -91,7 +91,7 @@ func (c Context) ScaledBlockquoteGeometry(node *ast.Node) styling.BlockquoteGeom
 	}
 }
 
-func (c Context) ScaledTableGeometry(node *ast.Node) styling.TableGeometry {
+func (c Context) scaledTableGeometry(node *ast.Node) styling.TableGeometry {
 	g := c.Styles.TableGeometry(node)
 	return styling.TableGeometry{
 		FrameThickness:      g.FrameThickness * c.Scale,

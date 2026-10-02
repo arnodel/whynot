@@ -49,7 +49,7 @@ flowchart TD
         B --> G["ast.Node tree\n(tag + parent only - mirrors real nesting\nincl. inline spans; each Block/Inline\nabove holds a node *ast.Node into it)"]
     end
     subgraph L2["Layer 2 — Layout tree (block.go, inline.go, block_layout.go,\ninline_layout.go, rendering_context.go, internal/styling)"]
-        C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, TableBox, EmptyBox, ContainerBox)"]
+        C -- "GetBlockLayout(ctx, width)" --> D["BlockLayout / InlineLayout tree\n(LineBox, StackBox, TextBox, ImageBox, RuleBox,\nBlockquoteBox, tableBox, EmptyBox, containerBox)"]
         G -. "ctx.Styles resolves\nMargins / TextStyle / Color / ..." .-> D
     end
     subgraph L3["Layer 3 — Canvas boundary (canvas/)"]
@@ -122,7 +122,7 @@ what nests in what - not into appearance: no font, color, or margin value
 is decided here, only recorded via each `Block`/`Inline`'s `node *ast.Node`
 field for the styles to resolve later, in Layer 2.
 
-Margins aren't a field every `Block` carries: most embed `WithoutMargins`
+Margins aren't a field every `Block` carries: most embed `withoutMargins`
 (a zero-value `Margins()`) and get real ones only where the compiler wraps
 them in a `MarginBlock{Block, node}` - resolved from `Styles.Margins`
 against that node during `GetBlockLayout`, not baked in here at construction time.
@@ -150,7 +150,7 @@ font face cache, and `Styles`) and produce a `BlockLayout` /
 `InlineLayout` tree ([block_layout.go](internal/engine/block_layout.go),
 [inline_layout.go](internal/engine/inline_layout.go)): `TextBox`,
 `ImageBox`, `LineBox` (one wrapped line), `StackBox` (vertical stack with
-margins resolved to gaps), `ContainerBox` (indentation), `EmptyBox`
+margins resolved to gaps), `containerBox` (indentation), `EmptyBox`
 (margin spacer). This is where appearance actually gets resolved -
 `ctx.Styles.Margins`/`.Color`/`.BorderColor`, `ctx.ResolvedTextStyle`/
 `.ResolvedColor` (ancestry-merged `TextStyle`/color), `ctx.Scaled*` (the
@@ -168,7 +168,7 @@ mutated, which is what makes the memoization described next safe.
 `canvas.Canvas` ([canvas](canvas)) is the sole interface between
 backend-agnostic layout and actual drawing: `Bounds`, `DrawText`,
 `DrawImage`, `DrawRect`, and `Clip`, which returns a `Canvas` restricted to a
-rectangle (used by `ScrollBox`, [hscroll.go](internal/engine/hscroll.go), for blocks that
+rectangle (used by `ScrollBox`, [scroll.go](internal/engine/scroll.go), for blocks that
 scroll sideways). `DrawImage` takes an already-decoded `image.Image`, not a
 source path — resolving, fetching, and decoding an image is entirely
 the library's own concern (`imagecache.Cache`, see "Image loading" below), so
@@ -181,7 +181,7 @@ since the same resolved image comes back from the image cache every time.
 `BlockLayout` gets drawn — it checks `box.Bounds()` against `dst.Bounds()` and
 skips `drawContents` (the type-specific drawing logic) entirely if they
 don't overlap. Every `BlockLayout` implementation gets that off-screen skip for
-free this way, including `ContainerBox` delegating to its inner box,
+free this way, including `containerBox` delegating to its inner box,
 rather than each type having to remember to check. `StackBox.drawContents`
 also breaks out of its child loop once a child starts past the viewport's
 bottom edge — safe because children are laid out top-to-bottom with no
@@ -425,7 +425,7 @@ every recursion level.
 `StackBox` falls back to itself - reporting its own `Source` - when the
 slot a point falls into doesn't cover it (past the end of a short last
 line) or that slot's own `HitTest` declines, the same way
-`BlockquoteBox`/`TableBox` already fall back to their own `Source` on a
+`BlockquoteBox`/`tableBox` already fall back to their own `Source` on a
 declining child. This only fires when the `StackBox` was built from a
 single owning `Block` (a paragraph's or code block's own wrapped lines,
 tracked via an optional `source Block` field set at those

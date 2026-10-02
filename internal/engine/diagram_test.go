@@ -181,7 +181,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	// bounds by frameThickness+DiagramPadding on every side - the
 	// "matting" a bare frame around the diagram doesn't give it on its
 	// own.
-	wantInset := int(ctx.ScaledThematicBreakThickness(nil)) + int(ctx.Styles.DiagramPadding(nil)*ctx.Scale)
+	wantInset := int(ctx.scaledThematicBreakThickness(nil)) + int(ctx.Styles.DiagramPadding(nil)*ctx.Scale)
 	wantImageRect := image.Rect(wantInset, wantInset, box.Bounds().Dx()-wantInset, box.Bounds().Dy()-wantInset)
 	if canvas.ImageRects[0] != wantImageRect {
 		t.Errorf("image drawn at %v, want %v (inset %d on every side)", canvas.ImageRects[0], wantImageRect, wantInset)

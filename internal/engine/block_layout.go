@@ -78,12 +78,12 @@ type StackSlot struct {
 type StackBox struct {
 	Slots []StackSlot
 
-	// Ctx is what unresolved slots are laid out with, when first needed.
+	// Context is what unresolved slots are laid out with, when first needed.
 	// For a View's top-level StackBox this is the View's own live context,
 	// so a change that only affects slots laid out from then on (e.g. the
 	// hovered link) needs no rebuild, just invalidating the affected slots.
-	Ctx   *Context
-	Width int
+	Context *Context
+	Width   int
 
 	// source is the single Block this StackBox's slots were all built
 	// from - e.g. a paragraph's wrapped lines - or nil when the slots
@@ -163,9 +163,9 @@ func (b *StackBox) PendingImages() []string {
 func (b *StackBox) BoxAt(i int) BlockLayout {
 	slot := &b.Slots[i]
 	if slot.Box == nil {
-		inner := slot.Block.GetBlockLayout(*b.Ctx, slot.Width)
+		inner := slot.Block.GetBlockLayout(*b.Context, slot.Width)
 		if slot.wrap {
-			slot.Box = NewContainerBox(inner, b.Width, inner.Bounds().Dy(), slot.leftMargin, 0)
+			slot.Box = newContainerBox(inner, b.Width, inner.Bounds().Dy(), slot.leftMargin, 0)
 		} else {
 			slot.Box = inner
 		}
@@ -206,7 +206,7 @@ func (b *StackBox) AddSpacers(top, bottom int) {
 // A miss on the matched slot (outside its bounds, or its own HitTest
 // declines - e.g. clicking past the end of a paragraph's short last
 // line) falls back to this StackBox itself when it has a Source - the
-// same fallback-to-self BlockquoteBox/TableBox already do. When it
+// same fallback-to-self BlockquoteBox/tableBox already do. When it
 // doesn't (an aggregate of unrelated blocks - see Source), it's a
 // genuine miss instead, same as before Source existed.
 func (b *StackBox) HitTest(p image.Point) (Hit, image.Point) {
@@ -354,28 +354,28 @@ func (b *EmptyBox) PendingImages() []string {
 	return nil
 }
 
-type ContainerBox struct {
+type containerBox struct {
 	bounds   image.Rectangle
 	innerPos image.Point
 	inner    BlockLayout
 }
 
-func NewContainerBox(inner BlockLayout, w, h, x, y int) *ContainerBox {
-	return &ContainerBox{
+func newContainerBox(inner BlockLayout, w, h, x, y int) *containerBox {
+	return &containerBox{
 		bounds:   image.Rect(0, 0, w, h),
 		innerPos: image.Pt(x, y),
 		inner:    inner,
 	}
 }
 
-func (b *ContainerBox) Bounds() image.Rectangle {
+func (b *containerBox) Bounds() image.Rectangle {
 	return b.bounds
 }
 
 // Source delegates to inner: a pure positioning wrapper (for
 // indentation, or cell alignment in a table) has no identity of its
 // own, but always wraps exactly one thing, unlike StackBox.
-func (b *ContainerBox) Source() Source {
+func (b *containerBox) Source() Source {
 	return b.inner.Source()
 }
 
@@ -383,7 +383,7 @@ func (b *ContainerBox) Source() Source {
 // indentation, or cell alignment in a table) - so a miss on inner (e.g.
 // content narrower than the space it was given) reports no match rather
 // than falling back to anything.
-func (b *ContainerBox) HitTest(p image.Point) (Hit, image.Point) {
+func (b *containerBox) HitTest(p image.Point) (Hit, image.Point) {
 	local := p.Sub(b.innerPos)
 	if !local.In(b.inner.Bounds()) {
 		return nil, image.Point{}
@@ -395,11 +395,11 @@ func (b *ContainerBox) HitTest(p image.Point) (Hit, image.Point) {
 	return hit, offset.Add(b.innerPos)
 }
 
-func (b *ContainerBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *containerBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y, now)
 }
 
-func (b *ContainerBox) PendingImages() []string {
+func (b *containerBox) PendingImages() []string {
 	return b.inner.PendingImages()
 }
 
@@ -451,7 +451,7 @@ func (b *BlockquoteBox) HitTest(p image.Point) (Hit, image.Point) {
 	return b, image.Point{}
 }
 
-// TableBox draws a GFM table: a frame around the whole thing, a rule
+// tableBox draws a GFM table: a frame around the whole thing, a rule
 // under the header row, a rule between each pair of columns, and each
 // cell positioned at its resolved (column, row) offset. columnOffsets/
 // rowOffsets have one more entry than there are columns/rows - the last
@@ -460,7 +460,7 @@ func (b *BlockquoteBox) HitTest(p image.Point) (Hit, image.Point) {
 // rowOffsets[1] (see TableBlock.GetBlockLayout for why that boundary is exactly
 // where the rule belongs). Each column rule is centered in the columnGap
 // between adjacent columns' content, at columnOffsets[c] - columnGap/2.
-type TableBox struct {
+type tableBox struct {
 	columnOffsets       []int
 	rowOffsets          []int
 	frameThickness      int
@@ -473,20 +473,20 @@ type TableBox struct {
 	source Block
 }
 
-var _ BlockLayout = (*TableBox)(nil)
+var _ BlockLayout = (*tableBox)(nil)
 
-func (b *TableBox) Source() Source {
+func (b *tableBox) Source() Source {
 	return b.source
 }
 
-func (b *TableBox) Bounds() image.Rectangle {
+func (b *tableBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0,
 		b.columnOffsets[len(b.columnOffsets)-1],
 		b.rowOffsets[len(b.rowOffsets)-1],
 	)
 }
 
-func (b *TableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *tableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
 	width := b.columnOffsets[len(b.columnOffsets)-1]
 	height := b.rowOffsets[len(b.rowOffsets)-1]
 
@@ -523,7 +523,7 @@ func (b *TableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) 
 // isn't one to recurse into (the frame, a gap between cells/rows) or the
 // cell itself declines (its content is narrower/shorter than the cell's
 // allotted space).
-func (b *TableBox) HitTest(p image.Point) (Hit, image.Point) {
+func (b *tableBox) HitTest(p image.Point) (Hit, image.Point) {
 	row := -1
 	for r := 0; r < len(b.rowOffsets)-1; r++ {
 		if p.Y >= b.rowOffsets[r] && p.Y < b.rowOffsets[r+1] {
@@ -547,7 +547,7 @@ func (b *TableBox) HitTest(p image.Point) (Hit, image.Point) {
 	return b, image.Point{}
 }
 
-func (b *TableBox) PendingImages() []string {
+func (b *tableBox) PendingImages() []string {
 	var pending []string
 	for _, row := range b.cells {
 		for _, cell := range row {

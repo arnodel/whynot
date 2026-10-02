@@ -56,7 +56,7 @@ func TestEmptyBoxHitTest(t *testing.T) {
 func TestContainerBoxHitTest(t *testing.T) {
 	src := &sourceBlock{node: &ast.Node{Tag: ast.TagThematicBreak}}
 	inner := &RuleBox{width: 50, thickness: 2, source: src}
-	b := NewContainerBox(inner, 100, 10, 20, 3) // inner offset by (20, 3)
+	b := newContainerBox(inner, 100, 10, 20, 3) // inner offset by (20, 3)
 
 	// Inside inner's shifted footprint.
 	hit, offset := b.HitTest(image.Pt(30, 4))
@@ -106,7 +106,7 @@ func TestTableBoxHitTest(t *testing.T) {
 	// One column [5, 45), one row [5, 25) - everything outside that
 	// range (but still within the table's own overall bounds) is frame/
 	// edge gap, not a second column with no cell.
-	b := &TableBox{
+	b := &tableBox{
 		columnOffsets: []int{5, 45},
 		rowOffsets:    []int{5, 25},
 		cells:         [][]BlockLayout{{cell}},
@@ -125,7 +125,7 @@ func TestTableBoxHitTest(t *testing.T) {
 	}
 
 	// A cell that declines (EmptyBox) falls back to the table itself.
-	bEmpty := &TableBox{
+	bEmpty := &tableBox{
 		columnOffsets: []int{5, 45},
 		rowOffsets:    []int{5, 25},
 		cells:         [][]BlockLayout{{NewEmptyBox(40, 20)}},
@@ -203,7 +203,7 @@ func TestListItemMarkerBoxHitTest(t *testing.T) {
 	}
 	markerSrc := &InlineText{Text: "•", ASTNode: &ast.Node{Tag: ast.TagListItem}}
 	markerBox := &TextBox{Text: markerSrc.Text, Face: face, source: markerSrc}
-	marker := &ListItemMarkerBox{Marker: markerBox}
+	marker := &listItemMarkerBox{Marker: markerBox}
 
 	markerBounds, advance := markerBox.BoundsAndAdvance()
 	space := markerBox.SpaceWidth()
@@ -401,7 +401,7 @@ func TestStackBoxHitTest(t *testing.T) {
 // TestStackBoxHitTestFallsBackToSelf checks that a StackBox built from
 // a single Block (e.g. a paragraph's wrapped lines) falls back to
 // itself - rather than a hard miss - when the matched slot doesn't
-// cover the point, mirroring BlockquoteBox/TableBox's own
+// cover the point, mirroring BlockquoteBox/tableBox's own
 // fallback-to-self behavior. Covers both ways a slot can fail to cover
 // a point: geometrically out of bounds, and in bounds but declining.
 func TestStackBoxHitTestFallsBackToSelf(t *testing.T) {
@@ -526,7 +526,7 @@ func TestStackBoxMoveCursor(t *testing.T) {
 }
 
 func TestImageBoxPendingImages(t *testing.T) {
-	ready := &ImageBox{Img: image.NewRGBA(image.Rect(0, 0, 1, 1)), Rect: image.Rect(0, 0, 1, 1)}
+	ready := &ImageBox{Image: image.NewRGBA(image.Rect(0, 0, 1, 1)), Rect: image.Rect(0, 0, 1, 1)}
 	if got := ready.PendingImages(); got != nil {
 		t.Errorf("ready ImageBox.PendingImages() = %v, want nil", got)
 	}
@@ -600,7 +600,7 @@ func TestImageBoxDrawInlineAnimated(t *testing.T) {
 		[]image.Image{f0, f1},
 		[]time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
 	)
-	box := &ImageBox{Anim: anim, Rect: image.Rect(0, 0, 4, 4)}
+	box := &ImageBox{Animation: anim, Rect: image.Rect(0, 0, 4, 4)}
 	dst := &canvastest.Recorder{}
 
 	box.DrawInline(dst, 0, 0, 0)
@@ -657,19 +657,19 @@ func goRegularFace(t *testing.T) font.Face {
 // TestTaskCheckboxFallsBackToCheckboxBox checks the path that actually
 // runs against the real bundled Go fonts today: they have no ☐/☑ glyphs
 // (see compile.go's own comment on why □/■ were used before TaskCheckbox
-// existed), so GetInlineLayout must fall back to CheckboxBox rather than
+// existed), so GetInlineLayout must fall back to checkboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
 	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	for _, checked := range []bool{false, true} {
 		c := &TaskCheckbox{Checked: checked, ASTNode: &ast.Node{Tag: ast.TagListItem}}
 		layout := c.GetInlineLayout(ctx, 100)
-		cb, ok := layout.(*CheckboxBox)
+		cb, ok := layout.(*checkboxBox)
 		if !ok {
-			t.Fatalf("checked=%v layout = %T, want *CheckboxBox", checked, layout)
+			t.Fatalf("checked=%v layout = %T, want *checkboxBox", checked, layout)
 		}
 		if cb.checked != checked {
-			t.Errorf("checked=%v: CheckboxBox.checked = %v", checked, cb.checked)
+			t.Errorf("checked=%v: checkboxBox.checked = %v", checked, cb.checked)
 		}
 	}
 }
@@ -764,7 +764,7 @@ func TestLineBoxListMarkerBoundsMatchDrawing(t *testing.T) {
 	face := goRegularFace(t)
 	word := &TextBox{Text: "word", Face: face}
 	line := NewLineBox([]InlineLayout{
-		&ListItemMarkerBox{Marker: &TextBox{Text: "-", Face: face}},
+		&listItemMarkerBox{Marker: &TextBox{Text: "-", Face: face}},
 		word,
 	}, false)
 	dst := &canvastest.Recorder{Area: image.Rect(-100, -100, 1000, 1000)}

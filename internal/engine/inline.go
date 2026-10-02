@@ -42,7 +42,7 @@ func (t *InlineText) GetInlineLayout(ctx Context, width int) InlineLayout {
 		Text:            t.Text,
 		Face:            face,
 		Color:           ctx.ResolvedColor(t.ASTNode),
-		StrikeThickness: int(ctx.ScaledStrikeThickness(t.ASTNode)),
+		StrikeThickness: int(ctx.scaledStrikeThickness(t.ASTNode)),
 		LineHeight:      ctx.Styles.LineHeight(t.ASTNode),
 		glued:           t.Glued,
 		source:          t,
@@ -60,7 +60,7 @@ const (
 
 // TaskCheckbox is a GFM task list item's checkbox marker (- [ ]/- [x]).
 // Resolved at layout time, not compile time: whether to draw the real
-// ballot-box glyph or a procedurally-drawn box (see CheckboxBox) depends
+// ballot-box glyph or a procedurally-drawn box (see checkboxBox) depends
 // on whether the active FaceSelector/StyleSheet's resolved font actually
 // has that glyph, which can change across a re-layout (zoom, theme, a
 // caller registering a different font) even though the semantic tree
@@ -152,16 +152,16 @@ func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
 	switch result.Status {
 	case imagecache.Ready:
 		return &ImageBox{
-			Img:    result.Image,
-			Anim:   result.Animation,
-			Rect:   FitWidth(scaleRect(result.Bounds, ctx.Scale), width),
-			glued:  i.Glued,
-			source: i,
+			Image:     result.Image,
+			Animation: result.Animation,
+			Rect:      fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
+			glued:     i.Glued,
+			source:    i,
 		}
 	case imagecache.Pending:
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
-				Rect:             FitWidth(scaleRect(result.Bounds, ctx.Scale), width),
+				Rect:             fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 				placeholderColor: ctx.Styles.BorderColor(i.ASTNode),
 				Pending:          []string{resolved},
 				glued:            i.Glued,
@@ -201,13 +201,13 @@ func scaleRect(r image.Rectangle, scale float64) image.Rectangle {
 	)}
 }
 
-// FitWidth scales r down, preserving aspect ratio, so its width never
+// fitWidth scales r down, preserving aspect ratio, so its width never
 // exceeds width - CSS's max-width: 100%, applied to an inline image.
 // width <= 0 means unbounded (e.g. TableBlock's natural-width
 // measurement pass, naturalWidthMeasure); r already fitting is the same
 // case either way, returned unchanged. Never scales up - a small image
 // stays its own size regardless of how much room is available.
-func FitWidth(r image.Rectangle, width int) image.Rectangle {
+func fitWidth(r image.Rectangle, width int) image.Rectangle {
 	if width <= 0 || r.Dx() <= width {
 		return r
 	}
