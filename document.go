@@ -28,11 +28,6 @@ type TOCEntry struct {
 	Text  string
 }
 
-// Root returns the document's Block tree, ready for GetBlockLayout.
-func (d *Document) Root() engine.Block {
-	return d.root
-}
-
 // Title returns the text of the document's first heading, at any level,
 // or ok=false if it has none.
 //

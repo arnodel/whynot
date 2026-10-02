@@ -229,19 +229,21 @@ func (v *View) Draw(dst canvas.Canvas, x, y int) {
 	v.stack.Box.DrawFrom(dst, v.stack.Cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
 }
 
-// HitTest identifies what's at document position (x, y) - the same
-// coordinate space Draw's (x, y) places content's origin into. hit is
-// nil if (x, y) doesn't land on any content - past the end of the
-// document, or in a margin/gap. Otherwise offset is where hit.Bounds()
-// should be placed to get its absolute position in that same space,
-// e.g. for drawing an outline around it.
+// HitTest returns the rectangle of the content at (x, y), e.g. for
+// drawing an outline around it. Both are in the coordinate space Draw's
+// (x, y) places content's origin into. ok is false if (x, y) doesn't
+// land on any content: past the end of the document, or in a margin or
+// gap.
 //
 // Known imprecision: a position above the very start of the document
 // resolves as if it landed on the first slot rather than missing. Callers
 // only ever pass points within their own rendered viewport.
-func (v *View) HitTest(x, y int) (hit engine.Hit, offset image.Point) {
-	hit, offset, _ = v.hitTest(x, y)
-	return hit, offset
+func (v *View) HitTest(x, y int) (r image.Rectangle, ok bool) {
+	hit, offset, _ := v.hitTest(x, y)
+	if hit == nil {
+		return image.Rectangle{}, false
+	}
+	return hit.Bounds().Add(offset), true
 }
 
 // hitTest is HitTest's real implementation, additionally reporting
@@ -337,10 +339,11 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 }
 
 // Layout sets the pixel width and display scale to render at (DPI = scale
-// * 72), and now - elapsed time since rendering started, the embedder's
-// own reference point (see engine.Context.Time), stored on every call
-// since animated images need fresh time to animate. Cheap to call every
-// frame: the layout is only rebuilt when width or scale change.
+// * 72), and now: elapsed time since rendering started, from whatever
+// reference point the embedder chooses, as long as it's the same one on
+// every call. now is stored on every call, since animated images need
+// fresh time to animate. Cheap to call every frame: the layout is only
+// rebuilt when width or scale change.
 //
 // height is the viewport's height - not used for wrapping, only to know
 // where the visible area ends when laying out and prefetching ahead.
