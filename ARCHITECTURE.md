@@ -23,7 +23,9 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
-| `chromahighlight/` | implements `whynot.Highlighter` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
+| `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`; implementations in subpackages |
+| `codeblocks/chromahighlight/` | a `codeblocks.Plugin` producing `Tokens` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
+| `codeblocks/kroki/` | a `codeblocks.Plugin` producing an `Image`: renders Mermaid fences as images through a Kroki server |
 | `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
 | `cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
 | `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |

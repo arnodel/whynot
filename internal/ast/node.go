@@ -33,16 +33,12 @@ const (
 	TagImage
 	TagUnsupported
 
-	// TagCodeKeyword..TagCodeFunction classify a syntax-highlighted code
-	// token - see Highlighter. Appended after TagUnsupported deliberately:
-	// headingTag() relies on TagHeading1..TagHeading6 staying consecutive,
-	// so nothing may be inserted before them.
-	TagCodeKeyword
-	TagCodeString
-	TagCodeNumber
-	TagCodeComment
-	TagCodeType
-	TagCodeFunction
+	// TagCodeToken is a classified token in a code block, its kind given
+	// by the node's Class (see codeblocks.Span). Appended after
+	// TagUnsupported deliberately: headingTag() relies on
+	// TagHeading1..TagHeading6 staying consecutive, so nothing may be
+	// inserted before them.
+	TagCodeToken
 )
 
 // Path is a tag ancestry, root-to-leaf.
@@ -63,6 +59,11 @@ type Node struct {
 	// "my-heading" for "## My Heading") - what a link's URL fragment
 	// (the part after '#') targets. Empty for every non-heading tag.
 	ID string
+
+	// Class refines Tag for styling, like an HTML class: for a
+	// TagCodeToken, the kind of token ("keyword", "string", ...). Empty
+	// when there's none.
+	Class string
 
 	path Path // memoized on first Path() call
 }

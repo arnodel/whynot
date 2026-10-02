@@ -15,7 +15,7 @@ import (
 // resolves, and fallback's own layout - typically the same CodeBlock
 // that would've rendered without a plugin - while it's still pending or
 // failed, so a diagram's raw source stays visible rather than a bare
-// placeholder message. See CodeBlockPlugin.
+// placeholder message. See codeblocks.Plugin.
 func NewDiagramBlock(node *ast.Node, img images.AsyncImage, fallback Block) Block {
 	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Image: img, Fallback: fallback}
 }

@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/arnodel/whynot/codeblocks"
 )
 
-func TestRendererCanHandle(t *testing.T) {
+func TestRendererHandles(t *testing.T) {
 	r := Renderer{}
-	if !r.CanHandle("mermaid") {
-		t.Error(`CanHandle("mermaid") = false, want true`)
+	if !r.Handles("mermaid") {
+		t.Error(`Handles("mermaid") = false, want true`)
 	}
-	if r.CanHandle("go") {
-		t.Error(`CanHandle("go") = true, want false`)
+	if r.Handles("go") {
+		t.Error(`Handles("go") = true, want false`)
 	}
 }
 
@@ -23,12 +25,12 @@ func TestRendererCanHandle(t *testing.T) {
 // relies on this to tell distinct diagrams apart.
 func TestDiagramImageKeyDistinguishesCodeAndType(t *testing.T) {
 	r := Renderer{}
-	a := r.Image("mermaid", "graph TD; A-->B;")
-	b := r.Image("mermaid", "graph TD; A-->C;")
+	a := r.image("mermaid", "graph TD; A-->B;")
+	b := r.image("mermaid", "graph TD; A-->C;")
 	if a.Key == b.Key {
 		t.Errorf("Key for different source text matched: %q", a.Key)
 	}
-	if a.Key != r.Image("mermaid", "graph TD; A-->B;").Key {
+	if a.Key != r.image("mermaid", "graph TD; A-->B;").Key {
 		t.Error("Key differed for identical (language, code) - want a stable cache key")
 	}
 }
@@ -55,7 +57,7 @@ func TestDiagramImageFetchPostsExpectedRequest(t *testing.T) {
 	defer server.Close()
 
 	r := Renderer{BaseURL: server.URL}
-	img := r.Image("mermaid", "graph TD; A-->B;")
+	img := r.image("mermaid", "graph TD; A-->B;")
 	rc, err := img.Fetch()
 	if err != nil {
 		t.Fatalf("Fetch() = _, %v, want nil error", err)
@@ -93,8 +95,20 @@ func TestDiagramImageFetchNonOKStatus(t *testing.T) {
 	defer server.Close()
 
 	r := Renderer{BaseURL: server.URL}
-	img := r.Image("mermaid", "not valid mermaid")
+	img := r.image("mermaid", "not valid mermaid")
 	if _, err := img.Fetch(); err == nil {
 		t.Error("Fetch() with a 400 response = nil error, want one")
+	}
+}
+
+// TestRendererParseIsImage checks Parse wraps the diagram as an Image.
+func TestRendererParseIsImage(t *testing.T) {
+	r := Renderer{}
+	content, ok := r.Parse("mermaid", "graph TD; A-->B;").(codeblocks.Image)
+	if !ok {
+		t.Fatalf("Parse = %T, want codeblocks.Image", r.Parse("mermaid", "graph TD; A-->B;"))
+	}
+	if want := r.image("mermaid", "graph TD; A-->B;").Key; content.Key != want {
+		t.Errorf("Key = %q, want %q", content.Key, want)
 	}
 }

@@ -112,16 +112,8 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block 
 		}
 
 		language, _ := cb.Language(c.source)
-		lines := c.codeBlockLines(astNode, language, rawLines)
-		if plugin := c.pluginFor(language); plugin != nil {
-			// rawLines already carry their own trailing newlines (see
-			// highlightLines' identical join) - joining with "" avoids
-			// doubling them up.
-			code := strings.Join(rawLines, "")
-			fallback := &engine.CodeBlock{Lines: lines, ASTNode: astNode}
-			return &engine.MarginBlock{Block: engine.NewDiagramBlock(astNode, plugin.Image(language, code), fallback), MarginNode: astNode}
-		}
-		return &engine.MarginBlock{Block: &engine.CodeBlock{Lines: lines, ASTNode: astNode}, MarginNode: astNode}
+		block := c.codeBlock(astNode, language, rawLines, c.pluginsFor(language))
+		return &engine.MarginBlock{Block: block, MarginNode: astNode}
 	case gmast.KindThematicBreak:
 		astNode := parent.AddChild(ast.TagThematicBreak)
 		return &engine.MarginBlock{
