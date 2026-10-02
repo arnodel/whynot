@@ -16,8 +16,8 @@ import (
 
 // Dimensions of a ScrollBox's edge fades, in logical (unscaled) pixels.
 const (
-	HScrollFadeWidth = 24
-	hscrollFadeSteps = 8
+	scrollFadeWidth = 24
+	scrollFadeSteps = 8
 )
 
 // ScrollBox shows a window, width wide, onto content that's wider,
@@ -114,11 +114,11 @@ func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration)
 // the page background, with stepped transparency.
 func (b *ScrollBox) drawFades(dst canvas.Canvas, box image.Rectangle, offset int) {
 	r, g, bl, _ := b.background.RGBA()
-	width := int(HScrollFadeWidth * b.scale)
-	step := max(1, width/hscrollFadeSteps)
-	for i := range hscrollFadeSteps {
+	width := int(scrollFadeWidth * b.scale)
+	step := max(1, width/scrollFadeSteps)
+	for i := range scrollFadeSteps {
 		// Opaque-ish at the edge, fading toward the content.
-		alpha := uint8(255 * (hscrollFadeSteps - i) / (hscrollFadeSteps + 1))
+		alpha := uint8(255 * (scrollFadeSteps - i) / (scrollFadeSteps + 1))
 		c := color.NRGBA{uint8(r >> 8), uint8(g >> 8), uint8(bl >> 8), alpha}
 		if offset > 0 {
 			dst.DrawRect(box.Min.X+i*step, box.Min.Y, step, box.Dy(), c)

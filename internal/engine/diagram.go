@@ -17,11 +17,11 @@ import (
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See CodeBlockPlugin.
 func NewDiagramBlock(node *ast.Node, img images.AsyncImage, fallback Block) Block {
-	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Img: img, Fallback: fallback}
+	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Image: img, Fallback: fallback}
 }
 
 type DiagramBlock struct {
-	WithoutMargins
+	withoutMargins
 	node *ast.Node
 	// imageNode is a ast.TagImage child of node, precomputed once here
 	// rather than on demand inside GetBlockLayout (which can run many
@@ -30,7 +30,7 @@ type DiagramBlock struct {
 	// Its only job is giving the ready image's frame a StyleSheet.
 	// BorderColor to resolve (ast.TagCodeBlock, node's own tag, has none).
 	imageNode *ast.Node
-	Img       images.AsyncImage
+	Image     images.AsyncImage
 	Fallback  Block
 }
 
@@ -44,7 +44,7 @@ func (b *DiagramBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	if ctx.ImageCache == nil {
 		return b.Fallback.GetBlockLayout(ctx, width)
 	}
-	result := ctx.ImageCache.LoadImage(b.Img)
+	result := ctx.ImageCache.LoadImage(b.Image)
 	if result.Status != imagecache.Ready {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
@@ -52,16 +52,16 @@ func (b *DiagramBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
 		// later Pending/Ready, per imagecache.Cache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
-		return &diagramBox{inner: b.Fallback.GetBlockLayout(ctx, width), pendingKey: b.Img.Key}
+		return &diagramBox{inner: b.Fallback.GetBlockLayout(ctx, width), pendingKey: b.Image.Key}
 	}
 
-	frameThickness := int(ctx.ScaledThematicBreakThickness(b.imageNode))
+	frameThickness := int(ctx.scaledThematicBreakThickness(b.imageNode))
 	inset := frameThickness + int(ctx.Styles.DiagramPadding(b.imageNode)*ctx.Scale)
 	availableWidth := width - 2*inset
 	if availableWidth < 0 {
 		availableWidth = 0
 	}
-	imgBounds := FitWidth(scaleRect(result.Bounds, ctx.Scale), availableWidth)
+	imgBounds := fitWidth(scaleRect(result.Bounds, ctx.Scale), availableWidth)
 	return &diagramBox{inner: &imageLayout{
 		img:            result.Image,
 		anim:           result.Animation,
@@ -113,7 +113,7 @@ func (b *diagramBox) PendingImages() []string {
 // for a diagramBox's ready state - a resolved diagram just draws like
 // any other image once decoded, except for one deliberate difference:
 // it always draws on an opaque white backdrop, framed the same way
-// TableBox's own border is (frameThickness/frameColor, both from
+// tableBox's own border is (frameThickness/frameColor, both from
 // ctx.Styles). A rendered diagram's own colors (arrow strokes, thin
 // lines, text) are chosen by whatever tool produced it assuming a light
 // backdrop, and Kroki's own output is transparent where nothing is

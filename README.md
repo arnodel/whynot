@@ -468,8 +468,8 @@ by implementation order now that most of the list is done.
 - [x] Ordered and unordered lists, tight or loose, nested to any depth, including task
       lists (`- [ ]`)
 - [x] Tables (GFM), including column alignment and negotiated column widths - needed a
-      genuine 2D layout primitive (`TableBox`, row height = max of that row's cells),
-      not an extension of the existing 1D `StackBox`/`ContainerBox`
+      genuine 2D layout primitive (`tableBox`, row height = max of that row's cells),
+      not an extension of the existing 1D `StackBox`/`containerBox`
 - [ ] Footnotes, definition lists - goldmark extensions for both exist but aren't
       enabled, so the syntax (`[^1]`, term/`: definition`) isn't recognized at all yet,
       rendering as plain literal text

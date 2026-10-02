@@ -112,14 +112,14 @@ func TestScrollBoxHitTestFollowsOffset(t *testing.T) {
 
 func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	fadeWidth := engine.HScrollFadeWidth // scale 1
 	fadesAt := func(dst *canvastest.Recorder) (left, right bool) {
 		for _, r := range dst.Rects {
 			if r.H != area.Box.Dy() {
 				continue
 			}
 			left = left || r.X == area.Box.Min.X
-			right = right || r.X+r.W == area.Box.Max.X && r.X >= area.Box.Max.X-fadeWidth
+			// A fade strip ends at the box's edge and is much narrower than it.
+			right = right || r.X+r.W == area.Box.Max.X && r.W < area.Box.Dx()/2
 		}
 		return left, right
 	}
