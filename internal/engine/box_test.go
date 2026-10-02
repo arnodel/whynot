@@ -460,7 +460,7 @@ func TestStackBoxNormalizeCursor(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := stack.normalizeCursor(tc.c)
+		got := stack.NormalizeCursor(tc.c)
 		if got != tc.want {
 			t.Errorf("normalizeCursor(%+v) = %+v, want %+v", tc.c, got, tc.want)
 		}
@@ -469,7 +469,7 @@ func TestStackBoxNormalizeCursor(t *testing.T) {
 
 func TestStackBoxNormalizeCursorEmpty(t *testing.T) {
 	stack := &StackBox{}
-	got := stack.normalizeCursor(StackCursor{0, 5})
+	got := stack.NormalizeCursor(StackCursor{0, 5})
 	if got != (StackCursor{0, 0}) {
 		t.Errorf("normalizeCursor on an empty StackBox = %+v, want {0, 0}", got)
 	}
@@ -489,7 +489,7 @@ func TestStackBoxNormalizeCursorIdempotent(t *testing.T) {
 		h := stack.BoxAt(index).Bounds().Dy()
 		for offset := 0; offset < h; offset++ {
 			c := StackCursor{Index: index, Offset: float64(offset)}
-			got := stack.normalizeCursor(c)
+			got := stack.NormalizeCursor(c)
 			if got != c {
 				t.Errorf("normalizeCursor(%+v) (already canonical) = %+v, want unchanged", c, got)
 			}
@@ -518,7 +518,7 @@ func TestStackBoxMoveCursor(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := stack.moveCursor(tc.c, tc.dy)
+		got := stack.MoveCursor(tc.c, tc.dy)
 		if got != tc.want {
 			t.Errorf("moveCursor(%+v, %v) = %+v, want %+v", tc.c, tc.dy, got, tc.want)
 		}
