@@ -109,7 +109,7 @@ func (in *Interaction) TouchStart(cx, cy int, now time.Time) {
 	case !p.In(in.Bounds):
 		in.touchAxis = touchNone
 	case in.hscroll() != nil:
-		if a, ok := in.hscroll().AreaAt(p.Sub(in.Bounds.Min)); ok {
+		if a, ok := in.hscroll().areaAt(p.Sub(in.Bounds.Min)); ok {
 			in.touchTarget = a.Source
 			in.touchAxis = touchUndecided
 			return
@@ -158,7 +158,7 @@ func (in *Interaction) TouchDrag(dx, dy int, now time.Time) {
 // was on mustn't stay hovered - a link highlighted - after it lifts.
 func (in *Interaction) TouchEnd() {
 	if s := in.hscroll(); s != nil && in.touchAxis == touchHorizontal {
-		s.Reveal(in.touchTarget, in.View.ctx.Time)
+		s.reveal(in.touchTarget, in.View.ctx.Time)
 	}
 	in.touching = false
 	in.touchAxis = touchNone
@@ -178,16 +178,16 @@ func abs(n int) int {
 	return n
 }
 
-func (in *Interaction) hscroll() *engine.HScrollState {
-	return in.View.ctx.HScroll
+func (in *Interaction) hscroll() *hscrollState {
+	return in.View.hscroll
 }
 
 // scrollTarget scrolls the sideways-scrolling block target by dx, showing
 // its scrollbar (there's no hover on touch).
 func (in *Interaction) scrollTarget(target engine.Block, dx float64) {
 	if s := in.hscroll(); s != nil && target != nil {
-		s.ScrollSource(target, dx)
-		s.Reveal(target, in.View.ctx.Time)
+		s.scrollSource(target, dx)
+		s.reveal(target, in.View.ctx.Time)
 	}
 }
 
@@ -221,7 +221,7 @@ func (in *Interaction) Moving() bool {
 // requesting frames while it's true, or the animation stops dead.
 func (in *Interaction) Animating() bool {
 	s := in.hscroll()
-	return in.Moving() || s != nil && s.Animating(in.View.ctx.Time)
+	return in.Moving() || s != nil && s.animating(in.View.ctx.Time)
 }
 
 func fastEnough(v float64) bool {
@@ -278,7 +278,7 @@ func (in *Interaction) HoverAndClick(cx, cy int, justPressed bool) {
 			// TouchDrag), not for being under the finger.
 			dest, hasLink = in.View.hoverLink(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
 			if s := in.hscroll(); s != nil {
-				s.Unhover()
+				s.unhover()
 			}
 		} else {
 			dest, hasLink = in.View.Hover(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
@@ -323,21 +323,21 @@ func (in *Interaction) ScrollHorizontal(cx, cy int, dx float64) {
 // whether the pointer is pressed; justPressed whether it was pressed
 // this frame.
 func (in *Interaction) DragHorizontalScrollbar(cx, cy int, down, justPressed bool) bool {
-	s := in.View.ctx.HScroll
+	s := in.View.hscroll
 	if s == nil {
 		return false
 	}
 	p := image.Pt(cx-in.Bounds.Min.X, cy-in.Bounds.Min.Y)
 	switch {
-	case s.Dragging != nil && !down:
-		s.EndDrag(in.View.ctx.Time)
-		s.Hover(p, in.View.ctx.Time)
+	case s.dragging != nil && !down:
+		s.endDrag(in.View.ctx.Time)
+		s.hover(p, in.View.ctx.Time)
 		return true
-	case s.Dragging != nil:
-		s.DragTo(p.X)
+	case s.dragging != nil:
+		s.dragTo(p.X)
 		return true
 	case justPressed && image.Pt(cx, cy).In(in.Bounds):
-		return s.BeginDrag(p)
+		return s.beginDrag(p)
 	}
 	return false
 }

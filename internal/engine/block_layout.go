@@ -173,8 +173,8 @@ func (b *StackBox) BoxAt(i int) BlockLayout {
 	return slot.Box
 }
 
-// invalidate discards slot i's layout; boxAt rebuilds it when next needed.
-func (b *StackBox) invalidate(i int) {
+// Invalidate discards slot i's layout; boxAt rebuilds it when next needed.
+func (b *StackBox) Invalidate(i int) {
 	if i < 0 || i >= len(b.Slots) {
 		return
 	}
@@ -243,17 +243,17 @@ type StackCursor struct {
 	Offset float64
 }
 
-// normalizeCursor adjusts c so that 0 <= offset < boxAt(index)'s height,
+// NormalizeCursor adjusts c so that 0 <= offset < boxAt(index)'s height,
 // walking to neighboring slots as needed rather than scanning from the
 // start: only the slots actually walked over are touched (via boxAt), so
 // cost is proportional to how far a position moved, not to how far into
 // the document it already was.
 //
-// Past the very end of the document, normalizeCursor clamps to (lastIndex,
+// Past the very end of the document, NormalizeCursor clamps to (lastIndex,
 // height(lastIndex)) - offset equal to the height, not less than it -
-// rather than reporting an ever-growing out-of-range offset. normalizeCursor
+// rather than reporting an ever-growing out-of-range offset. NormalizeCursor
 // is idempotent everywhere except exactly that clamped value.
-func (b *StackBox) normalizeCursor(c StackCursor) StackCursor {
+func (b *StackBox) NormalizeCursor(c StackCursor) StackCursor {
 	if len(b.Slots) == 0 {
 		return StackCursor{}
 	}
@@ -285,15 +285,15 @@ func (b *StackBox) normalizeCursor(c StackCursor) StackCursor {
 	}
 }
 
-// moveCursor returns c shifted by dy (in the offset's own sign convention:
+// MoveCursor returns c shifted by dy (in the offset's own sign convention:
 // positive moves forward through the document) and normalized, for callers
 // that have a cursor already and want to move it rather than construct a
 // new one from scratch - e.g. View.Scroll. Layout's resize re-anchoring
 // isn't a move like this (offset is recomputed from a ratio through a
 // slot's new height, not shifted from its old value), so it calls
 // normalizeCursor directly instead.
-func (b *StackBox) moveCursor(c StackCursor, dy float64) StackCursor {
-	return b.normalizeCursor(StackCursor{Index: c.Index, Offset: c.Offset + dy})
+func (b *StackBox) MoveCursor(c StackCursor, dy float64) StackCursor {
+	return b.NormalizeCursor(StackCursor{Index: c.Index, Offset: c.Offset + dy})
 }
 
 func (b *StackBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {

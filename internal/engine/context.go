@@ -33,7 +33,7 @@ type Context struct {
 
 	// HScroll is the View's horizontal scrolling state, shared with the
 	// ScrollBoxes laid out under this context; nil outside a View.
-	HScroll *HScrollState
+	HScroll HScroller
 
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never

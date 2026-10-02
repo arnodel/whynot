@@ -27,8 +27,12 @@ type View struct {
 	doc *Document
 	ctx engine.Context
 
+	// hscroll is the sideways scrolling state of the View's code blocks
+	// and tables; ctx.HScroll is this same value, for drawing them.
+	hscroll *hscrollState
+
 	// stack is the laid-out document and the scroll position within it.
-	stack engine.DocumentStack
+	stack documentStack
 
 	// width and scale are what stack was last laid out at.
 	width int
@@ -63,14 +67,16 @@ func WithImageSource(s images.Source) ViewOption {
 // in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
 // once Layout has been called to establish a width.
 func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
+	hscroll := newHScrollState()
 	v := &View{
 		doc: doc,
 		ctx: engine.Context{
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
-			HScroll:      engine.NewHScrollState(),
+			HScroll:      hscroll,
 		},
+		hscroll: hscroll,
 	}
 	for _, opt := range opts {
 		opt(v)
@@ -89,11 +95,11 @@ func (v *View) Document() *Document {
 // position, or nothing has been laid out yet. Only reads each slot's
 // Block, never laying anything out.
 func (v *View) CurrentHeadingID() (id string, ok bool) {
-	if !v.stack.LaidOut() {
+	if !v.stack.laidOut() {
 		return "", false
 	}
-	for i := min(v.stack.Cursor.Index, v.stack.Len()-1); i >= 0; i-- {
-		if n := nodeOf(v.stack.BlockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
+	for i := min(v.stack.cursor.Index, v.stack.len()-1); i >= 0; i-- {
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.Tag >= ast.TagHeading1 && n.Tag <= ast.TagHeading6 {
 			return n.ID, true
 		}
 	}
@@ -114,8 +120,8 @@ func nodeOf(block engine.Block) *ast.Node {
 // ebiten.Wheel()'s dy passed straight through, so callers don't need to
 // negate it.
 func (v *View) Scroll(dy float64) {
-	if v.stack.LaidOut() {
-		v.stack.Scroll(-dy)
+	if v.stack.laidOut() {
+		v.stack.scroll(-dy)
 	}
 }
 
@@ -127,13 +133,13 @@ type ScrollPosition struct {
 
 // ScrollPosition captures the View's current scroll position.
 func (v *View) ScrollPosition() ScrollPosition {
-	return ScrollPosition{cursor: v.stack.Cursor}
+	return ScrollPosition{cursor: v.stack.cursor}
 }
 
 // RestoreScrollPosition restores a position captured earlier by
 // ScrollPosition - only meaningful on the same View it was taken from.
 func (v *View) RestoreScrollPosition(p ScrollPosition) {
-	v.stack.Cursor = p.cursor
+	v.stack.cursor = p.cursor
 }
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id
@@ -146,12 +152,12 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 // blockquote or list won't be. Only reads each slot's Block, never laying
 // anything out beyond the target.
 func (v *View) ScrollToAnchor(id string) bool {
-	if !v.stack.LaidOut() {
+	if !v.stack.laidOut() {
 		return false
 	}
-	for i := range v.stack.Len() {
-		if n := nodeOf(v.stack.BlockAt(i)); n != nil && n.ID == id {
-			v.stack.ScrollToSlot(i)
+	for i := range v.stack.len() {
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id {
+			v.stack.scrollToSlot(i)
 			return true
 		}
 	}
@@ -165,8 +171,8 @@ func (v *View) ScrollToAnchor(id string) bool {
 // from the live estimate every call, so a jump into not-yet-laid-out
 // territory corrects toward whatever ratio the caller asks for next.
 func (v *View) ScrollToRatio(ratio float64) {
-	if v.stack.LaidOut() {
-		v.stack.ScrollToRatio(ratio)
+	if v.stack.laidOut() {
+		v.stack.scrollToRatio(ratio)
 	}
 }
 
@@ -190,20 +196,20 @@ func (v *View) ScrollbarColor(hover, pressed bool) color.Color {
 // caller scales the ratio between this and VisibleViewBounds to build its
 // own scrollbar.
 func (v *View) DocumentBounds() image.Rectangle {
-	if !v.stack.LaidOut() {
+	if !v.stack.laidOut() {
 		return image.Rectangle{}
 	}
-	return image.Rect(0, 0, v.width, int(v.stack.TotalHeight()))
+	return image.Rect(0, 0, v.width, int(v.stack.totalHeight()))
 }
 
 // VisibleViewBounds returns the sub-rectangle of DocumentBounds
 // currently visible for a viewport of viewportSize (the same size
 // passed to Draw's dst).
 func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
-	if !v.stack.LaidOut() || v.stack.Cursor.Index >= v.stack.Len() {
+	if !v.stack.laidOut() || v.stack.cursor.Index >= v.stack.len() {
 		return image.Rectangle{}
 	}
-	top, bottom := v.stack.VisibleRange(viewportSize.Y)
+	top, bottom := v.stack.visibleRange(viewportSize.Y)
 	return image.Rect(0, int(top), viewportSize.X, int(bottom))
 }
 
@@ -218,15 +224,15 @@ func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
 func (v *View) Draw(dst canvas.Canvas, x, y int) {
 	bounds := dst.Bounds()
 	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.Styles.BackgroundColor())
-	if !v.stack.LaidOut() {
+	if !v.stack.laidOut() {
 		return
 	}
-	if v.ctx.HScroll != nil {
-		v.ctx.HScroll.BeginFrame(image.Pt(x, y))
+	if v.hscroll != nil {
+		v.hscroll.beginFrame(image.Pt(x, y))
 	}
 	// The top/bottom ViewMargins are spacer slots in the stack (see
 	// rebuild); only Left needs applying here.
-	v.stack.Box.DrawFrom(dst, v.stack.Cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
+	v.stack.box.DrawFrom(dst, v.stack.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
 }
 
 // HitTest returns the rectangle of the content at (x, y), e.g. for
@@ -250,15 +256,15 @@ func (v *View) HitTest(x, y int) (r image.Rectangle, ok bool) {
 // which top-level slot y resolved to (meaningful only when hit is
 // non-nil).
 func (v *View) hitTest(x, y int) (hit engine.Hit, offset image.Point, slot int) {
-	if !v.stack.LaidOut() {
+	if !v.stack.laidOut() {
 		return nil, image.Point{}, 0
 	}
 	left := int(v.ctx.ScaledViewMargins().Left)
-	c := v.stack.At(y)
-	if c.Index < 0 || c.Index >= v.stack.Len() {
+	c := v.stack.at(y)
+	if c.Index < 0 || c.Index >= v.stack.len() {
 		return nil, image.Point{}, 0
 	}
-	box := v.stack.Box.BoxAt(c.Index)
+	box := v.stack.box.BoxAt(c.Index)
 	local := image.Pt(x-left, int(c.Offset))
 	if !local.In(box.Bounds()) {
 		return nil, image.Point{}, c.Index
@@ -292,8 +298,8 @@ func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 // Hover also reports the link under (x, y), same as LinkAt, so a caller
 // handling a click at the same position doesn't need a second HitTest.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
-	if v.ctx.HScroll != nil {
-		v.ctx.HScroll.Hover(image.Pt(x, y), v.ctx.Time)
+	if v.hscroll != nil {
+		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
 	return v.hoverLink(x, y)
 }
@@ -302,12 +308,12 @@ func (v *View) Hover(x, y int) (destination string, ok bool) {
 func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
 	if node != v.ctx.HighlightNode {
-		if v.ctx.HighlightNode != nil && v.stack.LaidOut() {
-			v.stack.Invalidate(v.highlightSlot)
+		if v.ctx.HighlightNode != nil && v.stack.laidOut() {
+			v.stack.invalidate(v.highlightSlot)
 		}
 		v.ctx.HighlightNode = node
 		if node != nil {
-			v.stack.Invalidate(slot)
+			v.stack.invalidate(slot)
 		}
 	}
 	if node == nil {
@@ -323,7 +329,7 @@ func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 // start, matching Scroll's convention for dy. Reports whether there was
 // such a block. Works from what the last Draw drew.
 func (v *View) ScrollHorizontal(x, y int, dx float64) bool {
-	return v.ctx.HScroll != nil && v.ctx.HScroll.ScrollAt(image.Pt(x, y), dx, v.ctx.Time)
+	return v.hscroll != nil && v.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time)
 }
 
 // LinkAt reports the destination URL of the link at document position
@@ -358,7 +364,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 		v.scale = scale
 		v.rebuild()
 	}
-	v.stack.PreLayout(height)
+	v.stack.preLayout(height)
 	v.prefetchImageSources(height)
 }
 
@@ -367,7 +373,7 @@ func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 // imagecache.Cache) and need picking up. Only slots waiting on an image that
 // changed are invalidated.
 func (v *View) invalidateChangedImages() {
-	if !v.stack.LaidOut() || v.ctx.ImageCache == nil {
+	if !v.stack.laidOut() || v.ctx.ImageCache == nil {
 		return
 	}
 	changes, mark := v.ctx.ImageCache.ChangedSince(v.imageCacheMark)
@@ -379,7 +385,7 @@ func (v *View) invalidateChangedImages() {
 	for _, c := range changes {
 		changed[c.Src] = true
 	}
-	v.stack.InvalidateWhere(func(box engine.BlockLayout) bool {
+	v.stack.invalidateWhere(func(box engine.BlockLayout) bool {
 		for _, src := range box.PendingImages() {
 			if changed[src] {
 				return true
@@ -400,10 +406,10 @@ const prefetchImageSourceHeightRadius = 20000
 // scrolls into view. An image mixed into running text is loaded when its
 // slot is laid out.
 func (v *View) prefetchImageSources(viewportHeight int) {
-	if !v.stack.LaidOut() || v.ctx.ImageCache == nil {
+	if !v.stack.laidOut() || v.ctx.ImageCache == nil {
 		return
 	}
-	v.stack.ForEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block engine.Block) {
+	v.stack.forEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block engine.Block) {
 		if src, ok := v.doc.soleImages[block]; ok {
 			v.ctx.ImageCache.Load(src)
 		}
@@ -416,7 +422,7 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 // nothing has been laid out yet, the first Layout call picks s up.
 func (v *View) SetStyleSheet(s StyleSheet) {
 	v.ctx.Styles = s.Styles()
-	if v.stack.LaidOut() {
+	if v.stack.laidOut() {
 		v.rebuild()
 	}
 }
@@ -433,5 +439,5 @@ func (v *View) rebuild() {
 	contentWidth := max(0, v.width-int(margin.Left)-int(margin.Right))
 	box := v.doc.root.StackLayout(&v.ctx, contentWidth)
 	box.AddSpacers(int(margin.Top), int(margin.Bottom))
-	v.stack.SetBox(box)
+	v.stack.setBox(box)
 }
