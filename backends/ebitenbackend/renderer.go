@@ -1,8 +1,4 @@
-// Package ebitenrenderer implements canvas.Canvas on top of ebiten. It's
-// the only place in the module outside cmd/whynot that depends on ebiten -
-// the core whynot package (parsing, layout, and the Canvas interface
-// itself) has no rendering backend dependency at all.
-package ebitenrenderer
+package ebitenbackend
 
 import (
 	"image"

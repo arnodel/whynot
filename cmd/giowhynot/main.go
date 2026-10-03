@@ -1,7 +1,7 @@
 // Command giowhynot is cmd/whynot's Gio (gioui.org) counterpart: the
 // same browser.App - navigation history, theme, zoom, document/image
 // loading, welcome page - drawn with giorenderer instead of
-// ebitenrenderer, with Gio's own scrollbar and a Gio-native toolbar (see
+// ebitenbackend, with Gio's own scrollbar and a Gio-native toolbar (see
 // toolbar.go).
 package main
 

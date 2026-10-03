@@ -61,7 +61,7 @@ func New() *Renderer {
 
 // NewCanvas returns a Canvas that records drawing operations into ops,
 // clipped to bounds - Gio has no sub-image concept to derive them from,
-// unlike ebitenrenderer's ebiten.Image.SubImage. Shares this Renderer's
+// unlike ebitenbackend's ebiten.Image.SubImage. Shares this Renderer's
 // caches with every other Canvas it creates.
 func (r *Renderer) NewCanvas(ops *op.Ops, bounds image.Rectangle) *Canvas {
 	return &Canvas{ops: ops, bounds: bounds, renderer: r}

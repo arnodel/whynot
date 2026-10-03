@@ -10,7 +10,7 @@ import (
 // at startup (see the icon vars below), not per frame. Returns a plain
 // image.Image, not a backend-specific type: each renderer backend
 // already has its own way to upload/tint an image (e.g.
-// ebitenrenderer's own DrawImageOptions.ColorScale, or a Gio app's own
+// ebitenbackend's own DrawImageOptions.ColorScale, or a Gio app's own
 // paint ops), so this package stays backend-agnostic.
 func decodeIcon(name string) image.Image {
 	data, err := assetsFS.ReadFile("assets/icons/" + name)

@@ -19,7 +19,7 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -40,7 +40,7 @@ func exampleDoc() string {
 
 type game struct {
 	view     *whynot.View
-	renderer *ebitenrenderer.Renderer
+	renderer *ebitenbackend.Renderer
 	start    time.Time
 }
 
@@ -86,7 +86,7 @@ func main() {
 
 	g := &game{
 		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), buildFaceSelector(*fontPath), simpletheme.DarkStyleSheet),
-		renderer: ebitenrenderer.New(),
+		renderer: ebitenbackend.New(),
 		start:    time.Now(),
 	}
 	ebiten.SetWindowSize(800, 600)
