@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"image"
@@ -12,7 +12,6 @@ import (
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
-	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -78,8 +77,8 @@ func stringsEqual(a, b []string) bool {
 }
 
 func TestParseParagraph(t *testing.T) {
-	doc := Parse([]byte("Hello there world"))
-	stack := doc.root
+	doc := parse([]byte("Hello there world"))
+	stack := doc.Root
 	if len(stack.Blocks) != 1 {
 		t.Fatalf("Parse result = %#v, want a single-block StackBlock", doc)
 	}
@@ -95,8 +94,8 @@ func TestParseParagraph(t *testing.T) {
 }
 
 func TestParseHeading(t *testing.T) {
-	doc := Parse([]byte("### Level three"))
-	stack := doc.root
+	doc := parse([]byte("### Level three"))
+	stack := doc.Root
 	heading, ok := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *TextBlock", stack.Blocks[0])
@@ -125,8 +124,8 @@ func TestParseTightList(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := Parse([]byte(tc.source))
-			stack := doc.root
+			doc := parse([]byte(tc.source))
+			stack := doc.Root
 			list, ok := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 			if !ok || len(list.Blocks) != len(tc.want) {
 				t.Fatalf("list = %#v, want a %d-item StackBlock", stack.Blocks[0], len(tc.want))
@@ -143,8 +142,8 @@ func TestParseTightList(t *testing.T) {
 }
 
 func TestParseTaskList(t *testing.T) {
-	doc := Parse([]byte("- [ ] todo item\n- [x] done item\n- plain item"))
-	stack := doc.root
+	doc := parse([]byte("- [ ] todo item\n- [x] done item\n- plain item"))
+	stack := doc.Root
 	list, ok := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	if !ok || len(list.Blocks) != 3 {
 		t.Fatalf("list = %#v, want a 3-item StackBlock", stack.Blocks[0])
@@ -179,8 +178,8 @@ func TestParseTaskList(t *testing.T) {
 // trailing block, stacked below its own paragraph text, while a sibling
 // item with no nested content gets no trailing block at all.
 func TestParseNestedList(t *testing.T) {
-	doc := Parse([]byte("- one\n  - nested\n- two"))
-	stack := doc.root
+	doc := parse([]byte("- one\n  - nested\n- two"))
+	stack := doc.Root
 	list := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	if len(list.Blocks) != 2 {
 		t.Fatalf("list = %#v, want 2 items", list.Blocks)
@@ -210,8 +209,8 @@ func TestParseNestedList(t *testing.T) {
 // (e.g. a nested list), rather than stacking them flush against each
 // other.
 func TestListItemTrailingGap(t *testing.T) {
-	doc := Parse([]byte("- one\n  - nested"))
-	stack := doc.root
+	doc := parse([]byte("- one\n  - nested"))
+	stack := doc.Root
 	list := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	item := list.Blocks[0]
 	_, trailing := listItemParts(t, item)
@@ -248,8 +247,8 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
-		doc := Parse([]byte(source))
-		para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+		doc := parse([]byte(source))
+		para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 		return para.GetBlockLayout(ctx, engine.NaturalWidthMeasure).Bounds().Dx()
 	}
 
@@ -273,8 +272,8 @@ func TestLineBoxBoundsIncludesInterWordSpacing(t *testing.T) {
 // its last word. This specific sentence reliably drifts Min.X to 1.
 func TestWrapLinesNaturalWidthFits(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
-	doc := Parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("Fast, cheap, and easy to set up with minimal configuration required"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 
 	natWidth := para.GetBlockLayout(ctx, engine.NaturalWidthMeasure).Bounds().Dx()
 	box := para.GetBlockLayout(ctx, natWidth).(*engine.StackBox)
@@ -289,8 +288,8 @@ func TestWrapLinesNaturalWidthFits(t *testing.T) {
 // Glued and compiler.pendingSpace), so no gap gets rendered and
 // neither boundary can become a line break.
 func TestParseAdjacentCodeSpanGluedFlags(t *testing.T) {
-	doc := Parse([]byte("a(`b`)"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("a(`b`)"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"a(", "b", ")"}
 	if !stringsEqual(got, want) {
@@ -316,8 +315,8 @@ func TestParseNoGapAroundAdjacentCodeSpan(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
-		doc := Parse([]byte(source))
-		para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+		doc := parse([]byte(source))
+		para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 		return para.GetBlockLayout(ctx, engine.NaturalWidthMeasure).Bounds().Dx()
 	}
 
@@ -335,8 +334,8 @@ func TestParseNoGapAroundAdjacentCodeSpan(t *testing.T) {
 // even at a width far too narrow for it to fit.
 func TestParseAdjacentPunctuationStaysOnOneLine(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
-	doc := Parse([]byte("(**bold**)"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("(**bold**)"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 
 	box := para.GetBlockLayout(ctx, 1).(*engine.StackBox)
 	if len(box.Slots) != 1 {
@@ -352,8 +351,8 @@ func TestParseAdjacentPunctuationStaysOnOneLine(t *testing.T) {
 // compiler.pendingSpace to carry across appendString calls,
 // rather than each call only looking at its own string's edges.
 func TestParseSpaceBetweenNonTextSiblings(t *testing.T) {
-	doc := Parse([]byte("**a** *b*"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("**a** *b*"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"a", "b"}
 	if !stringsEqual(got, want) {
@@ -376,8 +375,8 @@ func TestParseSoftLineBreakIsASpace(t *testing.T) {
 	// its own Inline item once the Typographer extension is enabled (see
 	// TestParseTypographerDashes and friends), which is beside this
 	// test's point.
-	doc := Parse([]byte("ever laid\nout there"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("ever laid\nout there"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"ever", "laid", "out", "there"}
 	if !stringsEqual(got, want) {
@@ -397,16 +396,16 @@ func TestParseNonBreakingSpace(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	widthOf := func(source string) int {
 		t.Helper()
-		doc := Parse([]byte(source))
-		para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+		doc := parse([]byte(source))
+		para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 		return para.GetBlockLayout(ctx, engine.NaturalWidthMeasure).Bounds().Dx()
 	}
 	spaceWidth := widthOf("a b")
 
 	for _, source := range []string{"a\u00a0b", "a&nbsp;b"} {
 		t.Run(source, func(t *testing.T) {
-			doc := Parse([]byte(source))
-			para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+			doc := parse([]byte(source))
+			para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 			if len(para.Parts) != 3 {
 				t.Fatalf("parts = %#v, want 3 (\"a\", nbsp, \"b\")", para.Parts)
 			}
@@ -438,8 +437,8 @@ func TestParseNonBreakingSpace(t *testing.T) {
 // standing alone rather than panicking - the item's parts end up empty,
 // and the nested list becomes its trailing block.
 func TestParseListItemNoLeadingParagraph(t *testing.T) {
-	doc := Parse([]byte("- - nested only\n"))
-	stack := doc.root
+	doc := parse([]byte("- - nested only\n"))
+	stack := doc.Root
 	outer := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	head, trailing := listItemParts(t, outer.Blocks[0])
 	if len(head.Parts) != 0 {
@@ -456,8 +455,8 @@ func TestParseListItemNoLeadingParagraph(t *testing.T) {
 // real paragraph margins instead of a tight item's zero margins.
 func TestParseLooseList(t *testing.T) {
 	ctx := engine.Context{Styles: stylingtest.Basic()}
-	doc := Parse([]byte("- one\n\n- two"))
-	stack := doc.root
+	doc := parse([]byte("- one\n\n- two"))
+	stack := doc.Root
 	list, ok := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	if !ok || len(list.Blocks) != 2 {
 		t.Fatalf("list = %#v, want a 2-item StackBlock", stack.Blocks[0])
@@ -489,8 +488,8 @@ func TestParseLooseList(t *testing.T) {
 // needed.
 func TestParseLooseListMultiParagraphItem(t *testing.T) {
 	ctx := engine.Context{Styles: stylingtest.Basic()}
-	doc := Parse([]byte("- first paragraph\n\n  second paragraph\n"))
-	stack := doc.root
+	doc := parse([]byte("- first paragraph\n\n  second paragraph\n"))
+	stack := doc.Root
 	list, ok := unwrap(stack.Blocks[0]).(*engine.StackBlock)
 	if !ok || len(list.Blocks) != 1 {
 		t.Fatalf("list = %#v, want a 1-item StackBlock", stack.Blocks[0])
@@ -522,8 +521,8 @@ func TestParseLooseListMultiParagraphItem(t *testing.T) {
 }
 
 func TestParseFencedCodeBlock(t *testing.T) {
-	doc := Parse([]byte("```\nline one\nline two\n```"))
-	stack := doc.root
+	doc := parse([]byte("```\nline one\nline two\n```"))
+	stack := doc.Root
 	code, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.Blocks[0])
@@ -541,8 +540,8 @@ func TestParseFencedCodeBlock(t *testing.T) {
 }
 
 func TestParseIndentedCodeBlock(t *testing.T) {
-	doc := Parse([]byte("    line one\n    line two"))
-	stack := doc.root
+	doc := parse([]byte("    line one\n    line two"))
+	stack := doc.Root
 	code, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.Blocks[0])
@@ -565,8 +564,8 @@ func TestParseIndentedCodeBlock(t *testing.T) {
 // than reaching the font as a raw tab character, which renders as a
 // placeholder box instead of whitespace.
 func TestParseCodeBlockExpandsTabs(t *testing.T) {
-	doc := Parse([]byte("```\n\tindented\n```"))
-	stack := doc.root
+	doc := parse([]byte("```\n\tindented\n```"))
+	stack := doc.Root
 	code, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.Blocks[0])
@@ -597,8 +596,8 @@ func TestParseWithTokensPlugin(t *testing.T) {
 			{Text: " f()"},
 		}}
 	}}
-	doc := Parse([]byte("```go\nfunc f()\n```"), WithCodeBlockPlugin(p))
-	stack := doc.root
+	doc := parse([]byte("```go\nfunc f()\n```"), p)
+	stack := doc.Root
 	code, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *CodeBlock", stack.Blocks[0])
@@ -653,13 +652,13 @@ func TestParseWithCodeBlockPlugin(t *testing.T) {
 		handles: map[string]bool{"mermaid": true},
 		image: func(language, code string) images.AsyncImage {
 			if language != "mermaid" || code != "graph TD; A-->B;\n" {
-				t.Errorf("Parse(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
+				t.Errorf("parse(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
 			}
 			return wantImg
 		},
 	}
-	doc := Parse([]byte("```mermaid\ngraph TD; A-->B;\n```"), WithCodeBlockPlugin(plugin))
-	stack := doc.root
+	doc := parse([]byte("```mermaid\ngraph TD; A-->B;\n```"), plugin)
+	stack := doc.Root
 	diagram, ok := unwrap(stack.Blocks[0]).(*engine.DiagramBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *diagramBlock", unwrap(stack.Blocks[0]))
@@ -685,8 +684,8 @@ func TestParseWithCodeBlockPlugin(t *testing.T) {
 // would with no plugin configured at all.
 func TestParseCodeBlockPluginFallsThroughForUnrecognizedLanguage(t *testing.T) {
 	plugin := fakeImagePlugin{handles: map[string]bool{"mermaid": true}}
-	doc := Parse([]byte("```go\nfunc f()\n```"), WithCodeBlockPlugin(plugin))
-	stack := doc.root
+	doc := parse([]byte("```go\nfunc f()\n```"), plugin)
+	stack := doc.Root
 	if _, ok := unwrap(stack.Blocks[0]).(*engine.CodeBlock); !ok {
 		t.Fatalf("block = %T, want *CodeBlock (plugin shouldn't have handled \"go\")", unwrap(stack.Blocks[0]))
 	}
@@ -708,8 +707,8 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 		image:        func(language, code string) images.AsyncImage { return images.AsyncImage{Key: "k"} },
 	}
 	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
-	doc := Parse(source, WithCodeBlockPlugin(first), WithCodeBlockPlugin(second))
-	stack := doc.root
+	doc := parse(source, first, second)
+	stack := doc.Root
 	if len(stack.Blocks) != 3 {
 		t.Fatalf("got %d top-level blocks, want 3", len(stack.Blocks))
 	}
@@ -724,8 +723,8 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 }
 
 func TestParseThematicBreak(t *testing.T) {
-	doc := Parse([]byte("---"))
-	stack := doc.root
+	doc := parse([]byte("---"))
+	stack := doc.Root
 	wrapper, ok := stack.Blocks[0].(*engine.MarginBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *MarginBlock", stack.Blocks[0])
@@ -755,8 +754,8 @@ func TestParseThematicBreak(t *testing.T) {
 // that block directly, not wrapped in a StackBlock (wrapBlocks only wraps
 // when there's more than one).
 func TestParseBlockquote(t *testing.T) {
-	doc := Parse([]byte("> quoted text"))
-	stack := doc.root
+	doc := parse([]byte("> quoted text"))
+	stack := doc.Root
 	bq, ok := unwrap(stack.Blocks[0]).(*engine.BlockquoteBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *BlockquoteBlock", stack.Blocks[0])
@@ -775,8 +774,8 @@ func TestParseBlockquote(t *testing.T) {
 // TestParseBlockquoteMultipleBlocks checks that a blockquote spanning more
 // than one block wraps them in a StackBlock, unlike the single-block case.
 func TestParseBlockquoteMultipleBlocks(t *testing.T) {
-	doc := Parse([]byte("> first\n>\n> second"))
-	stack := doc.root
+	doc := parse([]byte("> first\n>\n> second"))
+	stack := doc.Root
 	bq := unwrap(stack.Blocks[0]).(*engine.BlockquoteBlock)
 	inner, ok := bq.Inner.(*engine.StackBlock)
 	if !ok || len(inner.Blocks) != 2 {
@@ -789,8 +788,8 @@ func TestParseBlockquoteMultipleBlocks(t *testing.T) {
 // drawn, with no special-casing needed since BlockquoteBlock positions
 // itself rather than relying on its parent.
 func TestParseNestedBlockquote(t *testing.T) {
-	doc := Parse([]byte("> > nested quote"))
-	stack := doc.root
+	doc := parse([]byte("> > nested quote"))
+	stack := doc.Root
 	outer := unwrap(stack.Blocks[0]).(*engine.BlockquoteBlock)
 	inner, ok := unwrap(outer.Inner).(*engine.BlockquoteBlock)
 	if !ok {
@@ -833,8 +832,8 @@ func TestBlockquoteBoxIndent(t *testing.T) {
 }
 
 func TestParseLink(t *testing.T) {
-	doc := Parse([]byte(`[click *here*](https://example.com "a title")`))
-	stack := doc.root
+	doc := parse([]byte(`[click *here*](https://example.com "a title")`))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"click", "here"}
@@ -867,8 +866,8 @@ func TestParseAutoLink(t *testing.T) {
 	ctx := engine.Context{Styles: stylingtest.Basic()}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := Parse([]byte(tc.source))
-			stack := doc.root
+			doc := parse([]byte(tc.source))
+			stack := doc.Root
 			para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 			if len(para.Parts) != 1 {
 				t.Fatalf("parts = %#v, want 1 part", para.Parts)
@@ -898,8 +897,8 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 	ctx := engine.Context{Styles: stylingtest.Basic()}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := Parse([]byte(tc.source))
-			stack := doc.root
+			doc := parse([]byte(tc.source))
+			stack := doc.Root
 			para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 			if len(para.Parts) != 1 {
 				t.Fatalf("parts = %#v, want 1 part", para.Parts)
@@ -917,8 +916,8 @@ func TestParseEmphasisAndStrong(t *testing.T) {
 }
 
 func TestParseCodeSpan(t *testing.T) {
-	doc := Parse([]byte("see `code` here"))
-	stack := doc.root
+	doc := parse([]byte("see `code` here"))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"see", "code", "here"}
@@ -937,8 +936,8 @@ func TestParseCodeSpan(t *testing.T) {
 // is a structural ancestry fact (HasAncestorTag), resolved independently
 // of TextStyle.
 func TestParseStrikethrough(t *testing.T) {
-	doc := Parse([]byte("plain ~~struck **and bold**~~ text"))
-	stack := doc.root
+	doc := parse([]byte("plain ~~struck **and bold**~~ text"))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"plain", "struck", "and", "bold", "text"}
@@ -970,27 +969,9 @@ func TestParseStrikethrough(t *testing.T) {
 	}
 }
 
-func TestInlineTextStrikeThickness(t *testing.T) {
-	styleSheet := stylingtest.Basic()
-	ctx := engine.Context{Scale: 2, FaceSelector: fonts.NewGoSelector(), Styles: styleSheet}
-
-	plainNode := (*ast.Node)(nil).AddChild(ast.TagParagraph).AddChild(ast.TagEmphasis)
-	plain := (&engine.InlineText{Text: "x", ASTNode: plainNode}).GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.TextBox)
-	if plain.StrikeThickness != 0 {
-		t.Errorf("non-struck StrikeThickness = %d, want 0", plain.StrikeThickness)
-	}
-
-	struckNode := (*ast.Node)(nil).AddChild(ast.TagParagraph).AddChild(ast.TagStrikethrough)
-	struck := (&engine.InlineText{Text: "x", ASTNode: struckNode}).GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.TextBox)
-	want := int(styleSheet.StrikeThickness(struckNode) * ctx.Scale)
-	if struck.StrikeThickness != want {
-		t.Errorf("struck StrikeThickness = %d, want %d", struck.StrikeThickness, want)
-	}
-}
-
 func TestParseImageWithTitle(t *testing.T) {
-	doc := Parse([]byte(`![alt](cat.jpeg "a lovely cat")`))
-	stack := doc.root
+	doc := parse([]byte(`![alt](cat.jpeg "a lovely cat")`))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	if len(para.Parts) != 1 {
 		t.Fatalf("parts = %#v, want 1 part", para.Parts)
@@ -1024,8 +1005,8 @@ func TestParseImageWithTitle(t *testing.T) {
 // inline content in an image's description, flattened to plain text
 // the same way HTML rendering flattens it into an alt attribute.
 func TestParseImageAltTextFlattensMarkup(t *testing.T) {
-	doc := Parse([]byte("![a *b* c](x.png)"))
-	stack := doc.root
+	doc := parse([]byte("![a *b* c](x.png)"))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	img := para.Parts[0].(*engine.InlineImage)
 	if img.Alt != "a b c" {
@@ -1033,162 +1014,12 @@ func TestParseImageAltTextFlattensMarkup(t *testing.T) {
 	}
 }
 
-// TestImageGetInlineLayoutWithoutImageCache checks that with no
-// image cache the image isn't loaded at all: it renders as its alt text,
-// with nothing pending to revisit.
-func TestImageGetInlineLayoutWithoutImageCache(t *testing.T) {
-	img := &engine.InlineImage{Src: "testdata/cat.jpeg", Alt: "a cat"}
-	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
-
-	box, ok := img.GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.TextBox)
-	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *TextBox", img.GetInlineLayout(ctx, engine.NaturalWidthMeasure))
-	}
-	if box.Text != "a cat" {
-		t.Errorf("Text = %q, want the alt text %q", box.Text, "a cat")
-	}
-	if pending := box.PendingImages(); len(pending) != 0 {
-		t.Errorf("PendingImages() = %v, want none", pending)
-	}
-}
-
-// TestImageGetInlineLayoutScalesBounds checks an image's layout bounds
-// are its native pixel size times ctx.Scale, like every other sized
-// quantity in the layout system (engine.Context.ScaledMargins and
-// friends) - not the file's raw pixel size unconditionally, which would
-// leave images pixel-locked against zoom/DPI scale.
-func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
-	img := &engine.InlineImage{Src: "testdata/cat.jpeg"} // 400x600
-	// FaceSelector/Styles: the first call sees the fetch still pending
-	// and falls back to text ("(loading image…)"), which needs both.
-	ctx := engine.Context{
-		Scale:        2,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
-		FaceSelector: fonts.NewGoSelector(),
-		Styles:       stylingtest.Basic(),
-	}
-	img.GetInlineLayout(ctx, engine.NaturalWidthMeasure)
-	waitForSettled(t, ctx.ImageCache, img.Src)
-	box, ok := img.GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.ImageBox)
-	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, engine.NaturalWidthMeasure))
-	}
-	want := image.Rect(0, 0, 800, 1200)
-	if box.Rect != want {
-		t.Errorf("bounds = %v, want %v", box.Rect, want)
-	}
-	if box.Image == nil {
-		t.Error("img = nil, want the decoded image")
-	}
-}
-
-// TestImageGetInlineLayoutFitsWidth checks an image whose ctx.Scale-d
-// size would still exceed the width it's given is scaled down further,
-// preserving aspect ratio (see fitWidth) - CSS's max-width: 100%,
-// applied to an inline image, so a document author's own image at its
-// native resolution never overflows the page.
-func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
-	img := &engine.InlineImage{Src: "testdata/cat.jpeg"} // 400x600
-	ctx := engine.Context{
-		Scale:        1,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
-		FaceSelector: fonts.NewGoSelector(),
-		Styles:       stylingtest.Basic(),
-	}
-	img.GetInlineLayout(ctx, 200)
-	waitForSettled(t, ctx.ImageCache, img.Src)
-	box, ok := img.GetInlineLayout(ctx, 200).(*engine.ImageBox)
-	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, 200))
-	}
-	want := image.Rect(0, 0, 200, 300)
-	if box.Rect != want {
-		t.Errorf("bounds = %v, want %v", box.Rect, want)
-	}
-}
-
-// TestImageGetInlineLayoutFallsBackWhenMissing checks a missing/unreadable
-// image renders as flagged fallback text (see appendUnsupportedInline)
-// instead of a silent zero-size gap, preferring alt text over title over
-// a generic message naming the resolved (here: unresolved-any-further,
-// since FileImageLoader doesn't resolve) source.
-func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
-	styleSheet := stylingtest.Basic()
-	ctx := engine.Context{
-		Scale:        1,
-		FaceSelector: fonts.NewGoSelector(),
-		Styles:       styleSheet,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
-	}
-	fallbackNode := (*ast.Node)(nil).AddChild(ast.TagImage).AddChild(ast.TagUnsupported)
-
-	// All three cases below share the src "nope.png" (only alt/title
-	// differ), so waiting once here - before any of them look at the
-	// result - is enough: the rest hit the already-settled cache entry
-	// directly.
-	ctx.ImageCache.Load("nope.png")
-	waitForSettled(t, ctx.ImageCache, "nope.png")
-
-	for _, tc := range []struct {
-		name string
-		img  *engine.InlineImage
-		want string
-	}{
-		{"alt wins", &engine.InlineImage{Src: "nope.png", Alt: "a lovely cat", Title: "title", FallbackNode: fallbackNode}, "a lovely cat"},
-		{"title when no alt", &engine.InlineImage{Src: "nope.png", Title: "a lovely cat", FallbackNode: fallbackNode}, "a lovely cat"},
-		{"generic message when neither", &engine.InlineImage{Src: "nope.png", FallbackNode: fallbackNode}, "(image not found: nope.png)"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			box, ok := tc.img.GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.TextBox)
-			if !ok {
-				t.Fatalf("GetInlineLayout returned %T, want *TextBox", tc.img.GetInlineLayout(ctx, engine.NaturalWidthMeasure))
-			}
-			if box.Text != tc.want {
-				t.Errorf("Text = %q, want %q", box.Text, tc.want)
-			}
-			if box.Color != styleSheet.UnsupportedColor {
-				t.Errorf("Color = %v, want UnsupportedColor %v", box.Color, styleSheet.UnsupportedColor)
-			}
-		})
-	}
-}
-
-// TestImageGetInlineLayoutAnimated checks that an animated GIF src
-// produces an ImageBox with anim set (not img), with bounds scaled
-// from the animation's own (shared, per-frame) size.
-func TestImageGetInlineLayoutAnimated(t *testing.T) {
-	img := &engine.InlineImage{Src: "testdata/animated.gif"} // 64x64
-	ctx := engine.Context{
-		Scale:        2,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
-		FaceSelector: fonts.NewGoSelector(),
-		Styles:       stylingtest.Basic(),
-	}
-	img.GetInlineLayout(ctx, engine.NaturalWidthMeasure)
-	waitForSettled(t, ctx.ImageCache, img.Src)
-
-	box, ok := img.GetInlineLayout(ctx, engine.NaturalWidthMeasure).(*engine.ImageBox)
-	if !ok {
-		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, engine.NaturalWidthMeasure))
-	}
-	if box.Animation == nil {
-		t.Fatal("anim = nil, want the decoded imagecache.Animation")
-	}
-	if box.Image != nil {
-		t.Errorf("img = %v, want nil for an animated GIF", box.Image)
-	}
-	want := image.Rect(0, 0, 128, 128) // 64x64 native * scale 2
-	if box.Rect != want {
-		t.Errorf("bounds = %v, want %v", box.Rect, want)
-	}
-}
-
 // TestParseResolvesEntitiesAndEscapes checks the v2 migration's behavior
 // change noted in the migration plan: text values are resolved (entity
 // references and backslash escapes decoded), unlike v1's raw Text().
 func TestParseResolvesEntitiesAndEscapes(t *testing.T) {
-	doc := Parse([]byte(`Fish \& chips and &amp; and \*literal\*`))
-	stack := doc.root
+	doc := parse([]byte(`Fish \& chips and &amp; and \*literal\*`))
+	stack := doc.Root
 	para := unwrap(stack.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"Fish", "&", "chips", "and", "&", "and", "*literal*"}
@@ -1204,8 +1035,8 @@ func TestParseResolvesEntitiesAndEscapes(t *testing.T) {
 // TestParseResolvesEntitiesAndEscapes), so the literal curly rune comes out
 // with no extra config.
 func TestParseTypographerSmartQuotes(t *testing.T) {
-	doc := Parse([]byte(`"hello" and 'world'`))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte(`"hello" and 'world'`))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"“", "hello", "”", "and", "‘", "world", "’"}
 	if !stringsEqual(got, want) {
@@ -1224,8 +1055,8 @@ func TestParseTypographerSmartQuotes(t *testing.T) {
 // wrap if the boundaries were (wrongly) breakable.
 func TestParseTypographerApostropheGluedToWord(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
-	doc := Parse([]byte("Alice's book"))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("Alice's book"))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"Alice", "’", "s", "book"}
 	if !stringsEqual(got, want) {
@@ -1277,8 +1108,8 @@ func TestParseTypographerDashes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := Parse([]byte(tc.source))
-			para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+			doc := parse([]byte(tc.source))
+			para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 			got := textOf(t, para.Parts)
 			if !stringsEqual(got, tc.want) {
 				t.Fatalf("words = %v, want %v", got, tc.want)
@@ -1296,8 +1127,8 @@ func TestParseTypographerDashes(t *testing.T) {
 // quotes and dashes) - "..." becomes a single "…" glued to the word before
 // it, same mechanism as the others.
 func TestParseTypographerEllipsis(t *testing.T) {
-	doc := Parse([]byte("wait..."))
-	para := unwrap(doc.root.Blocks[0]).(*engine.TextBlock)
+	doc := parse([]byte("wait..."))
+	para := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
 	got := textOf(t, para.Parts)
 	want := []string{"wait", "…"}
 	if !stringsEqual(got, want) {

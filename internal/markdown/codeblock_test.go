@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"testing"
@@ -150,7 +150,7 @@ func codeBlockOf(rawLines []string, plugins ...codeblocks.Plugin) (engine.Block,
 }
 
 // TestCodeBlockPassesSourceVerbatim is a regression test: rawLines each
-// already end in their own "\n" (see compile.go's KindCodeBlock case),
+// already end in their own "\n" (see blocks.go's KindCodeBlock case),
 // so they must reach the plugin concatenated verbatim, with no extra
 // "\n" between them.
 func TestCodeBlockPassesSourceVerbatim(t *testing.T) {

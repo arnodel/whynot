@@ -1,4 +1,4 @@
-package whynot
+package markdown
 
 import (
 	"strings"
@@ -7,6 +7,30 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
+
+// codeBlockTabExpansion is what a tab in a code block's source is
+// replaced with.
+const codeBlockTabExpansion = "    "
+
+// pluginsFor returns the registered plugins that handle language, in
+// registration order - resolved once per distinct language and cached
+// from then on.
+func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
+	if ps, ok := c.pluginCache[language]; ok {
+		return ps
+	}
+	if c.pluginCache == nil {
+		c.pluginCache = make(map[string][]codeblocks.Plugin)
+	}
+	var ps []codeblocks.Plugin
+	for _, p := range c.codeBlockPlugins {
+		if p.Handles(language) {
+			ps = append(ps, p)
+		}
+	}
+	c.pluginCache[language] = ps
+	return ps
+}
 
 // codeBlock builds a fenced or indented code block's content from its
 // rawLines, through the first of plugins (those handling its language,
@@ -55,11 +79,7 @@ func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][
 			return
 		}
 		if len(current) == 0 {
-			// A blank source line (or a span boundary that happens to
-			// land exactly on one) leaves current empty - LineBox
-			// requires at least one part (it indexes parts[0]
-			// unconditionally), so give it an empty-text placeholder
-			// rather than an empty slice.
+			// A blank line has no parts, but a line needs at least one.
 			current = []engine.Inline{&engine.InlineText{Text: "", ASTNode: blockNode}}
 		}
 		lines[lineIndex] = current

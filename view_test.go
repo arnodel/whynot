@@ -1317,9 +1317,9 @@ func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 	view.Layout(300, 1000, 1, 0)
 	// Slots: 0 = leading view margin, 1 = "first paragraph here", 2 =
 	// inter-block gap, 3 = the image's own paragraph, 4 = gap, 5 =
-	// "third paragraph here", 6 = trailing view margin (compile.go
-	// inserts a margin-gap slot between each pair of top-level blocks -
-	// see TestViewSetStyleSheetReanchorsScroll).
+	// "third paragraph here", 6 = trailing view margin
+	// (StackBlock.StackLayout inserts a margin-gap slot between each pair
+	// of top-level blocks - see TestViewSetStyleSheetReanchorsScroll).
 	const imageSlot = 3
 	oldHeight := view.stack.box.BoxAt(imageSlot).Bounds().Dy() // the placeholder's height
 	firstParaBefore := view.stack.box.Slots[1].Box

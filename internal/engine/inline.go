@@ -100,9 +100,10 @@ type InlineImage struct {
 	Alt     string
 	Title   string
 	ASTNode *ast.Node
-	// FallbackNode is a ast.TagUnsupported child of node - see the compile.go
-	// KindImage case for why it's precomputed once, at parse time,
-	// rather than created on demand here.
+	// FallbackNode is a ast.TagUnsupported child of node - see the
+	// compiler's KindImage case (internal/markdown/inlines.go) for why
+	// it's precomputed once, at parse time, rather than created on demand
+	// here.
 	FallbackNode *ast.Node
 
 	// Glued - see InlineLayout.Glued's doc comment and InlineText.Glued.

@@ -431,3 +431,14 @@ func TestHoverScrollbarFadesWhenIdle(t *testing.T) {
 		t.Errorf("opacity while resting on the scrollbar = %v, want 1", got)
 	}
 }
+
+// unwrap strips any MarginBlocks around b, to reach the block itself.
+func unwrap(b engine.Block) engine.Block {
+	for {
+		mb, ok := b.(*engine.MarginBlock)
+		if !ok {
+			return b
+		}
+		b = mb.Block
+	}
+}
