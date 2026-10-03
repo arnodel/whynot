@@ -62,22 +62,22 @@ func TestViewScrollSideways(t *testing.T) {
 	at := area.Visible.Min.Add(image.Pt(10, 10))
 	before := drawnTextX(t, v, "wide")
 
-	if !scrollHorizontal(v, at.X, at.Y, -50) {
-		t.Fatal("scrollHorizontal over the code block = false, want true")
+	if !hscrollAt(v, at.X, at.Y, 50) {
+		t.Fatal("hscrollAt over the code block = false, want true")
 	}
 	if got := drawnTextX(t, v, "wide"); got != before-50 {
 		t.Errorf("text at x=%d after scrolling by -50, want %d", got, before-50)
 	}
 
-	if scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y-5, -50) {
-		t.Error("scrollHorizontal above the code block = true, want false")
+	if hscrollAt(v, area.Visible.Min.X+10, area.Visible.Min.Y-5, 50) {
+		t.Error("hscrollAt above the code block = true, want false")
 	}
 
-	scrollHorizontal(v, at.X, at.Y, 1e6)
+	hscrollAt(v, at.X, at.Y, -1e6)
 	if got := drawnTextX(t, v, "wide"); got != before {
 		t.Errorf("text at x=%d after scrolling far back, want %d (clamped at the start)", got, before)
 	}
-	scrollHorizontal(v, at.X, at.Y, -1e6)
+	hscrollAt(v, at.X, at.Y, 1e6)
 	maxOffset := area.ContentSize - area.Box.Dx()
 	if got := drawnTextX(t, v, "wide"); got != before-maxOffset {
 		t.Errorf("text at x=%d after scrolling far forward, want %d (clamped at the end)", got, before-maxOffset)
@@ -87,7 +87,7 @@ func TestViewScrollSideways(t *testing.T) {
 func TestViewHorizontalOffsetSurvivesRelayout(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
 	before := drawnTextX(t, v, "wide")
-	scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
+	hscrollAt(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, 50)
 
 	v.SetStyleSheet(stylingtest.NoViewMargin())
 	if got := drawnTextX(t, v, "wide"); got != before-50 {
@@ -105,7 +105,7 @@ func TestScrollBoxHitTestFollowsOffset(t *testing.T) {
 	if hit, _ := hitAt(v, p.X, p.Y); !isShort(hit) {
 		t.Fatalf("HitTest on the second line = %T, want the \"short\" text", hit)
 	}
-	scrollHorizontal(v, p.X, p.Y, -200)
+	hscrollAt(v, p.X, p.Y, 200)
 	if hit, _ := hitAt(v, p.X, p.Y); isShort(hit) {
 		t.Error("HitTest still finds \"short\" after scrolling it out of view")
 	}
@@ -157,7 +157,7 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 		t.Error("scrollbar still drawn once faded out after the pointer left the code block")
 	}
 
-	scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
+	hscrollAt(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, 50)
 	if left, right := fadesAt(draw()); !left || !right {
 		t.Errorf("mid-scroll: left fade %v, right fade %v, want both", left, right)
 	}
@@ -443,7 +443,7 @@ func TestHoverScrollbarFadesWhenIdle(t *testing.T) {
 		t.Errorf("opacity after moving again = %v, want 1", got)
 	}
 	later()
-	scrollHorizontal(v, over.X+1, over.Y, -10)
+	hscrollAt(v, over.X+1, over.Y, 10)
 	if got := opacity(); got != 1 {
 		t.Errorf("opacity after scrolling the block = %v, want 1", got)
 	}
@@ -468,9 +468,10 @@ func unwrap(b engine.Block) engine.Block {
 	}
 }
 
-// scrollHorizontal scrolls the sideways-scrolling block at (x, y), in
-// the View's coordinates, by dx (positive moves its content right),
-// reporting whether there was one.
-func scrollHorizontal(v *View, x, y int, dx float64) bool {
-	return v.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time) != nil
+// hscrollAt scrolls the sideways-scrolling block at (x, y), in
+// the View's coordinates, dx pixels towards its end, reporting whether
+// there was one.
+func hscrollAt(v *View, x, y int, dx float64) bool {
+	r, ok := v.hscroll.regionAt(image.Pt(x, y))
+	return ok && v.hscroll.scrollBy(r.Source, dx, v.ctx.Time)
 }

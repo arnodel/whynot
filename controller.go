@@ -59,10 +59,10 @@ type Controller struct {
 	// stops any fling.
 	viewMoves uint64
 
-	// sideways is the sideways-scrolling block last scrolled, pressed or
-	// touched: ScrollLeft and ScrollRight's target when the pointer isn't
-	// on one.
-	sideways engine.Block
+	// lastHScrolled is the sideways-scrolling block last scrolled, pressed
+	// or touched: ScrollLeft and ScrollRight's target when the pointer
+	// isn't on one.
+	lastHScrolled engine.Block
 
 	// The touch in progress: touching is set from its TouchStart to its
 	// TouchEnd, even for a touch outside the bounds. Other touches are
@@ -109,7 +109,7 @@ func (c *Controller) View() *View {
 func (c *Controller) SetView(v *View) {
 	c.view = v
 	c.hoverDest = ""
-	c.hTarget, c.sideways = nil, nil
+	c.hTarget, c.lastHScrolled = nil, nil
 	c.viewMoves = v.moves
 	c.cancelMomentum()
 }
@@ -192,13 +192,11 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				c.view.beginScrollbarDrag(local)
 				continue
 			}
-			if s != nil {
-				if r, ok := s.regionAt(local); ok {
-					c.sideways = r.Source
-				}
-				if s.beginDrag(local) {
-					continue
-				}
+			if b := c.hscrollBlockAt(p); b != nil {
+				c.lastHScrolled = b
+			}
+			if s != nil && s.beginDrag(local) {
+				continue
 			}
 			pressed, pressedAt = true, p
 		case input.Wheel:
@@ -216,7 +214,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			}
 			c.view.ScrollBy(dy)
 			if dx != 0 {
-				c.scrollAt(p, dx)
+				c.hscrollBy(c.hscrollBlockAt(p), dx)
 			}
 		case input.TouchStart:
 			if c.touching {
@@ -350,17 +348,13 @@ func (c *Controller) touchStart(p image.Point, now time.Duration) {
 	c.cancelMomentum()
 	c.tick(now)
 	c.touchPending = image.Point{}
-	c.touchTarget = nil
+	c.touchTarget = c.hscrollBlockAt(p)
 	switch {
 	case !p.In(c.bounds):
 		c.touchAxis = touchNone
-	case c.hscroll() != nil:
-		if r, ok := c.hscroll().regionAt(p.Sub(c.bounds.Min)); ok {
-			c.touchTarget, c.sideways = r.Source, r.Source
-			c.touchAxis = touchUndecided
-			return
-		}
-		fallthrough
+	case c.touchTarget != nil:
+		c.lastHScrolled = c.touchTarget
+		c.touchAxis = touchUndecided
 	default:
 		c.touchAxis = touchVertical
 	}
@@ -389,7 +383,9 @@ func (c *Controller) touchDrag(dx, dy int, now time.Duration) {
 		c.view.ScrollBy(-float64(dy))
 		c.accumulate(&c.momentum, float64(dy), now)
 	case touchHorizontal:
-		c.scrollTarget(c.touchTarget, float64(dx))
+		// Content follows the finger: moving right scrolls towards the
+		// start.
+		c.hscrollBy(c.touchTarget, -float64(dx))
 		c.hTarget = c.touchTarget
 		c.accumulate(&c.hMomentum, float64(dx), now)
 	}
@@ -423,20 +419,48 @@ func (c *Controller) hscroll() *hscrollState {
 	return c.view.hscroll
 }
 
-// scrollAt scrolls the sideways-scrolling block at p, in the input's
-// coordinates, dx pixels towards its end, reporting whether there was
-// one.
-func (c *Controller) scrollAt(p image.Point, dx float64) bool {
+// hscrollBlockAt returns the sideways-scrolling block at p, in the
+// input's coordinates, or nil if there's none.
+func (c *Controller) hscrollBlockAt(p image.Point) engine.Block {
 	s := c.hscroll()
 	if s == nil || !p.In(c.bounds) {
+		return nil
+	}
+	r, ok := s.regionAt(p.Sub(c.bounds.Min))
+	if !ok {
+		return nil
+	}
+	return r.Source
+}
+
+// hscrollTarget is the block ScrollLeft and ScrollRight scroll: the one
+// under the pointer, else the one last scrolled, pressed or touched.
+func (c *Controller) hscrollTarget() engine.Block {
+	if c.hasPointer {
+		if b := c.hscrollBlockAt(c.pointer); b != nil {
+			return b
+		}
+	}
+	return c.lastHScrolled
+}
+
+// hscrollBy scrolls block dx pixels towards its end, showing its
+// scrollbar, and remembers it as the last block scrolled. It reports
+// whether block is on screen (and so scrolled).
+func (c *Controller) hscrollBy(block engine.Block, dx float64) bool {
+	s := c.hscroll()
+	if s == nil || block == nil || !s.scrollBy(block, dx, c.view.ctx.Time) {
 		return false
 	}
-	b := s.scrollAt(p.Sub(c.bounds.Min), -dx, c.view.ctx.Time)
-	if b == nil {
-		return false
-	}
-	c.sideways = b
+	c.lastHScrolled = block
 	return true
+}
+
+// vscrollBy scrolls the View dy pixels towards the end, stopping any
+// fling.
+func (c *Controller) vscrollBy(dy float64) {
+	c.cancelMomentum()
+	c.view.ScrollBy(dy)
 }
 
 // commandStep is how far ScrollDown, ScrollUp, ScrollLeft and ScrollRight
@@ -448,54 +472,30 @@ const commandStep = 40
 const pageOverlap = 0.1
 
 // ScrollDown scrolls a step towards the end, as for an arrow key.
-func (c *Controller) ScrollDown() { c.scrollBy(commandStep * c.scale) }
+func (c *Controller) ScrollDown() { c.vscrollBy(commandStep * c.scale) }
 
 // ScrollUp scrolls a step towards the start, as for an arrow key.
-func (c *Controller) ScrollUp() { c.scrollBy(-commandStep * c.scale) }
+func (c *Controller) ScrollUp() { c.vscrollBy(-commandStep * c.scale) }
 
 // PageDown scrolls a page towards the end.
-func (c *Controller) PageDown() { c.scrollBy(float64(c.bounds.Dy()) * (1 - pageOverlap)) }
+func (c *Controller) PageDown() { c.vscrollBy(float64(c.bounds.Dy()) * (1 - pageOverlap)) }
 
 // PageUp scrolls a page towards the start.
-func (c *Controller) PageUp() { c.scrollBy(-float64(c.bounds.Dy()) * (1 - pageOverlap)) }
-
-func (c *Controller) scrollBy(dy float64) {
-	c.cancelMomentum()
-	c.view.ScrollBy(dy)
-}
+func (c *Controller) PageUp() { c.vscrollBy(-float64(c.bounds.Dy()) * (1 - pageOverlap)) }
 
 // ScrollLeft scrolls a block wider than the View (a code block or table,
 // say) a step towards its start: the block under the pointer, else the
 // one last scrolled, clicked or touched, if it's still on screen. It
 // reports whether there was such a block.
-func (c *Controller) ScrollLeft() bool { return c.scrollSideways(-commandStep * c.scale) }
-
-// ScrollRight scrolls a block a step towards its end, like ScrollLeft.
-func (c *Controller) ScrollRight() bool { return c.scrollSideways(commandStep * c.scale) }
-
-func (c *Controller) scrollSideways(dx float64) bool {
+func (c *Controller) ScrollLeft() bool {
 	c.cancelMomentum()
-	if c.hasPointer && c.scrollAt(c.pointer, dx) {
-		return true
-	}
-	s := c.hscroll()
-	if s == nil || c.sideways == nil {
-		return false
-	}
-	if _, ok := s.regionOf(c.sideways); !ok {
-		return false
-	}
-	c.scrollTarget(c.sideways, -dx)
-	return true
+	return c.hscrollBy(c.hscrollTarget(), -commandStep*c.scale)
 }
 
-// scrollTarget scrolls the sideways-scrolling block target by dx, showing
-// its scrollbar (there's no hover on touch).
-func (c *Controller) scrollTarget(target engine.Block, dx float64) {
-	if s := c.hscroll(); s != nil && target != nil {
-		s.scrollSource(target, dx)
-		s.reveal(target, c.view.ctx.Time)
-	}
+// ScrollRight scrolls a block a step towards its end, like ScrollLeft.
+func (c *Controller) ScrollRight() bool {
+	c.cancelMomentum()
+	return c.hscrollBy(c.hscrollTarget(), commandStep*c.scale)
 }
 
 // accumulate blends delta, moved since the last tick, into the coasting
@@ -537,7 +537,7 @@ func fastEnough(v float64) bool {
 func (c *Controller) coastMomentum(now time.Duration) {
 	dt := c.tick(now)
 	c.momentum = coast(c.momentum, dt, func(d float64) { c.view.ScrollBy(-d) })
-	c.hMomentum = coast(c.hMomentum, dt, func(d float64) { c.scrollTarget(c.hTarget, d) })
+	c.hMomentum = coast(c.hMomentum, dt, func(d float64) { c.hscrollBy(c.hTarget, -d) })
 }
 
 // coast applies dt seconds of velocity v through apply, and returns v

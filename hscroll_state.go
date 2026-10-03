@@ -194,19 +194,6 @@ func (s *hscrollState) unhover() {
 	s.hovered, s.barHovered = nil, false
 }
 
-// scrollAt scrolls the box at p by dx (positive moves the content right,
-// revealing its start) at now, returning its source, or nil if there's
-// none.
-func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) engine.Block {
-	a, ok := s.regionAt(p)
-	if !ok {
-		return nil
-	}
-	s.offsets[a.Source] = clamp(a, s.offsets[a.Source]-dx)
-	s.reveal(a.Source, now)
-	return a.Source
-}
-
 // beginDrag starts dragging the scrollbar at p, if there is one.
 func (s *hscrollState) beginDrag(p image.Point) bool {
 	a, ok := s.regionAt(p)
@@ -248,12 +235,18 @@ func (s *hscrollState) endDrag(now time.Duration) {
 	s.dragging = nil
 }
 
-// scrollSource scrolls source's box by dx, as scrollAt does, wherever it
-// is now - for a touch pan, which sticks to the block it started on.
-func (s *hscrollState) scrollSource(source engine.Block, dx float64) {
-	if a, ok := s.regionOf(source); ok {
-		s.offsets[source] = clamp(a, s.offsets[source]-dx)
+// scrollBy scrolls source's box dx pixels towards its end (towards its
+// start if dx is negative), revealing its scrollbar at now. It reports
+// whether the box was drawn by the last View.Draw: if not, nothing
+// happens.
+func (s *hscrollState) scrollBy(source engine.Block, dx float64, now time.Duration) bool {
+	a, ok := s.regionOf(source)
+	if !ok {
+		return false
 	}
+	s.offsets[source] = clamp(a, s.offsets[source]+dx)
+	s.reveal(source, now)
+	return true
 }
 
 // reveal shows source's scrollbar from now, fading out after
