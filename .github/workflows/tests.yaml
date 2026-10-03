@@ -1,8 +1,16 @@
 name: Go
 
 on:
+  # A pull request is tested through pull_request; testing its branch
+  # pushes as well would run the same job twice.
   push:
+    branches: [main]
   pull_request:
+
+# Only the latest commit of a branch or PR matters: cancel older runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
