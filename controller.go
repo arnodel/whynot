@@ -102,11 +102,12 @@ func (c *Controller) View() *View {
 	return c.view
 }
 
-// SetView makes the Controller drive v instead, forgetting what was
-// hovered in the previous View.
+// SetView makes the Controller drive v instead. A link hovered in the
+// previous View no longer is: OnLinkHover is called with "", and the
+// next Frame reports whatever is under the pointer in v.
 func (c *Controller) SetView(v *View) {
 	c.view = v
-	c.hoverDest = ""
+	c.setHover("", false)
 	c.hTarget, c.lastHScrolled = nil, nil
 	c.viewMoves = v.moves
 	c.cancelMomentum()
