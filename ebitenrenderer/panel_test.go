@@ -251,7 +251,7 @@ func TestSetView(t *testing.T) {
 	// A stylesheet with one distinctive scrollbar color, whatever the state.
 	c := color.RGBA{1, 2, 3, 4}
 	theme := simpletheme.Dark()
-	theme.ScrollbarColors = simpletheme.ScrollbarColors{Idle: c, Hover: c, Pressed: c}
+	theme.Scrollbar.Idle, theme.Scrollbar.Hover, theme.Scrollbar.Pressed = c, c, c
 
 	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar(), WithStyleSheet(theme.StyleSheet()))
 	if got := p.scrollbarColor(); got != c {

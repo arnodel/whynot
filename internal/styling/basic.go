@@ -7,10 +7,11 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 )
 
-// ScrollbarColors is the three colors a scrollbar thumb picks between -
-// idle, hovered, and actively dragged.
-type ScrollbarColors struct {
+// ScrollbarStyle is how scrollbars look: the three colors a thumb picks
+// between (idle, hovered, and dragged), and its geometry.
+type ScrollbarStyle struct {
 	Idle, Hover, Pressed color.Color
+	ScrollbarGeometry
 }
 
 // Basic is the field-configured Styles implementation behind
@@ -89,7 +90,7 @@ type Basic struct {
 
 	Highlight color.Color
 
-	Scrollbar ScrollbarColors
+	Scrollbar ScrollbarStyle
 
 	// TokenColors colors code tokens (ast.TagCodeToken) by their Class.
 	// A token whose class isn't here shows in its code block's color.
@@ -231,6 +232,10 @@ func (s *Basic) ViewMargins() Margins {
 
 func (s *Basic) HighlightColor() color.Color {
 	return s.Highlight
+}
+
+func (s *Basic) ScrollbarGeometry() ScrollbarGeometry {
+	return s.Scrollbar.ScrollbarGeometry
 }
 
 func (s *Basic) ScrollbarColor(hover, pressed bool) color.Color {

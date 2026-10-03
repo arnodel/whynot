@@ -73,10 +73,11 @@ func Basic() *styling.Basic {
 		// Light overrides this fully (see below) - unlike
 		// Highlight above, these don't read well against both
 		// backgrounds.
-		Scrollbar: styling.ScrollbarColors{
-			Idle:    color.RGBA{0x80, 0x80, 0x80, 0xA0},
-			Hover:   color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
-			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
+		Scrollbar: styling.ScrollbarStyle{
+			Idle:              color.RGBA{0x80, 0x80, 0x80, 0xA0},
+			Hover:             color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
+			Pressed:           color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
+			ScrollbarGeometry: styling.ScrollbarGeometry{Thickness: 6, Inset: 2, MinThumbLength: 24},
 		},
 
 		// Light overrides this fully (see below) - a palette
