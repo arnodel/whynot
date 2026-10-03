@@ -194,9 +194,31 @@ func TestControllerSetViewForgetsHover(t *testing.T) {
 	}
 
 	c.SetView(v)
+	if len(hoverEvents) != 2 || hoverEvents[1] != "" {
+		t.Errorf("hover events after SetView = %v, want a trailing \"\"", hoverEvents)
+	}
 	frame(c)
-	if len(hoverEvents) != 2 || hoverEvents[1] != "dest" {
-		t.Errorf("hover events after SetView = %v, want a second \"dest\"", hoverEvents)
+	if len(hoverEvents) != 3 || hoverEvents[2] != "dest" {
+		t.Errorf("hover events after the next frame = %v, want a trailing \"dest\"", hoverEvents)
+	}
+}
+
+// TestControllerSetViewClearsHover checks that a link hovered in the old
+// View doesn't stay reported once the new one has no link under the
+// pointer, e.g. after following a link.
+func TestControllerSetViewClearsHover(t *testing.T) {
+	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
+	lx, ly := findLinkPos(t, v)
+	var hovered string
+	c.OnLinkHover = func(dest string) { hovered = dest }
+	frame(c, input.PointerMove{X: lx, Y: ly})
+
+	plain := NewView(Parse([]byte("Just text, no links at all.")), fonts.NewGoSelector(), stylingtest.Basic())
+	plain.SetBounds(v.Bounds())
+	c.SetView(plain)
+	frame(c)
+	if hovered != "" {
+		t.Errorf("hovered link after SetView to a View without links = %q, want \"\"", hovered)
 	}
 }
 
