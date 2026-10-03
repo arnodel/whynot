@@ -25,10 +25,10 @@ jobs:
       with:
         go-version: 1.25
 
-    # backends/giobackend/examples/gio (giobackend's demo) needs Gio's own native build
-    # deps - giobackend itself has none of these, only the actual
-    # windowing package (gioui.org/app) does. Exact list per
-    # https://gioui.org/doc/install/linux.
+    # The Gio module's programs (backends/giobackend/cmd/giowhynot and
+    # examples/gio) need Gio's native build deps - giobackend itself has
+    # none of these, only the windowing package (gioui.org/app) does.
+    # Exact list per https://gioui.org/doc/install/linux.
     - name: Install Gio's Linux build dependencies
       run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
 
@@ -41,15 +41,21 @@ jobs:
           exit 1
         fi
 
+    # Two modules (see go.work): the core, and the Gio backend in
+    # backends/giobackend, which ./... from the root doesn't reach.
     - name: Vet
-      run: go vet ./...
+      run: |
+        go vet ./...
+        cd backends/giobackend && go vet ./...
 
     - name: All tests
-      run: go test -race -coverprofile="coverage.txt" -covermode=atomic ./...
+      run: |
+        go test -race -coverprofile="coverage.txt" -covermode=atomic ./...
+        cd backends/giobackend && go test -race -coverprofile="coverage.txt" -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2
       with:
-        files: ./coverage.txt
+        files: ./coverage.txt,./backends/giobackend/coverage.txt
         name: codecov-all-tests
         verbose: true
