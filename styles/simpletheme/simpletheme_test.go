@@ -77,7 +77,7 @@ func TestLightColors(t *testing.T) {
 		{"LinkColor", dark.LinkColor, light.LinkColor},
 		{"CodeBlockColor", dark.CodeBlockColor, light.CodeBlockColor},
 		{"CodeSpanColor", dark.CodeSpanColor, light.CodeSpanColor},
-		{"ScrollbarColors", dark.ScrollbarColors, light.ScrollbarColors},
+		{"Scrollbar", dark.Scrollbar, light.Scrollbar},
 		{"SyntaxColors", dark.SyntaxColors, light.SyntaxColors},
 	} {
 		if c.dark == c.light {

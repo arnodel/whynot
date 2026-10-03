@@ -61,6 +61,8 @@ type Controller struct {
 	touchAxis    touchAxis
 	touchTarget  engine.Block // the sideways-scrolling block it started on, if any
 	touchPending image.Point
+	// touchOnBar is whether the touch is dragging the View's scrollbar.
+	touchOnBar bool
 }
 
 // touchAxis is what a touch drag scrolls.
@@ -122,7 +124,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 		switch e := e.(type) {
 		case input.PointerMove:
 			c.pointer, c.hasPointer = image.Pt(e.X, e.Y), true
-			if s := c.hscroll(); s != nil && s.dragging != nil {
+			if c.view.vbar.dragging {
+				c.view.dragScrollbarTo(e.Y - c.bounds.Min.Y)
+			} else if s := c.hscroll(); s != nil && s.dragging != nil {
 				s.dragTo(e.X - c.bounds.Min.X)
 			}
 		case input.PointerLeave:
@@ -135,6 +139,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			c.pointer, c.hasPointer = p, true
 			s := c.hscroll()
 			if !e.Down {
+				if c.view.vbar.dragging {
+					c.view.endScrollbarDrag()
+				}
 				if s != nil && s.dragging != nil {
 					s.endDrag(c.view.ctx.Time)
 					s.hover(p.Sub(c.bounds.Min), c.view.ctx.Time)
@@ -143,6 +150,10 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			}
 			c.CancelMomentum()
 			if !p.In(c.bounds) {
+				continue
+			}
+			if local := p.Sub(c.bounds.Min); c.view.onScrollbar(local) {
+				c.view.beginScrollbarDrag(local)
 				continue
 			}
 			if s != nil && s.beginDrag(p.Sub(c.bounds.Min)) {
@@ -174,12 +185,25 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				continue
 			}
 			c.touching, c.touchID, c.touchPos = true, e.ID, image.Pt(e.X, e.Y)
+			local := c.touchPos.Sub(c.bounds.Min)
+			if c.touchPos.In(c.bounds) && c.view.onScrollbar(local) && c.view.scrollbarOpacity(c.view.ctx.Time) > 0 {
+				// A visible scrollbar is dragged by touch too; a hidden one
+				// mustn't swallow touches along the edge.
+				c.touchOnBar = true
+				c.CancelMomentum()
+				c.view.beginScrollbarDrag(local)
+				continue
+			}
 			touchStarted = true
 			c.touchStart(c.touchPos, now)
 		case input.TouchMove:
 			if c.touching && e.ID == c.touchID {
 				p := image.Pt(e.X, e.Y)
-				touchDelta = touchDelta.Add(p.Sub(c.touchPos))
+				if c.touchOnBar {
+					c.view.dragScrollbarTo(p.Y - c.bounds.Min.Y)
+				} else {
+					touchDelta = touchDelta.Add(p.Sub(c.touchPos))
+				}
 				c.touchPos = p
 			}
 		case input.TouchEnd:
@@ -194,6 +218,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 	}
 
 	switch {
+	case c.touchOnBar:
 	case c.touching:
 		// Also while the finger is held still (no movement), so the
 		// velocity decays before release rather than flinging.
@@ -231,18 +256,20 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 }
 
 // hover updates the hover from the pointer's position, unless a
-// sideways-scrollbar drag owns the pointer.
+// scrollbar drag owns the pointer.
 func (c *Controller) hover() {
-	if s := c.hscroll(); s != nil && s.dragging != nil {
+	if s := c.hscroll(); c.view.vbar.dragging || s != nil && s.dragging != nil {
 		return
 	}
 	if !c.hasPointer || !c.pointer.In(c.bounds) {
 		// (-1, -1) can't land on anything.
+		c.view.vbar.hovered = false
 		c.view.Hover(-1, -1)
 		c.setHover("", false)
 		return
 	}
 	local := c.pointer.Sub(c.bounds.Min)
+	c.view.vbar.hovered = c.view.onScrollbar(local)
 	c.setHover(c.view.Hover(local.X, local.Y))
 }
 
@@ -334,6 +361,10 @@ func (c *Controller) touchDrag(dx, dy int, now time.Duration) {
 // pan, the block's scrollbar fades out from now. It also clears hover:
 // whatever the finger was on mustn't stay hovered after it lifts.
 func (c *Controller) touchEnd() {
+	if c.touchOnBar {
+		c.touchOnBar = false
+		c.view.endScrollbarDrag()
+	}
 	if s := c.hscroll(); s != nil && c.touchAxis == touchHorizontal {
 		s.reveal(c.touchTarget, c.view.ctx.Time)
 	}
@@ -390,7 +421,7 @@ func (c *Controller) moving() bool {
 // true, or the animation stops dead.
 func (c *Controller) Animating() bool {
 	s := c.hscroll()
-	return c.moving() || s != nil && s.animating(c.view.ctx.Time)
+	return c.moving() || s != nil && s.animating(c.view.ctx.Time) || c.view.scrollbarAnimating(c.view.ctx.Time)
 }
 
 func fastEnough(v float64) bool {

@@ -17,18 +17,27 @@ const (
 	hscrollRevealFade = 300 * time.Millisecond
 )
 
-// Scrollbar thumb dimensions, in logical (unscaled) pixels.
-const (
-	scrollbarThickness = 6
-	scrollbarInset     = 2
-	scrollbarMinThumb  = 24
-)
+// barGeometry is a style's scrollbar geometry at the View's scale, in
+// pixels.
+type barGeometry struct {
+	thickness, inset, minThumb int
+	alwaysVisible              bool
+}
+
+func scaledBar(g styling.ScrollbarGeometry, scale float64) barGeometry {
+	return barGeometry{
+		thickness:     int(g.Thickness * scale),
+		inset:         int(g.Inset * scale),
+		minThumb:      int(g.MinThumbLength * scale),
+		alwaysVisible: g.AlwaysVisible,
+	}
+}
 
 // drawnRegion is a scroll region as drawn by the last View.Draw, in View
-// coordinates, with the scale it was drawn at.
+// coordinates, with the scrollbar geometry it was drawn with.
 type drawnRegion struct {
 	engine.ScrollRegion
-	scale float64
+	bar barGeometry
 }
 
 // hscrollState is a View's horizontal scrolling state: each block's
@@ -72,16 +81,20 @@ func (s *hscrollState) scrollOffset(source engine.Block, axis engine.Axis) float
 	return s.offsets[source]
 }
 
-// drawScrollbar is the engine's Scrollbar hook, for a region drawn at
-// scale with styles: it notes the region for input, and draws its thumb
-// as visible as barOpacity says.
+// drawScrollbar is the engine's Scrollbar hook, for a region drawn with
+// styles at scale: it notes the region for input, and draws its thumb as
+// visible as barOpacity says.
 func (s *hscrollState) drawScrollbar(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration, scale float64, styles styling.Styles) {
-	thumb := regionThumb(r, r.Offset, scale)
+	bar := scaledBar(styles.ScrollbarGeometry(), scale)
+	thumb := regionThumb(r, r.Offset, bar)
 	r.Box = r.Box.Sub(s.origin)
 	r.Visible = r.Visible.Sub(s.origin)
-	s.regions = append(s.regions, drawnRegion{r, scale})
+	s.regions = append(s.regions, drawnRegion{r, bar})
 
 	opacity := s.barOpacity(r.Source, now)
+	if bar.alwaysVisible {
+		opacity = 1
+	}
 	if opacity <= 0 {
 		return
 	}
@@ -93,17 +106,17 @@ func (s *hscrollState) drawScrollbar(dst canvas.Canvas, r engine.ScrollRegion, n
 }
 
 // regionThumb is the scrollbar thumb of r with its content scrolled to
-// offset, at scale. It sits along the bottom of the visible part, so a
-// box taller than the viewport still shows it.
-func regionThumb(r engine.ScrollRegion, offset int, scale float64) image.Rectangle {
+// offset. It sits along the bottom of the visible part, so a box taller
+// than the viewport still shows it.
+func regionThumb(r engine.ScrollRegion, offset int, bar barGeometry) image.Rectangle {
 	w := r.Box.Dx()
-	thumbWidth := min(w, max(w*w/r.ContentSize, int(scrollbarMinThumb*scale)))
+	thumbWidth := min(w, max(w*w/r.ContentSize, bar.minThumb))
 	x := r.Box.Min.X
 	if maxOffset := r.MaxOffset(); maxOffset > 0 {
 		x += offset * (w - thumbWidth) / maxOffset
 	}
-	bottom := min(r.Box.Max.Y, r.Visible.Max.Y) - int(scrollbarInset*scale)
-	return image.Rect(x, bottom-int(scrollbarThickness*scale), x+thumbWidth, bottom)
+	bottom := min(r.Box.Max.Y, r.Visible.Max.Y) - bar.inset
+	return image.Rect(x, bottom-bar.thickness, x+thumbWidth, bottom)
 }
 
 // beginFrame forgets the last frame's regions before a View.Draw at
@@ -145,14 +158,14 @@ func (s *hscrollState) offset(r drawnRegion) int {
 }
 
 func (s *hscrollState) thumb(r drawnRegion) image.Rectangle {
-	return regionThumb(r.ScrollRegion, s.offset(r), r.scale)
+	return regionThumb(r.ScrollRegion, s.offset(r), r.bar)
 }
 
 // barZone is the strip along the bottom of r's box that counts as its
 // scrollbar for the pointer: the thumb's track, with a little slack.
 func (s *hscrollState) barZone(r drawnRegion) image.Rectangle {
 	thumb := s.thumb(r)
-	return image.Rect(r.Box.Min.X, thumb.Min.Y-int(scrollbarInset*r.scale), r.Box.Max.X, r.Visible.Max.Y)
+	return image.Rect(r.Box.Min.X, thumb.Min.Y-r.bar.inset, r.Box.Max.X, r.Visible.Max.Y)
 }
 
 // hover updates which box, and whether its scrollbar, is under p at now.

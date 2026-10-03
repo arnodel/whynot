@@ -33,9 +33,14 @@ type View struct {
 	// stack is the laid-out document and the scroll position within it.
 	stack documentStack
 
-	// width and scale are what stack was last laid out at.
-	width int
-	scale float64
+	// width and scale are what stack was last laid out at; height is the
+	// viewport's.
+	width  int
+	height int
+	scale  float64
+
+	// vbar is the View's own vertical scrollbar, if enabled.
+	vbar vscrollbar
 
 	// imageCacheMark is the imagecache.Cache.ChangedSince mark from the last
 	// time Layout checked for image state changes.
@@ -120,6 +125,7 @@ func nodeOf(block engine.Block) *ast.Node {
 func (v *View) Scroll(dy float64) {
 	if v.stack.laidOut() {
 		v.stack.scroll(-dy)
+		v.revealScrollbar()
 	}
 }
 
@@ -166,6 +172,7 @@ func (v *View) ScrollToAnchor(id string) bool {
 func (v *View) ScrollToRatio(ratio float64) {
 	if v.stack.laidOut() {
 		v.stack.scrollToRatio(ratio)
+		v.revealScrollbar()
 	}
 }
 
@@ -226,6 +233,7 @@ func (v *View) Draw(dst canvas.Canvas, x, y int) {
 	// The top/bottom ViewMargins are spacer slots in the stack (see
 	// rebuild); only Left needs applying here.
 	v.stack.box.DrawFrom(dst, v.stack.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
+	v.drawScrollbar(dst, x, y)
 }
 
 // HitTest returns the rectangle of the content at (x, y), e.g. for
@@ -341,6 +349,7 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 func (v *View) Layout(width, height int, scale float64, now time.Duration) {
 	v.ctx.Scale = scale
 	v.ctx.Time = now
+	v.height = height
 
 	if width == v.width && scale == v.scale {
 		v.invalidateChangedImages()

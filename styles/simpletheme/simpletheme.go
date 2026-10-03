@@ -89,7 +89,9 @@ type Theme struct {
 	// HighlightColor is the text color of a hovered link.
 	HighlightColor color.Color
 
-	ScrollbarColors ScrollbarColors
+	// Scrollbar is how scrollbars look: the View's own, and those of code
+	// blocks and tables that scroll sideways.
+	Scrollbar Scrollbar
 	// SyntaxColors colors code tokens, when a code-block plugin
 	// classifies them (see codeblocks.Tokens).
 	SyntaxColors SyntaxColors
@@ -104,10 +106,17 @@ type Margins struct {
 	Top, Bottom, Left, Right float64
 }
 
-// ScrollbarColors is a scrollbar thumb's color when idle, hovered, and
-// being dragged.
-type ScrollbarColors struct {
+// Scrollbar is a scrollbar thumb's color when idle, hovered, and being
+// dragged, and its size in logical (unscaled) pixels. A zero size means
+// the default: 6 thick, 2 from the edge, at least 24 long.
+type Scrollbar struct {
 	Idle, Hover, Pressed color.Color
+
+	Thickness, Inset, MinThumbLength float64
+
+	// AlwaysVisible shows scrollbars whenever the content can scroll,
+	// instead of only while scrolling or pointing at them.
+	AlwaysVisible bool
 }
 
 // SyntaxColors is the color of each conventional class of code token
@@ -120,6 +129,27 @@ type SyntaxColors struct {
 	String   color.Color
 	Number   color.Color
 	Comment  color.Color
+}
+
+// style converts s to the engine's form, with defaults for zero sizes.
+func (s Scrollbar) style() styling.ScrollbarStyle {
+	orDefault := func(v, def float64) float64 {
+		if v == 0 {
+			return def
+		}
+		return v
+	}
+	return styling.ScrollbarStyle{
+		Idle:    s.Idle,
+		Hover:   s.Hover,
+		Pressed: s.Pressed,
+		ScrollbarGeometry: styling.ScrollbarGeometry{
+			Thickness:      orDefault(s.Thickness, 6),
+			Inset:          orDefault(s.Inset, 2),
+			MinThumbLength: orDefault(s.MinThumbLength, 24),
+			AlwaysVisible:  s.AlwaysVisible,
+		},
+	}
 }
 
 // byClass maps c's colors to the token classes they color. A nil color
@@ -248,7 +278,7 @@ func Dark() *Theme {
 		ViewMargins:     Margins{Top: 20, Bottom: 20, Left: 20, Right: 20},
 		HighlightColor:  color.RGBA{0xFF, 0xA5, 0x00, 0xFF},
 
-		ScrollbarColors: ScrollbarColors{
+		Scrollbar: Scrollbar{
 			Idle:    color.RGBA{0x80, 0x80, 0x80, 0xA0},
 			Hover:   color.RGBA{0xA0, 0xA0, 0xA0, 0xC0},
 			Pressed: color.RGBA{0xC0, 0xC0, 0xC0, 0xE0},
@@ -276,11 +306,9 @@ func Light() *Theme {
 	t.LinkColor = color.RGBA{0x03, 0x66, 0xD6, 0xFF}
 	t.CodeBlockColor = color.RGBA{0x33, 0x33, 0x33, 0xFF}
 	t.CodeSpanColor = color.RGBA{0x8B, 0x5A, 0x00, 0xFF}
-	t.ScrollbarColors = ScrollbarColors{
-		Idle:    color.RGBA{0x60, 0x60, 0x60, 0xA0},
-		Hover:   color.RGBA{0x40, 0x40, 0x40, 0xC0},
-		Pressed: color.RGBA{0x20, 0x20, 0x20, 0xE0},
-	}
+	t.Scrollbar.Idle = color.RGBA{0x60, 0x60, 0x60, 0xA0}
+	t.Scrollbar.Hover = color.RGBA{0x40, 0x40, 0x40, 0xC0}
+	t.Scrollbar.Pressed = color.RGBA{0x20, 0x20, 0x20, 0xE0}
 	t.SyntaxColors = SyntaxColors{
 		Keyword:  color.RGBA{0x7A, 0x33, 0xB0, 0xFF},
 		Type:     color.RGBA{0x00, 0x7A, 0x6E, 0xFF},
@@ -353,7 +381,7 @@ func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b.Background = t.BackgroundColor
 	b.ViewMargin = styling.Margins(t.ViewMargins)
 	b.Highlight = t.HighlightColor
-	b.Scrollbar = styling.ScrollbarColors(t.ScrollbarColors)
+	b.Scrollbar = t.Scrollbar.style()
 	b.TokenColors = t.SyntaxColors.byClass()
 	b.Dims.LineHeight = t.LineHeight
 	if b.Dims.LineHeight == 0 {

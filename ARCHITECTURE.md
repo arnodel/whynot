@@ -277,9 +277,11 @@ framework's input into [`input`](input) events (pointer moves and
 buttons, wheel, touches) and passes each frame's events to a
 `whynot.Controller` ([controller.go](controller.go)), which owns
 scrolling, hover and clicks, touch pans and flings, and sideways
-scrollbars. Each Panel's own vertical scrollbar is still its own:
-`ebitenrenderer` hand-draws its thumb and keeps the pointer while it's
-dragged, `giorenderer` drives Gio's native `widget.Scrollbar`.
+scrollbars, and the View's own vertical scrollbar (`WithScrollbar`,
+[scrollbar.go](scrollbar.go)), drawn by the View as its StyleSheet says.
+A Gio app may use Gio's native `widget.Scrollbar` instead
+(`giorenderer.WithNativeScrollbar`), styled best-effort from the same
+StyleSheet's colors.
 
 `DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
 scales the ratio between them to whatever real pixel track it's drawing a
@@ -346,9 +348,8 @@ the small placeholder that was estimating it, right as the scroll
 cursor reaches it, is exactly the scenario that can make a
 `DocumentBounds`-based scrollbar visibly jump backward even though the
 user only ever scrolled forward (the ratio's denominator grows more
-than its numerator does in the same frame - see `ebitenrenderer.Panel`'s
-`scrollbarThumbRect`/`giorenderer.Panel`'s `drawScrollbar`, what actually
-builds a scrollbar from these numbers). Getting a slot's real size known *before* the
+than its numerator does in the same frame - see `View.scrollbarThumb`,
+what actually builds a scrollbar from these numbers). Getting a slot's real size known *before* the
 cursor arrives, not right as it does, avoids the surprise instead of
 smoothing over it after the fact:
 

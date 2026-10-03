@@ -56,6 +56,19 @@ type TableGeometry struct {
 	ColumnRuleThickness float64
 }
 
+// ScrollbarGeometry is a scrollbar thumb's size, in logical (unscaled)
+// pixels, and whether it's always shown or fades out when idle.
+type ScrollbarGeometry struct {
+	// Thickness is the thumb's width across the direction it scrolls,
+	// and Inset its distance from the edge it runs along.
+	Thickness, Inset float64
+	// MinThumbLength keeps a thumb grabbable on long content.
+	MinThumbLength float64
+	// AlwaysVisible shows the scrollbar whenever the content can scroll,
+	// instead of only while scrolling or pointing at it.
+	AlwaysVisible bool
+}
+
 // Styles resolves an ast.Node's semantic role to concrete appearance - what the
 // layout engine queries. Every per-element method takes the node,
 // uniformly, even where nothing varies a value by node today - an
@@ -91,6 +104,8 @@ type Styles interface {
 	// it's highlighted (including while dragged), pressed only while
 	// dragged.
 	ScrollbarColor(hover, pressed bool) color.Color
+	// ScrollbarGeometry is a scrollbar's size and visibility.
+	ScrollbarGeometry() ScrollbarGeometry
 
 	// StrikeThickness returns the thickness of a strikethrough line at
 	// node, or 0 if node isn't (nor is any ancestor) struck through -
