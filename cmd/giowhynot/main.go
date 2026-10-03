@@ -60,6 +60,7 @@ func main() {
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel
 	panel.OnLinkClick = browserApp.Follow
+	panel.OnAnchorClick = browserApp.FollowAnchor
 	panel.OnLinkHover = browserApp.OnLinkHover
 
 	tb := newToolbar(fonts.NewGoSelector(), renderer)

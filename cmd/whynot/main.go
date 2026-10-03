@@ -77,6 +77,7 @@ func main() {
 
 	g.relayout()
 	g.panel.OnLinkClick = app.Follow
+	g.panel.OnAnchorClick = app.FollowAnchor
 	g.panel.OnLinkHover = app.OnLinkHover
 
 	app.Open(location)

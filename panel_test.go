@@ -44,11 +44,12 @@ func TestPanelHoverAndClick(t *testing.T) {
 	}
 }
 
-func TestPanelAnchorScrolling(t *testing.T) {
+// TestPanelAnchorDefault checks a Panel's "#id" links scroll by
+// default.
+func TestPanelAnchorDefault(t *testing.T) {
 	// The link is at the top and its heading far below.
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
 	p := newTestPanel(doc, image.Rect(0, 0, testWidth, testHeight))
-	p.AnchorScrolling = true
 	x, y := findLinkPos(t, p.View())
 	var clicked bool
 	p.OnLinkClick = func(string) { clicked = true }
@@ -57,7 +58,7 @@ func TestPanelAnchorScrolling(t *testing.T) {
 	before := visibleViewBounds(p.View(), viewport).Min.Y
 	p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
 	if clicked {
-		t.Error("OnLinkClick called for a #fragment link with AnchorScrolling")
+		t.Error("OnLinkClick called for a #id link")
 	}
 	if after := visibleViewBounds(p.View(), viewport).Min.Y; after <= before {
 		t.Errorf("page top after clicking the anchor link = %d, want more than %d", after, before)

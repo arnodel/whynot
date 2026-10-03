@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"math"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,12 +29,20 @@ type Controller struct {
 	scale float64
 
 	// OnLinkClick is called with a link's destination when it's clicked
-	// or tapped, OnLinkHover when the hovered link changes ("" when
-	// none). With AnchorScrolling, a "#fragment" link scrolls the View to
-	// that heading instead of calling OnLinkClick.
-	OnLinkClick     func(destination string)
-	OnLinkHover     func(destination string)
-	AnchorScrolling bool
+	// or tapped, unless it's a link within the document (see
+	// OnAnchorClick). Nil means the default: nothing happens, since
+	// following a link to another document is up to the app.
+	OnLinkClick func(destination string)
+
+	// OnAnchorClick is called when a link within the document ("#id") is
+	// clicked or tapped, with id percent-decoded. Nil means the default:
+	// the View scrolls to that heading ([View.ScrollToAnchor]). Set it to
+	// do something else as well, such as recording history.
+	OnAnchorClick func(id string)
+
+	// OnLinkHover is called when the hovered link changes, with its
+	// destination, or "" when none is hovered.
+	OnLinkHover func(destination string)
 
 	hoverDest string
 
@@ -310,9 +319,20 @@ func (c *Controller) setHover(dest string, ok bool) {
 
 // click follows the link to dest.
 func (c *Controller) click(dest string) {
-	if c.AnchorScrolling && strings.HasPrefix(dest, "#") {
-		c.view.ScrollToAnchor(strings.TrimPrefix(dest, "#"))
-	} else if c.OnLinkClick != nil {
+	if id, ok := strings.CutPrefix(dest, "#"); ok {
+		// Ids are matched decoded, as browsers do: "#caf%C3%A9" is the
+		// heading "café".
+		if decoded, err := url.PathUnescape(id); err == nil {
+			id = decoded
+		}
+		if c.OnAnchorClick != nil {
+			c.OnAnchorClick(id)
+		} else {
+			c.view.ScrollToAnchor(id)
+		}
+		return
+	}
+	if c.OnLinkClick != nil {
 		c.OnLinkClick(dest)
 	}
 }
