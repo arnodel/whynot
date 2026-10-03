@@ -6,9 +6,8 @@ import (
 	"github.com/arnodel/whynot/internal/engine"
 )
 
-// Document is a parsed Markdown document: its Block tree plus what the
-// compiler recorded about its top-level structure along the way. Built by
-// Parse, immutable afterward, and renderable by any number of Views.
+// Document is a parsed Markdown document, made by Parse. It's immutable,
+// and any number of Views can show it.
 type Document struct {
 	root *engine.StackBlock
 

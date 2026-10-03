@@ -18,25 +18,21 @@ const (
 	interactionMomentumMinVelocity    = 30
 )
 
-// Interaction drives a View from generic pointer input - the backend-
-// agnostic core of what a "panel" embedding a View needs (see
-// ebitenrenderer.Panel, giorenderer.Panel), so scroll gating, hover/click
-// dispatch, and touch-momentum decay are implemented once rather than
-// per rendering backend. It deliberately knows nothing about a
-// scrollbar - that stays backend-specific, since each backend represents
-// one so differently (a hand-drawn rect vs a native widget).
+// Interaction drives a View from pointer and touch input in screen
+// coordinates, so that each backend doesn't reimplement it: scrolling,
+// link hover and clicks, sideways-scrolling blocks and their scrollbars,
+// and touch flings. The View's own vertical scrollbar is the backend's.
 //
-// View/Bounds/OnLinkClick/OnLinkHover/AnchorScrolling are plain fields a
-// caller keeps in sync with its own equivalents (e.g. every tick, or
-// whenever they change) - Interaction has no setter methods to keep
-// this a lightweight, low-level helper rather than another layer of
-// encapsulation on top of Panel's own.
+// Set the fields, and keep View and Bounds up to date, before feeding it
+// events.
 type Interaction struct {
 	View   *View
 	Bounds image.Rectangle
 
-	// OnLinkClick/OnLinkHover/AnchorScrolling - see ebitenrenderer.Panel's
-	// identical fields/option for what these mean.
+	// OnLinkClick is called with a link's destination when it's clicked,
+	// OnLinkHover when the hovered link changes ("" when none). With
+	// AnchorScrolling, a "#fragment" link scrolls the View to that
+	// heading instead of calling OnLinkClick.
 	OnLinkClick     func(destination string)
 	OnLinkHover     func(destination string)
 	AnchorScrolling bool
@@ -73,10 +69,8 @@ const (
 // decides whether it scrolls the block or the page.
 const touchAxisLockDistance = 10
 
-// tick returns real elapsed seconds since the last call (0 on the very
-// first), updating the internal clock - shared by touch drags and
-// Momentum, since both need real time, not tick count, to stay correct
-// regardless of frame rate.
+// tick returns the seconds elapsed since its last call (0 the first
+// time): flings use real time, so they don't depend on the frame rate.
 func (in *Interaction) tick(now time.Time) float64 {
 	dt := 0.0
 	if !in.lastTick.IsZero() {
