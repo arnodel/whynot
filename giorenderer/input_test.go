@@ -96,8 +96,6 @@ func TestTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 func TestTouchLeavesNoHover(t *testing.T) {
 	app := newTestApp(strings.Repeat("[a link](#nowhere) ", 20), image.Rect(0, 0, 400, 300))
 	frame, router, panel := app.frame, &app.router, app.panel
-	var hovered []string
-	panel.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
 	var link f32.Point
 	for y := 0; y < 100 && link == (f32.Point{}); y++ {
 		for x := 0; x < 200; x++ {
@@ -114,10 +112,13 @@ func TestTouchLeavesNoHover(t *testing.T) {
 	frame()
 	router.Queue(pointer.Event{Kind: pointer.Press, Source: pointer.Touch, Position: link})
 	frame()
+	if _, ok := panel.View().HoveredLink(); !ok {
+		t.Fatal("test setup: the tapped link isn't highlighted while touched")
+	}
 	router.Queue(pointer.Event{Kind: pointer.Release, Source: pointer.Touch, Position: link})
 	frame()
 
-	if len(hovered) == 0 || hovered[len(hovered)-1] != "" {
-		t.Errorf("OnLinkHover calls = %q, want the last one to clear the hover (\"\")", hovered)
+	if dest, ok := panel.View().HoveredLink(); ok {
+		t.Errorf("HoveredLink() = %q after the finger lifted, want none", dest)
 	}
 }

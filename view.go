@@ -3,7 +3,6 @@ package whynot
 import (
 	"image"
 	"image/color"
-	"strings"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -158,33 +157,23 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id at
 // the top of the viewport, e.g. after following a link with a URL
-// fragment. As in a browser, the empty id, and "top" when no heading has
-// that id, scroll to the top of the document. ok is false, and the scroll
-// position unchanged, if no heading has that id or nothing has been laid
-// out yet.
+// fragment. ok is false, and the scroll position unchanged, if no heading
+// has that id or nothing has been laid out yet.
 //
 // Only top-level headings are found: not one nested in a blockquote or
 // list.
 func (v *View) ScrollToAnchor(id string) bool {
-	if !v.stack.laidOut() {
+	if !v.stack.laidOut() || id == "" {
 		return false
 	}
-	slot := -1
 	for i := range v.stack.len() {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id && id != "" {
-			slot = i
-			break
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id {
+			v.stack.scrollToSlot(i)
+			v.moves++
+			return true
 		}
 	}
-	if slot < 0 && (id == "" || strings.EqualFold(id, "top")) {
-		slot = 0
-	}
-	if slot < 0 {
-		return false
-	}
-	v.stack.scrollToSlot(slot)
-	v.moves++
-	return true
+	return false
 }
 
 // ScrollToRatio puts the top of the View at ratio (clamped to [0, 1]) of
@@ -403,6 +392,17 @@ func (v *View) setHighlight(node *ast.Node, slot int) {
 	if node != nil {
 		v.highlightSlot = slot
 	}
+}
+
+// HoveredLink returns the destination of the link under the pointer, as
+// written in the document, or ok=false if there's none. A Controller
+// keeps it up to date; it's highlighted in the StyleSheet's
+// HighlightColor.
+func (v *View) HoveredLink() (destination string, ok bool) {
+	if n := v.ctx.HighlightNode; n != nil {
+		return n.Destination, true
+	}
+	return "", false
 }
 
 // LinkAt reports the destination URL of the link at (x, y). ok is false

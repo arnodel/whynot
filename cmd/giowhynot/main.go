@@ -59,12 +59,10 @@ func main() {
 	view := browserApp.NewView(source, location)
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel
-	panel.OnLinkClick = browserApp.Follow
-	panel.OnAnchorClick = browserApp.FollowAnchor
-	panel.OnLinkHover = browserApp.OnLinkHover
+	panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
 
 	tb := newToolbar(fonts.NewGoSelector(), renderer)
-	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit}
+	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit, onEvents: browserApp.HandleEvents}
 
 	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))

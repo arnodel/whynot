@@ -40,9 +40,9 @@ func newTestController(t *testing.T, source string) (*Controller, *View) {
 	return NewController(v), v
 }
 
-// frame runs one frame of events at time 0.
-func frame(c *Controller, events ...input.Event) {
-	c.Frame(events, 0)
+// frame runs one frame of events at time 0, returning what happened.
+func frame(c *Controller, events ...input.Event) []Event {
+	return c.Frame(events, 0)
 }
 
 func press(x, y int) input.Event {
@@ -53,6 +53,12 @@ func release(x, y int) input.Event {
 	return input.PointerButton{X: x, Y: y, Button: input.ButtonPrimary}
 }
 
+// hovered is v's hovered link, or "" if none.
+func hovered(v *View) string {
+	dest, _ := v.HoveredLink()
+	return dest
+}
+
 func TestControllerHoverAndClick(t *testing.T) {
 	const doc = "A paragraph with [a link](dest) in it, and then some more text below it too."
 	c, v := newTestController(t, doc)
@@ -60,47 +66,34 @@ func TestControllerHoverAndClick(t *testing.T) {
 	v.SetBounds(image.Rect(50, 30, 50+testWidth, 30+testHeight))
 	cx, cy := findLinkPos(t, v)
 
-	var hoverEvents []string
-	c.OnLinkHover = func(dest string) { hoverEvents = append(hoverEvents, dest) }
-	var clicked string
-	var clickCount int
-	c.OnLinkClick = func(dest string) { clicked = dest; clickCount++ }
-
 	// Outside bounds entirely - no hover.
 	frame(c, input.PointerMove{X: 0, Y: 0})
-	if len(hoverEvents) != 0 {
-		t.Errorf("hover events outside bounds = %v, want none", hoverEvents)
+	if got := hovered(v); got != "" {
+		t.Errorf("hovered link outside bounds = %q, want none", got)
 	}
 
-	// Over the link.
+	// Over the link, and it stays hovered without further input.
 	frame(c, input.PointerMove{X: cx, Y: cy})
-	if len(hoverEvents) != 1 || hoverEvents[0] != "dest" {
-		t.Errorf("hover events after moving onto the link = %v, want [dest]", hoverEvents)
+	if got := hovered(v); got != "dest" {
+		t.Errorf("hovered link over the link = %q, want dest", got)
+	}
+	if events := frame(c); len(events) != 0 || hovered(v) != "dest" {
+		t.Errorf("a frame without input: events %v, hovered %q; want none, dest", events, hovered(v))
 	}
 
-	// A frame without input - no new event (edge-triggered).
-	frame(c)
-	if len(hoverEvents) != 1 {
-		t.Errorf("hover events after a frame without input = %v, want still just 1", hoverEvents)
+	// Click it: reported once, on the press.
+	events := frame(c, press(cx, cy))
+	if len(events) != 1 || events[0] != (LinkClick{Destination: "dest"}) {
+		t.Errorf("events for a press on the link = %v, want [LinkClick{dest}]", events)
 	}
-
-	// Click it.
-	frame(c, press(cx, cy))
-	frame(c, release(cx, cy))
-	if clickCount != 1 || clicked != "dest" {
-		t.Errorf("OnLinkClick called %d time(s) with %q, want once with \"dest\"", clickCount, clicked)
+	if events := frame(c, release(cx, cy)); len(events) != 0 {
+		t.Errorf("events for the release = %v, want none", events)
 	}
 
 	// Move off - hover clears.
 	frame(c, input.PointerMove{X: v.Bounds().Min.X, Y: v.Bounds().Min.Y})
-	if len(hoverEvents) != 2 || hoverEvents[1] != "" {
-		t.Errorf("hover events after moving off the link = %v, want a trailing \"\"", hoverEvents)
-	}
-
-	// Leave - nothing hovered, already cleared: no new event.
-	frame(c, input.PointerLeave{})
-	if len(hoverEvents) != 2 {
-		t.Errorf("hover events after leaving = %v, want still 2", hoverEvents)
+	if got := hovered(v); got != "" {
+		t.Errorf("hovered link after moving off = %q, want none", got)
 	}
 }
 
@@ -109,133 +102,82 @@ func TestControllerHoverAndClick(t *testing.T) {
 func TestControllerLeaveClearsHover(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
 	lx, ly := findLinkPos(t, v)
-	var hovered string
-	c.OnLinkHover = func(dest string) { hovered = dest }
 
 	frame(c, input.PointerMove{X: lx, Y: ly})
-	if hovered != "dest" {
-		t.Fatalf("hovered = %q, want dest", hovered)
+	if got := hovered(v); got != "dest" {
+		t.Fatalf("hovered = %q, want dest", got)
 	}
 	frame(c, input.PointerLeave{})
-	if hovered != "" {
-		t.Errorf("hovered after leaving = %q, want none", hovered)
+	if got := hovered(v); got != "" {
+		t.Errorf("hovered after leaving = %q, want none", got)
 	}
 }
 
 // TestControllerSecondaryButtonDoesNotClick checks only the primary
-// button follows links.
+// button clicks links.
 func TestControllerSecondaryButtonDoesNotClick(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
 	lx, ly := findLinkPos(t, v)
-	clicked := false
-	c.OnLinkClick = func(string) { clicked = true }
 
-	frame(c, input.PointerButton{X: lx, Y: ly, Button: input.ButtonSecondary, Down: true})
-	if clicked {
-		t.Error("a secondary-button press followed the link")
+	events := frame(c, input.PointerButton{X: lx, Y: ly, Button: input.ButtonSecondary, Down: true})
+	if len(events) != 0 {
+		t.Errorf("events for a secondary-button press on a link = %v, want none", events)
 	}
 }
 
-// TestControllerTapFollowsLink checks a touch on a link follows it, and
+// TestControllerTapClicksLink checks a touch on a link clicks it, and
 // leaves nothing hovered once lifted.
-func TestControllerTapFollowsLink(t *testing.T) {
+func TestControllerTapClicksLink(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
 	lx, ly := findLinkPos(t, v)
-	var clicked, hovered string
-	c.OnLinkClick = func(dest string) { clicked = dest }
-	c.OnLinkHover = func(dest string) { hovered = dest }
 
-	frame(c, input.TouchStart{ID: 1, X: lx, Y: ly})
-	if clicked != "dest" {
-		t.Errorf("clicked = %q after a tap on the link, want dest", clicked)
+	events := frame(c, input.TouchStart{ID: 1, X: lx, Y: ly})
+	if len(events) != 1 || events[0] != (LinkClick{Destination: "dest"}) {
+		t.Errorf("events for a tap on the link = %v, want [LinkClick{dest}]", events)
 	}
 	frame(c, input.TouchEnd{ID: 1})
-	if hovered != "" {
-		t.Errorf("hovered = %q after the touch ended, want none", hovered)
+	if got := hovered(v); got != "" {
+		t.Errorf("hovered = %q after the touch ended, want none", got)
 	}
 }
 
-// TestControllerAnchorDefault checks a "#id" link scrolls to its
-// heading when OnAnchorClick is nil, without calling OnLinkClick.
-func TestControllerAnchorDefault(t *testing.T) {
-	// The link sits at the very top (easy to find without scrolling);
-	// the heading it targets is far below.
-	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
-	c, v := newTestController(t, doc)
-	lx, ly := findLinkPos(t, v)
-
-	var clicked bool
-	c.OnLinkClick = func(string) { clicked = true }
-
-	before, _ := v.VisibleRange()
-	frame(c, press(lx, ly))
-	if clicked {
-		t.Error("OnLinkClick was called for a #id link")
-	}
-	if after, _ := v.VisibleRange(); after <= before {
-		t.Errorf("VisibleRange start after clicking the anchor link = %v, want more than %v", after, before)
-	}
-}
-
-// TestControllerOnAnchorClick checks OnAnchorClick replaces the default
-// scrolling, and gets the id percent-decoded.
-func TestControllerOnAnchorClick(t *testing.T) {
+// TestControllerReportsAnchorClick checks a "#id" link is reported as an
+// AnchorClick, with its id percent-decoded, and that the Controller
+// doesn't act on it.
+func TestControllerReportsAnchorClick(t *testing.T) {
 	doc := "[jump](#a%20target)\n\n" + strings.Repeat(longDoc, 10) + "# A target"
 	c, v := newTestController(t, doc)
 	lx, ly := findLinkPos(t, v)
 
-	var got []string
-	c.OnAnchorClick = func(id string) { got = append(got, id) }
-	frame(c, press(lx, ly))
-	if len(got) != 1 || got[0] != "a target" {
-		t.Errorf("OnAnchorClick called with %q, want [\"a target\"]", got)
+	events := frame(c, press(lx, ly))
+	if len(events) != 1 || events[0] != (AnchorClick{ID: "a target"}) {
+		t.Errorf("events for a press on an anchor link = %v, want [AnchorClick{a target}]", events)
 	}
 	if start, _ := v.VisibleRange(); start != 0 {
-		t.Errorf("VisibleRange start = %v after OnAnchorClick, want 0 (no default scrolling)", start)
+		t.Errorf("VisibleRange start = %v after the click, want 0 (the Controller doesn't scroll)", start)
 	}
 }
 
-// TestControllerSetViewForgetsHover checks that switching View clears the
-// hovered link, so the same link in the new View is reported again.
-func TestControllerSetViewForgetsHover(t *testing.T) {
-	const doc = "A paragraph with [a link](dest) in it."
-	c, v := newTestController(t, doc)
-	lx, ly := findLinkPos(t, v)
-
-	var hoverEvents []string
-	c.OnLinkHover = func(dest string) { hoverEvents = append(hoverEvents, dest) }
-
-	frame(c, input.PointerMove{X: lx, Y: ly})
-	if len(hoverEvents) != 1 {
-		t.Fatalf("hover events before SetView = %v, want 1", hoverEvents)
-	}
-
-	c.SetView(v)
-	if len(hoverEvents) != 2 || hoverEvents[1] != "" {
-		t.Errorf("hover events after SetView = %v, want a trailing \"\"", hoverEvents)
-	}
-	frame(c)
-	if len(hoverEvents) != 3 || hoverEvents[2] != "dest" {
-		t.Errorf("hover events after the next frame = %v, want a trailing \"dest\"", hoverEvents)
-	}
-}
-
-// TestControllerSetViewClearsHover checks that a link hovered in the old
-// View doesn't stay reported once the new one has no link under the
-// pointer, e.g. after following a link.
+// TestControllerSetViewClearsHover checks that switching View leaves
+// nothing hovered in the old one, and that the next frame hovers what's
+// under the pointer in the new one.
 func TestControllerSetViewClearsHover(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
 	lx, ly := findLinkPos(t, v)
-	var hovered string
-	c.OnLinkHover = func(dest string) { hovered = dest }
 	frame(c, input.PointerMove{X: lx, Y: ly})
 
 	plain := NewView(Parse([]byte("Just text, no links at all.")), fonts.NewGoSelector(), stylingtest.Basic())
 	plain.SetBounds(v.Bounds())
 	c.SetView(plain)
+	if got := hovered(v); got != "" {
+		t.Errorf("old View's hovered link after SetView = %q, want none", got)
+	}
+
+	// Back to the first View: the link under the pointer is hovered again.
+	c.SetView(v)
 	frame(c)
-	if hovered != "" {
-		t.Errorf("hovered link after SetView to a View without links = %q, want \"\"", hovered)
+	if got := hovered(v); got != "dest" {
+		t.Errorf("hovered link after switching back and a frame = %q, want dest", got)
 	}
 }
 

@@ -17,51 +17,70 @@ func newTestPanel(source string, bounds image.Rectangle) *Panel {
 	return NewPanel(v, bounds)
 }
 
-// TestPanelHoverAndClick checks the Panel passes input to its link
-// callbacks, in the coordinates of its bounds.
+// TestPanelHoverAndClick checks the Panel hovers and reports links, in
+// the coordinates of its bounds.
 func TestPanelHoverAndClick(t *testing.T) {
 	// Away from the origin, to catch a coordinate-translation bug.
 	bounds := image.Rect(50, 30, 50+testWidth, 30+testHeight)
 	p := newTestPanel("A paragraph with [a link](dest) in it, and then some more text below it too.", bounds)
 	x, y := findLinkPos(t, p.View())
 
-	var hovered []string
-	p.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
-	var clicked []string
-	p.OnLinkClick = func(dest string) { clicked = append(clicked, dest) }
-
 	p.Frame([]input.Event{input.PointerMove{X: 0, Y: 0}}, 0)
-	if len(hovered) != 0 {
-		t.Errorf("hovered %q with the pointer outside the bounds, want nothing", hovered)
+	if got := hovered(p.View()); got != "" {
+		t.Errorf("hovered %q with the pointer outside the bounds, want nothing", got)
 	}
 	p.Frame([]input.Event{input.PointerMove{X: x, Y: y}}, 0)
-	if len(hovered) != 1 || hovered[0] != "dest" {
-		t.Errorf("hovered %q over the link, want [dest]", hovered)
+	if got := hovered(p.View()); got != "dest" {
+		t.Errorf("hovered %q over the link, want dest", got)
 	}
-	p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
-	if len(clicked) != 1 || clicked[0] != "dest" {
-		t.Errorf("clicked %q, want [dest]", clicked)
+	events := p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
+	if len(events) != 1 || events[0] != (LinkClick{Destination: "dest"}) {
+		t.Errorf("events for a click on the link = %v, want [LinkClick{dest}]", events)
 	}
 }
 
-// TestPanelAnchorDefault checks a Panel's "#id" links scroll by
-// default.
-func TestPanelAnchorDefault(t *testing.T) {
+// TestPanelAnchorScrolling checks a Panel scrolls to a "#id" link's
+// heading by default, still reporting the AnchorClick, and that
+// SetAnchorScrolling(false) leaves it to the app.
+func TestPanelAnchorScrolling(t *testing.T) {
 	// The link is at the top and its heading far below.
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
-	p := newTestPanel(doc, image.Rect(0, 0, testWidth, testHeight))
-	x, y := findLinkPos(t, p.View())
-	var clicked bool
-	p.OnLinkClick = func(string) { clicked = true }
+	for _, on := range []bool{true, false} {
+		p := newTestPanel(doc, image.Rect(0, 0, testWidth, testHeight))
+		p.SetAnchorScrolling(on)
+		x, y := findLinkPos(t, p.View())
 
-	viewport := image.Pt(testWidth, testHeight)
-	before := visibleViewBounds(p.View(), viewport).Min.Y
-	p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
-	if clicked {
-		t.Error("OnLinkClick called for a #id link")
+		events := p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
+		if len(events) != 1 || events[0] != (AnchorClick{ID: "target"}) {
+			t.Errorf("anchor scrolling %v: events = %v, want [AnchorClick{target}]", on, events)
+		}
+		if start, _ := p.View().VisibleRange(); (start > 0) != on {
+			t.Errorf("anchor scrolling %v: VisibleRange start = %v after the click", on, start)
+		}
 	}
-	if after := visibleViewBounds(p.View(), viewport).Min.Y; after <= before {
-		t.Errorf("page top after clicking the anchor link = %d, want more than %d", after, before)
+}
+
+// TestPanelAnchorTop checks a bare "#" link, and "#top" when no heading
+// has that id, scroll to the top, as in a browser, while a "Top" heading
+// takes precedence.
+func TestPanelAnchorTop(t *testing.T) {
+	click := func(t *testing.T, doc string) (start float64) {
+		t.Helper()
+		p := newTestPanel(doc, image.Rect(0, 0, testWidth, testHeight))
+		p.View().ScrollBy(5) // off the top, with the link still on screen
+		x, y := findLinkPos(t, p.View())
+		p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
+		start, _ = p.View().VisibleRange()
+		return start
+	}
+	filler := strings.Repeat(longDoc, 10)
+	for _, dest := range []string{"#", "#top", "#Top"} {
+		if start := click(t, "[up]("+dest+")\n\n"+filler); start != 0 {
+			t.Errorf("after clicking a %q link, VisibleRange start = %v, want 0", dest, start)
+		}
+	}
+	if start := click(t, "[up](#top)\n\n"+filler+"# Top\n\n"+filler); start == 0 {
+		t.Error(`a "#top" link went to the top of the document, want the "Top" heading`)
 	}
 }
 

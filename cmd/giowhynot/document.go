@@ -24,6 +24,8 @@ type document struct {
 	// focus doesn't follow clicks, so the toolbar can't otherwise tell
 	// the user clicked away from the address bar.
 	onPress func()
+	// onEvents is given what the panel reports each frame.
+	onEvents func([]whynot.Event)
 }
 
 // layout runs the document's frame: input, then drawing.
@@ -33,7 +35,7 @@ func (d *document) layout(gtx layout.Context) {
 	if d.onPress != nil && pressed(events) {
 		d.onPress()
 	}
-	d.panel.Frame(events, now)
+	d.onEvents(d.panel.Frame(events, now))
 	// Gio only produces frames when something happens.
 	if d.panel.Animating() {
 		gtx.Execute(op.InvalidateCmd{})

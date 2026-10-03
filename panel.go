@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"image"
+	"strings"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -17,24 +18,10 @@ import (
 // A Panel doesn't depend on a graphics library. Each frame, the app
 // passes it the frame's input events (from a backend's input.Source)
 // and a canvas.Canvas to draw on, along with the time.
+//
+// Unlike a Controller, a Panel acts on some Events itself: it follows
+// links within the document (see SetAnchorScrolling).
 type Panel struct {
-	// OnLinkClick is called with a link's destination when it's clicked
-	// or tapped, unless it's a link within the document (see
-	// OnAnchorClick). Nil means the default: nothing happens, since
-	// following a link to another document is up to the app.
-	OnLinkClick func(destination string)
-
-	// OnAnchorClick is called when a link within the document ("#id") is
-	// clicked or tapped, with id percent-decoded. Nil means the default:
-	// the View scrolls to that heading ([View.ScrollToAnchor]). Set it to
-	// do something else as well, such as recording history.
-	OnAnchorClick func(id string)
-
-	// OnLinkHover is called when the hovered link changes, with "" when
-	// none is. The View already highlights it; this is for the app's own
-	// reactions, like a status bar.
-	OnLinkHover func(destination string)
-
 	view       *View
 	controller *Controller
 
@@ -44,13 +31,15 @@ type Panel struct {
 	zoom       float64
 	styleSheet StyleSheet
 	scrollbar  bool
+
+	anchorScrolling bool
 }
 
 // NewPanel returns a Panel showing view in bounds, at scale 1 and zoom 1.
 // bounds is in canvas coordinates (see Coordinates in the package
 // documentation).
 func NewPanel(view *View, bounds image.Rectangle) *Panel {
-	p := &Panel{bounds: bounds, scale: 1, zoom: 1, controller: NewController(view)}
+	p := &Panel{bounds: bounds, scale: 1, zoom: 1, anchorScrolling: true, controller: NewController(view)}
 	p.SetView(view)
 	return p
 }
@@ -124,13 +113,38 @@ func (p *Panel) SetStyleSheet(s StyleSheet) {
 }
 
 // Frame applies one frame's input events at now, elapsed time on the
-// app's clock. Call it once per frame, before Draw, with no events if
-// there were none, so flings keep coasting.
-func (p *Panel) Frame(events []input.Event, now time.Duration) {
-	p.controller.OnLinkClick = p.OnLinkClick
-	p.controller.OnLinkHover = p.OnLinkHover
-	p.controller.OnAnchorClick = p.OnAnchorClick
-	p.controller.Frame(events, now)
+// app's clock, and returns what happened, like [Controller.Frame]. Call
+// it once per frame, before Draw, with no events if there were none, so
+// flings keep coasting.
+//
+// Unless SetAnchorScrolling turned it off, an AnchorClick has already
+// scrolled the View to its anchor by the time Frame returns it.
+func (p *Panel) Frame(events []input.Event, now time.Duration) []Event {
+	out := p.controller.Frame(events, now)
+	if p.anchorScrolling {
+		for _, e := range out {
+			if a, ok := e.(AnchorClick); ok {
+				scrollToFragment(p.view, a.ID)
+			}
+		}
+	}
+	return out
+}
+
+// SetAnchorScrolling sets whether a link within the document ("#id")
+// scrolls the View to its anchor, as it does by default. Turn it off to
+// handle AnchorClick events differently, e.g. to record history first.
+func (p *Panel) SetAnchorScrolling(on bool) {
+	p.anchorScrolling = on
+}
+
+// scrollToFragment scrolls v to the anchor a URL fragment names, the way
+// browsers do: the heading with that id, else the top of the document
+// for an empty fragment or "top".
+func scrollToFragment(v *View, id string) {
+	if !v.ScrollToAnchor(id) && (id == "" || strings.EqualFold(id, "top")) {
+		v.ScrollToRatio(0)
+	}
 }
 
 // Draw draws the View onto dst, within the Panel's bounds, as it is at
