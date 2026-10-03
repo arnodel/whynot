@@ -7,7 +7,7 @@ import (
 	"gioui.org/op"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/input"
 )
 
@@ -15,9 +15,9 @@ import (
 // scrollbar.
 type document struct {
 	panel     *whynot.Panel
-	renderer  *giorenderer.Renderer
-	input     giorenderer.Input
-	scrollbar giorenderer.NativeScrollbar
+	renderer  *giobackend.Renderer
+	input     giobackend.Input
+	scrollbar giobackend.NativeScrollbar
 	start     time.Time // the clock the panel runs on
 
 	// onPress is called when a press lands on the document: Gio's key

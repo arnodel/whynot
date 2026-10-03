@@ -1,4 +1,4 @@
-package giorenderer
+package giobackend
 
 import (
 	"image"

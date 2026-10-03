@@ -1,6 +1,6 @@
 # giowhynot in the browser
 
-Runs the real `cmd/giowhynot` - toolbar (including the editable address bar), history, zoom,
+Runs the real `backends/giobackend/cmd/giowhynot` - toolbar (including the editable address bar), history, zoom,
 theme - in a browser tab via Gio's own `js`/`wasm` backend. Local file opening and paste-to-open
 both no-op with a console message instead of working, since neither maps onto a browser sandbox
 the way it does on desktop. A link to a webpage opens in a new tab, as in
@@ -39,5 +39,5 @@ python3 -m http.server
 
 Then visit <http://localhost:8000> for the built-in welcome page, or
 <http://localhost:8000/?doc=https://raw.githubusercontent.com/arnodel/whynot/main/README.md> to
-open a document by URL straight away - `?doc=` becomes `cmd/giowhynot`'s usual first command-line
+open a document by URL straight away - `?doc=` becomes `backends/giobackend/cmd/giowhynot`'s usual first command-line
 argument (see `index.html`), the same convention `cmd/whynot/web` uses.

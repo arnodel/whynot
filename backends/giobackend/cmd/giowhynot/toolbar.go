@@ -16,8 +16,8 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
+	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/internal/browser"
 )
 
@@ -26,7 +26,7 @@ import (
 const toolbarLogicalHeight = 36
 
 // toolbar is the back/forward/reload/zoom/theme button row and address
-// bar - cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
+// bar - backends/giobackend/cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
 // hand-rolled draw.go/layout.go/input.go. Unlike the document panel's
 // scroll/hover/click (shared via whynot.Controller), this input layer
 // isn't shared with ebitenbackend: these are plain momentary buttons,
@@ -54,10 +54,10 @@ type toolbar struct {
 	// dpi is the toolbar text's: deviceScale alone, not the document's
 	// zoomed scale, so the toolbar text stays a fixed physical size.
 	dpi      float64
-	renderer *giorenderer.Renderer
+	renderer *giobackend.Renderer
 }
 
-func newToolbar(faceSelector fonts.FaceSelector, renderer *giorenderer.Renderer) *toolbar {
+func newToolbar(faceSelector fonts.FaceSelector, renderer *giobackend.Renderer) *toolbar {
 	tb := &toolbar{
 		faceSelector: faceSelector,
 		renderer:     renderer,
@@ -286,7 +286,7 @@ func (tb *toolbar) layoutEditor(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{Size: size}
 }
 
-// layoutLocation draws the read-only address bar text via giorenderer,
+// layoutLocation draws the read-only address bar text via giobackend,
 // matching cmd/whynot's own address bar exactly (same face, same
 // middle-truncation for a long path/URL).
 func (tb *toolbar) layoutLocation(gtx layout.Context, app *browser.App) layout.Dimensions {
