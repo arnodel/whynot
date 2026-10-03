@@ -53,15 +53,21 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-debug-hit` | `false` | pass `-debug-hit` through to the guest, so the captured frame shows the red `HitTest` outline at the cursor - useful for confirming exact click coordinates before using `-click` |
 | `-settle-delay` | `0` | real wall-clock `time.Sleep` before the settle ticks - see the Gotchas entry on background goroutines below before reaching for this |
 
+**Scrolling needs the cursor over the document.** Wheel input only scrolls the document when the
+pointer is inside the document panel, and the cursor defaults to (0, 0), which is in the toolbar.
+So always pass `-cursor-x`/`-cursor-y` inside the document when scrolling (the cursor is moved
+before the scroll phase). Without them the wheel silently does nothing, and before/after
+screenshot comparisons pass trivially on an unscrolled frame - check the image actually scrolled.
+
 To scroll to a specific section, increase `-scroll-ticks` (or `-wheel-dy`'s magnitude) and check the
 result - there's no direct "scroll to heading" API, only wheel-notch simulation, so getting to a
 specific spot is trial and error. As a data point verified in this repo: against `testdata/demo.md`
-at `-h 900`, `-wheel-dy -50 -scroll-ticks 24` lands with the "## Tables" section's first few tables
-in frame; `-scroll-ticks 30` overshoots past the first two tables.
+at `-h 600`, `-cursor-x 400 -cursor-y 300 -wheel-dy -50 -scroll-ticks 10` lands on the "Examples"
+section.
 
 ```bash
-# Example: scroll ~24 wheel-ticks down, then capture
-go run ./.claude/skills/run-whynot -h 900 -wheel-dy -50 -scroll-ticks 24 -out /tmp/frame.png
+# Example: scroll 10 wheel-ticks down with the cursor over the document, then capture
+go run ./.claude/skills/run-whynot -h 600 -cursor-x 400 -cursor-y 300 -wheel-dy -50 -scroll-ticks 10 -out /tmp/frame.png
 ```
 
 To screenshot a different markdown file (e.g. one you're editing to test a rendering change),

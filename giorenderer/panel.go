@@ -44,7 +44,8 @@ type Panel struct {
 	// clicking.
 	controller *whynot.Controller
 
-	scrollbarEnabled bool
+	scrollbarEnabled bool // the View's built-in scrollbar
+	nativeScrollbar  bool // Gio's material.Scrollbar
 	anchorScrolling  bool
 	scrollbar        widget.Scrollbar
 	theme            *material.Theme
@@ -59,10 +60,17 @@ type Panel struct {
 // parameter.
 type PanelOption func(*Panel)
 
-// WithScrollbar enables Panel's scrollbar - Gio's own widget.Scrollbar,
-// drawn along Bounds' right edge.
+// WithScrollbar shows the View's own scrollbar (see whynot.WithScrollbar),
+// in every View the Panel shows, styled by its StyleSheet.
 func WithScrollbar() PanelOption {
 	return func(p *Panel) { p.scrollbarEnabled = true }
+}
+
+// WithNativeScrollbar shows Gio's own material.Scrollbar along Bounds'
+// right edge instead, for an app that wants its scrollbars to match the
+// rest of its Gio UI. It takes the StyleSheet's scrollbar colors.
+func WithNativeScrollbar() PanelOption {
+	return func(p *Panel) { p.nativeScrollbar = true }
 }
 
 // WithAnchorScrolling - see ebitenrenderer.Panel's identical option.
@@ -100,6 +108,9 @@ func NewPanel(view *whynot.View, renderer *Renderer, bounds image.Rectangle, opt
 	for _, opt := range opts {
 		opt(p)
 	}
+	if p.scrollbarEnabled {
+		view.SetScrollbar(true)
+	}
 	p.relayout()
 	return p
 }
@@ -114,6 +125,9 @@ func (p *Panel) SetView(v *whynot.View) {
 	p.view = v
 	if p.styleSheet != nil {
 		p.view.SetStyleSheet(p.styleSheet)
+	}
+	if p.scrollbarEnabled {
+		v.SetScrollbar(true)
 	}
 	p.controller.SetView(v)
 	p.relayout()

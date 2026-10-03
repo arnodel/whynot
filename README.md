@@ -162,7 +162,8 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 Run it yourself: `go run ./examples/panel`.
 
 `giorenderer.Panel` is the Gio equivalent, same shape (`NewPanel`,
-`WithScrollbar`, `OnLinkClick`/`OnLinkHover`) - see
+`WithScrollbar`, `OnLinkClick`/`OnLinkHover`), plus `WithNativeScrollbar` to
+use Gio's own scrollbar widget instead of whynot's - see
 [`examples/gio`](examples/gio) for a runnable version, or
 [`cmd/giowhynot`](cmd/giowhynot) for a full app built on it.
 
@@ -564,12 +565,12 @@ by implementation order now that most of the list is done.
 - [x] Back/forward history, light/dark theme, zoom
 - [x] Renders document text in this platform's own fonts when it can find them
       (`systemfont.RegisterPreferredFont`), falling back to the bundled Go fonts
-- [x] Scrollbar - via `ebitenrenderer.Panel`'s `WithScrollbar()` (not the library itself:
-      `View.DocumentBounds`/`VisibleViewBounds` expose the geometry an embedder needs to
-      build its own, whether that's `Panel`'s version, a native scrollbar widget, or
-      something else entirely). Draggable (`View.ScrollToRatio`), with hover/drag color
-      feedback and a theme-aware color (a light thumb on the dark theme's near-black
-      background would be invisible against the light theme's white one, and vice versa)
+- [x] Scrollbar - the View's own (`whynot.WithScrollbar()`, or a Panel's
+      `WithScrollbar()`), fully defined by the StyleSheet: colors, thickness, inset,
+      minimum thumb length, and whether it stays visible or fades when idle. Draggable,
+      with hover/drag color feedback. It's optional: `View.DocumentBounds`/
+      `VisibleViewBounds` expose the geometry to build your own, and a Gio app can use
+      Gio's native scrollbar instead (`giorenderer.WithNativeScrollbar()`)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 

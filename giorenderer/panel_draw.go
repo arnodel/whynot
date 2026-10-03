@@ -20,20 +20,19 @@ func (p *Panel) Draw(gtx layout.Context) {
 	canvas := p.Renderer.NewCanvas(gtx.Ops, p.bounds)
 	p.view.Draw(canvas, p.bounds.Min.X, p.bounds.Min.Y)
 
-	if p.scrollbarEnabled {
-		p.drawScrollbar(gtx)
+	if p.nativeScrollbar {
+		p.drawNativeScrollbar(gtx)
 	}
 }
 
-// drawScrollbar lays out Gio's own material.Scrollbar in a strip along
-// Bounds' right edge - its width comes from the widget itself
-// (ScrollbarStyle.Width), not a share of the document's own margin the
-// way ebitenrenderer.Panel's hand-drawn scrollbar borrows. Laying it out
+// drawNativeScrollbar lays out Gio's own material.Scrollbar in a strip
+// along Bounds' right edge - its width comes from the widget itself
+// (ScrollbarStyle.Width), not from the StyleSheet. Laying it out
 // here (registering its own input area) is what makes Update's routing
 // comment true: it must happen after Update's own clip.Rect(p.bounds)/
 // event.Op so the scrollbar's area is foremost over the overlapping
 // strip.
-func (p *Panel) drawScrollbar(gtx layout.Context) {
+func (p *Panel) drawNativeScrollbar(gtx layout.Context) {
 	doc := p.view.DocumentBounds()
 	if doc.Dy() == 0 {
 		return

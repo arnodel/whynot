@@ -55,7 +55,7 @@ func main() {
 	renderer := giorenderer.New()
 	view := browserApp.NewView(source, location)
 	panel := giorenderer.NewPanel(view, renderer, image.Rectangle{},
-		giorenderer.WithScrollbar(),
+		giorenderer.WithNativeScrollbar(),
 		giorenderer.WithStyleSheet(styleSheet),
 	)
 	browserApp.Panel = panel

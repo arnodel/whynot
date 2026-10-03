@@ -34,107 +34,6 @@ func tick(p *Panel, x, y int, wheelY float64, down bool) {
 	p.apply(p.input.mouseEvents(mouseInput{x: x, y: y, down: down, wheelY: wheelY}))
 }
 
-func TestScrollbarThumbRectShortDocument(t *testing.T) {
-	p := newTestPanel(t, "just one short line", WithScrollbar())
-	if _, ok := p.scrollbarThumbRect(); ok {
-		t.Error("scrollbarThumbRect ok = true for a document that fits, want false")
-	}
-}
-
-func TestScrollbarThumbRectLongDocument(t *testing.T) {
-	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar())
-
-	r, ok := p.scrollbarThumbRect()
-	if !ok {
-		t.Fatal("scrollbarThumbRect ok = false for a document taller than the viewport")
-	}
-	if r.Min.X < p.bounds.Min.X || r.Max.X > p.bounds.Max.X {
-		t.Errorf("thumb rect x-range %v outside bounds %v", r, p.bounds)
-	}
-	if r.Min.Y < p.bounds.Min.Y || r.Max.Y > p.bounds.Max.Y {
-		t.Errorf("thumb rect y-range %v outside bounds %v", r, p.bounds)
-	}
-	if r.Dx() <= 0 {
-		t.Errorf("thumb width = %d, want positive", r.Dx())
-	}
-
-	p.view.ScrollToRatio(0)
-	top, _ := p.scrollbarThumbRect()
-	if top.Min.Y != p.bounds.Min.Y {
-		t.Errorf("thumb top at ratio 0 = %d, want bounds.Min.Y (%d)", top.Min.Y, p.bounds.Min.Y)
-	}
-
-	p.view.ScrollToRatio(1)
-	bottom, _ := p.scrollbarThumbRect()
-	if bottom.Max.Y != p.bounds.Max.Y {
-		t.Errorf("thumb bottom at ratio 1 = %d, want bounds.Max.Y (%d)", bottom.Max.Y, p.bounds.Max.Y)
-	}
-}
-
-func TestUpdateScrollbarDragPressOutsideThumb(t *testing.T) {
-	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar())
-	r, ok := p.scrollbarThumbRect()
-	if !ok {
-		t.Fatal("test setup: expected a thumb")
-	}
-	// Well outside the thumb (thumb is at the right edge).
-	consumed := p.updateScrollbarDrag(r.Min.X-50, r.Min.Y, true, true)
-	if consumed {
-		t.Error("updateScrollbarDrag consumed a press outside the thumb")
-	}
-	if p.draggingScrollbar {
-		t.Error("draggingScrollbar = true after a press outside the thumb")
-	}
-}
-
-func TestUpdateScrollbarDragPressAndDrag(t *testing.T) {
-	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar())
-	r, ok := p.scrollbarThumbRect()
-	if !ok {
-		t.Fatal("test setup: expected a thumb")
-	}
-	grabX, grabY := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
-
-	if !p.updateScrollbarDrag(grabX, grabY, true, true) {
-		t.Fatal("updateScrollbarDrag didn't consume a press on the thumb")
-	}
-	if !p.draggingScrollbar {
-		t.Error("draggingScrollbar = false after pressing the thumb")
-	}
-	if !p.scrollbarState.pressed {
-		t.Error("scrollbarState.pressed = false while dragging")
-	}
-
-	beforeTop := p.view.VisibleViewBounds(image.Pt(testPanelWidth, testPanelHeight)).Min.Y
-	// Drag most of the way down the track.
-	dragY := p.bounds.Min.Y + int(float64(p.bounds.Dy())*0.8)
-	if !p.updateScrollbarDrag(grabX, dragY, true, false) {
-		t.Fatal("updateScrollbarDrag didn't consume a continued drag")
-	}
-	afterTop := p.view.VisibleViewBounds(image.Pt(testPanelWidth, testPanelHeight)).Min.Y
-	if afterTop <= beforeTop {
-		t.Errorf("scroll position after dragging down = %d, want more than before (%d)", afterTop, beforeTop)
-	}
-
-	// Cursor now outside the thumb rect, but mouse still down - the
-	// drag should keep being tracked (see updateScrollbarDrag's own
-	// doc comment: only *starting* a drag requires hovering).
-	if !p.updateScrollbarDrag(grabX-1000, dragY, true, false) {
-		t.Error("updateScrollbarDrag stopped tracking an in-progress drag once the cursor left the thumb")
-	}
-	if !p.draggingScrollbar {
-		t.Error("draggingScrollbar = false mid-drag after the cursor left the thumb rect")
-	}
-
-	// Release.
-	if p.updateScrollbarDrag(grabX, dragY, false, false) {
-		t.Error("updateScrollbarDrag consumed input after mouse release")
-	}
-	if p.draggingScrollbar {
-		t.Error("draggingScrollbar = true after release")
-	}
-}
-
 // findLinkPos scans a grid of panel-local coordinates for one that
 // LinkAt resolves to a link - the only way to locate a link from
 // outside package whynot, which has no test-only fixture helpers
@@ -254,36 +153,15 @@ func TestSetView(t *testing.T) {
 	theme.Scrollbar.Idle, theme.Scrollbar.Hover, theme.Scrollbar.Pressed = c, c, c
 
 	p := newTestPanel(t, strings.Repeat(longDoc, 20), WithScrollbar(), WithStyleSheet(theme.StyleSheet()))
-	if got := p.scrollbarColor(); got != c {
-		t.Fatalf("scrollbarColor before SetView = %v, want %v", got, c)
-	}
-
-	// Get it into a mid-drag state so SetView's reset is meaningful to check.
-	r, _ := p.scrollbarThumbRect()
-	p.updateScrollbarDrag(r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2, true, true)
-	if !p.draggingScrollbar {
-		t.Fatal("test setup: expected a drag in progress")
-	}
-
 	v2 := whynot.NewView(whynot.Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	p.SetView(v2)
 
 	if p.View() != v2 {
 		t.Error("View() after SetView doesn't return the new View")
 	}
-	if p.draggingScrollbar {
-		t.Error("draggingScrollbar still true after SetView")
-	}
-	if p.scrollbarState != (buttonState{}) {
-		t.Errorf("scrollbarState after SetView = %+v, want zero value", p.scrollbarState)
-	}
-	// Hover state (whynot.Interaction.Reset) is covered directly in the
-	// whynot package's own tests now that it's shared with giorenderer.
-	// The remembered StyleSheet should carry over to the new View -
-	// scrollbarColor is the only externally-observable proof available
-	// (View has no public getter for its own current StyleSheet).
-	if got := p.scrollbarColor(); got != c {
-		t.Errorf("scrollbarColor after SetView = %v, want %v (StyleSheet not re-applied)", got, c)
+	// The remembered StyleSheet carries over to the new View.
+	if got := v2.ScrollbarColor(false, false); got != c {
+		t.Errorf("new View's scrollbar color = %v, want %v (StyleSheet not re-applied)", got, c)
 	}
 }
 

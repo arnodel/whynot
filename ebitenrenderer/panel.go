@@ -60,35 +60,14 @@ type Panel struct {
 
 	// input reads Ebitengine's input as events.
 	input Input
-
-	// The pointer, mouse or touch, as followed through the events, for
-	// the Panel's own scrollbar (see followPointer).
-	pointer     image.Point
-	pointerDown bool
-
-	// Scrollbar drag state, mirroring cmd/whynot's own (grabRatio is a
-	// fraction of thumb height, not an absolute offset, since the
-	// thumb's height can itself shrink mid-drag). Unused unless
-	// WithScrollbar is set.
-	draggingScrollbar  bool
-	scrollbarGrabRatio float64
-	scrollbarState     buttonState
 }
-
-// buttonState is the scrollbar thumb's per-frame hover/pressed state,
-// driving its drawn color - mirrors cmd/whynot's own type of the same
-// name and shape.
-type buttonState struct{ hover, pressed bool }
 
 // PanelOption customizes a Panel at construction, via NewPanel's opts
 // parameter.
 type PanelOption func(*Panel)
 
-// WithScrollbar enables Panel's own scrollbar thumb along its bounds'
-// right edge, draggable - omitted by default so a panel that never
-// needs one pays no cost tracking drag state or hit-testing a rect
-// that was never drawn. Its colour comes from the View's StyleSheet
-// (View.ScrollbarColor).
+// WithScrollbar shows the View's own scrollbar (see whynot.WithScrollbar),
+// in every View the Panel shows.
 func WithScrollbar() PanelOption {
 	return func(p *Panel) { p.scrollbarEnabled = true }
 }
@@ -122,6 +101,9 @@ func NewPanel(view *whynot.View, renderer *Renderer, bounds image.Rectangle, opt
 	for _, opt := range opts {
 		opt(p)
 	}
+	if p.scrollbarEnabled {
+		view.SetScrollbar(true)
+	}
 	p.relayout()
 	return p
 }
@@ -136,9 +118,10 @@ func (p *Panel) View() *whynot.View {
 
 // SetView swaps the View this Panel draws/scrolls - e.g. navigating to
 // a different document (cmd/whynot's own cross-document jump keeps a
-// separate *View per document and swaps which one's current). Resets
-// scrollbar-drag and hover state (meaningless carried over from the old
-// View), re-applies the last StyleSheet given via SetStyleSheet/
+// separate *View per document and swaps which one's current). Forgets
+// hover state (meaningless carried over from the old View), shows the
+// new View's scrollbar if WithScrollbar was given, re-applies the last
+// StyleSheet given via SetStyleSheet/
 // WithStyleSheet (if any) so switching documents doesn't silently drop
 // back to the new View's own default styling, and lays the new View
 // out immediately, the same as NewPanel does.
@@ -147,9 +130,10 @@ func (p *Panel) SetView(v *whynot.View) {
 	if p.styleSheet != nil {
 		p.view.SetStyleSheet(p.styleSheet)
 	}
+	if p.scrollbarEnabled {
+		v.SetScrollbar(true)
+	}
 	p.controller.SetView(v)
-	p.draggingScrollbar = false
-	p.scrollbarState = buttonState{}
 	p.relayout()
 }
 
