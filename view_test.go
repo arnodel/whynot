@@ -1594,28 +1594,19 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	}
 }
 
-// TestViewScrollToAnchorTop checks the empty id, and "top" when no
-// heading has that id, scroll to the top, as in a browser.
-func TestViewScrollToAnchorTop(t *testing.T) {
-	for _, id := range []string{"", "top", "Top"} {
-		v := NewView(Parse([]byte(strings.Repeat(longDoc, 10))), fonts.NewGoSelector(), stylingtest.Basic())
-		layoutView(v, testWidth, testHeight, 1, 0)
-		v.ScrollBy(500)
-		if !v.ScrollToAnchor(id) {
-			t.Errorf("ScrollToAnchor(%q) = false, want true", id)
-		}
-		if start, _ := v.VisibleRange(); start != 0 {
-			t.Errorf("VisibleRange start after ScrollToAnchor(%q) = %v, want 0", id, start)
-		}
-	}
-
-	// A heading with the id "top" wins.
-	v := NewView(Parse([]byte(strings.Repeat(longDoc, 10)+"# Top\n")), fonts.NewGoSelector(), stylingtest.Basic())
+// TestViewScrollToAnchorNoFragmentRules checks ScrollToAnchor finds
+// headings only: interpreting "" or "top" the way browsers do is for
+// whoever handles links (see Panel).
+func TestViewScrollToAnchorNoFragmentRules(t *testing.T) {
+	v := NewView(Parse([]byte(strings.Repeat(longDoc, 10))), fonts.NewGoSelector(), stylingtest.Basic())
 	layoutView(v, testWidth, testHeight, 1, 0)
-	if !v.ScrollToAnchor("top") {
-		t.Fatal(`ScrollToAnchor("top") = false with a "Top" heading`)
+	v.ScrollBy(500)
+	for _, id := range []string{"", "top"} {
+		if v.ScrollToAnchor(id) {
+			t.Errorf("ScrollToAnchor(%q) = true with no such heading, want false", id)
+		}
 	}
 	if start, _ := v.VisibleRange(); start == 0 {
-		t.Error(`ScrollToAnchor("top") stayed at the top, want the "Top" heading`)
+		t.Error("ScrollToAnchor moved the View to the top")
 	}
 }

@@ -76,9 +76,7 @@ func main() {
 	app.OnTitleChange = ebiten.SetWindowTitle
 
 	g.relayout()
-	g.panel.OnLinkClick = app.Follow
-	g.panel.OnAnchorClick = app.FollowAnchor
-	g.panel.OnLinkHover = app.OnLinkHover
+	g.panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
 
 	app.Open(location)
 	if err := ebiten.RunGame(g); err != nil {

@@ -35,19 +35,29 @@
 // out: [View.VisibleRange] reports the part in view as fractions of the
 // height, and [View.ScrollToRatio] scrolls to one.
 //
-// # Links
+// # Events and state
 //
-// A [Controller] highlights the link under the pointer and reports it
-// to its OnLinkHover callback. What a click or tap on a link does
-// depends on where it leads:
+// What happens in a View that an app may react to comes out of
+// [Controller.Frame] as [Event] values, in order: the counterpart of the
+// input events going in. They're a sealed set, like input's, so new
+// kinds can be added without breaking anyone:
 //
-//   - A link within the document, "#id", scrolls the View to the heading
-//     with that id ([View.ScrollToAnchor]) by default. Setting the
-//     OnAnchorClick callback replaces that, for an app that also wants
-//     to record history, say.
-//   - Any other link is passed to the OnLinkClick callback, since
-//     following it (resolving it, loading another document) is up to the
-//     app. By default, nothing happens.
+//	for _, e := range panel.Frame(in.Events(), now) {
+//		switch e := e.(type) {
+//		case whynot.LinkClick:
+//			// follow e.Destination: load another document, say
+//		case whynot.AnchorClick:
+//			// already scrolled to e.ID, unless turned off
+//		}
+//	}
 //
-// A Panel has the same callbacks.
+// A Controller only reports events. A Panel also acts on one: it
+// scrolls to an [AnchorClick]'s heading, the way a browser follows a
+// "#id" link, unless [Panel.SetAnchorScrolling] turns that off for an
+// app that handles it itself, to record history first, say. Following
+// a [LinkClick] is always up to the app.
+//
+// What's true at the moment, rather than what happened, is read from the
+// View when needed, such as the link under the pointer
+// ([View.HoveredLink]), which an app may show in a status bar.
 package whynot

@@ -53,12 +53,6 @@ func run() error {
 	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	panel.SetScrollbar(true)
-	panel.OnLinkClick = func(dest string) { log.Printf("clicked: %s", dest) }
-	panel.OnLinkHover = func(dest string) {
-		if dest != "" {
-			log.Printf("hovering: %s", dest)
-		}
-	}
 
 	renderer := giorenderer.New()
 	var in giorenderer.Input
@@ -83,7 +77,13 @@ func run() error {
 			}
 
 			now := time.Since(start)
-			panel.Frame(in.Source(gtx, panel, bounds).Events(), now)
+			for _, e := range panel.Frame(in.Source(gtx, panel, bounds).Events(), now) {
+				// An AnchorClick has already scrolled the View: the Panel's
+				// default.
+				if e, ok := e.(whynot.LinkClick); ok {
+					log.Printf("clicked: %s", e.Destination)
+				}
+			}
 			// Gio only produces frames when something happens.
 			if panel.Animating() {
 				gtx.Execute(op.InvalidateCmd{})

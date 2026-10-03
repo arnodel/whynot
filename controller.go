@@ -20,31 +20,17 @@ const (
 )
 
 // Controller turns a backend's input events into what they do to a View:
-// scrolling, link hover and clicks, sideways-scrolling blocks and their
-// scrollbars, touch pans and flings. Feed it each frame's events with
-// Frame. It also scrolls on command (ScrollDown, PageDown, ScrollLeft
+// scrolling, link hovering, sideways-scrolling blocks and their
+// scrollbars, touch pans and flings. Feed it each frame's input with
+// Frame, which returns the Events that happened, such as a link being
+// clicked. It also scrolls on command (ScrollDown, PageDown, ScrollLeft
 // and so on), for an app binding keys to them.
 type Controller struct {
 	view  *View
 	scale float64
 
-	// OnLinkClick is called with a link's destination when it's clicked
-	// or tapped, unless it's a link within the document (see
-	// OnAnchorClick). Nil means the default: nothing happens, since
-	// following a link to another document is up to the app.
-	OnLinkClick func(destination string)
-
-	// OnAnchorClick is called when a link within the document ("#id") is
-	// clicked or tapped, with id percent-decoded. Nil means the default:
-	// the View scrolls to that heading ([View.ScrollToAnchor]). Set it to
-	// do something else as well, such as recording history.
-	OnAnchorClick func(id string)
-
-	// OnLinkHover is called when the hovered link changes, with its
-	// destination, or "" when none is hovered.
-	OnLinkHover func(destination string)
-
-	hoverDest string
+	// events collects what happens during a Frame, for it to return.
+	events []Event
 
 	// lastTick is the time of the last tick; ticked is whether there was
 	// one.
@@ -111,12 +97,15 @@ func (c *Controller) View() *View {
 	return c.view
 }
 
-// SetView makes the Controller drive v instead. A link hovered in the
-// previous View no longer is: OnLinkHover is called with "", and the
-// next Frame reports whatever is under the pointer in v.
+// SetView makes the Controller drive v instead. Nothing stays hovered in
+// the previous View; the next Frame hovers whatever is under the pointer
+// in v.
 func (c *Controller) SetView(v *View) {
+	if c.view != nil {
+		c.view.vbar.hovered = false
+		c.view.unhover()
+	}
 	c.view = v
-	c.setHover("", false)
 	c.hTarget, c.lastHScrolled = nil, nil
 	c.viewMoves = v.moves
 	c.cancelMomentum()
@@ -143,12 +132,17 @@ func (c *Controller) SetScale(s float64) {
 // on the clock the View is laid out with (see View.Layout). Call it once
 // per frame, with no events if there were none, so flings keep coasting.
 //
+// It returns what happened that the app may want to react to, such as a
+// LinkClick, in order; nil if nothing did. The Controller doesn't act on
+// them itself.
+//
 // A fling stops if the app moves the View itself (with View.ScrollBy,
 // ScrollToAnchor and so on) or swaps it with SetView.
-func (c *Controller) Frame(events []input.Event, now time.Duration) {
+func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 	if c.view.moves != c.viewMoves {
 		c.cancelMomentum()
 	}
+	c.events = nil
 	defer func() { c.viewMoves = c.view.moves }()
 	var (
 		pressed      bool        // a primary press inside the bounds, for a click
@@ -272,7 +266,6 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 		if s := c.hscroll(); s != nil {
 			s.unhover()
 		}
-		c.setHover(dest, ok)
 		if ok {
 			c.click(dest)
 		}
@@ -288,6 +281,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 	if touchEnded {
 		c.touchEnd()
 	}
+	return c.events
 }
 
 // hover updates the hover from the pointer's position, unless a
@@ -299,25 +293,13 @@ func (c *Controller) hover() {
 	if !c.hasPointer || !c.pointer.In(c.bounds()) {
 		c.view.vbar.hovered = false
 		c.view.unhover()
-		c.setHover("", false)
 		return
 	}
 	c.view.vbar.hovered = c.view.onScrollbar(c.pointer)
-	c.setHover(c.view.hover(c.pointer.X, c.pointer.Y))
+	c.view.hover(c.pointer.X, c.pointer.Y)
 }
 
-// setHover records the hovered link, calling OnLinkHover on a change.
-func (c *Controller) setHover(dest string, ok bool) {
-	if !ok {
-		dest = ""
-	}
-	if dest != c.hoverDest && c.OnLinkHover != nil {
-		c.OnLinkHover(dest)
-	}
-	c.hoverDest = dest
-}
-
-// click follows the link to dest.
+// click reports a click or tap on the link to dest.
 func (c *Controller) click(dest string) {
 	if id, ok := strings.CutPrefix(dest, "#"); ok {
 		// Ids are matched decoded, as browsers do: "#caf%C3%A9" is the
@@ -325,16 +307,10 @@ func (c *Controller) click(dest string) {
 		if decoded, err := url.PathUnescape(id); err == nil {
 			id = decoded
 		}
-		if c.OnAnchorClick != nil {
-			c.OnAnchorClick(id)
-		} else {
-			c.view.ScrollToAnchor(id)
-		}
+		c.events = append(c.events, AnchorClick{ID: id})
 		return
 	}
-	if c.OnLinkClick != nil {
-		c.OnLinkClick(dest)
-	}
+	c.events = append(c.events, LinkClick{Destination: dest})
 }
 
 // tick returns the seconds elapsed since its last call (0 the first
@@ -413,7 +389,6 @@ func (c *Controller) touchEnd() {
 	c.touching = false
 	c.touchAxis = touchNone
 	c.view.unhover()
-	c.setHover("", false)
 }
 
 func abs(n int) int {

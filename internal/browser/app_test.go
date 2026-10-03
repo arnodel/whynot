@@ -12,6 +12,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -165,6 +166,69 @@ func TestAppFollowSamePageFragmentScrolls(t *testing.T) {
 	if app.Location().Fragment != "target" {
 		t.Errorf("Location().Fragment = %q, want \"target\"", app.Location().Fragment)
 	}
+}
+
+// TestAppHandleEvents checks HandleEvents follows a LinkClick to another
+// document, and an AnchorClick within the current one, with history.
+func TestAppHandleEvents(t *testing.T) {
+	dir := t.TempDir()
+	source := "[other](other.md)\n\n" + repeatLines(40) + "\n\n# Target"
+	loc := writeTempMD(t, dir, "doc.md", source)
+	writeTempMD(t, dir, "other.md", "# Other")
+	app := newTestApp(t, dir, loc, source)
+
+	app.HandleEvents([]whynot.Event{whynot.AnchorClick{ID: "target"}})
+	if start, _ := app.Panel.View().VisibleRange(); start == 0 {
+		t.Error("an AnchorClick didn't scroll to its heading")
+	}
+	if !app.CanGoBack() {
+		t.Error("CanGoBack() = false after an AnchorClick, want true")
+	}
+
+	app.HandleEvents([]whynot.Event{whynot.LinkClick{Destination: "other.md"}})
+	if got := filepath.Base(app.Location().Path); got != "other.md" {
+		t.Errorf("Location after a LinkClick to other.md = %v, want other.md", app.Location())
+	}
+}
+
+// TestAppHoverDest checks HoverDest is the hovered link resolved against
+// the document's location, and clears when the document changes.
+func TestAppHoverDest(t *testing.T) {
+	dir := t.TempDir()
+	source := "A paragraph with [a link](other.md) in it."
+	loc := writeTempMD(t, dir, "doc.md", source)
+	writeTempMD(t, dir, "other.md", "# Other")
+	app := newTestApp(t, dir, loc, source)
+
+	x, y := linkPos(t, app.Panel.View())
+	if got := app.HoverDest(); got != "" {
+		t.Errorf("HoverDest before hovering = %q, want none", got)
+	}
+	app.Panel.Frame([]input.Event{input.PointerMove{X: x, Y: y}}, 0)
+	want, _ := app.ResolveLink("other.md")
+	if got := app.HoverDest(); got != want.String() {
+		t.Errorf("HoverDest over the link = %q, want %q", got, want)
+	}
+
+	app.Follow("other.md")
+	if got := app.HoverDest(); got != "" {
+		t.Errorf("HoverDest after following the link = %q, want none", got)
+	}
+}
+
+// linkPos returns a point on a link in v.
+func linkPos(t *testing.T, v *whynot.View) (x, y int) {
+	t.Helper()
+	b := v.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += 2 {
+		for x := b.Min.X; x < b.Max.X; x += 2 {
+			if _, ok := v.LinkAt(x, y); ok {
+				return x, y
+			}
+		}
+	}
+	t.Fatal("test setup: no link found")
+	return 0, 0
 }
 
 func repeatLines(n int) string {

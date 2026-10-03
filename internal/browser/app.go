@@ -102,11 +102,6 @@ type App struct {
 	width, height, toolbarHeight int
 	scale                        float64
 
-	// hoverDest is the link under the cursor, if any - what the
-	// address bar should show instead of Location() while hovering.
-	// Set via OnLinkHover, wired as Panel's own OnLinkHover field.
-	hoverDest string
-
 	// tocDocView is the real document's View, saved here while a
 	// synthetic table-of-contents View is current in Panel instead - nil
 	// whenever the TOC isn't showing (see ShowTOC/HideTOC in toc.go).
@@ -139,9 +134,38 @@ func (a *App) Open(location *url.URL) {
 // Location returns where the current document was loaded from.
 func (a *App) Location() *url.URL { return a.location }
 
-// HoverDest returns the destination of the link currently under the
-// cursor, or "" if none - see OnLinkHover.
-func (a *App) HoverDest() string { return a.hoverDest }
+// HoverDest returns where the link under the cursor points, resolved
+// against the current document's location, or "" if there's none: what
+// an address bar shows instead of Location while hovering.
+func (a *App) HoverDest() string {
+	if a.Panel == nil {
+		return ""
+	}
+	dest, ok := a.Panel.View().HoveredLink()
+	if !ok {
+		return ""
+	}
+	resolved, err := a.ResolveLink(dest)
+	if err != nil {
+		return ""
+	}
+	return resolved.String()
+}
+
+// HandleEvents follows the links clicked in Panel, as reported by
+// Panel.Frame. Panel's own anchor scrolling must be off (see
+// Panel.SetAnchorScrolling), since FollowAnchor scrolls, after
+// recording history.
+func (a *App) HandleEvents(events []whynot.Event) {
+	for _, e := range events {
+		switch e := e.(type) {
+		case whynot.LinkClick:
+			a.Follow(e.Destination)
+		case whynot.AnchorClick:
+			a.FollowAnchor(e.ID)
+		}
+	}
+}
 
 // CanGoBack/CanGoForward report whether Back/Forward would do
 // anything. CanGoBack is also true while the TOC is showing, since Back
@@ -208,21 +232,6 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 	return resolveAgainst(a.location, dest)
 }
 
-// OnLinkHover is Panel.OnLinkHover: dest is the raw destination text of
-// whatever's under the cursor, or "" when nothing is - resolved (same
-// as ResolveLink does for a click) so HoverDest reflects where a
-// relative or fragment-only link actually points, not just its literal
-// Markdown text.
-func (a *App) OnLinkHover(dest string) {
-	a.hoverDest = ""
-	if dest == "" {
-		return
-	}
-	if resolved, err := a.ResolveLink(dest); err == nil {
-		a.hoverDest = resolved.String()
-	}
-}
-
 // NewView parses source, loaded from location, into a View - bundling
 // the options every call site needs together: the current StyleSheet,
 // an images.Source that resolves an image's src against location the
@@ -273,8 +282,8 @@ func (a *App) Follow(dest string) {
 }
 
 // FollowAnchor is Follow for a link within the current document to the
-// heading with the given id, already percent-decoded: for
-// Panel.OnAnchorClick.
+// heading with the given id, already percent-decoded, as in a
+// whynot.AnchorClick.
 func (a *App) FollowAnchor(id string) {
 	resolved := *a.location
 	resolved.Fragment, resolved.RawFragment = id, ""
@@ -289,7 +298,7 @@ func (a *App) follow(resolved *url.URL) {
 		a.Panel.SetView(docView)
 		a.tocDocView = nil
 		if resolved.Fragment != "" {
-			docView.ScrollToAnchor(resolved.Fragment)
+			scrollToFragment(docView, resolved.Fragment)
 		}
 		a.location = resolved
 		a.updateWindowTitle()
@@ -301,7 +310,7 @@ func (a *App) follow(resolved *url.URL) {
 			return
 		}
 		a.pushHistory()
-		a.Panel.View().ScrollToAnchor(resolved.Fragment)
+		scrollToFragment(a.Panel.View(), resolved.Fragment)
 		// resolved (unlike a.location) carries the fragment, so a
 		// caller's address bar reflects the jump even though the
 		// document itself didn't change.
@@ -319,7 +328,7 @@ func (a *App) follow(resolved *url.URL) {
 	view := a.NewView(source, resolved)
 	a.place(view)
 	if resolved.Fragment != "" {
-		view.ScrollToAnchor(resolved.Fragment)
+		scrollToFragment(view, resolved.Fragment)
 	}
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
@@ -504,6 +513,15 @@ const zoomStep = 0.1
 func (a *App) place(view *whynot.View) {
 	view.SetScale(a.scale)
 	view.SetBounds(a.Panel.Bounds())
+}
+
+// scrollToFragment scrolls v to the anchor a URL fragment names, the way
+// browsers do: the heading with that id, else the top of the document
+// for an empty fragment or "top".
+func scrollToFragment(v *whynot.View, id string) {
+	if !v.ScrollToAnchor(id) && (id == "" || strings.EqualFold(id, "top")) {
+		v.ScrollToRatio(0)
+	}
 }
 
 // minZoom, maxZoom clamp SetZoom to a sane range.
