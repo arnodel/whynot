@@ -33,7 +33,7 @@ type Panel struct {
 
 	view       *View
 	bounds     image.Rectangle
-	scale      float64
+	zoom       float64
 	controller *Controller
 
 	// Re-applied to each View the Panel shows.
@@ -45,12 +45,12 @@ type Panel struct {
 	now time.Duration
 }
 
-// NewPanel returns a Panel showing view in bounds, at scale 1.
+// NewPanel returns a Panel showing view in bounds, at scale 1 and zoom 1.
 //
 // bounds is in the coordinates of the Canvas the Panel draws on and of
 // the input events it's given (see package input).
 func NewPanel(view *View, bounds image.Rectangle) *Panel {
-	p := &Panel{bounds: bounds, scale: 1, controller: NewController(view, bounds)}
+	p := &Panel{bounds: bounds, zoom: 1, controller: NewController(view, bounds)}
 	p.SetView(view)
 	return p
 }
@@ -86,15 +86,26 @@ func (p *Panel) SetBounds(r image.Rectangle) {
 	p.relayout()
 }
 
-// Scale returns the scale the View is laid out at.
+// Scale returns the display's scale (see SetScale).
 func (p *Panel) Scale() float64 {
-	return p.scale
+	return p.controller.Scale()
 }
 
-// SetScale sets the scale the View is laid out at: the display's scale
-// times any zoom.
+// SetScale sets the display's scale: canvas pixels per logical pixel.
 func (p *Panel) SetScale(s float64) {
-	p.scale = s
+	p.controller.SetScale(s)
+	p.relayout()
+}
+
+// Zoom returns the document's zoom (see SetZoom).
+func (p *Panel) Zoom() float64 {
+	return p.zoom
+}
+
+// SetZoom magnifies the document by zoom (1 is 100%): the View is laid
+// out at Scale times Zoom. Scrolling steps don't change with the zoom.
+func (p *Panel) SetZoom(zoom float64) {
+	p.zoom = zoom
 	p.relayout()
 }
 
@@ -140,36 +151,26 @@ func (p *Panel) Animating() bool {
 	return p.controller.Animating()
 }
 
-const (
-	// arrowScrollLines is how far ScrollDown and ScrollUp move, in
-	// logical pixels.
-	arrowScrollLines = 40
-	// pageOverlapFrac is how much of the page PageDown and PageUp keep
-	// in view, for continuity.
-	pageOverlapFrac = 0.1
-)
+// ScrollDown scrolls a step towards the end, as for an arrow key.
+func (p *Panel) ScrollDown() { p.controller.ScrollDown() }
 
-// ScrollDown scrolls a little towards the end, as for an arrow key.
-func (p *Panel) ScrollDown() { p.view.Scroll(-arrowScrollLines * p.scale) }
+// ScrollUp scrolls a step towards the start, as for an arrow key.
+func (p *Panel) ScrollUp() { p.controller.ScrollUp() }
 
-// ScrollUp scrolls a little towards the start, as for an arrow key.
-func (p *Panel) ScrollUp() { p.view.Scroll(arrowScrollLines * p.scale) }
+// ScrollLeft scrolls a block wider than the View a step towards its
+// start (see Controller.ScrollLeft), reporting whether there was one.
+func (p *Panel) ScrollLeft() bool { return p.controller.ScrollLeft() }
 
-// ScrollLeft scrolls the block under the mouse pointer a little towards
-// its start, if it's wider than the page (a code block or table, say).
-// It reports whether there was such a block.
-func (p *Panel) ScrollLeft() bool { return p.controller.scrollAtPointer(arrowScrollLines * p.scale) }
-
-// ScrollRight scrolls the block under the mouse pointer a little towards
-// its end, like ScrollLeft.
-func (p *Panel) ScrollRight() bool { return p.controller.scrollAtPointer(-arrowScrollLines * p.scale) }
+// ScrollRight scrolls a block wider than the View a step towards its
+// end, like ScrollLeft.
+func (p *Panel) ScrollRight() bool { return p.controller.ScrollRight() }
 
 // PageDown scrolls a page towards the end.
-func (p *Panel) PageDown() { p.view.Scroll(-float64(p.bounds.Dy()) * (1 - pageOverlapFrac)) }
+func (p *Panel) PageDown() { p.controller.PageDown() }
 
 // PageUp scrolls a page towards the start.
-func (p *Panel) PageUp() { p.view.Scroll(float64(p.bounds.Dy()) * (1 - pageOverlapFrac)) }
+func (p *Panel) PageUp() { p.controller.PageUp() }
 
 func (p *Panel) relayout() {
-	p.view.Layout(p.bounds.Dx(), p.bounds.Dy(), p.scale, p.now)
+	p.view.Layout(p.bounds.Dx(), p.bounds.Dy(), p.Scale()*p.zoom, p.now)
 }

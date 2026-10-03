@@ -73,7 +73,7 @@ type game struct {
 
 // buttonState is a toolbar button's per-frame input state, driving its
 // drawn appearance - the same "check each frame, draw differently"
-// pattern View.Hover already uses for a hovered link.
+// pattern the View already uses for a hovered link.
 type buttonState struct {
 	hover, pressed bool
 }

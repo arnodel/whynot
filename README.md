@@ -227,7 +227,7 @@ type game struct {
 
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
-	g.view.Scroll(dy * 2)
+	g.view.ScrollBy(-dy * 2)
 	return nil
 }
 
@@ -423,8 +423,10 @@ this section is about `cmd/whynot` specifically, but everything except the toolb
   it self-corrects toward wherever the mouse currently is as
   not-yet-resolved parts of the document get resolved during the drag,
   rather than drifting away from the cursor. **↓**/**↑** nudge the scroll
-  position a bit at a time, repeating while held.
-- **Hovering a link** highlights it (`View.Hover`).
+  position a bit at a time, repeating while held, and **←**/**→** scroll
+  the code block or table under the pointer (else the one last scrolled)
+  sideways.
+- **Hovering a link** highlights it (through `whynot.Controller`).
 - **Clicking a link follows it** - a relative path loads another local
   file, an `http(s)` URL fetches it (opening it in the system's default
   browser instead if its `Content-Type` turns out to be HTML rather than
@@ -452,7 +454,7 @@ this section is about `cmd/whynot` specifically, but everything except the toolb
   document - see [Features](#features).
 
 None of the link-following/history logic lives in the library itself -
-`whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
+`whynot` only exposes the primitives (`Controller`'s link callbacks,
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
 files, fetching URLs, and keeping a history stack all live in
 `browser` (`internal/browser`, `browser.App`, internal to this module) - the
@@ -515,7 +517,7 @@ by implementation order now that most of the list is done.
 
 **Links and navigation**
 - [x] Links and autolinks, including reference-style (`[text][ref]`) - highlighted on
-      hover (`View.Hover`), destination resolvable at a point (`View.LinkAt`)
+      hover (`Controller`), destination resolvable at a point (`View.LinkAt`)
 - [x] Heading anchors: goldmark's auto-generated heading ids, scrollable to via
       `View.ScrollToAnchor` - what a link's `#fragment` targets
 - [ ] Raw inline/block HTML rendered as HTML - currently shown as flagged unsupported
@@ -524,7 +526,7 @@ by implementation order now that most of the list is done.
 **Rendering and performance**
 - [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
       viewport culling - all handled by `whynot.View`
-- [x] Smooth scrolling - `View.Scroll`'s position is a `float64`, accumulating
+- [x] Smooth scrolling - `View.ScrollBy`'s position is a `float64`, accumulating
       fractional wheel deltas exactly rather than rounding each call, so repeated
       small scrolls end up exactly where one large one would
 - [x] `View.DocumentBounds`/`VisibleViewBounds` expose real per-slot pixel-height

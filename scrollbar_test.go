@@ -90,7 +90,7 @@ func TestScrollbarFades(t *testing.T) {
 	if got := v.scrollbarOpacity(v.ctx.Time); got != 0 {
 		t.Errorf("opacity before any scrolling = %v, want 0", got)
 	}
-	v.Scroll(-50)
+	v.ScrollBy(50)
 	if got := v.scrollbarOpacity(v.ctx.Time); got != 1 {
 		t.Errorf("opacity right after scrolling = %v, want 1", got)
 	}

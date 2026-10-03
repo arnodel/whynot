@@ -251,12 +251,28 @@ func TestControllerMomentum(t *testing.T) {
 		t.Errorf("VisibleViewBounds top after coasting = %d, want more than %d (coasting forward)", got, before)
 	}
 
-	c.CancelMomentum()
+	// The app moving the View stops the fling.
+	v.ScrollBy(10)
 	before = v.VisibleViewBounds(viewport).Min.Y
 	now += 100 * time.Millisecond
 	c.Frame(nil, now)
 	if got := v.VisibleViewBounds(viewport).Min.Y; got != before {
-		t.Errorf("VisibleViewBounds top after coasting following CancelMomentum = %d, want unchanged %d", got, before)
+		t.Errorf("VisibleViewBounds top after coasting following View.ScrollBy = %d, want unchanged %d", got, before)
+	}
+}
+
+// TestControllerSetViewStopsFling checks a fling doesn't carry over to a
+// new View.
+func TestControllerSetViewStopsFling(t *testing.T) {
+	c, _ := newTestController(t, strings.Repeat(longDoc, 20))
+	now := fling(c, -60, 100*time.Millisecond)
+
+	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
+	v2.Layout(testWidth, testHeight, 1, now)
+	c.SetView(v2)
+	c.Frame(nil, now+100*time.Millisecond)
+	if got := v2.VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y; got != 0 {
+		t.Errorf("new View's top after a frame = %d, want 0 (no fling carried over)", got)
 	}
 }
 

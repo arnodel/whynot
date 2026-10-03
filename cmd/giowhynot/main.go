@@ -100,7 +100,7 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			// filters match regardless of focus, so e.g. typing "-" or
 			// space into it would otherwise also fire ZoomOut/PageDown.
 			if !tb.editing {
-				pollKeys(gtx, browserApp, doc.panel, deviceScale)
+				pollKeys(gtx, browserApp, doc.panel)
 			}
 			doc.layout(gtx)
 			tb.layout(gtx, browserApp)

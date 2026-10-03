@@ -20,7 +20,7 @@ type Context struct {
 	Styles       styling.Styles
 
 	// HighlightNode is the ast.Node currently under the mouse (e.g. a
-	// hovered link), or nil - see ResolvedColor. Set by View.Hover, which
+	// hovered link), or nil - see ResolvedColor. Set by View's hover, which
 	// rebuilds the layout tree when it changes.
 	HighlightNode *ast.Node
 

@@ -8,23 +8,21 @@ import (
 	"github.com/arnodel/whynot/internal/browser"
 )
 
-// arrowScrollLines matches cmd/whynot's own input.go constant.
-const arrowScrollLines = 40
-
 // pollKeys handles global keyboard shortcuts - back/forward, page/line
 // scroll, paste-to-navigate, zoom. key.Filter with no Focus requirement
 // matches regardless of what's focused (Gio's own router special-cases
 // a nil Focus - confirmed against io/input/key.go), so unlike
 // pointer.Filter these need no prior area/event.Op registration: call
-// once per frame, from anywhere. deviceScale is the display's own
-// scale, with no zoom applied.
-func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel, deviceScale float64) {
+// once per frame, from anywhere.
+func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 	for {
 		e, ok := gtx.Event(
 			key.Filter{Name: key.NameDeleteBackward},
 			key.Filter{Name: key.NameSpace},
 			key.Filter{Name: key.NameUpArrow},
 			key.Filter{Name: key.NameDownArrow},
+			key.Filter{Name: key.NameLeftArrow},
+			key.Filter{Name: key.NameRightArrow},
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: "V", Required: key.ModShortcut},
 			key.Filter{Name: "="},
@@ -50,14 +48,14 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel, deviceS
 			} else {
 				panel.PageDown()
 			}
-		// View.Scroll directly rather than panel.ScrollUp/Down, which
-		// scale by the panel's own combined scale (deviceScale*zoom) -
-		// this stays deviceScale-alone, deliberately zoom-independent,
-		// matching cmd/whynot's own arrow-key scroll exactly.
 		case key.NameUpArrow:
-			panel.View().Scroll(arrowScrollLines * deviceScale)
+			panel.ScrollUp()
 		case key.NameDownArrow:
-			panel.View().Scroll(-arrowScrollLines * deviceScale)
+			panel.ScrollDown()
+		case key.NameLeftArrow:
+			panel.ScrollLeft()
+		case key.NameRightArrow:
+			panel.ScrollRight()
 		case key.NameEscape:
 			if app.TOCShowing() {
 				app.HideTOC()

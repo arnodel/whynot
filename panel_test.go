@@ -111,7 +111,7 @@ func TestPanelDrawClipsToBounds(t *testing.T) {
 func TestPanelScrollAndPage(t *testing.T) {
 	p := newTestPanel(strings.Repeat(longDoc, 40), image.Rect(0, 0, testWidth, testHeight))
 	top := func() int { return p.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y }
-	page := float64(testHeight) * (1 - pageOverlapFrac)
+	page := float64(testHeight) * (1 - pageOverlap)
 
 	steps := []struct {
 		name     string
@@ -134,8 +134,25 @@ func TestPanelScrollAndPage(t *testing.T) {
 	}
 }
 
+// TestPanelZoomedScrollStep checks the View is laid out at the scale
+// times the zoom, while ScrollDown's step follows the scale alone.
+func TestPanelZoomedScrollStep(t *testing.T) {
+	p := newTestPanel(strings.Repeat(longDoc, 40), image.Rect(0, 0, testWidth, testHeight))
+	p.SetScale(2)
+	p.SetZoom(1.5)
+	if got := p.View().ctx.Scale; got != 3 {
+		t.Errorf("View laid out at scale %v, want 3", got)
+	}
+	top := func() int { return p.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y }
+	before := top()
+	p.ScrollDown()
+	if d := top() - before; d != 2*commandStep {
+		t.Errorf("ScrollDown moved %d, want %d", d, 2*commandStep)
+	}
+}
+
 // TestPanelScrollLeftRight checks ScrollLeft and ScrollRight scroll the
-// wide block under the pointer, and only that.
+// wide block under the pointer, else the one last scrolled.
 func TestPanelScrollLeftRight(t *testing.T) {
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
@@ -160,11 +177,46 @@ func TestPanelScrollLeftRight(t *testing.T) {
 	if !p.ScrollRight() {
 		t.Fatal("ScrollRight with the pointer on the code block = false, want true")
 	}
-	if got := drawnTextX(t, v, "wide"); got != before-arrowScrollLines {
-		t.Errorf("text at x=%d after ScrollRight, want %d", got, before-arrowScrollLines)
+	if got := drawnTextX(t, v, "wide"); got != before-commandStep {
+		t.Errorf("text at x=%d after ScrollRight, want %d", got, before-commandStep)
 	}
 	p.ScrollLeft()
 	if got := drawnTextX(t, v, "wide"); got != before {
 		t.Errorf("text at x=%d after ScrollLeft, want %d (back at the start)", got, before)
+	}
+
+	// With the pointer elsewhere, the block last scrolled is the target.
+	p.Frame([]input.Event{input.PointerMove{X: above.X, Y: above.Y}}, 0)
+	if !p.ScrollRight() {
+		t.Fatal("ScrollRight after scrolling the code block = false, want true")
+	}
+	if got := drawnTextX(t, v, "wide"); got != before-commandStep {
+		t.Errorf("text at x=%d after ScrollRight, want %d", got, before-commandStep)
+	}
+	// Until the View is replaced.
+	p.SetView(v)
+	if p.ScrollRight() {
+		t.Error("ScrollRight after SetView = true, want false")
+	}
+}
+
+// TestControllerSidewaysTargetTouched checks a block touched becomes the
+// target of ScrollRight, even with no pointer.
+func TestControllerSidewaysTargetTouched(t *testing.T) {
+	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
+		strings.Repeat("Filler paragraph.\n\n", 60)
+	bounds := image.Rect(0, 0, 300, 400)
+	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
+	p := NewPanel(v, bounds)
+	p.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 1000, 1000)}, 0)
+	on := v.hscroll.regions[0].Visible.Min.Add(image.Pt(10, 10))
+	before := drawnTextX(t, v, "wide")
+
+	p.Frame([]input.Event{input.TouchStart{X: on.X, Y: on.Y}, input.TouchEnd{}}, 0)
+	if !p.ScrollRight() {
+		t.Fatal("ScrollRight after touching the code block = false, want true")
+	}
+	if got := drawnTextX(t, v, "wide"); got != before-commandStep {
+		t.Errorf("text at x=%d after ScrollRight, want %d", got, before-commandStep)
 	}
 }
