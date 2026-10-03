@@ -89,9 +89,11 @@ func TestViewVisibleRange(t *testing.T) {
 	if start, end := v.VisibleRange(); start != 0 || end != 1 {
 		t.Errorf("VisibleRange before SetBounds = %v, %v; want 0, 1", start, end)
 	}
-	// A frame lays out ahead of the viewport, which settles the height
-	// estimate.
-	layoutView(v, testWidth, testHeight, 1, 0)
+	v.SetBounds(image.Rect(0, 0, testWidth, testHeight))
+	// Lay out the whole document, so the height is exact rather than an
+	// estimate: how good the estimate is depends on how much a frame's
+	// time budget lays out ahead.
+	v.stack.visibleRange(math.MaxInt32)
 
 	start, end := v.VisibleRange()
 	if start != 0 || end <= 0 || end >= 1 {
@@ -100,12 +102,11 @@ func TestViewVisibleRange(t *testing.T) {
 	visible := end - start
 	for _, ratio := range []float64{0.5, 0.2, 0.8} {
 		v.ScrollToRatio(ratio)
-		v.update(0)
 		start, end := v.VisibleRange()
-		if math.Abs(start-ratio) > 0.01 {
+		if math.Abs(start-ratio) > 1e-9 {
 			t.Errorf("VisibleRange after ScrollToRatio(%v) starts at %v", ratio, start)
 		}
-		if math.Abs((end-start)-visible) > 0.01 {
+		if math.Abs((end-start)-visible) > 1e-9 {
 			t.Errorf("VisibleRange after ScrollToRatio(%v) spans %v, want about %v", ratio, end-start, visible)
 		}
 	}
