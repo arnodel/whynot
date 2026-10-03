@@ -1,14 +1,3 @@
-// Package ebitenbackend is whynot's backend for Ebitengine
-// (github.com/hajimehoshi/ebiten/v2). It provides both ends a whynot
-// View or Panel needs from a game:
-//
-//   - drawing: a [Renderer] makes a [Canvas] (a [canvas.Canvas]) onto
-//     an *ebiten.Image, typically the screen in the game's Draw;
-//   - input: an [Input] reads Ebitengine's mouse, wheel and touch state
-//     as [input.Event] values, once per tick in the game's Update.
-//
-// The core whynot packages don't depend on Ebitengine; only this one
-// does.
 package ebitenbackend
 
 import (
