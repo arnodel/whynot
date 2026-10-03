@@ -47,6 +47,11 @@ type View struct {
 	// time Layout checked for image state changes.
 	imageCacheMark uint64
 
+	// moves counts calls that set the scroll position (ScrollBy,
+	// ScrollToRatio and so on), so a Controller can tell when something
+	// else moved the View. Re-anchoring after a relayout doesn't count.
+	moves uint64
+
 	// highlightSlot is the top-level slot containing ctx.HighlightNode
 	// (meaningless when HighlightNode is nil). Hover refreshes it on every
 	// call, so it self-heals after an intervening rebuild.
@@ -123,6 +128,7 @@ func nodeOf(block engine.Block) *ast.Node {
 func (v *View) ScrollBy(dy float64) {
 	if v.stack.laidOut() {
 		v.stack.scroll(dy)
+		v.moves++
 		v.revealScrollbar()
 	}
 }
@@ -142,6 +148,7 @@ func (v *View) ScrollPosition() ScrollPosition {
 // ScrollPosition - only meaningful on the same View it was taken from.
 func (v *View) RestoreScrollPosition(p ScrollPosition) {
 	v.stack.cursor = p.cursor
+	v.moves++
 }
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id at
@@ -158,6 +165,7 @@ func (v *View) ScrollToAnchor(id string) bool {
 	for i := range v.stack.len() {
 		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id {
 			v.stack.scrollToSlot(i)
+			v.moves++
 			return true
 		}
 	}
@@ -170,6 +178,7 @@ func (v *View) ScrollToAnchor(id string) bool {
 func (v *View) ScrollToRatio(ratio float64) {
 	if v.stack.laidOut() {
 		v.stack.scrollToRatio(ratio)
+		v.moves++
 		v.revealScrollbar()
 	}
 }

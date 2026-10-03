@@ -54,6 +54,11 @@ type Controller struct {
 	hMomentum float64
 	hTarget   engine.Block
 
+	// viewMoves is the View's moves count at the end of the last Frame:
+	// if it's changed by the next one, the app moved the View, which
+	// stops any fling.
+	viewMoves uint64
+
 	// sideways is the sideways-scrolling block last scrolled, pressed or
 	// touched: ScrollLeft and ScrollRight's target when the pointer isn't
 	// on one.
@@ -105,6 +110,8 @@ func (c *Controller) SetView(v *View) {
 	c.view = v
 	c.hoverDest = ""
 	c.hTarget, c.sideways = nil, nil
+	c.viewMoves = v.moves
+	c.cancelMomentum()
 }
 
 // Bounds returns where the View is drawn, in the input's coordinates.
@@ -132,7 +139,14 @@ func (c *Controller) SetScale(s float64) {
 // Frame applies one frame's input events, in order, at now: elapsed time
 // on the clock the View is laid out with (see View.Layout). Call it once
 // per frame, with no events if there were none, so flings keep coasting.
+//
+// A fling stops if the app moves the View itself (with View.ScrollBy,
+// ScrollToAnchor and so on) or swaps it with SetView.
 func (c *Controller) Frame(events []input.Event, now time.Duration) {
+	if c.view.moves != c.viewMoves {
+		c.cancelMomentum()
+	}
+	defer func() { c.viewMoves = c.view.moves }()
 	var (
 		pressed      bool        // a primary press inside the bounds, for a click
 		pressedAt    image.Point // where
@@ -169,7 +183,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				}
 				continue
 			}
-			c.CancelMomentum()
+			c.cancelMomentum()
 			if !p.In(c.bounds) {
 				continue
 			}
@@ -192,7 +206,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			if !p.In(c.bounds) {
 				continue
 			}
-			c.CancelMomentum()
+			c.cancelMomentum()
 			wheeled = true
 			dx, dy := e.DX, e.DY
 			if e.Mods.Contain(input.ModShift) {
@@ -214,7 +228,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				// A visible scrollbar is dragged by touch too; a hidden one
 				// mustn't swallow touches along the edge.
 				c.touchOnBar = true
-				c.CancelMomentum()
+				c.cancelMomentum()
 				c.view.beginScrollbarDrag(local)
 				continue
 			}
@@ -333,7 +347,7 @@ func (c *Controller) tick(now time.Duration) float64 {
 // it first clearly moves in, scrolling the block or the page; any other
 // drag inside the bounds scrolls the page, and one outside nothing.
 func (c *Controller) touchStart(p image.Point, now time.Duration) {
-	c.CancelMomentum()
+	c.cancelMomentum()
 	c.tick(now)
 	c.touchPending = image.Point{}
 	c.touchTarget = nil
@@ -446,7 +460,7 @@ func (c *Controller) PageDown() { c.scrollBy(float64(c.bounds.Dy()) * (1 - pageO
 func (c *Controller) PageUp() { c.scrollBy(-float64(c.bounds.Dy()) * (1 - pageOverlap)) }
 
 func (c *Controller) scrollBy(dy float64) {
-	c.CancelMomentum()
+	c.cancelMomentum()
 	c.view.ScrollBy(dy)
 }
 
@@ -460,7 +474,7 @@ func (c *Controller) ScrollLeft() bool { return c.scrollSideways(-commandStep * 
 func (c *Controller) ScrollRight() bool { return c.scrollSideways(commandStep * c.scale) }
 
 func (c *Controller) scrollSideways(dx float64) bool {
-	c.CancelMomentum()
+	c.cancelMomentum()
 	if c.hasPointer && c.scrollAt(c.pointer, dx) {
 		return true
 	}
@@ -494,8 +508,8 @@ func (c *Controller) accumulate(v *float64, delta float64, now time.Duration) {
 	*v = *v*0.5 + delta/dt*0.5
 }
 
-// CancelMomentum stops any fling outright.
-func (c *Controller) CancelMomentum() {
+// cancelMomentum stops any fling outright.
+func (c *Controller) cancelMomentum() {
 	c.momentum = 0
 	c.hMomentum = 0
 }
