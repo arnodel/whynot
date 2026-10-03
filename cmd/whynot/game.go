@@ -4,9 +4,9 @@ import (
 	"image"
 	"time"
 
-	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/internal/browser"
 )
 
 // game adapts a browser.App (navigation/history/theme/zoom) and an

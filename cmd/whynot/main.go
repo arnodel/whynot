@@ -7,9 +7,9 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/ebitenrenderer"
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/internal/browser"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 

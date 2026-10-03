@@ -6,8 +6,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-
-	"github.com/arnodel/whynot/ebitenrenderer"
 )
 
 func (g *game) Update() error {
@@ -16,9 +14,9 @@ func (g *game) Update() error {
 
 	g.panel.Update()
 
-	// PointerState so these buttons work with a touch too, not just a mouse.
+	// pointerState so these buttons work with a touch too, not just a mouse.
 	var pointerDown, clicked bool
-	g.hoverX, g.hoverY, pointerDown, clicked = ebitenrenderer.PointerState()
+	g.hoverX, g.hoverY, pointerDown, clicked = pointerState()
 	cursor := image.Pt(g.hoverX, g.hoverY)
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: pointerDown && cursor.In(g.backButton)}
 	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: pointerDown && cursor.In(g.forwardButton)}

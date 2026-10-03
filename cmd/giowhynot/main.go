@@ -13,9 +13,9 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 
-	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot/internal/browser"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 

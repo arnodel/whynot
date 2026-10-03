@@ -16,9 +16,9 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot/internal/browser"
 )
 
 // toolbarLogicalHeight is the address bar / button row's height, in dp

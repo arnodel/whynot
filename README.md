@@ -443,7 +443,7 @@ None of the link-following/history logic lives in the library itself -
 `whynot` only exposes the primitives (`View.Hover`, `LinkAt`,
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
 files, fetching URLs, and keeping a history stack all live in
-`browser` (`github.com/arnodel/whynot/browser`, `browser.App`) - the
+`browser` (`internal/browser`, `browser.App`, internal to this module) - the
 backend-agnostic app layer [`cmd/giowhynot`](cmd/giowhynot) is built on
 too, sharing this exact behavior rather than reimplementing it (its own
 toolbar and input handling are Gio-native instead - see
