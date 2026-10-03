@@ -39,22 +39,15 @@ type Heading struct {
 }
 
 // Compile compiles Markdown source into its block tree, with plugins
-// (in priority order) parsing fenced code blocks. It only builds
-// structure: appearance comes later, from a View's StyleSheet.
+// (in priority order) parsing fenced code blocks.
 func Compile(source []byte, plugins []codeblocks.Plugin) *Result {
 	p := parser.New(
 		parser.WithExtensions(
 			extension.TaskListItemParser,
 			extension.StrikethroughParser,
 			extension.TableParser,
-			// Substitutes straight quotes/dashes/ellipsis for their
-			// typographic equivalents ("x" -> "x", -- -> en dash, etc.) as
-			// a plain Text node, same as any other inline text - its
-			// default substitutions are HTML entities (e.g. "&rsquo;"),
-			// but Text.Value's decoder resolves those the same way it
-			// already resolves &nbsp;/&amp; in ordinary prose (see
-			// TestParseResolvesEntitiesAndEscapes), so no extra config is
-			// needed to get literal runes out of it.
+			// Smart quotes, dashes and ellipses. It substitutes HTML
+			// entities, which Text.Value decodes to runes like any other.
 			extension.TypographerParser,
 		),
 		parser.WithAutoHeadingID(),
@@ -69,25 +62,20 @@ func Compile(source []byte, plugins []codeblocks.Plugin) *Result {
 	}
 }
 
-// compiler compiles Markdown source into a Block/ast.Node tree - structure
-// only, no appearance. See Parse.
+// compiler is the state of one Compile call.
 type compiler struct {
 	source []byte
 
-	// codeBlockPlugins is every codeblocks.Plugin registered via
-	// WithCodeBlockPlugin, in registration order. pluginCache remembers
-	// which of them handle a given language, populated lazily by
-	// pluginsFor - so a document with many fences in the same language
-	// only calls Handles once per plugin per language, not once per
-	// fence.
+	// codeBlockPlugins are the code-block plugins, in priority order;
+	// pluginCache records which of them handle each language seen so
+	// far (see pluginsFor).
 	codeBlockPlugins []codeblocks.Plugin
 	pluginCache      map[string][]codeblocks.Plugin
 
-	// pendingSpace is true when a breakable space has been seen in the
-	// source but not yet attached to the next appended Inline item - see
-	// appendString. Reset to true at the start of each fresh run of
-	// inline content (a paragraph, heading, list item head, or table
-	// cell), since there's nothing for the first item there to glue to.
+	// pendingSpace is whether breakable whitespace has been seen since
+	// the last Inline was appended, so the next one isn't Glued to it
+	// (see appendString). It starts out true for each run of inline
+	// content: the first item has nothing to glue to.
 	pendingSpace bool
 
 	// headings and soleImages accumulate the Result fields of the same

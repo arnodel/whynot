@@ -8,8 +8,8 @@ import (
 	"github.com/arnodel/whynot/internal/engine"
 )
 
-// codeBlockTabExpansion is what a literal tab in a code block's source is
-// replaced with - see the KindCodeBlock case below.
+// codeBlockTabExpansion is what a tab in a code block's source is
+// replaced with.
 const codeBlockTabExpansion = "    "
 
 // pluginsFor returns the registered plugins that handle language, in
@@ -79,11 +79,7 @@ func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][
 			return
 		}
 		if len(current) == 0 {
-			// A blank source line (or a span boundary that happens to
-			// land exactly on one) leaves current empty - LineBox
-			// requires at least one part (it indexes parts[0]
-			// unconditionally), so give it an empty-text placeholder
-			// rather than an empty slice.
+			// A blank line has no parts, but a line needs at least one.
 			current = []engine.Inline{&engine.InlineText{Text: "", ASTNode: blockNode}}
 		}
 		lines[lineIndex] = current

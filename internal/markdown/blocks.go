@@ -13,6 +13,8 @@ import (
 	"github.com/arnodel/whynot/internal/engine"
 )
 
+// compileBlock compiles a block node under parent (nil at the top level),
+// or returns nil for one that shows nothing.
 func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block {
 	switch node.Kind() {
 	case gmast.KindParagraph:
@@ -39,12 +41,8 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block 
 		segs := cb.Value.Segments()
 		rawLines := make([]string, len(segs))
 		for i, seg := range segs {
-			// A code block's content is verbatim source, tabs included -
-			// unlike indentation elsewhere in the document, this isn't
-			// tab-expanded before it reaches us. Most fonts have no glyph
-			// for a raw tab, rendering it as a placeholder box instead of
-			// whitespace, so expand it here to keep indentation looking
-			// like indentation.
+			// Code keeps its tabs, and most fonts have no glyph for one:
+			// expand them so indentation shows as indentation.
 			rawLines[i] = strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
 		}
 
@@ -66,15 +64,12 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block 
 	case extast.KindTable:
 		return c.compileTable(node, parent)
 	case gmast.KindLinkReferenceDefinition:
-		// A `[foo]: /url "title"` line - already consumed by goldmark to
-		// resolve reference-style links elsewhere in the document (see
-		// KindLink), and, like in any other Markdown renderer, invisible
-		// in its own right.
+		// A `[foo]: /url` definition: goldmark has already used it to
+		// resolve links, and it isn't shown.
 		return nil
 	case gmast.KindHTMLBlock:
 		if node.(*gmast.HTMLBlock).HTMLBlockKind == gmast.HTMLBlockKind2 {
-			// A <!-- comment -->, invisible in any Markdown renderer -
-			// not "unsupported", never meant to be shown at all.
+			// A <!-- comment -->: never shown.
 			return nil
 		}
 	}
@@ -122,11 +117,10 @@ func plainText(items []engine.Inline) string {
 	return strings.Join(words, " ")
 }
 
-// compileUnsupportedBlock handles any block-level Markdown construct
-// whynot doesn't have a case for above. Rather than taking down the
-// whole document, it logs a warning and renders the construct as a
-// code block in StyleSheet.UnsupportedColor, showing its raw source
-// where possible so the gap is visible rather than silently dropped.
+// compileUnsupportedBlock shows a block construct the compiler has no
+// case for as a code block of its raw source (where available), styled
+// as unsupported, and logs it: the gap stays visible rather than
+// silently dropped.
 func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ast.Node) engine.Block {
 	astNode := parent.AddChild(ast.TagUnsupported)
 	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
@@ -163,12 +157,10 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 		marker = &engine.InlineText{Text: listMarker(list, index), ASTNode: itemNode}
 	}
 
-	// A leading Paragraph is the item's own text, flowed with the marker
-	// hanging off its first line (see ListItemHeadBlock.GetBlockLayout).
-	// Anything after it - a nested List, or (in a loose list) further
-	// paragraphs - stacks below as trailing block content. An item with no
-	// leading paragraph has no parts, so the marker ends up on a line of
-	// its own.
+	// A leading paragraph is the item's own text, with the marker hanging
+	// off its first line. Anything after it (a nested list, further
+	// paragraphs) stacks below. Without a leading paragraph, the marker
+	// is on a line of its own.
 	var parts []engine.Inline
 	next := node.FirstChild()
 	if next != nil && next.Kind() == gmast.KindParagraph {
@@ -182,17 +174,11 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 		ASTNode: itemNode,
 	})
 	if !list.IsTight {
-		// Loose items get real paragraph spacing on their own leading text
-		// too, not a tight head's zero margins. This also grows the gap
-		// between items with no separate constant: StackBlock.Margins()
-		// reports its first child's margin, so it collapses outward
-		// through the item's own MarginBlock and the list's own
-		// StackBlock, like any sibling gap.
-		//
-		// A dedicated ast.TagParagraph child, not itemNode itself: the head's
-		// own margins should resolve as a paragraph's (matching what this
-		// looked like before StyleSheet), distinct from itemNode's tag,
-		// which the marker/parts' own inline styling still uses.
+		// A loose item's text gets paragraph spacing. That also spaces the
+		// items apart: a StackBlock's margins are its first child's, so
+		// they collapse outward like any sibling gap. The margins come from
+		// a paragraph node of its own, while the marker and text keep
+		// itemNode for their styling.
 		head = &engine.MarginBlock{Block: head, MarginNode: itemNode.AddChild(ast.TagParagraph)}
 	}
 	blocks := []engine.Block{head}
@@ -201,12 +187,9 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 		blocks = append(blocks, wrapBlocks(trailingBlocks))
 	}
 
-	// The whole item - head plus any trailing content - is a StackBlock
-	// carrying the item's real margins (crucially Left, for indentation).
-	// Not wrapBlocks: that returns a single block unwrapped when there's
-	// only one, which would lose these margins for the common
-	// no-trailing-content tight case (ListItemHeadBlock's own Margins() is
-	// zero then).
+	// Always a StackBlock carrying the item's margins (notably Left, the
+	// indentation): wrapBlocks would return a lone head unwrapped, and
+	// lose them.
 	return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: blocks}, MarginNode: itemNode}
 }
 
@@ -220,9 +203,8 @@ func listMarker(list *gmast.List, index int) string {
 	return string(list.Marker)
 }
 
-// compileTable compiles a Table node. The header is mandatory (GFM
-// requires it); the body is not - a table can legitimately have zero
-// data rows, in which case Table has no TableBody child at all.
+// compileTable compiles a table. It always has a header, but may have no
+// body: a table with no data rows has no TableBody child.
 func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) engine.Block {
 	astNode := parent.AddChild(ast.TagTable)
 	headerNode := node.FirstChild()
@@ -241,9 +223,8 @@ func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) engine.Block 
 	}
 }
 
-// compileTableRow compiles the cells of a TableHeader or a TableRow -
-// both have TableCell children directly, no intermediate node, so one
-// method handles both despite the different AST kinds.
+// compileTableRow compiles the cells of a TableHeader or a TableRow,
+// which both have TableCell children.
 func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []engine.TableCell {
 	var cells []engine.TableCell
 	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
@@ -257,9 +238,7 @@ func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []engine.T
 	return cells
 }
 
-// tableCellAlignment translates goldmark's own alignment enum to
-// whynot's - see cellAlignment's doc comment for why they're kept
-// distinct.
+// tableCellAlignment converts goldmark's alignment to the engine's.
 func tableCellAlignment(a extast.Alignment) engine.CellAlignment {
 	switch a {
 	case extast.AlignLeft:
@@ -273,9 +252,7 @@ func tableCellAlignment(a extast.Alignment) engine.CellAlignment {
 	}
 }
 
-// wrapBlocks returns blocks[0] directly if there's exactly one, or a
-// StackBlock of all of them otherwise - for a Block field that holds "one
-// or more" blocks without unconditionally wrapping a single child.
+// wrapBlocks returns a lone block as is, and several in a StackBlock.
 func wrapBlocks(blocks []engine.Block) engine.Block {
 	if len(blocks) == 1 {
 		return blocks[0]
