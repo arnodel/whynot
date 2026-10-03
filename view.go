@@ -13,15 +13,18 @@ import (
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
-// View renders a Document onto a Canvas, scrolled to a position. It lays
-// out only what's needed to draw, re-lays out only when the width, scale
-// or StyleSheet change, and keeps the scroll position across those
-// changes.
+// View renders a Document into a rectangle of a Canvas, its Bounds,
+// scrolled to a position. It lays out only what's needed to draw, lays
+// out again only when the width, scale or StyleSheet change, and keeps
+// the scroll position across those changes.
 //
 // A View reads no input itself: a Controller turns input into hovering,
 // clicking and scrolling. Its own methods are for programmatic use:
-// Layout when the size or scale changes, and positioning with ScrollBy,
-// ScrollToRatio, ScrollToAnchor and RestoreScrollPosition.
+// SetBounds and SetScale when the window or zoom change, and positioning
+// with ScrollBy, ScrollToRatio, ScrollToAnchor and RestoreScrollPosition.
+//
+// All its positions and distances are in canvas pixels (see Coordinates
+// in the package documentation).
 type View struct {
 	doc *Document
 	ctx engine.Context
@@ -34,17 +37,17 @@ type View struct {
 	// stack is the laid-out document and the scroll position within it.
 	stack documentStack
 
-	// width and scale are what stack was last laid out at; height is the
-	// viewport's.
+	// bounds is where the View is drawn on the canvas. width and scale are
+	// what stack was last laid out at.
+	bounds image.Rectangle
 	width  int
-	height int
 	scale  float64
 
 	// vbar is the View's own vertical scrollbar, if enabled.
 	vbar vscrollbar
 
 	// imageCacheMark is the imagecache.Cache.ChangedSince mark from the last
-	// time Layout checked for image state changes.
+	// time Draw checked for image state changes.
 	imageCacheMark uint64
 
 	// moves counts calls that set the scroll position (ScrollBy,
@@ -72,12 +75,13 @@ func WithImageSource(s images.Source) ViewOption {
 }
 
 // NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
-// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), ready to render
-// once Layout has been called to establish a width.
+// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), at scale 1. It
+// has empty bounds, so it shows nothing until SetBounds is called.
 func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
 		ctx: engine.Context{
+			Scale:        1,
 			FaceSelector: faceSelector,
 			Styles:       styleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
@@ -172,9 +176,9 @@ func (v *View) ScrollToAnchor(id string) bool {
 	return false
 }
 
-// ScrollToRatio sets the scroll position to ratio (clamped to [0, 1]) of
+// ScrollToRatio puts the top of the View at ratio (clamped to [0, 1]) of
 // the document's estimated height, e.g. while dragging a scrollbar thumb
-// (DocumentBounds and VisibleViewBounds give the ratio back).
+// (VisibleRange gives the ratio back).
 func (v *View) ScrollToRatio(ratio float64) {
 	if v.stack.laidOut() {
 		v.stack.scrollToRatio(ratio)
@@ -197,57 +201,110 @@ func (v *View) ScrollbarColor(hover, pressed bool) color.Color {
 	return v.ctx.Styles.ScrollbarColor(hover, pressed)
 }
 
-// DocumentBounds returns the document's estimated extent, origin at
-// (0, 0): width is the last Layout width; height is the current best
-// estimate of the total, exact once every slot has been laid out. A
-// caller scales the ratio between this and VisibleViewBounds to build its
-// own scrollbar.
-func (v *View) DocumentBounds() image.Rectangle {
-	if !v.stack.laidOut() {
-		return image.Rectangle{}
-	}
-	return image.Rect(0, 0, v.width, int(v.stack.totalHeight()))
-}
-
-// VisibleViewBounds returns the sub-rectangle of DocumentBounds
-// currently visible for a viewport of viewportSize (the same size
-// passed to Draw's dst).
-func (v *View) VisibleViewBounds(viewportSize image.Point) image.Rectangle {
+// VisibleRange returns the part of the document in view, as fractions of
+// its height: from start to end, with 0 <= start <= end <= 1 - e.g. for
+// drawing a scrollbar thumb. ScrollToRatio(start) is the way back. The
+// height is an estimate until the whole document has been laid out, so
+// the fractions can shift a little as more of it is seen. Before
+// anything is laid out, it's (0, 1).
+func (v *View) VisibleRange() (start, end float64) {
 	if !v.stack.laidOut() || v.stack.cursor.Index >= v.stack.len() {
-		return image.Rectangle{}
+		return 0, 1
 	}
-	top, bottom := v.stack.visibleRange(viewportSize.Y)
-	return image.Rect(0, int(top), viewportSize.X, int(bottom))
+	top, bottom, total := v.stack.visibleRange(v.bounds.Dy())
+	if total <= 0 {
+		return 0, 1
+	}
+	return top / total, bottom / total
 }
 
-// Draw renders the document onto dst with its top-left corner at (x, y),
-// at the current scroll position. Content above the current cursor, and
-// content outside dst's bounds, is never laid out or drawn - Draw's cost
-// tracks what's visible, not the document's total size or how far into it
-// the scroll position is.
+// Bounds returns where the View is drawn on the canvas.
+func (v *View) Bounds() image.Rectangle {
+	return v.bounds
+}
+
+// SetBounds sets where the View is drawn on the canvas, which is also
+// where its HitTest and LinkAt apply. A change of width lays the document
+// out again, keeping the scroll position.
+func (v *View) SetBounds(r image.Rectangle) {
+	v.bounds = r
+	v.relayout()
+}
+
+// Scale returns the scale the View is laid out at (see SetScale).
+func (v *View) Scale() float64 {
+	return v.ctx.Scale
+}
+
+// SetScale sets the scale the View is laid out at: canvas pixels per
+// logical pixel (the display's scale), times any zoom. Fonts are sized
+// at scale*72 DPI, and the StyleSheet's dimensions are multiplied by it.
+// A change lays the document out again, keeping the scroll position.
+func (v *View) SetScale(scale float64) {
+	v.ctx.Scale = scale
+	v.relayout()
+}
+
+// relayout lays the document out again if its width or scale changed.
+func (v *View) relayout() {
+	if v.bounds.Dx() <= 0 || v.stack.laidOut() && v.bounds.Dx() == v.width && v.ctx.Scale == v.scale {
+		return
+	}
+	v.width, v.scale = v.bounds.Dx(), v.ctx.Scale
+	v.rebuild()
+}
+
+// Draw draws the View onto dst, within its Bounds, as it is at now:
+// elapsed time on a clock of the caller's choosing (any origin, as long
+// as it's the same on every call), which animated images and fading
+// scrollbars follow. Call it every frame: it also picks up images that
+// have finished loading.
 //
-// Draw first fills dst's whole bounds with the StyleSheet's background
-// color, so a caller doesn't need its own clear step.
-func (v *View) Draw(dst canvas.Canvas, x, y int) {
-	bounds := dst.Bounds()
-	dst.DrawRect(bounds.Min.X, bounds.Min.Y, bounds.Dx(), bounds.Dy(), v.ctx.Styles.BackgroundColor())
+// Draw fills its Bounds with the StyleSheet's background color first, so
+// a caller doesn't need its own clear step. Its cost follows what's
+// visible, not the document's size or how far into it the scroll
+// position is.
+func (v *View) Draw(dst canvas.Canvas, now time.Duration) {
+	v.ctx.Time = now
+	dst = dst.Clip(v.bounds)
+	area := dst.Bounds()
+	dst.DrawRect(area.Min.X, area.Min.Y, area.Dx(), area.Dy(), v.ctx.Styles.BackgroundColor())
 	if !v.stack.laidOut() {
 		return
 	}
+	v.update(now)
 	if v.hscroll != nil {
-		v.hscroll.beginFrame(image.Pt(x, y))
+		v.hscroll.beginFrame()
 	}
-	// The top/bottom ViewMargins are spacer slots in the stack (see
-	// rebuild); only Left needs applying here.
-	v.stack.box.DrawFrom(dst, v.stack.cursor, x+int(v.ctx.ScaledViewMargins().Left), y, v.ctx.Time)
-	v.drawScrollbar(dst, x, y)
+	origin := v.contentOrigin()
+	v.stack.box.DrawFrom(dst, v.stack.cursor, origin.X, origin.Y, now)
+	v.drawScrollbar(dst)
+}
+
+// update does a frame's work before drawing at now: picking up images
+// that have loaded, and laying out and loading ahead of the viewport.
+func (v *View) update(now time.Duration) {
+	v.ctx.Time = now
+	if !v.stack.laidOut() {
+		return
+	}
+	v.invalidateChangedImages()
+	v.stack.preLayout(v.bounds.Dy())
+	v.prefetchImageSources(v.bounds.Dy())
+}
+
+// contentOrigin is where the top-left corner of the content at the
+// scroll position is drawn: the top-left corner of the bounds, shifted
+// by the left ViewMargin. (The top and bottom ViewMargins are spacer
+// slots in the stack: see rebuild.)
+func (v *View) contentOrigin() image.Point {
+	return v.bounds.Min.Add(image.Pt(int(v.ctx.ScaledViewMargins().Left), 0))
 }
 
 // HitTest returns the rectangle of the content at (x, y), e.g. for
-// drawing an outline around it. Both are in the coordinate space Draw's
-// (x, y) places content's origin into. ok is false if (x, y) doesn't
-// land on any content: past the end of the document, or in a margin or
-// gap. A point above the document resolves to its first block.
+// drawing an outline around it. ok is false if (x, y) is outside the
+// Bounds, or doesn't land on any content: past the end of the document,
+// or in a margin or gap.
 func (v *View) HitTest(x, y int) (r image.Rectangle, ok bool) {
 	hit, offset, _ := v.hitTest(x, y)
 	if hit == nil {
@@ -257,19 +314,19 @@ func (v *View) HitTest(x, y int) (r image.Rectangle, ok bool) {
 }
 
 // hitTest is HitTest's real implementation, additionally reporting
-// which top-level slot y resolved to (meaningful only when hit is
+// which top-level slot (x, y) resolved to (meaningful only when hit is
 // non-nil).
 func (v *View) hitTest(x, y int) (hit engine.Hit, offset image.Point, slot int) {
-	if !v.stack.laidOut() {
+	if !v.stack.laidOut() || !image.Pt(x, y).In(v.bounds) {
 		return nil, image.Point{}, 0
 	}
-	left := int(v.ctx.ScaledViewMargins().Left)
-	c := v.stack.at(y)
+	origin := v.contentOrigin()
+	c := v.stack.at(y - origin.Y)
 	if c.Index < 0 || c.Index >= v.stack.len() {
 		return nil, image.Point{}, 0
 	}
 	box := v.stack.box.BoxAt(c.Index)
-	local := image.Pt(x-left, int(c.Offset))
+	local := image.Pt(x-origin.X, int(c.Offset))
 	if !local.In(box.Bounds()) {
 		return nil, image.Point{}, c.Index
 	}
@@ -277,14 +334,13 @@ func (v *View) hitTest(x, y int) (hit engine.Hit, offset image.Point, slot int) 
 	if hit == nil {
 		return nil, image.Point{}, c.Index
 	}
-	// Shift back from box's own local frame into the frame (x, y) arrived
-	// in, undoing both the left-margin shift and the cursor-relative y.
-	return hit, offset.Add(image.Pt(left, y-int(c.Offset))), c.Index
+	// From box's own frame back to the canvas: box's top is c.Offset
+	// above y.
+	return hit, offset.Add(image.Pt(origin.X, y-int(c.Offset))), c.Index
 }
 
-// linkNodeAt returns the ast.Node of the link at document position
-// (x, y), or nil if none - same coordinate space as HitTest - and the
-// top-level slot it's in.
+// linkNodeAt returns the ast.Node of the link at (x, y), or nil if none,
+// and the top-level slot it's in.
 func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 	hit, _, slot := v.hitTest(x, y)
 	if hit == nil {
@@ -294,8 +350,8 @@ func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 }
 
 // hover updates which link is highlighted, and which sideways-scrolling
-// block shows its scrollbar, given the pointer position in HitTest's
-// coordinates. It also reports the link there, like LinkAt.
+// block shows its scrollbar, given the pointer at (x, y). It also
+// reports the link there, like LinkAt.
 func (v *View) hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
@@ -303,9 +359,27 @@ func (v *View) hover(x, y int) (destination string, ok bool) {
 	return v.hoverLink(x, y)
 }
 
+// unhover clears what hover set: the pointer is gone.
+func (v *View) unhover() {
+	if v.hscroll != nil {
+		v.hscroll.unhover()
+	}
+	v.setHighlight(nil, 0)
+}
+
 // hoverLink is hover for links only.
 func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
+	v.setHighlight(node, slot)
+	if node == nil {
+		return "", false
+	}
+	return node.Destination, true
+}
+
+// setHighlight highlights the link node, in top-level slot slot, or
+// none if node is nil.
+func (v *View) setHighlight(node *ast.Node, slot int) {
 	if node != v.ctx.HighlightNode {
 		if v.ctx.HighlightNode != nil && v.stack.laidOut() {
 			v.stack.invalidate(v.highlightSlot)
@@ -315,15 +389,13 @@ func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 			v.stack.invalidate(slot)
 		}
 	}
-	if node == nil {
-		return "", false
+	if node != nil {
+		v.highlightSlot = slot
 	}
-	v.highlightSlot = slot
-	return node.Destination, true
 }
 
-// LinkAt reports the destination URL of the link at (x, y), in HitTest's
-// coordinates. ok is false if (x, y) doesn't land on a link.
+// LinkAt reports the destination URL of the link at (x, y). ok is false
+// if (x, y) doesn't land on a link.
 func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 	node, _ := v.linkNodeAt(x, y)
 	if node == nil {
@@ -332,34 +404,8 @@ func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 	return node.Destination, true
 }
 
-// Layout sets the pixel width and display scale to render at (DPI = scale
-// * 72), and now: elapsed time since rendering started, from whatever
-// reference point the embedder chooses, as long as it's the same one on
-// every call. now is stored on every call, since animated images need
-// fresh time to animate. Cheap to call every frame: the layout is only
-// rebuilt when width or scale change.
-//
-// height is the viewport's height - not used for wrapping, only to know
-// where the visible area ends when laying out and prefetching ahead.
-func (v *View) Layout(width, height int, scale float64, now time.Duration) {
-	v.ctx.Scale = scale
-	v.ctx.Time = now
-	v.height = height
-
-	if width == v.width && scale == v.scale {
-		v.invalidateChangedImages()
-	} else {
-		v.width = width
-		v.scale = scale
-		v.rebuild()
-	}
-	v.stack.preLayout(height)
-	v.prefetchImageSources(height)
-}
-
-// invalidateChangedImages is Layout's response to an unchanged
-// width/scale: an image may have settled since the last call (see
-// imagecache.Cache) and need picking up. Only slots waiting on an image that
+// invalidateChangedImages picks up images that have settled since the
+// last call (see imagecache.Cache). Only slots waiting on an image that
 // changed are invalidated.
 func (v *View) invalidateChangedImages() {
 	if !v.stack.laidOut() || v.ctx.ImageCache == nil {
@@ -408,7 +454,7 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 // SetStyleSheet swaps the View's StyleSheet and takes effect immediately:
 // style values are resolved when the layout is built, so it's rebuilt
 // here, re-anchoring the scroll position the same way a resize does. If
-// nothing has been laid out yet, the first Layout call picks s up.
+// nothing has been laid out yet, SetBounds lays it out with s.
 func (v *View) SetStyleSheet(s StyleSheet) {
 	v.ctx.Styles = s.Styles()
 	if v.stack.laidOut() {

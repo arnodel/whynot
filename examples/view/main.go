@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"strings"
 	"time"
@@ -46,13 +47,11 @@ func (g *game) Update() error {
 func (g *game) Draw(screen *ebiten.Image) {
 	// View.Draw fills its own background (from the View's StyleSheet) -
 	// no separate clear step needed here.
-	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
+	g.view.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	// The last argument is elapsed time since rendering started - only
-	// animated images actually need it (see View.Layout).
-	g.view.Layout(outsideWidth, outsideHeight, 1, time.Since(g.start))
+	g.view.SetBounds(image.Rect(0, 0, outsideWidth, outsideHeight))
 	return outsideWidth, outsideHeight
 }
 

@@ -14,6 +14,7 @@ package main
 
 import (
 	"flag"
+	"image"
 	"log"
 	"strings"
 	"time"
@@ -56,14 +57,15 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
+	g.view.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	width := int(float64(outsideWidth) * scale)
 	height := int(float64(outsideHeight) * scale)
-	g.view.Layout(width, height, scale, time.Since(g.start))
+	g.view.SetScale(scale)
+	g.view.SetBounds(image.Rect(0, 0, width, height))
 	return width, height
 }
 

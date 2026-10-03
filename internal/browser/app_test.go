@@ -152,12 +152,12 @@ func TestAppFollowSamePageFragmentScrolls(t *testing.T) {
 	app := newTestApp(t, dir, loc, "[jump](#target)\n\n"+
 		"paragraph\n\n"+repeatLines(40)+"\n\n# Target")
 
-	before := app.Panel.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y
+	before, _ := app.Panel.View().VisibleRange()
 	app.Follow("#target")
-	after := app.Panel.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y
+	after, _ := app.Panel.View().VisibleRange()
 
 	if after <= before {
-		t.Errorf("VisibleViewBounds top after following an in-page anchor = %d, want more than %d", after, before)
+		t.Errorf("VisibleRange start after following an in-page anchor = %v, want more than %v", after, before)
 	}
 	if !app.CanGoBack() {
 		t.Error("CanGoBack() = false after an in-page anchor jump, want true")

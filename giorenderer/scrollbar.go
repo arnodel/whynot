@@ -22,18 +22,13 @@ type NativeScrollbar struct {
 	scrollbar widget.Scrollbar
 }
 
-// Layout lays the scrollbar out along the right edge of bounds, where
-// view is drawn, and scrolls view when it's dragged. Call it after
-// registering the View's own input area for the frame (see
-// Input.Source), so the scrollbar's area takes its input first.
-func (s *NativeScrollbar) Layout(gtx layout.Context, view *whynot.View, bounds image.Rectangle) {
-	doc := view.DocumentBounds()
-	if doc.Dy() == 0 {
-		return
-	}
-	visible := view.VisibleViewBounds(bounds.Size())
-	start := float32(visible.Min.Y) / float32(doc.Dy())
-	end := float32(visible.Max.Y) / float32(doc.Dy())
+// Layout lays the scrollbar out along the right edge of view's Bounds,
+// and scrolls view when it's dragged. Call it after registering the
+// View's own input area for the frame (see Input.Source), so the
+// scrollbar's area takes its input first.
+func (s *NativeScrollbar) Layout(gtx layout.Context, view *whynot.View) {
+	start, end := view.VisibleRange()
+	bounds := view.Bounds()
 
 	if s.Theme == nil {
 		s.Theme = material.NewTheme()
@@ -48,11 +43,11 @@ func (s *NativeScrollbar) Layout(gtx layout.Context, view *whynot.View, bounds i
 	stack := op.Offset(strip.Min).Push(gtx.Ops)
 	stripGtx := gtx
 	stripGtx.Constraints = layout.Exact(strip.Size())
-	sb.Layout(stripGtx, layout.Vertical, start, end)
+	sb.Layout(stripGtx, layout.Vertical, float32(start), float32(end))
 	stack.Pop()
 
-	// ScrollDistance is a fraction of the document.
+	// ScrollDistance is a fraction of the document, like VisibleRange.
 	if d := s.scrollbar.ScrollDistance(); d != 0 {
-		view.ScrollBy(float64(d) * float64(doc.Dy()))
+		view.ScrollToRatio(start + float64(d))
 	}
 }

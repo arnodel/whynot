@@ -24,9 +24,8 @@ const (
 // Frame. It also scrolls on command (ScrollDown, PageDown, ScrollLeft
 // and so on), for an app binding keys to them.
 type Controller struct {
-	view   *View
-	bounds image.Rectangle
-	scale  float64
+	view  *View
+	scale float64
 
 	// OnLinkClick is called with a link's destination when it's clicked
 	// or tapped, OnLinkHover when the hovered link changes ("" when
@@ -92,11 +91,10 @@ const (
 // decides whether it scrolls the block or the page.
 const touchAxisLockDistance = 10
 
-// NewController returns a Controller for v, acting on input inside
-// bounds: where the View is drawn, in the input's coordinates, at
-// scale 1.
-func NewController(v *View, bounds image.Rectangle) *Controller {
-	return &Controller{view: v, bounds: bounds, scale: 1}
+// NewController returns a Controller for v, at scale 1. It acts on
+// input inside v's Bounds.
+func NewController(v *View) *Controller {
+	return &Controller{view: v, scale: 1}
 }
 
 // View returns the View the Controller drives.
@@ -114,14 +112,9 @@ func (c *Controller) SetView(v *View) {
 	c.cancelMomentum()
 }
 
-// Bounds returns where the View is drawn, in the input's coordinates.
-func (c *Controller) Bounds() image.Rectangle {
-	return c.bounds
-}
-
-// SetBounds sets where the View is drawn, in the input's coordinates.
-func (c *Controller) SetBounds(r image.Rectangle) {
-	c.bounds = r
+// bounds is where the View is drawn.
+func (c *Controller) bounds() image.Rectangle {
+	return c.view.Bounds()
 }
 
 // Scale returns the display's scale (see SetScale).
@@ -160,9 +153,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 		case input.PointerMove:
 			c.pointer, c.hasPointer = image.Pt(e.X, e.Y), true
 			if c.view.vbar.dragging {
-				c.view.dragScrollbarTo(e.Y - c.bounds.Min.Y)
+				c.view.dragScrollbarTo(e.Y)
 			} else if s := c.hscroll(); s != nil && s.dragging != nil {
-				s.dragTo(e.X - c.bounds.Min.X)
+				s.dragTo(e.X)
 			}
 		case input.PointerLeave:
 			c.hasPointer = false
@@ -179,29 +172,28 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				}
 				if s != nil && s.dragging != nil {
 					s.endDrag(c.view.ctx.Time)
-					s.hover(p.Sub(c.bounds.Min), c.view.ctx.Time)
+					s.hover(p, c.view.ctx.Time)
 				}
 				continue
 			}
 			c.cancelMomentum()
-			if !p.In(c.bounds) {
+			if !p.In(c.bounds()) {
 				continue
 			}
-			local := p.Sub(c.bounds.Min)
-			if c.view.onScrollbar(local) {
-				c.view.beginScrollbarDrag(local)
+			if c.view.onScrollbar(p) {
+				c.view.beginScrollbarDrag(p)
 				continue
 			}
 			if b := c.hscrollBlockAt(p); b != nil {
 				c.lastHScrolled = b
 			}
-			if s != nil && s.beginDrag(local) {
+			if s != nil && s.beginDrag(p) {
 				continue
 			}
 			pressed, pressedAt = true, p
 		case input.Wheel:
 			p := image.Pt(e.X, e.Y)
-			if !p.In(c.bounds) {
+			if !p.In(c.bounds()) {
 				continue
 			}
 			c.cancelMomentum()
@@ -221,13 +213,12 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				continue
 			}
 			c.touching, c.touchID, c.touchPos = true, e.ID, image.Pt(e.X, e.Y)
-			local := c.touchPos.Sub(c.bounds.Min)
-			if c.touchPos.In(c.bounds) && c.view.onScrollbar(local) && c.view.scrollbarOpacity(c.view.ctx.Time) > 0 {
+			if c.touchPos.In(c.bounds()) && c.view.onScrollbar(c.touchPos) && c.view.scrollbarOpacity(c.view.ctx.Time) > 0 {
 				// A visible scrollbar is dragged by touch too; a hidden one
 				// mustn't swallow touches along the edge.
 				c.touchOnBar = true
 				c.cancelMomentum()
-				c.view.beginScrollbarDrag(local)
+				c.view.beginScrollbarDrag(c.touchPos)
 				continue
 			}
 			touchStarted = true
@@ -236,7 +227,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			if c.touching && e.ID == c.touchID {
 				p := image.Pt(e.X, e.Y)
 				if c.touchOnBar {
-					c.view.dragScrollbarTo(p.Y - c.bounds.Min.Y)
+					c.view.dragScrollbarTo(p.Y)
 				} else {
 					touchDelta = touchDelta.Add(p.Sub(c.touchPos))
 				}
@@ -263,12 +254,11 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 		c.coastMomentum(now)
 	}
 
-	if touchStarted && c.touchPos.In(c.bounds) {
+	if touchStarted && c.touchPos.In(c.bounds()) {
 		// A touch only taps: it highlights and clicks the link under it,
 		// but hovers nothing else (a block's scrollbar shows only while
 		// panning it).
-		local := c.touchPos.Sub(c.bounds.Min)
-		dest, ok := c.view.hoverLink(local.X, local.Y)
+		dest, ok := c.view.hoverLink(c.touchPos.X, c.touchPos.Y)
 		if s := c.hscroll(); s != nil {
 			s.unhover()
 		}
@@ -279,8 +269,7 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 	} else if !c.touching {
 		c.hover()
 		if pressed {
-			local := pressedAt.Sub(c.bounds.Min)
-			if dest, ok := c.view.LinkAt(local.X, local.Y); ok {
+			if dest, ok := c.view.LinkAt(pressedAt.X, pressedAt.Y); ok {
 				c.click(dest)
 			}
 		}
@@ -297,16 +286,14 @@ func (c *Controller) hover() {
 	if s := c.hscroll(); c.view.vbar.dragging || s != nil && s.dragging != nil {
 		return
 	}
-	if !c.hasPointer || !c.pointer.In(c.bounds) {
-		// (-1, -1) can't land on anything.
+	if !c.hasPointer || !c.pointer.In(c.bounds()) {
 		c.view.vbar.hovered = false
-		c.view.hover(-1, -1)
+		c.view.unhover()
 		c.setHover("", false)
 		return
 	}
-	local := c.pointer.Sub(c.bounds.Min)
-	c.view.vbar.hovered = c.view.onScrollbar(local)
-	c.setHover(c.view.hover(local.X, local.Y))
+	c.view.vbar.hovered = c.view.onScrollbar(c.pointer)
+	c.setHover(c.view.hover(c.pointer.X, c.pointer.Y))
 }
 
 // setHover records the hovered link, calling OnLinkHover on a change.
@@ -350,7 +337,7 @@ func (c *Controller) touchStart(p image.Point, now time.Duration) {
 	c.touchPending = image.Point{}
 	c.touchTarget = c.hscrollBlockAt(p)
 	switch {
-	case !p.In(c.bounds):
+	case !p.In(c.bounds()):
 		c.touchAxis = touchNone
 	case c.touchTarget != nil:
 		c.lastHScrolled = c.touchTarget
@@ -404,7 +391,7 @@ func (c *Controller) touchEnd() {
 	}
 	c.touching = false
 	c.touchAxis = touchNone
-	c.view.hover(-1, -1)
+	c.view.unhover()
 	c.setHover("", false)
 }
 
@@ -423,10 +410,10 @@ func (c *Controller) hscroll() *hscrollState {
 // input's coordinates, or nil if there's none.
 func (c *Controller) hscrollBlockAt(p image.Point) engine.Block {
 	s := c.hscroll()
-	if s == nil || !p.In(c.bounds) {
+	if s == nil || !p.In(c.bounds()) {
 		return nil
 	}
-	r, ok := s.regionAt(p.Sub(c.bounds.Min))
+	r, ok := s.regionAt(p)
 	if !ok {
 		return nil
 	}
@@ -478,10 +465,10 @@ func (c *Controller) ScrollDown() { c.vscrollBy(commandStep * c.scale) }
 func (c *Controller) ScrollUp() { c.vscrollBy(-commandStep * c.scale) }
 
 // PageDown scrolls a page towards the end.
-func (c *Controller) PageDown() { c.vscrollBy(float64(c.bounds.Dy()) * (1 - pageOverlap)) }
+func (c *Controller) PageDown() { c.vscrollBy(float64(c.bounds().Dy()) * (1 - pageOverlap)) }
 
 // PageUp scrolls a page towards the start.
-func (c *Controller) PageUp() { c.vscrollBy(-float64(c.bounds.Dy()) * (1 - pageOverlap)) }
+func (c *Controller) PageUp() { c.vscrollBy(-float64(c.bounds().Dy()) * (1 - pageOverlap)) }
 
 // ScrollLeft scrolls a block wider than the View (a code block or table,
 // say) a step towards its start: the block under the pointer, else the

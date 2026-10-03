@@ -29,12 +29,8 @@ func (g *game) Draw(screen *ebiten.Image) {
 	}
 
 	if g.debugHit {
-		cursor := image.Pt(g.hoverX, g.hoverY)
-		if cursor.In(g.panel.Bounds()) {
-			rel := cursor.Sub(g.panel.Bounds().Min)
-			if r, ok := g.panel.View().HitTest(rel.X, rel.Y); ok {
-				drawOutline(canvas, r.Add(g.panel.Bounds().Min), color.RGBA{255, 0, 0, 255})
-			}
+		if r, ok := g.panel.View().HitTest(g.hoverX, g.hoverY); ok {
+			drawOutline(canvas, r, color.RGBA{255, 0, 0, 255})
 		}
 	}
 }

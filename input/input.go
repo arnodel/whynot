@@ -3,10 +3,11 @@
 // turns into scrolling, hovering, clicking and so on.
 //
 // Positions and wheel deltas are in the coordinate space of the Canvas
-// the View is drawn on (device pixels for whynot's own backends). A
-// backend reports all the input it sees; a Controller acts on events
-// inside its bounds, except that a press inside captures the pointer
-// until it's released.
+// the View is drawn on (device pixels for whynot's own backends): see
+// Coordinates in package whynot's documentation. A backend reports all
+// the input it sees; a Controller acts on events inside its View's
+// bounds, except that a press inside captures the pointer until it's
+// released.
 //
 // Keyboard input isn't part of it: keys belong to the app, which binds
 // them to commands such as paging.

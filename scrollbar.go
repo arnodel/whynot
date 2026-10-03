@@ -48,23 +48,21 @@ func (v *View) scrollbarBar() barGeometry {
 	return scaledBar(v.ctx.Styles.ScrollbarGeometry(), v.ctx.Scale)
 }
 
-// scrollbarThumb is the vertical scrollbar's thumb, in the View's
-// coordinates, or ok=false if there's none: the scrollbar is off, or the
-// whole document fits.
+// scrollbarThumb is the vertical scrollbar's thumb, or ok=false if
+// there's none: the scrollbar is off, or the whole document fits.
 func (v *View) scrollbarThumb() (r image.Rectangle, ok bool) {
 	if !v.vbar.enabled {
 		return image.Rectangle{}, false
 	}
-	doc := v.DocumentBounds()
-	visible := v.VisibleViewBounds(image.Pt(v.width, v.height))
-	if doc.Dy() == 0 || visible.Dy() >= doc.Dy() {
+	start, end := v.VisibleRange()
+	if end-start >= 1 {
 		return image.Rectangle{}, false
 	}
 	bar := v.scrollbarBar()
-	track := v.height
-	length := max(visible.Dy()*track/doc.Dy(), bar.minThumb)
-	y := min(visible.Min.Y*track/doc.Dy(), track-length)
-	x := v.width - bar.inset - bar.thickness
+	track := v.bounds.Dy()
+	length := max(int((end-start)*float64(track)), bar.minThumb)
+	y := v.bounds.Min.Y + min(int(start*float64(track)), track-length)
+	x := v.bounds.Max.X - bar.inset - bar.thickness
 	return image.Rect(x, y, x+bar.thickness, y+length), true
 }
 
@@ -72,11 +70,11 @@ func (v *View) scrollbarThumb() (r image.Rectangle, ok bool) {
 // its scrollbar for the pointer: the thumb's track, with a little slack.
 func (v *View) scrollbarZone() image.Rectangle {
 	bar := v.scrollbarBar()
-	return image.Rect(v.width-bar.thickness-2*bar.inset, 0, v.width, v.height)
+	b := v.bounds
+	return image.Rect(b.Max.X-bar.thickness-2*bar.inset, b.Min.Y, b.Max.X, b.Max.Y)
 }
 
-// onScrollbar reports whether p, in the View's coordinates, is on the
-// scrollbar.
+// onScrollbar reports whether p is on the scrollbar.
 func (v *View) onScrollbar(p image.Point) bool {
 	_, ok := v.scrollbarThumb()
 	return ok && p.In(v.scrollbarZone())
@@ -99,9 +97,8 @@ func (v *View) scrollbarAnimating(now time.Duration) bool {
 	return v.vbar.enabled && now < v.vbar.revealUntil
 }
 
-// drawScrollbar draws the vertical scrollbar onto dst, the View's top-left
-// corner at (x, y).
-func (v *View) drawScrollbar(dst canvas.Canvas, x, y int) {
+// drawScrollbar draws the vertical scrollbar onto dst.
+func (v *View) drawScrollbar(dst canvas.Canvas) {
 	thumb, ok := v.scrollbarThumb()
 	if !ok {
 		return
@@ -113,12 +110,10 @@ func (v *View) drawScrollbar(dst canvas.Canvas, x, y int) {
 	pressed := v.vbar.dragging
 	c := color.NRGBAModel.Convert(v.ctx.Styles.ScrollbarColor(v.vbar.hovered || pressed, pressed)).(color.NRGBA)
 	c.A = uint8(float64(c.A) * opacity)
-	thumb = thumb.Add(image.Pt(x, y))
 	dst.DrawRect(thumb.Min.X, thumb.Min.Y, thumb.Dx(), thumb.Dy(), c)
 }
 
-// beginScrollbarDrag starts dragging the scrollbar from p, in the View's
-// coordinates: a press on the thumb grabs it where pressed, one elsewhere
+// beginScrollbarDrag starts dragging the scrollbar from p: a press on the thumb grabs it where pressed, one elsewhere
 // on the track grabs its middle there, so it jumps under the pointer.
 func (v *View) beginScrollbarDrag(p image.Point) {
 	thumb, ok := v.scrollbarThumb()
@@ -134,15 +129,14 @@ func (v *View) beginScrollbarDrag(p image.Point) {
 	v.dragScrollbarTo(p.Y)
 }
 
-// dragScrollbarTo moves the dragged thumb to follow the pointer's y, in
-// the View's coordinates.
+// dragScrollbarTo moves the dragged thumb to follow the pointer's y.
 func (v *View) dragScrollbarTo(y int) {
 	thumb, ok := v.scrollbarThumb()
-	if !ok || v.height <= 0 {
+	if !ok || v.bounds.Dy() <= 0 {
 		return
 	}
-	top := float64(y) - v.vbar.grab*float64(thumb.Dy())
-	v.ScrollToRatio(top / float64(v.height))
+	top := float64(y-v.bounds.Min.Y) - v.vbar.grab*float64(thumb.Dy())
+	v.ScrollToRatio(top / float64(v.bounds.Dy()))
 }
 
 // endScrollbarDrag ends a drag: the scrollbar then fades out like after

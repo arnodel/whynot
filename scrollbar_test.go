@@ -16,8 +16,8 @@ import (
 func scrollbarView(t *testing.T, source string, opts ...ViewOption) (*View, *Controller) {
 	t.Helper()
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic(), append([]ViewOption{WithScrollbar()}, opts...)...)
-	v.Layout(testWidth, testHeight, 1, 0)
-	return v, NewController(v, image.Rect(0, 0, testWidth, testHeight))
+	layoutView(v, testWidth, testHeight, 1, 0)
+	return v, NewController(v)
 }
 
 func TestScrollbarNoThumbWhenItFitsOrIsOff(t *testing.T) {
@@ -73,10 +73,10 @@ func TestScrollbarDrag(t *testing.T) {
 	if !v.vbar.dragging {
 		t.Fatal("a press on the thumb didn't start a drag")
 	}
-	before := v.VisibleViewBounds(viewport).Min.Y
+	before := visibleViewBounds(v, viewport).Min.Y
 	// Dragging keeps tracking the pointer even off the scrollbar.
 	frame(c, input.PointerMove{X: grab.X - 100, Y: grab.Y + testHeight/2})
-	if after := v.VisibleViewBounds(viewport).Min.Y; after <= before {
+	if after := visibleViewBounds(v, viewport).Min.Y; after <= before {
 		t.Errorf("page top after dragging the thumb down = %d, want more than %d", after, before)
 	}
 	frame(c, release(grab.X-100, grab.Y+testHeight/2))
@@ -108,7 +108,7 @@ func TestScrollbarAlwaysVisible(t *testing.T) {
 	style := stylingtest.Basic()
 	style.Scrollbar.ScrollbarGeometry = styling.ScrollbarGeometry{Thickness: 6, Inset: 2, MinThumbLength: 24, AlwaysVisible: true}
 	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), style, WithScrollbar())
-	v.Layout(testWidth, testHeight, 1, 0)
+	layoutView(v, testWidth, testHeight, 1, 0)
 	if got := v.scrollbarOpacity(v.ctx.Time); got != 1 {
 		t.Errorf("opacity of an always-visible scrollbar = %v, want 1", got)
 	}
