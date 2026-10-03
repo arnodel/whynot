@@ -9,7 +9,11 @@
 //     for an app that wants its scrollbar to match the rest of its UI
 //     rather than use the View's.
 //
-// The core whynot packages don't depend on Gio; only this one does.
+// The core whynot packages don't depend on Gio; only this one does. It's
+// a Go module of its own (github.com/arnodel/whynot/backends/giobackend),
+// so the core doesn't pull in Gio, and it stays on v0 while Gio does:
+// Gio's types are part of its API, so a breaking change in Gio can force
+// one here.
 //
 // # A window showing a document
 //

@@ -20,6 +20,20 @@ before any code. Its PRs reference the issue: "Part of #N" when the work
 spans several PRs (tracked as a task list in the issue), and "Closes #N"
 on the one that completes it.
 
+## Modules
+
+The repository holds two Go modules: the core (`github.com/arnodel/whynot`,
+the root) and the Gio backend (`backends/giobackend`, with its programs).
+`go.work` at the root makes the Gio module use the local core while
+developing; `./...` from the root covers the core only, so build and test
+the Gio module from its own directory too (CI does both).
+
+`go install` and users ignore `go.work`: the Gio module's `go.mod` must
+require a core version that has everything it uses. Before tagging the
+Gio module (`backends/giobackend/vX.Y.Z`), tag the core if needed, then
+`go get github.com/arnodel/whynot@<that version>` and `go mod tidy` in
+`backends/giobackend`, and check it builds with `GOWORK=off`.
+
 ## Commit messages and PR titles
 
 Prefix them with a [Conventional Commits](https://www.conventionalcommits.org/)
