@@ -2,12 +2,9 @@ package whynot
 
 import "image"
 
-// Panel is the common shape ebitenrenderer.Panel and giorenderer.Panel
-// both already have - enough for backend-agnostic app code (see
-// browser.App) to drive a panel without depending on either backend.
-// OnLinkClick/OnLinkHover are deliberately not part of this interface:
-// both concrete types expose them as plain fields, wired directly by
-// whichever backend constructs the panel.
+// Panel is what the backends' panels have in common, so app code can
+// drive one without depending on a backend. The link callbacks aren't
+// part of it: they're plain fields, set by whoever creates the panel.
 type Panel interface {
 	View() *View
 	SetView(v *View)

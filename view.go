@@ -13,16 +13,14 @@ import (
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
-// View renders a Document onto a Canvas. It owns the layout cache (rebuilt
-// only when width, scale or StyleSheet change, not every frame), viewport
-// culling, and scroll-position anchoring across resizes - the parts of
-// rendering a reflowing document that are easy to get wrong and not
-// specific to any one game.
+// View renders a Document onto a Canvas, scrolled to a position. It lays
+// out only what's needed to draw, re-lays out only when the width, scale
+// or StyleSheet change, and keeps the scroll position across those
+// changes.
 //
-// A View doesn't read input itself: call Scroll with deltas from whatever
-// input source is appropriate for the embedding game, and call Layout
-// whenever the available width or the display scale changes (typically
-// from the embedding game's own layout/resize callback).
+// A View reads no input itself: the embedding app calls Layout when its
+// size or scale changes, and Scroll, Hover and so on from its own input
+// handling (or uses an Interaction to do so).
 type View struct {
 	doc *Document
 	ctx engine.Context
@@ -53,11 +51,9 @@ type View struct {
 // parameter.
 type ViewOption func(*View)
 
-// WithImageSource overrides the images.Source NewView otherwise defaults
-// to (images.FileSource) - e.g. for an embedder that wants images
-// resolved relative to a document's own location, or fetched over
-// http(s), the way cmd/whynot does. Wrapped in an image cache, so each
-// image is resolved and fetched only once for the life of the View.
+// WithImageSource sets where the View's images come from, instead of the
+// default images.FileSource - e.g. relative to the document's location,
+// or over http(s). Each image is fetched at most once per View.
 func WithImageSource(s images.Source) ViewOption {
 	return func(v *View) {
 		v.ctx.ImageCache = imagecache.NewCache(s)
@@ -94,9 +90,8 @@ func (v *View) Document() *Document {
 
 // CurrentHeadingID returns the id of the top-level heading at or just
 // above the top of the viewport - the section currently on screen - or
-// ok=false if the document has no heading before the current scroll
-// position, or nothing has been laid out yet. Only reads each slot's
-// Block, never laying anything out.
+// ok=false if there's none before the scroll position, or nothing has
+// been laid out yet.
 func (v *View) CurrentHeadingID() (id string, ok bool) {
 	if !v.stack.laidOut() {
 		return "", false
@@ -145,15 +140,13 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 	v.stack.cursor = p.cursor
 }
 
-// ScrollToAnchor scrolls to put the heading with the given anchor id
-// (see ast.Node.ID) at the top of the viewport, e.g. after following a
-// link with a URL fragment. ok is false, and the scroll position
-// unchanged, if no heading has that id or nothing has been laid out
-// yet (see Layout).
+// ScrollToAnchor scrolls to put the heading with the given anchor id at
+// the top of the viewport, e.g. after following a link with a URL
+// fragment. ok is false, and the scroll position unchanged, if no heading
+// has that id or nothing has been laid out yet.
 //
-// Only top-level headings are found - a heading nested inside a
-// blockquote or list won't be. Only reads each slot's Block, never laying
-// anything out beyond the target.
+// Only top-level headings are found: not one nested in a blockquote or
+// list.
 func (v *View) ScrollToAnchor(id string) bool {
 	if !v.stack.laidOut() {
 		return false
@@ -167,12 +160,9 @@ func (v *View) ScrollToAnchor(id string) bool {
 	return false
 }
 
-// ScrollToRatio sets the scroll position to ratio (clamped to [0, 1])
-// through the document's current best-estimated height - e.g. for a
-// caller implementing scrollbar-thumb dragging, where DocumentBounds/
-// VisibleViewBounds already give the inverse ratio back. Recomputes
-// from the live estimate every call, so a jump into not-yet-laid-out
-// territory corrects toward whatever ratio the caller asks for next.
+// ScrollToRatio sets the scroll position to ratio (clamped to [0, 1]) of
+// the document's estimated height, e.g. while dragging a scrollbar thumb
+// (DocumentBounds and VisibleViewBounds give the ratio back).
 func (v *View) ScrollToRatio(ratio float64) {
 	if v.stack.laidOut() {
 		v.stack.scrollToRatio(ratio)
@@ -242,11 +232,7 @@ func (v *View) Draw(dst canvas.Canvas, x, y int) {
 // drawing an outline around it. Both are in the coordinate space Draw's
 // (x, y) places content's origin into. ok is false if (x, y) doesn't
 // land on any content: past the end of the document, or in a margin or
-// gap.
-//
-// Known imprecision: a position above the very start of the document
-// resolves as if it landed on the first slot rather than missing. Callers
-// only ever pass points within their own rendered viewport.
+// gap. A point above the document resolves to its first block.
 func (v *View) HitTest(x, y int) (r image.Rectangle, ok bool) {
 	hit, offset, _ := v.hitTest(x, y)
 	if hit == nil {
@@ -292,14 +278,10 @@ func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 	return hit.Source().Node().AncestorTag(ast.TagLink), slot
 }
 
-// Hover updates the currently-highlighted link, given the mouse position
-// in the same coordinate space HitTest/Draw use - call every frame from
-// the embedding game's own input handling. Highlighting only changes
-// color, never layout, so only the slot left and the slot entered are
-// invalidated.
-//
-// Hover also reports the link under (x, y), same as LinkAt, so a caller
-// handling a click at the same position doesn't need a second HitTest.
+// Hover updates which link is highlighted, and which sideways-scrolling
+// block shows its scrollbar, given the pointer position in HitTest's
+// coordinates - call it whenever the pointer moves. It also reports the
+// link there, like LinkAt.
 func (v *View) Hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
