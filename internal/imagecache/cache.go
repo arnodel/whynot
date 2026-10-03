@@ -5,6 +5,7 @@ package imagecache
 
 import (
 	"bytes"
+	"context"
 	"image"
 	_ "image/jpeg" // registers the JPEG format with image.Decode
 	_ "image/png"  // registers the PNG format with image.Decode
@@ -184,8 +185,9 @@ func (c *Cache) ChangedSince(mark uint64) (changed []Change, newMark uint64) {
 // (DecodeConfig's own format name, already read to get here) decodes
 // every frame via decodeAnimatedGIF instead of image.Decode's
 // single-frame result.
-func (c *Cache) fetchAndDecode(key string, fetch func() (io.ReadCloser, error)) {
-	rc, err := fetch()
+func (c *Cache) fetchAndDecode(key string, fetch func(context.Context) (io.ReadCloser, error)) {
+	// Nothing cancels a fetch yet.
+	rc, err := fetch(context.Background())
 	if err != nil {
 		c.setFailed(key, err)
 		return

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/url"
 	"path"
@@ -96,7 +97,7 @@ func addressBarTip() string {
 type welcomeImageSource struct{}
 
 func (welcomeImageSource) Image(src string) (images.AsyncImage, error) {
-	return images.AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) {
+	return images.AsyncImage{Key: src, Fetch: func(context.Context) (io.ReadCloser, error) {
 		data, err := assetsFS.ReadFile(path.Join("assets", src))
 		if err != nil {
 			return nil, err

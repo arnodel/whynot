@@ -6,6 +6,7 @@ package kroki
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,14 +68,19 @@ func (r Renderer) image(language, code string) images.AsyncImage {
 		// than its GET form, which embeds a zlib+base64 encoding of the
 		// source in the URL path and has a practical length limit) and
 		// returns the response body - a PNG on success.
-		Fetch: func() (io.ReadCloser, error) {
+		Fetch: func(ctx context.Context) (io.ReadCloser, error) {
 			body, err := json.Marshal(struct {
 				DiagramSource string `json:"diagram_source"`
 			}{code})
 			if err != nil {
 				return nil, err
 			}
-			resp, err := http.Post(baseURL+"/"+diagramType+"/png", "application/json", bytes.NewReader(body))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/"+diagramType+"/png", bytes.NewReader(body))
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return nil, err
 			}

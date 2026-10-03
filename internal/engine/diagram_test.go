@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/color"
@@ -46,7 +47,7 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 	release := make(chan struct{})
 	img := images.AsyncImage{
 		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
+		Fetch: func(context.Context) (io.ReadCloser, error) {
 			<-release
 			return io.NopCloser(bytes.NewReader(onePixelPNG(t))), nil
 		},
@@ -79,7 +80,7 @@ func TestDiagramBlockPendingShowsFallbackAndReportsPending(t *testing.T) {
 func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 	img := images.AsyncImage{
 		Key:   "diagram-key",
-		Fetch: func() (io.ReadCloser, error) { return nil, errors.New("boom") },
+		Fetch: func(context.Context) (io.ReadCloser, error) { return nil, errors.New("boom") },
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)
@@ -101,7 +102,7 @@ func TestDiagramBlockFailedShowsFallbackAndReportsPending(t *testing.T) {
 func TestDiagramBlockWithoutImageCacheShowsFallback(t *testing.T) {
 	img := images.AsyncImage{
 		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
+		Fetch: func(context.Context) (io.ReadCloser, error) {
 			t.Error("Fetch called without an ImageCache")
 			return nil, errors.New("unused")
 		},
@@ -147,7 +148,7 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	pixel := onePixelPNG(t)
 	img := images.AsyncImage{
 		Key:   "diagram-key",
-		Fetch: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(pixel)), nil },
+		Fetch: func(context.Context) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(pixel)), nil },
 	}
 	fallback := &fixedHeightBlock{height: 42}
 	block := NewDiagramBlock(nil, img, fallback)

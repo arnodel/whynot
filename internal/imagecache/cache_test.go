@@ -2,6 +2,7 @@ package imagecache
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/color"
@@ -36,7 +37,7 @@ func (s *countingImageSource) Image(src string) (images.AsyncImage, error) {
 	if s.resolveErr != nil {
 		return images.AsyncImage{}, s.resolveErr
 	}
-	return images.AsyncImage{Key: s.resolved, Fetch: func() (io.ReadCloser, error) {
+	return images.AsyncImage{Key: s.resolved, Fetch: func(context.Context) (io.ReadCloser, error) {
 		s.openCalls++
 		if s.open != nil {
 			return s.open()
@@ -311,7 +312,7 @@ func TestImageCacheLoadImageFetchesOnce(t *testing.T) {
 	var fetchCalls int
 	img := images.AsyncImage{
 		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
+		Fetch: func(context.Context) (io.ReadCloser, error) {
 			fetchCalls++
 			return io.NopCloser(bytes.NewReader(pixel)), nil
 		},
@@ -347,7 +348,7 @@ func TestImageCacheLoadImageParticipatesInChangedSince(t *testing.T) {
 	_, mark := cache.ChangedSince(0)
 	waitForSettledImage(t, cache, images.AsyncImage{
 		Key: "diagram-key",
-		Fetch: func() (io.ReadCloser, error) {
+		Fetch: func(context.Context) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(pixel)), nil
 		},
 	})
@@ -420,7 +421,7 @@ type stubMultiImageSource struct {
 
 func (s *stubMultiImageSource) Image(src string) (images.AsyncImage, error) {
 	resolved := s.byLiteral[src]
-	return images.AsyncImage{Key: resolved, Fetch: func() (io.ReadCloser, error) {
+	return images.AsyncImage{Key: resolved, Fetch: func(context.Context) (io.ReadCloser, error) {
 		s.openCalls++
 		return io.NopCloser(bytes.NewReader(s.data)), nil
 	}}, nil
