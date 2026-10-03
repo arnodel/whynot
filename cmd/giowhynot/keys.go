@@ -4,8 +4,8 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/layout"
 
-	"github.com/arnodel/whynot/browser"
 	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot/internal/browser"
 )
 
 // arrowScrollLines matches cmd/whynot's own input.go constant.

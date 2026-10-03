@@ -18,7 +18,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
 | `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
-| `browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
+| `internal/browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
 | `images/` | the image contract: `Source` (src → `AsyncImage`), `AsyncImage` (a key and a fetch) and the default `FileSource` |
 | `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, through an `images.Source`) and animated GIF decoding |
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
