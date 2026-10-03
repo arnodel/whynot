@@ -21,8 +21,8 @@ func hscrollTestView(t *testing.T, width int) (*View, drawnRegion) {
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
-	v.Layout(width, 400, 1, 0)
-	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, width, 400)}, 0, 0)
+	layoutView(v, width, 400, 1, 0)
+	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, width, 400)}, v.ctx.Time)
 	if len(v.hscroll.regions) != 1 {
 		t.Fatalf("got %d scrollable areas after Draw, want 1 (the code block)", len(v.hscroll.regions))
 	}
@@ -33,8 +33,8 @@ func hscrollTestView(t *testing.T, width int) (*View, drawnRegion) {
 // drawn.
 func drawnTextX(t *testing.T, v *View, prefix string) int {
 	t.Helper()
-	dst := &canvastest.Recorder{Area: image.Rect(0, 0, v.width, 400)}
-	v.Draw(dst, 0, 0)
+	dst := &canvastest.Recorder{Area: v.Bounds()}
+	v.Draw(dst, v.ctx.Time)
 	for _, dt := range dst.Texts {
 		if strings.HasPrefix(dt.S, prefix) {
 			return dt.X
@@ -135,7 +135,7 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 	}
 	draw := func() *canvastest.Recorder {
 		dst := &canvastest.Recorder{Area: image.Rect(0, 0, 300, 400)}
-		v.Draw(dst, 0, 0)
+		v.Draw(dst, v.ctx.Time)
 		return dst
 	}
 
@@ -152,7 +152,7 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 		t.Error("scrollbar not drawn while hovering the code block")
 	}
 	v.hover(area.Visible.Min.X+10, area.Visible.Min.Y-5)
-	v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
+	layoutView(v, 300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
 	if thumbDrawn(draw()) {
 		t.Error("scrollbar still drawn once faded out after the pointer left the code block")
 	}
@@ -167,7 +167,7 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 // scrollbar's thumb and moving drags it, and a press elsewhere doesn't.
 func TestControllerDragsHorizontalScrollbar(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	c := NewController(v, image.Rect(0, 0, 300, 400))
+	c := NewController(v)
 	before := drawnTextX(t, v, "wide")
 	thumb := v.hscroll.thumb(area)
 	grab := image.Pt(thumb.Min.X+2, thumb.Min.Y+1)
@@ -198,8 +198,8 @@ func TestControllerDragsHorizontalScrollbar(t *testing.T) {
 func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	source := "```\n" + strings.Repeat("wide ", 100) + "\n" + strings.Repeat("line\n", 100) + "```\n"
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
-	v.Layout(300, 400, 1, 0)
-	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 400)}, 0, 0)
+	layoutView(v, 300, 400, 1, 0)
+	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 400)}, v.ctx.Time)
 	area := v.hscroll.regions[0]
 	if area.Box.Max.Y <= 400 {
 		t.Fatalf("test setup: code block ends at y=%d, want below the 400px viewport", area.Box.Max.Y)
@@ -209,7 +209,7 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	if thumb.Max.Y > 400 || thumb.Min.Y < 0 {
 		t.Errorf("thumb at %v, want within the 400px viewport", thumb)
 	}
-	c := NewController(v, image.Rect(0, 0, 300, 400))
+	c := NewController(v)
 	frame(c, press(thumb.Min.X+2, thumb.Min.Y+1))
 	if v.hscroll.dragging == nil {
 		t.Error("press on the on-screen thumb didn't start a drag")
@@ -234,7 +234,7 @@ func TestTableScrollsWhenTooWide(t *testing.T) {
 
 // pageTop is how far down the page v is scrolled.
 func pageTop(v *View) int {
-	return v.VisibleViewBounds(image.Pt(v.width, 400)).Min.Y
+	return visibleViewBounds(v, image.Pt(v.width, 400)).Min.Y
 }
 
 // toucher drives a Controller with one finger.
@@ -245,7 +245,7 @@ type toucher struct {
 }
 
 func newToucher(v *View) *toucher {
-	return &toucher{c: NewController(v, image.Rect(0, 0, 300, 400)), now: time.Second}
+	return &toucher{c: NewController(v), now: time.Second}
 }
 
 func (tc *toucher) start(p image.Point) {
@@ -354,7 +354,7 @@ func TestTouchPanRevealsScrollbarThenFades(t *testing.T) {
 	if got := s.barOpacity(area.Source, mid); got <= 0 || got >= 1 {
 		t.Errorf("scrollbar opacity halfway through fading = %v, want between 0 and 1", got)
 	}
-	v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
+	layoutView(v, 300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
 	if got := s.barOpacity(area.Source, v.ctx.Time); got != 0 {
 		t.Errorf("scrollbar opacity after the fade = %v, want 0", got)
 	}
@@ -410,7 +410,7 @@ func TestTouchEndStartsScrollbarFade(t *testing.T) {
 	tc.drag(-30, 0)
 	// The finger rests (no frames - Gio draws none without events), then
 	// lifts after longer than the whole reveal.
-	v.Layout(300, 400, 1, v.ctx.Time+2*(hscrollRevealHold+hscrollRevealFade))
+	layoutView(v, 300, 400, 1, v.ctx.Time+2*(hscrollRevealHold+hscrollRevealFade))
 	tc.end()
 
 	if got := v.hscroll.barOpacity(area.Source, v.ctx.Time); got != 1 {
@@ -426,7 +426,7 @@ func TestHoverScrollbarFadesWhenIdle(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
 	s := v.hscroll
 	over := area.Visible.Min.Add(image.Pt(10, 10))
-	later := func() { v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade) }
+	later := func() { layoutView(v, 300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade) }
 	opacity := func() float64 { return s.barOpacity(area.Source, v.ctx.Time) }
 
 	v.hover(over.X, over.Y)

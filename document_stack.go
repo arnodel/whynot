@@ -193,16 +193,16 @@ func (s *documentStack) totalHeight() float64 {
 }
 
 // visibleRange returns the top and bottom of a viewport of viewportHeight
-// at the cursor, in the same estimated document coordinates as
-// totalHeight. The bottom is top+viewportHeight clamped to the total, not
+// at the cursor, and the document's estimated total height they're
+// measured against (totalHeight after this call). The bottom is top+viewportHeight clamped to the total, not
 // the end of the last visible slot: which slot is last changes discretely
 // while scrolling, which would make a scrollbar thumb's size jump.
 //
 // As a side effect, resolves the slots Draw would draw, which keeps the
 // estimate exact near the viewport.
-func (s *documentStack) visibleRange(viewportHeight int) (top, bottom float64) {
+func (s *documentStack) visibleRange(viewportHeight int) (top, bottom, total float64) {
 	avg := s.refreshHeights()
-	var before, total float64
+	var before float64
 	for i := range s.heights {
 		h := s.estimate(i, avg)
 		total += h
@@ -221,7 +221,7 @@ func (s *documentStack) visibleRange(viewportHeight int) (top, bottom float64) {
 		s.heights[i] = real
 		pos += real
 	}
-	return top, math.Min(top+float64(viewportHeight), total)
+	return top, math.Min(top+float64(viewportHeight), total), total
 }
 
 // preLayoutHeightRadius is how far beyond the visible viewport preLayout

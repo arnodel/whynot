@@ -230,7 +230,7 @@ tree and owns:
   converts the cursor to a ratio through its slot's old height, then
   re-derives a cursor at the same ratio through that slot's new height, so
   the same content stays at the top across a resize
-- a height estimate per slot (see `DocumentBounds` below), kept across
+- a height estimate per slot (see `VisibleRange` below), kept across
   rebuilds as a seed.
 
 Both the `BlockLayout` tree and drawing are **lazy**, anchored at the scroll
@@ -259,12 +259,15 @@ document is.
 `View` reads no input: its scrolling methods are position primitives
 (`ScrollBy(dy)`, positive towards the end; `ScrollToRatio`;
 `ScrollToAnchor`), with no coordinates and no policy. Input goes through a
-`Controller` (below). `Layout(width, height, scale, now)` should be called
-every frame regardless of whether width/scale actually changed (`now`,
-elapsed time since the embedder started rendering, needs to keep
-advancing for animated images even when nothing else did — see "Image
-loading" below; the layout tree itself still only rebuilds when width
-or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
+`Controller` (below). A View is a window onto the canvas's coordinate
+space: `SetBounds` places it, and `HitTest`/`LinkAt` take canvas
+coordinates, the same as input events (the package doc's "Coordinates"
+section is the user-facing statement of this). `SetBounds` and `SetScale`
+rebuild the layout tree when the width or scale change. `Draw(dst, now)`
+should be called every frame (`now`, elapsed time on the embedder's
+clock, needs to keep advancing for animated images even when nothing
+else did, and each `Draw` picks up loaded images and lays out ahead: see
+"Image loading" below). [examples/view](examples/view) is the minimal
 example of wiring this up by hand; `whynot.Panel`
 ([panel.go](panel.go)) packages the same wiring (plus input handling,
 gated on its own bounds) into a reusable type for embedding a `View`
@@ -286,9 +289,9 @@ A Gio app may use Gio's native `widget.Scrollbar` instead
 (`giorenderer.NativeScrollbar`), styled best-effort from the same
 StyleSheet's colors.
 
-`DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
-scales the ratio between them to whatever real pixel track it's drawing a
-scrollbar into) built from the same laziness: each top-level slot's real
+`VisibleRange` exposes the scroll position as fractions of the document's
+height (a caller scales them to whatever real pixel track it's drawing a
+scrollbar into), built from the same laziness: each top-level slot's real
 pixel height once resolved, extrapolated from the average of what's known for
 any slot that isn't, refined as more of the document is visited — never a
 full-document layout pass just to answer "how tall is this, roughly."
@@ -340,16 +343,16 @@ new height (`documentStack.reanchor`). A changed slot *before* the cursor -
 already scrolled past - is invalidated the same way but re-resolved
 immediately, right there, rather than left lazy: nothing ever walks
 backward over an earlier slot again on its own, so a lazily-invalidated
-one would silently freeze `DocumentBounds`' estimate at a stale value
+one would silently freeze `VisibleRange`'s estimate at a stale value
 forever.
 
-`View.Layout` also does two kinds of prefetching every call, both
+`View.Draw` also does two kinds of prefetching every call, both
 scoped to a margin around the current scroll cursor rather than the
 whole document (`documentStack.preLayout`, [document_stack.go](document_stack.go), and `View.prefetchImageSources`) -
 this exists because an image resolving to a much bigger real size than
 the small placeholder that was estimating it, right as the scroll
 cursor reaches it, is exactly the scenario that can make a
-`DocumentBounds`-based scrollbar visibly jump backward even though the
+`VisibleRange`-based scrollbar visibly jump backward even though the
 user only ever scrolled forward (the ratio's denominator grows more
 than its numerator does in the same frame - see `View.scrollbarThumb`,
 what actually builds a scrollbar from these numbers). Getting a slot's real size known *before* the
@@ -395,9 +398,8 @@ determines the loop position.
 ## Hit-testing: `View.HitTest`
 
 `View.HitTest(x, y)` ([view.go](view.go)) answers "what's at this
-position" in the same coordinate space `Draw`'s own `(x, y)` places
-content's origin into - the query counterpart to `Draw`, resolving a
-point instead of painting one. Publicly it returns just the hit's
+position", in canvas coordinates like everything else - the query
+counterpart to `Draw`, resolving a point instead of painting one. Publicly it returns just the hit's
 rectangle; inside the module (`View.hitTest`) it returns the `Hit`
 itself, which is what link hovering and clicking use. Like `Draw`, it's cursor-relative
 ([block_layout.go](internal/engine/block_layout.go)'s `normalizeCursor`), so a query far from the current
@@ -493,11 +495,11 @@ or misreport `Content-Type` for a perfectly good Markdown file.
 
 These are real, understood, and not yet fixed:
 
-- **A scrollbar built from `DocumentBounds`/`VisibleViewBounds` can still
+- **A scrollbar built from `VisibleRange` can still
   jump, including while sitting still.** `documentStack.preLayout` (see "Image
   loading" above) resolves real slots beyond the visible viewport in the
-  background, on every `Layout` call, regardless of whether the user is
-  scrolling - and `DocumentBounds`' total, so a scrollbar's own size and
+  background, on every `Draw` call, regardless of whether the user is
+  scrolling - and `VisibleRange`'s denominator, so a scrollbar's own size and
   position, is a raw, unsmoothed function of whatever's currently
   resolved. So a slot well off-screen settling to a real height different
   from the average estimating it can visibly shift the thumb even with

@@ -113,12 +113,6 @@ type App struct {
 	// Every method below that reads or replaces a.Panel.View() checks
 	// this first, since that's the TOC, not the document, while it's set.
 	tocDocView *whynot.View
-
-	// start is when the app began, for View.Layout's now
-	// (elapsed time since rendering started - what an animated GIF's
-	// current frame is picked from). Only ever compared to itself via
-	// elapsed(), never to a wall-clock timestamp.
-	start time.Time
 }
 
 // NewApp constructs an App with no Panel yet and no current location -
@@ -130,7 +124,6 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 		styleSheet:   styleSheet,
 		darkTheme:    dark,
 		zoom:         1,
-		start:        time.Now(),
 	}
 }
 
@@ -167,11 +160,6 @@ func (a *App) DarkTheme() bool { return a.darkTheme }
 
 // StyleSheet returns the current StyleSheet.
 func (a *App) StyleSheet() whynot.StyleSheet { return a.styleSheet }
-
-// elapsed is how long the app has been running - see start.
-func (a *App) elapsed() time.Duration {
-	return time.Since(a.start)
-}
 
 // SetTheme switches between whynot's built-in dark and light
 // StyleSheets - keeps styleSheet and darkTheme in sync so darkTheme
@@ -316,7 +304,7 @@ func (a *App) Follow(dest string) {
 		return
 	}
 	view := a.NewView(source, resolved)
-	view.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
+	a.place(view)
 	if resolved.Fragment != "" {
 		view.ScrollToAnchor(resolved.Fragment)
 	}
@@ -434,7 +422,7 @@ func (a *App) Reload() {
 	}
 	scroll := a.Panel.View().ScrollPosition()
 	view := a.NewView(source, a.location)
-	view.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
+	a.place(view)
 	view.RestoreScrollPosition(scroll)
 	a.Panel.SetView(view)
 	a.updateWindowTitle()
@@ -484,7 +472,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 	view := a.NewView(source, resolved)
-	view.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
+	a.place(view)
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
 	a.location = resolved
@@ -497,6 +485,13 @@ func (a *App) Navigate(text string) error {
 // rather than steps shrinking as you zoom out or growing as you zoom
 // in.
 const zoomStep = 0.1
+
+// place lays view out where Panel shows its View, so it can be scrolled
+// (e.g. to an anchor) before it's shown.
+func (a *App) place(view *whynot.View) {
+	view.SetScale(a.scale)
+	view.SetBounds(a.Panel.Bounds())
+}
 
 // minZoom, maxZoom clamp SetZoom to a sane range.
 const minZoom, maxZoom = 0.5, 3.0

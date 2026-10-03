@@ -39,7 +39,7 @@ func (d *document) layout(gtx layout.Context) {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	d.panel.Draw(d.renderer.NewCanvas(gtx.Ops, d.panel.Bounds()), now)
-	d.scrollbar.Layout(gtx, d.panel.View(), d.panel.Bounds())
+	d.scrollbar.Layout(gtx, d.panel.View())
 }
 
 // pressed reports whether events include a press: a mouse button or a

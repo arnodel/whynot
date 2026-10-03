@@ -193,6 +193,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"strings"
 	"time"
@@ -234,13 +235,11 @@ func (g *game) Update() error {
 func (g *game) Draw(screen *ebiten.Image) {
 	// View.Draw fills its own background (from the View's StyleSheet) -
 	// no separate clear step needed here.
-	g.view.Draw(g.renderer.NewCanvas(screen), 0, 0)
+	g.view.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	// The last argument is elapsed time since rendering started - only
-	// animated images actually need it (see View.Layout).
-	g.view.Layout(outsideWidth, outsideHeight, 1, time.Since(g.start))
+	g.view.SetBounds(image.Rect(0, 0, outsideWidth, outsideHeight))
 	return outsideWidth, outsideHeight
 }
 
@@ -529,10 +528,10 @@ by implementation order now that most of the list is done.
 - [x] Smooth scrolling - `View.ScrollBy`'s position is a `float64`, accumulating
       fractional wheel deltas exactly rather than rounding each call, so repeated
       small scrolls end up exactly where one large one would
-- [x] `View.DocumentBounds`/`VisibleViewBounds` expose real per-slot pixel-height
-      geometry (each top-level slot's height, once resolved; extrapolated from the
-      average of what's known for the rest, refined as more of the document is visited)
-      for a caller to build its own scrollbar, or feed to any other UI it wants to drive
+- [x] `View.VisibleRange` exposes the scroll position as fractions of the document's
+      height, from real per-slot pixel heights (each top-level slot's height, once
+      resolved; extrapolated from the average of what's known for the rest, refined as
+      more of the document is visited) for a caller to build its own scrollbar, or feed to any other UI it wants to drive
       from scroll position. `View.ScrollToRatio` is the other direction - a caller
       driving a scrollbar thumb drag recomputes the ratio from the mouse's current
       position every frame rather than a target captured once, so a jump into
@@ -581,8 +580,8 @@ by implementation order now that most of the list is done.
 - [x] Scrollbar - the View's own (`whynot.WithScrollbar()`, or
       `Panel.SetScrollbar`), fully defined by the StyleSheet: colors, thickness, inset,
       minimum thumb length, and whether it stays visible or fades when idle. Draggable,
-      with hover/drag color feedback. It's optional: `View.DocumentBounds`/
-      `VisibleViewBounds` expose the geometry to build your own, and a Gio app can use
+      with hover/drag color feedback. It's optional: `View.VisibleRange`
+      exposes the geometry to build your own, and a Gio app can use
       Gio's native scrollbar instead (`giorenderer.NativeScrollbar`)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app

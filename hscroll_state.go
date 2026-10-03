@@ -33,8 +33,8 @@ func scaledBar(g styling.ScrollbarGeometry, scale float64) barGeometry {
 	}
 }
 
-// drawnRegion is a scroll region as drawn by the last View.Draw, in View
-// coordinates, with the scrollbar geometry it was drawn with.
+// drawnRegion is a scroll region as drawn by the last View.Draw, with the
+// scrollbar geometry it was drawn with.
 type drawnRegion struct {
 	engine.ScrollRegion
 	bar barGeometry
@@ -49,12 +49,10 @@ type hscrollState struct {
 	// so it survives relayout.
 	offsets map[engine.Block]float64
 
-	// regions is where each ScrollBox was drawn by the last View.Draw, in
-	// View coordinates (relative to origin, that Draw's x, y), innermost
-	// last. Input is matched against these, so a ScrollBox needs no
-	// separate hit-testing path.
+	// regions is where each ScrollBox was drawn by the last View.Draw,
+	// innermost last. Input is matched against these, so a ScrollBox
+	// needs no separate hit-testing path.
 	regions []drawnRegion
-	origin  image.Point
 
 	hovered    engine.Block // whose box is under the pointer, or nil
 	barHovered bool         // whether the pointer is on hovered's scrollbar
@@ -87,8 +85,6 @@ func (s *hscrollState) scrollOffset(source engine.Block, axis engine.Axis) float
 func (s *hscrollState) drawScrollbar(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration, scale float64, styles styling.Styles) {
 	bar := scaledBar(styles.ScrollbarGeometry(), scale)
 	thumb := regionThumb(r, r.Offset, bar)
-	r.Box = r.Box.Sub(s.origin)
-	r.Visible = r.Visible.Sub(s.origin)
 	s.regions = append(s.regions, drawnRegion{r, bar})
 
 	opacity := s.barOpacity(r.Source, now)
@@ -119,11 +115,9 @@ func regionThumb(r engine.ScrollRegion, offset int, bar barGeometry) image.Recta
 	return image.Rect(x, bottom-bar.thickness, x+thumbWidth, bottom)
 }
 
-// beginFrame forgets the last frame's regions before a View.Draw at
-// origin.
-func (s *hscrollState) beginFrame(origin image.Point) {
+// beginFrame forgets the last frame's regions before a View.Draw.
+func (s *hscrollState) beginFrame() {
 	s.regions = s.regions[:0]
-	s.origin = origin
 }
 
 // regionAt returns the innermost region visible at p.

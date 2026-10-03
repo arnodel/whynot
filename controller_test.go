@@ -19,10 +19,11 @@ const (
 	testHeight = 200
 )
 
-func findLinkPos(t *testing.T, v *View, w, h int) (x, y int) {
+func findLinkPos(t *testing.T, v *View) (x, y int) {
 	t.Helper()
-	for y := 0; y < h; y += 4 {
-		for x := 0; x < w; x += 4 {
+	b := v.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += 4 {
+		for x := b.Min.X; x < b.Max.X; x += 4 {
 			if _, ok := v.LinkAt(x, y); ok {
 				return x, y
 			}
@@ -35,8 +36,8 @@ func findLinkPos(t *testing.T, v *View, w, h int) (x, y int) {
 func newTestController(t *testing.T, source string) (*Controller, *View) {
 	t.Helper()
 	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic())
-	v.Layout(testWidth, testHeight, 1, 0)
-	return NewController(v, image.Rect(0, 0, testWidth, testHeight)), v
+	layoutView(v, testWidth, testHeight, 1, 0)
+	return NewController(v), v
 }
 
 // frame runs one frame of events at time 0.
@@ -56,9 +57,8 @@ func TestControllerHoverAndClick(t *testing.T) {
 	const doc = "A paragraph with [a link](dest) in it, and then some more text below it too."
 	c, v := newTestController(t, doc)
 	// Offset bounds, to catch a coordinate-translation bug.
-	c.SetBounds(image.Rect(50, 30, 50+testWidth, 30+testHeight))
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
-	cx, cy := c.Bounds().Min.X+lx, c.Bounds().Min.Y+ly
+	v.SetBounds(image.Rect(50, 30, 50+testWidth, 30+testHeight))
+	cx, cy := findLinkPos(t, v)
 
 	var hoverEvents []string
 	c.OnLinkHover = func(dest string) { hoverEvents = append(hoverEvents, dest) }
@@ -92,7 +92,7 @@ func TestControllerHoverAndClick(t *testing.T) {
 	}
 
 	// Move off - hover clears.
-	frame(c, input.PointerMove{X: c.Bounds().Min.X, Y: c.Bounds().Min.Y})
+	frame(c, input.PointerMove{X: v.Bounds().Min.X, Y: v.Bounds().Min.Y})
 	if len(hoverEvents) != 2 || hoverEvents[1] != "" {
 		t.Errorf("hover events after moving off the link = %v, want a trailing \"\"", hoverEvents)
 	}
@@ -108,7 +108,7 @@ func TestControllerHoverAndClick(t *testing.T) {
 // hovered link.
 func TestControllerLeaveClearsHover(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
+	lx, ly := findLinkPos(t, v)
 	var hovered string
 	c.OnLinkHover = func(dest string) { hovered = dest }
 
@@ -126,7 +126,7 @@ func TestControllerLeaveClearsHover(t *testing.T) {
 // button follows links.
 func TestControllerSecondaryButtonDoesNotClick(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
+	lx, ly := findLinkPos(t, v)
 	clicked := false
 	c.OnLinkClick = func(string) { clicked = true }
 
@@ -140,7 +140,7 @@ func TestControllerSecondaryButtonDoesNotClick(t *testing.T) {
 // leaves nothing hovered once lifted.
 func TestControllerTapFollowsLink(t *testing.T) {
 	c, v := newTestController(t, "A paragraph with [a link](dest) in it.")
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
+	lx, ly := findLinkPos(t, v)
 	var clicked, hovered string
 	c.OnLinkClick = func(dest string) { clicked = dest }
 	c.OnLinkHover = func(dest string) { hovered = dest }
@@ -162,17 +162,17 @@ func TestControllerAnchorScrolling(t *testing.T) {
 	c, v := newTestController(t, doc)
 	c.AnchorScrolling = true
 
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
+	lx, ly := findLinkPos(t, v)
 
 	var clicked bool
 	c.OnLinkClick = func(string) { clicked = true }
 
-	beforeTop := v.VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y
+	beforeTop := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
 	frame(c, press(lx, ly))
 	if clicked {
 		t.Error("OnLinkClick was called for a #fragment link with AnchorScrolling set")
 	}
-	afterTop := v.VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y
+	afterTop := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
 	if afterTop <= beforeTop {
 		t.Errorf("VisibleViewBounds top after clicking the anchor link = %d, want more than before (%d)", afterTop, beforeTop)
 	}
@@ -183,7 +183,7 @@ func TestControllerAnchorScrolling(t *testing.T) {
 func TestControllerSetViewForgetsHover(t *testing.T) {
 	const doc = "A paragraph with [a link](dest) in it."
 	c, v := newTestController(t, doc)
-	lx, ly := findLinkPos(t, v, testWidth, testHeight)
+	lx, ly := findLinkPos(t, v)
 
 	var hoverEvents []string
 	c.OnLinkHover = func(dest string) { hoverEvents = append(hoverEvents, dest) }
@@ -207,18 +207,18 @@ func TestControllerWheelGatedByBounds(t *testing.T) {
 	// Scroll deep into the document first, so scrolling back afterwards
 	// has room to move without clamping at the top.
 	frame(c, input.Wheel{X: 0, Y: 0, DY: 5000})
-	before := v.VisibleViewBounds(viewport).Min.Y
+	before := visibleViewBounds(v, viewport).Min.Y
 	if before == 0 {
 		t.Fatal("test setup: wheel didn't scroll down")
 	}
 
 	frame(c, input.Wheel{X: -1000, Y: -1000, DY: -37}) // outside bounds
-	if got := v.VisibleViewBounds(viewport).Min.Y; got != before {
+	if got := visibleViewBounds(v, viewport).Min.Y; got != before {
 		t.Errorf("VisibleViewBounds top after an out-of-bounds wheel = %d, want unchanged %d", got, before)
 	}
 
 	frame(c, input.Wheel{X: 0, Y: 0, DY: -37}) // inside bounds
-	if got := v.VisibleViewBounds(viewport).Min.Y; got != before-37 {
+	if got := visibleViewBounds(v, viewport).Min.Y; got != before-37 {
 		t.Errorf("VisibleViewBounds top after an in-bounds wheel of -37 = %d, want %d", got, before-37)
 	}
 }
@@ -238,25 +238,25 @@ func TestControllerMomentum(t *testing.T) {
 
 	// No fling yet - nothing to coast.
 	c.Frame(nil, 0)
-	if got := v.VisibleViewBounds(viewport).Min.Y; got != 0 {
+	if got := visibleViewBounds(v, viewport).Min.Y; got != 0 {
 		t.Fatalf("VisibleViewBounds top after a frame with no fling = %d, want 0", got)
 	}
 
 	now := fling(c, -60, 100*time.Millisecond) // -60px over 100ms = -600px/s
 
-	before := v.VisibleViewBounds(viewport).Min.Y
+	before := visibleViewBounds(v, viewport).Min.Y
 	now += 100 * time.Millisecond
 	c.Frame(nil, now)
-	if got := v.VisibleViewBounds(viewport).Min.Y; got <= before {
+	if got := visibleViewBounds(v, viewport).Min.Y; got <= before {
 		t.Errorf("VisibleViewBounds top after coasting = %d, want more than %d (coasting forward)", got, before)
 	}
 
 	// The app moving the View stops the fling.
 	v.ScrollBy(10)
-	before = v.VisibleViewBounds(viewport).Min.Y
+	before = visibleViewBounds(v, viewport).Min.Y
 	now += 100 * time.Millisecond
 	c.Frame(nil, now)
-	if got := v.VisibleViewBounds(viewport).Min.Y; got != before {
+	if got := visibleViewBounds(v, viewport).Min.Y; got != before {
 		t.Errorf("VisibleViewBounds top after coasting following View.ScrollBy = %d, want unchanged %d", got, before)
 	}
 }
@@ -268,10 +268,10 @@ func TestControllerSetViewStopsFling(t *testing.T) {
 	now := fling(c, -60, 100*time.Millisecond)
 
 	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
-	v2.Layout(testWidth, testHeight, 1, now)
+	layoutView(v2, testWidth, testHeight, 1, now)
 	c.SetView(v2)
 	c.Frame(nil, now+100*time.Millisecond)
-	if got := v2.VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y; got != 0 {
+	if got := visibleViewBounds(v2, image.Pt(testWidth, testHeight)).Min.Y; got != 0 {
 		t.Errorf("new View's top after a frame = %d, want 0 (no fling carried over)", got)
 	}
 }
@@ -305,7 +305,7 @@ func TestControllerMomentumDecaysToZero(t *testing.T) {
 func TestControllerMomentumUnscaled(t *testing.T) {
 	// Regression pin for the decay formula itself, independent of a real
 	// View.
-	c := NewController(&View{}, image.Rect(0, 0, testWidth, testHeight))
+	c := NewController(&View{})
 	c.momentum = 1000
 
 	c.Frame(nil, 0) // dt=0 on the first frame - no-op
@@ -334,7 +334,7 @@ func TestControllerMomentumBelowMinimumNeverScrolls(t *testing.T) {
 	}
 	c.Frame(nil, 0)
 	c.Frame(nil, 3*time.Second)
-	if got := v.VisibleViewBounds(viewport).Min.Y; got != 0 {
+	if got := visibleViewBounds(v, viewport).Min.Y; got != 0 {
 		t.Errorf("VisibleViewBounds top = %d after coasting a below-minimum velocity, want 0 (no scroll)", got)
 	}
 }

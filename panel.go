@@ -32,25 +32,21 @@ type Panel struct {
 	AnchorScrolling bool
 
 	view       *View
-	bounds     image.Rectangle
-	zoom       float64
 	controller *Controller
 
 	// Re-applied to each View the Panel shows.
+	bounds     image.Rectangle
+	scale      float64
+	zoom       float64
 	styleSheet StyleSheet
 	scrollbar  bool
-
-	// now is the time of the last Frame or Draw, so a change between
-	// frames can lay the View out on the same clock.
-	now time.Duration
 }
 
 // NewPanel returns a Panel showing view in bounds, at scale 1 and zoom 1.
-//
-// bounds is in the coordinates of the Canvas the Panel draws on and of
-// the input events it's given (see package input).
+// bounds is in canvas coordinates (see Coordinates in the package
+// documentation).
 func NewPanel(view *View, bounds image.Rectangle) *Panel {
-	p := &Panel{bounds: bounds, zoom: 1, controller: NewController(view, bounds)}
+	p := &Panel{bounds: bounds, scale: 1, zoom: 1, controller: NewController(view)}
 	p.SetView(view)
 	return p
 }
@@ -60,8 +56,8 @@ func (p *Panel) View() *View {
 	return p.view
 }
 
-// SetView shows v instead, with the Panel's StyleSheet and scrollbar,
-// if set, and lays it out, so it can be scrolled straight away.
+// SetView shows v instead, with the Panel's bounds, scale, zoom,
+// StyleSheet and scrollbar, if set, so it can be scrolled straight away.
 func (p *Panel) SetView(v *View) {
 	p.view = v
 	if p.styleSheet != nil {
@@ -74,7 +70,7 @@ func (p *Panel) SetView(v *View) {
 	p.relayout()
 }
 
-// Bounds returns where the Panel is drawn.
+// Bounds returns where the Panel is drawn on the canvas.
 func (p *Panel) Bounds() image.Rectangle {
 	return p.bounds
 }
@@ -82,18 +78,17 @@ func (p *Panel) Bounds() image.Rectangle {
 // SetBounds moves or resizes the Panel.
 func (p *Panel) SetBounds(r image.Rectangle) {
 	p.bounds = r
-	p.controller.SetBounds(r)
 	p.relayout()
 }
 
 // Scale returns the display's scale (see SetScale).
 func (p *Panel) Scale() float64 {
-	return p.controller.Scale()
+	return p.scale
 }
 
 // SetScale sets the display's scale: canvas pixels per logical pixel.
 func (p *Panel) SetScale(s float64) {
-	p.controller.SetScale(s)
+	p.scale = s
 	p.relayout()
 }
 
@@ -128,7 +123,6 @@ func (p *Panel) SetStyleSheet(s StyleSheet) {
 // app's clock. Call it once per frame, before Draw, with no events if
 // there were none, so flings keep coasting.
 func (p *Panel) Frame(events []input.Event, now time.Duration) {
-	p.now = now
 	p.controller.OnLinkClick = p.OnLinkClick
 	p.controller.OnLinkHover = p.OnLinkHover
 	p.controller.AnchorScrolling = p.AnchorScrolling
@@ -138,11 +132,7 @@ func (p *Panel) Frame(events []input.Event, now time.Duration) {
 // Draw draws the View onto dst, within the Panel's bounds, as it is at
 // now.
 func (p *Panel) Draw(dst canvas.Canvas, now time.Duration) {
-	p.now = now
-	// Layout is cheap when nothing changed, and gives animated images
-	// the time.
-	p.relayout()
-	p.view.Draw(dst.Clip(p.bounds), p.bounds.Min.X, p.bounds.Min.Y)
+	p.view.Draw(dst, now)
 }
 
 // Animating reports whether the Panel needs more frames even without
@@ -171,6 +161,9 @@ func (p *Panel) PageDown() { p.controller.PageDown() }
 // PageUp scrolls a page towards the start.
 func (p *Panel) PageUp() { p.controller.PageUp() }
 
+// relayout applies the Panel's geometry to the View and Controller.
 func (p *Panel) relayout() {
-	p.view.Layout(p.bounds.Dx(), p.bounds.Dy(), p.Scale()*p.zoom, p.now)
+	p.controller.SetScale(p.scale)
+	p.view.SetScale(p.scale * p.zoom)
+	p.view.SetBounds(p.bounds)
 }

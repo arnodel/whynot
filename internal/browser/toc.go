@@ -45,7 +45,7 @@ func (a *App) ShowTOC() {
 		a.faceSelector,
 		a.styleSheet,
 	)
-	tocView.Layout(a.width, a.height-a.toolbarHeight, a.scale, a.elapsed())
+	a.place(tocView)
 	if currentID != "" {
 		tocView.ScrollToAnchor(currentID)
 	}

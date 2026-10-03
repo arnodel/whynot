@@ -54,8 +54,9 @@ func TestTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 	bounds := image.Rect(0, 0, 400, 300)
 	app := newTestApp(strings.Repeat("A paragraph of filler text to scroll through.\n\n", 400), bounds)
 	frame, router := app.frame, &app.router
-	top := func() int {
-		return app.panel.View().VisibleViewBounds(bounds.Size()).Min.Y
+	top := func() float64 {
+		start, _ := app.panel.View().VisibleRange()
+		return start
 	}
 	touch := func(kind pointer.Kind, y float32) {
 		router.Queue(pointer.Event{Kind: kind, Source: pointer.Touch, Position: f32.Pt(200, y)})
@@ -77,14 +78,14 @@ func TestTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 	}
 	released := top()
 	if released <= 0 {
-		t.Fatalf("drag didn't scroll: top = %d", released)
+		t.Fatalf("drag didn't scroll: top = %v", released)
 	}
 	for range 5 {
 		time.Sleep(16 * time.Millisecond)
 		frame()
 	}
 	if got := top(); got <= released {
-		t.Errorf("top = %d after 5 frames following release, want more than %d (still coasting)", got, released)
+		t.Errorf("top = %v after 5 frames following release, want more than %v (still coasting)", got, released)
 	}
 }
 

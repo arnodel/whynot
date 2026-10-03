@@ -23,15 +23,14 @@ func TestPanelHoverAndClick(t *testing.T) {
 	// Away from the origin, to catch a coordinate-translation bug.
 	bounds := image.Rect(50, 30, 50+testWidth, 30+testHeight)
 	p := newTestPanel("A paragraph with [a link](dest) in it, and then some more text below it too.", bounds)
-	lx, ly := findLinkPos(t, p.View(), bounds.Dx(), bounds.Dy())
-	x, y := bounds.Min.X+lx, bounds.Min.Y+ly
+	x, y := findLinkPos(t, p.View())
 
 	var hovered []string
 	p.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
 	var clicked []string
 	p.OnLinkClick = func(dest string) { clicked = append(clicked, dest) }
 
-	p.Frame([]input.Event{input.PointerMove{X: lx, Y: ly}}, 0)
+	p.Frame([]input.Event{input.PointerMove{X: 0, Y: 0}}, 0)
 	if len(hovered) != 0 {
 		t.Errorf("hovered %q with the pointer outside the bounds, want nothing", hovered)
 	}
@@ -50,17 +49,17 @@ func TestPanelAnchorScrolling(t *testing.T) {
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
 	p := newTestPanel(doc, image.Rect(0, 0, testWidth, testHeight))
 	p.AnchorScrolling = true
-	x, y := findLinkPos(t, p.View(), testWidth, testHeight)
+	x, y := findLinkPos(t, p.View())
 	var clicked bool
 	p.OnLinkClick = func(string) { clicked = true }
 
 	viewport := image.Pt(testWidth, testHeight)
-	before := p.View().VisibleViewBounds(viewport).Min.Y
+	before := visibleViewBounds(p.View(), viewport).Min.Y
 	p.Frame([]input.Event{press(x, y), release(x, y)}, 0)
 	if clicked {
 		t.Error("OnLinkClick called for a #fragment link with AnchorScrolling")
 	}
-	if after := p.View().VisibleViewBounds(viewport).Min.Y; after <= before {
+	if after := visibleViewBounds(p.View(), viewport).Min.Y; after <= before {
 		t.Errorf("page top after clicking the anchor link = %d, want more than %d", after, before)
 	}
 }
@@ -110,7 +109,7 @@ func TestPanelDrawClipsToBounds(t *testing.T) {
 
 func TestPanelScrollAndPage(t *testing.T) {
 	p := newTestPanel(strings.Repeat(longDoc, 40), image.Rect(0, 0, testWidth, testHeight))
-	top := func() int { return p.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y }
+	top := func() int { return visibleViewBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
 	page := float64(testHeight) * (1 - pageOverlap)
 
 	steps := []struct {
@@ -143,7 +142,7 @@ func TestPanelZoomedScrollStep(t *testing.T) {
 	if got := p.View().ctx.Scale; got != 3 {
 		t.Errorf("View laid out at scale %v, want 3", got)
 	}
-	top := func() int { return p.View().VisibleViewBounds(image.Pt(testWidth, testHeight)).Min.Y }
+	top := func() int { return visibleViewBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
 	before := top()
 	p.ScrollDown()
 	if d := top() - before; d != 2*commandStep {
@@ -166,13 +165,13 @@ func TestPanelScrollLeftRight(t *testing.T) {
 	if p.ScrollRight() {
 		t.Error("ScrollRight with no pointer = true, want false")
 	}
-	above := bounds.Min.Add(area.Visible.Min).Add(image.Pt(10, -5))
+	above := area.Visible.Min.Add(image.Pt(10, -5))
 	p.Frame([]input.Event{input.PointerMove{X: above.X, Y: above.Y}}, 0)
 	if p.ScrollRight() {
 		t.Error("ScrollRight with the pointer above the code block = true, want false")
 	}
 
-	on := bounds.Min.Add(area.Visible.Min).Add(image.Pt(10, 10))
+	on := area.Visible.Min.Add(image.Pt(10, 10))
 	p.Frame([]input.Event{input.PointerMove{X: on.X, Y: on.Y}}, 0)
 	if !p.ScrollRight() {
 		t.Fatal("ScrollRight with the pointer on the code block = false, want true")
