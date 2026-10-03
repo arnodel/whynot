@@ -49,9 +49,8 @@ type Panel struct {
 	scrollbar        widget.Scrollbar
 	theme            *material.Theme
 
-	// mouseDown is whether the primary mouse button is pressed, to report
-	// its release.
-	mouseDown bool
+	// input reads Gio's pointer input as events.
+	input Input
 
 	start time.Time
 }
