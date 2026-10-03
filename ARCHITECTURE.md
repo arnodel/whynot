@@ -246,7 +246,7 @@ cursor rather than the top of the document:
   not scanning from the start — so it costs the same whether the cursor is
   near the top of the document or deep inside it. `moveCursor(cursor, dy)`
   builds on it for the common case of shifting an existing cursor (what
-  `Scroll` does); a resize re-anchor calls `normalizeCursor` directly, since it
+  `ScrollBy` does); a resize re-anchor calls `normalizeCursor` directly, since it
   recomputes a cursor from a ratio rather than shifting one.
 - `StackBox.DrawFrom(dst, cursor, x, y)` draws starting at the cursor: it
   never calls `Bounds()` on the whole tree the way `DrawBlockLayout` does, and
@@ -256,10 +256,10 @@ Together, a resize or a frame of drawing only ever pays for slots at or
 near the current scroll position, regardless of how large the rest of the
 document is.
 
-A caller doesn't read input itself through `View` — `Scroll(dy)` takes a
-delta from whatever input source the embedding game uses (negative `dy`
-moves forward through the document, matching `ebiten.Wheel()` passed
-straight through), and `Layout(width, scale, now)` should be called
+`View` reads no input: its scrolling methods are position primitives
+(`ScrollBy(dy)`, positive towards the end; `ScrollToRatio`;
+`ScrollToAnchor`), with no coordinates and no policy. Input goes through a
+`Controller` (below). `Layout(width, height, scale, now)` should be called
 every frame regardless of whether width/scale actually changed (`now`,
 elapsed time since the embedder started rendering, needs to keep
 advancing for animated images even when nothing else did — see "Image
@@ -277,7 +277,10 @@ what's shaped by its framework: where those come from, and its frame
 loop. The Panel passes the events to a
 `whynot.Controller` ([controller.go](controller.go)), which owns
 scrolling, hover and clicks, touch pans and flings, and sideways
-scrollbars, and the View's own vertical scrollbar (`WithScrollbar`,
+scrollbars, as well as command scrolling (`ScrollDown`, `PageDown`,
+`ScrollLeft`, ...: it picks the step, in logical pixels so it doesn't
+change with the zoom, and the sideways target), and the View's own
+vertical scrollbar (`WithScrollbar`,
 [scrollbar.go](scrollbar.go)), drawn by the View as its StyleSheet says.
 A Gio app may use Gio's native `widget.Scrollbar` instead
 (`giorenderer.NativeScrollbar`), styled best-effort from the same

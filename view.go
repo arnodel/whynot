@@ -18,9 +18,10 @@ import (
 // or StyleSheet change, and keeps the scroll position across those
 // changes.
 //
-// A View reads no input itself: the embedding app calls Layout when its
-// size or scale changes, and Scroll, Hover and so on from its own input
-// handling (or uses a Controller to do so).
+// A View reads no input itself: a Controller turns input into hovering,
+// clicking and scrolling. Its own methods are for programmatic use:
+// Layout when the size or scale changes, and positioning with ScrollBy,
+// ScrollToRatio, ScrollToAnchor and RestoreScrollPosition.
 type View struct {
 	doc *Document
 	ctx engine.Context
@@ -117,14 +118,11 @@ func nodeOf(block engine.Block) *ast.Node {
 	return block.Node()
 }
 
-// Scroll adjusts the vertical scroll position by dy pixels: negative dy
-// moves the cursor forward through the document, revealing later content
-// ("scrolling down"); positive moves back toward the start. This matches
-// ebiten.Wheel()'s dy passed straight through, so callers don't need to
-// negate it.
-func (v *View) Scroll(dy float64) {
+// ScrollBy moves the scroll position dy pixels towards the end of the
+// document (towards the start if dy is negative).
+func (v *View) ScrollBy(dy float64) {
 	if v.stack.laidOut() {
-		v.stack.scroll(-dy)
+		v.stack.scroll(dy)
 		v.revealScrollbar()
 	}
 }
@@ -286,18 +284,17 @@ func (v *View) linkNodeAt(x, y int) (node *ast.Node, slot int) {
 	return hit.Source().Node().AncestorTag(ast.TagLink), slot
 }
 
-// Hover updates which link is highlighted, and which sideways-scrolling
+// hover updates which link is highlighted, and which sideways-scrolling
 // block shows its scrollbar, given the pointer position in HitTest's
-// coordinates - call it whenever the pointer moves. It also reports the
-// link there, like LinkAt.
-func (v *View) Hover(x, y int) (destination string, ok bool) {
+// coordinates. It also reports the link there, like LinkAt.
+func (v *View) hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
 	return v.hoverLink(x, y)
 }
 
-// hoverLink is Hover for links only.
+// hoverLink is hover for links only.
 func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	node, slot := v.linkNodeAt(x, y)
 	if node != v.ctx.HighlightNode {
@@ -316,19 +313,8 @@ func (v *View) hoverLink(x, y int) (destination string, ok bool) {
 	return node.Destination, true
 }
 
-// ScrollHorizontal scrolls the block at (x, y) - the same coordinate
-// space HitTest/Hover use - sideways by dx pixels, if it's wider than the
-// View and so scrolls: positive dx moves its content right, toward its
-// start, matching Scroll's convention for dy. Reports whether there was
-// such a block. Works from what the last Draw drew.
-func (v *View) ScrollHorizontal(x, y int, dx float64) bool {
-	return v.hscroll != nil && v.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time)
-}
-
-// LinkAt reports the destination URL of the link at document position
-// (x, y) - the same coordinate space HitTest/Hover use. ok is false if
-// (x, y) doesn't land on a link. Unlike Hover, this never changes the
-// highlight.
+// LinkAt reports the destination URL of the link at (x, y), in HitTest's
+// coordinates. ok is false if (x, y) doesn't land on a link.
 func (v *View) LinkAt(x, y int) (destination string, ok bool) {
 	node, _ := v.linkNodeAt(x, y)
 	if node == nil {

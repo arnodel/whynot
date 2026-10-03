@@ -288,7 +288,7 @@ func (b *StackBox) NormalizeCursor(c StackCursor) StackCursor {
 // MoveCursor returns c shifted by dy (in the offset's own sign convention:
 // positive moves forward through the document) and normalized, for callers
 // that have a cursor already and want to move it rather than construct a
-// new one from scratch - e.g. View.Scroll. Layout's resize re-anchoring
+// new one from scratch - e.g. View.ScrollBy. Layout's resize re-anchoring
 // isn't a move like this (offset is recomputed from a ratio through a
 // slot's new height, not shifted from its old value), so it calls
 // normalizeCursor directly instead.

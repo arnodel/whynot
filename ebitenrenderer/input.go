@@ -18,8 +18,9 @@ const wheelPixels = 2
 // the mouse; at most one touch is tracked.
 type Input struct {
 	// Scale converts Ebitengine's wheel units to the screen's pixels:
-	// the Panel's scale (whynot.Panel.Scale) when the game draws at
-	// the device's resolution or zooms. Zero means 1.
+	// the scale the document is drawn at (whynot.Panel's Scale times
+	// its Zoom) when the game draws at the device's resolution or
+	// zooms. Zero means 1.
 	Scale float64
 
 	cursor    image.Point

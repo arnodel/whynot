@@ -530,5 +530,6 @@ func (a *App) Relayout(outsideWidth, outsideHeight int, deviceScale float64, too
 	a.height = int(float64(outsideHeight) * deviceScale)
 	a.toolbarHeight = toolbarHeight
 	a.Panel.SetBounds(image.Rect(0, toolbarHeight, a.width, a.height))
-	a.Panel.SetScale(a.scale)
+	a.Panel.SetScale(deviceScale)
+	a.Panel.SetZoom(a.zoom)
 }

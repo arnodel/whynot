@@ -363,8 +363,8 @@ func TestAppSetZoomClamps(t *testing.T) {
 	if app.Zoom() != 1.5 {
 		t.Errorf("Zoom() after SetZoom(1.5) = %v, want 1.5", app.Zoom())
 	}
-	if got := app.Panel.Scale(); got != app.deviceScale*1.5 {
-		t.Errorf("Panel.Scale() after SetZoom(1.5) = %v, want deviceScale*1.5 = %v", got, app.deviceScale*1.5)
+	if got := app.Panel.Zoom(); got != 1.5 {
+		t.Errorf("Panel.Zoom() after SetZoom(1.5) = %v, want 1.5", got)
 	}
 }
 
@@ -379,8 +379,11 @@ func TestAppRelayout(t *testing.T) {
 	if got := app.Panel.Bounds(); got != wantBounds {
 		t.Errorf("Panel.Bounds() after Relayout(400,300,2,20) = %v, want %v", got, wantBounds)
 	}
-	if got, want := app.Panel.Scale(), 2*app.Zoom(); got != want {
-		t.Errorf("Panel.Scale() after Relayout = %v, want deviceScale*zoom = %v", got, want)
+	if got := app.Panel.Scale(); got != 2 {
+		t.Errorf("Panel.Scale() after Relayout = %v, want deviceScale = 2", got)
+	}
+	if got, want := app.Panel.Zoom(), app.Zoom(); got != want {
+		t.Errorf("Panel.Zoom() after Relayout = %v, want %v", got, want)
 	}
 }
 

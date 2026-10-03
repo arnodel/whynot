@@ -51,9 +51,8 @@ func (s *NativeScrollbar) Layout(gtx layout.Context, view *whynot.View, bounds i
 	sb.Layout(stripGtx, layout.Vertical, start, end)
 	stack.Pop()
 
-	// ScrollDistance is a fraction of the document, positive towards the
-	// end; View.Scroll is in pixels, positive towards the start.
+	// ScrollDistance is a fraction of the document.
 	if d := s.scrollbar.ScrollDistance(); d != 0 {
-		view.Scroll(-float64(d) * float64(doc.Dy()))
+		view.ScrollBy(float64(d) * float64(doc.Dy()))
 	}
 }

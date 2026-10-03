@@ -21,10 +21,12 @@ const (
 // Controller turns a backend's input events into what they do to a View:
 // scrolling, link hover and clicks, sideways-scrolling blocks and their
 // scrollbars, touch pans and flings. Feed it each frame's events with
-// Frame. The View's own vertical scrollbar is the backend's.
+// Frame. It also scrolls on command (ScrollDown, PageDown, ScrollLeft
+// and so on), for an app binding keys to them.
 type Controller struct {
 	view   *View
 	bounds image.Rectangle
+	scale  float64
 
 	// OnLinkClick is called with a link's destination when it's clicked
 	// or tapped, OnLinkHover when the hovered link changes ("" when
@@ -51,6 +53,11 @@ type Controller struct {
 	momentum  float64
 	hMomentum float64
 	hTarget   engine.Block
+
+	// sideways is the sideways-scrolling block last scrolled, pressed or
+	// touched: ScrollLeft and ScrollRight's target when the pointer isn't
+	// on one.
+	sideways engine.Block
 
 	// The touch in progress: touching is set from its TouchStart to its
 	// TouchEnd, even for a touch outside the bounds. Other touches are
@@ -81,9 +88,10 @@ const (
 const touchAxisLockDistance = 10
 
 // NewController returns a Controller for v, acting on input inside
-// bounds: where the View is drawn, in the input's coordinates.
+// bounds: where the View is drawn, in the input's coordinates, at
+// scale 1.
 func NewController(v *View, bounds image.Rectangle) *Controller {
-	return &Controller{view: v, bounds: bounds}
+	return &Controller{view: v, bounds: bounds, scale: 1}
 }
 
 // View returns the View the Controller drives.
@@ -96,6 +104,7 @@ func (c *Controller) View() *View {
 func (c *Controller) SetView(v *View) {
 	c.view = v
 	c.hoverDest = ""
+	c.hTarget, c.sideways = nil, nil
 }
 
 // Bounds returns where the View is drawn, in the input's coordinates.
@@ -106,6 +115,18 @@ func (c *Controller) Bounds() image.Rectangle {
 // SetBounds sets where the View is drawn, in the input's coordinates.
 func (c *Controller) SetBounds(r image.Rectangle) {
 	c.bounds = r
+}
+
+// Scale returns the display's scale (see SetScale).
+func (c *Controller) Scale() float64 {
+	return c.scale
+}
+
+// SetScale sets the display's scale: input pixels per logical pixel,
+// without any zoom of the document. Command scrolling steps and touch
+// thresholds are in logical pixels, so they don't change with the zoom.
+func (c *Controller) SetScale(s float64) {
+	c.scale = s
 }
 
 // Frame applies one frame's input events, in order, at now: elapsed time
@@ -152,12 +173,18 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 			if !p.In(c.bounds) {
 				continue
 			}
-			if local := p.Sub(c.bounds.Min); c.view.onScrollbar(local) {
+			local := p.Sub(c.bounds.Min)
+			if c.view.onScrollbar(local) {
 				c.view.beginScrollbarDrag(local)
 				continue
 			}
-			if s != nil && s.beginDrag(p.Sub(c.bounds.Min)) {
-				continue
+			if s != nil {
+				if r, ok := s.regionAt(local); ok {
+					c.sideways = r.Source
+				}
+				if s.beginDrag(local) {
+					continue
+				}
 			}
 			pressed, pressedAt = true, p
 		case input.Wheel:
@@ -173,12 +200,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) {
 				// already report it as horizontal, leaving dy 0.
 				dx, dy = dx+dy, 0
 			}
-			// View.Scroll and ScrollHorizontal move content, the
-			// opposite of the wheel's direction.
-			c.view.Scroll(-dy)
+			c.view.ScrollBy(dy)
 			if dx != 0 {
-				local := p.Sub(c.bounds.Min)
-				c.view.ScrollHorizontal(local.X, local.Y, -dx)
+				c.scrollAt(p, dx)
 			}
 		case input.TouchStart:
 			if c.touching {
@@ -264,13 +288,13 @@ func (c *Controller) hover() {
 	if !c.hasPointer || !c.pointer.In(c.bounds) {
 		// (-1, -1) can't land on anything.
 		c.view.vbar.hovered = false
-		c.view.Hover(-1, -1)
+		c.view.hover(-1, -1)
 		c.setHover("", false)
 		return
 	}
 	local := c.pointer.Sub(c.bounds.Min)
 	c.view.vbar.hovered = c.view.onScrollbar(local)
-	c.setHover(c.view.Hover(local.X, local.Y))
+	c.setHover(c.view.hover(local.X, local.Y))
 }
 
 // setHover records the hovered link, calling OnLinkHover on a change.
@@ -318,7 +342,7 @@ func (c *Controller) touchStart(p image.Point, now time.Duration) {
 		c.touchAxis = touchNone
 	case c.hscroll() != nil:
 		if r, ok := c.hscroll().regionAt(p.Sub(c.bounds.Min)); ok {
-			c.touchTarget = r.Source
+			c.touchTarget, c.sideways = r.Source, r.Source
 			c.touchAxis = touchUndecided
 			return
 		}
@@ -334,7 +358,7 @@ func (c *Controller) touchDrag(dx, dy int, now time.Duration) {
 	if c.touchAxis == touchUndecided {
 		c.touchPending = c.touchPending.Add(image.Pt(dx, dy))
 		d := c.touchPending
-		if math.Hypot(float64(d.X), float64(d.Y)) < touchAxisLockDistance*c.view.ctx.Scale {
+		if math.Hypot(float64(d.X), float64(d.Y)) < touchAxisLockDistance*c.scale {
 			c.tick(now)
 			return
 		}
@@ -348,7 +372,7 @@ func (c *Controller) touchDrag(dx, dy int, now time.Duration) {
 	}
 	switch c.touchAxis {
 	case touchVertical:
-		c.view.Scroll(float64(dy))
+		c.view.ScrollBy(-float64(dy))
 		c.accumulate(&c.momentum, float64(dy), now)
 	case touchHorizontal:
 		c.scrollTarget(c.touchTarget, float64(dx))
@@ -370,7 +394,7 @@ func (c *Controller) touchEnd() {
 	}
 	c.touching = false
 	c.touchAxis = touchNone
-	c.view.Hover(-1, -1)
+	c.view.hover(-1, -1)
 	c.setHover("", false)
 }
 
@@ -385,14 +409,70 @@ func (c *Controller) hscroll() *hscrollState {
 	return c.view.hscroll
 }
 
-// scrollAtPointer scrolls the block under the mouse pointer sideways by
-// dx (see View.ScrollHorizontal), reporting whether there was one.
-func (c *Controller) scrollAtPointer(dx float64) bool {
-	if !c.hasPointer || !c.pointer.In(c.bounds) {
+// scrollAt scrolls the sideways-scrolling block at p, in the input's
+// coordinates, dx pixels towards its end, reporting whether there was
+// one.
+func (c *Controller) scrollAt(p image.Point, dx float64) bool {
+	s := c.hscroll()
+	if s == nil || !p.In(c.bounds) {
 		return false
 	}
-	local := c.pointer.Sub(c.bounds.Min)
-	return c.view.ScrollHorizontal(local.X, local.Y, dx)
+	b := s.scrollAt(p.Sub(c.bounds.Min), -dx, c.view.ctx.Time)
+	if b == nil {
+		return false
+	}
+	c.sideways = b
+	return true
+}
+
+// commandStep is how far ScrollDown, ScrollUp, ScrollLeft and ScrollRight
+// move, in logical pixels.
+const commandStep = 40
+
+// pageOverlap is the fraction of the page PageDown and PageUp keep in
+// view, for continuity.
+const pageOverlap = 0.1
+
+// ScrollDown scrolls a step towards the end, as for an arrow key.
+func (c *Controller) ScrollDown() { c.scrollBy(commandStep * c.scale) }
+
+// ScrollUp scrolls a step towards the start, as for an arrow key.
+func (c *Controller) ScrollUp() { c.scrollBy(-commandStep * c.scale) }
+
+// PageDown scrolls a page towards the end.
+func (c *Controller) PageDown() { c.scrollBy(float64(c.bounds.Dy()) * (1 - pageOverlap)) }
+
+// PageUp scrolls a page towards the start.
+func (c *Controller) PageUp() { c.scrollBy(-float64(c.bounds.Dy()) * (1 - pageOverlap)) }
+
+func (c *Controller) scrollBy(dy float64) {
+	c.CancelMomentum()
+	c.view.ScrollBy(dy)
+}
+
+// ScrollLeft scrolls a block wider than the View (a code block or table,
+// say) a step towards its start: the block under the pointer, else the
+// one last scrolled, clicked or touched, if it's still on screen. It
+// reports whether there was such a block.
+func (c *Controller) ScrollLeft() bool { return c.scrollSideways(-commandStep * c.scale) }
+
+// ScrollRight scrolls a block a step towards its end, like ScrollLeft.
+func (c *Controller) ScrollRight() bool { return c.scrollSideways(commandStep * c.scale) }
+
+func (c *Controller) scrollSideways(dx float64) bool {
+	c.CancelMomentum()
+	if c.hasPointer && c.scrollAt(c.pointer, dx) {
+		return true
+	}
+	s := c.hscroll()
+	if s == nil || c.sideways == nil {
+		return false
+	}
+	if _, ok := s.regionOf(c.sideways); !ok {
+		return false
+	}
+	c.scrollTarget(c.sideways, -dx)
+	return true
 }
 
 // scrollTarget scrolls the sideways-scrolling block target by dx, showing
@@ -442,7 +522,7 @@ func fastEnough(v float64) bool {
 // from a touch drag that's since ended.
 func (c *Controller) coastMomentum(now time.Duration) {
 	dt := c.tick(now)
-	c.momentum = coast(c.momentum, dt, c.view.Scroll)
+	c.momentum = coast(c.momentum, dt, func(d float64) { c.view.ScrollBy(-d) })
 	c.hMomentum = coast(c.hMomentum, dt, func(d float64) { c.scrollTarget(c.hTarget, d) })
 }
 

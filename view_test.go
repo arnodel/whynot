@@ -245,7 +245,7 @@ func TestViewScrollClampsIntoBottomMargin(t *testing.T) {
 	}
 	v.Layout(100, 1000, 1, 0)
 
-	v.Scroll(-1000)
+	v.ScrollBy(1000)
 	wantIndex := len(v.stack.box.Slots) - 1
 	if v.stack.cursor != (engine.StackCursor{Index: wantIndex, Offset: 15}) {
 		t.Errorf("after scrolling past the end = %+v, want {%d, 15} (clamped inside the bottom margin)", v.stack.cursor, wantIndex)
@@ -320,19 +320,19 @@ func TestViewScroll(t *testing.T) {
 		t.Fatalf("initial position = %+v, want {0, 0}", v.stack.cursor)
 	}
 
-	v.Scroll(-15)
+	v.ScrollBy(15)
 	if v.stack.cursor != (engine.StackCursor{Index: 1, Offset: 5}) {
 		t.Errorf("after Scroll(-15) = %+v, want {1, 5}", v.stack.cursor)
 	}
 
-	v.Scroll(15)
+	v.ScrollBy(-15)
 	if v.stack.cursor != (engine.StackCursor{Index: 0, Offset: 0}) {
 		t.Errorf("after Scroll(15) = %+v, want {0, 0}", v.stack.cursor)
 	}
 
 	// Scrolling further than the document is long clamps to the end
 	// rather than going out of range.
-	v.Scroll(-1000)
+	v.ScrollBy(1000)
 	if v.stack.cursor != (engine.StackCursor{Index: 2, Offset: 30}) {
 		t.Errorf("after Scroll(-1000) = %+v, want {2, 30} (clamped to the end)", v.stack.cursor)
 	}
@@ -352,8 +352,8 @@ func TestViewScrollSubPixel(t *testing.T) {
 	)
 	v.Layout(100, 1000, 1, 0)
 
-	v.Scroll(-7.5)
-	v.Scroll(-7.5)
+	v.ScrollBy(7.5)
+	v.ScrollBy(7.5)
 	if v.stack.cursor != (engine.StackCursor{Index: 1, Offset: 5}) {
 		t.Errorf("after Scroll(-7.5) twice = %+v, want {1, 5}", v.stack.cursor)
 	}
@@ -496,7 +496,7 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 	}
 
 	beforeBox := v.stack.box
-	dest, ok := v.Hover(x, y)
+	dest, ok := v.hover(x, y)
 	if v.stack.box != beforeBox {
 		t.Error("Hover onto a link rebuilt the whole box, want surgical per-slot invalidation")
 	}
@@ -504,7 +504,7 @@ func TestViewHoverHighlightsLink(t *testing.T) {
 		t.Fatal("HighlightNode = nil after hovering a link, want non-nil")
 	}
 	if !ok || dest != "url" {
-		t.Errorf("Hover(x, y) = %q, %v, want %q, true", dest, ok, "url")
+		t.Errorf("hover(x, y) = %q, %v, want %q, true", dest, ok, "url")
 	}
 
 	hit, _ := hitAt(v, x, y)
@@ -583,11 +583,11 @@ func TestViewScrollPositionRoundTrip(t *testing.T) {
 	v := NewView(Parse(source), fonts.NewGoSelector(), stylingtest.NoViewMargin())
 	v.Layout(300, 1000, 1, 0)
 
-	v.Scroll(-500)
+	v.ScrollBy(500)
 	want := v.stack.cursor
 	pos := v.ScrollPosition()
 
-	v.Scroll(-1000)
+	v.ScrollBy(1000)
 	if v.stack.cursor == want {
 		t.Fatal("test setup: further scrolling didn't change the cursor")
 	}
@@ -724,10 +724,10 @@ func TestViewHoverNoOpWhenUnchanged(t *testing.T) {
 		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
-	v.Hover(x, y)
+	v.hover(x, y)
 	_, slot := v.linkNodeAt(x, y)
 	slotBox := v.stack.box.Slots[slot].Box
-	v.Hover(x, y)
+	v.hover(x, y)
 	if v.stack.box.Slots[slot].Box != slotBox {
 		t.Error("Hover at an unchanged position invalidated the slot again, want a no-op")
 	}
@@ -744,12 +744,12 @@ func TestViewHoverClearsWhenMovingAway(t *testing.T) {
 	if !ok {
 		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
-	v.Hover(x, y)
+	v.hover(x, y)
 	if v.ctx.HighlightNode == nil {
 		t.Fatal("HighlightNode = nil after hovering the link, want non-nil")
 	}
 
-	v.Hover(0, 0) // the top-left corner: inside the view margin, never the link
+	v.hover(0, 0) // the top-left corner: inside the view margin, never the link
 	if v.ctx.HighlightNode != nil {
 		t.Error("HighlightNode still set after hovering away from the link")
 	}
@@ -814,8 +814,8 @@ func TestViewHoverSurgicalInvalidation(t *testing.T) {
 	}
 	beforeBox := v.stack.box
 
-	v.Hover(x1, y1)
-	v.Hover(x2, y2)
+	v.hover(x1, y1)
+	v.hover(x2, y2)
 
 	if v.stack.box != beforeBox {
 		t.Fatal("Hover rebuilt the whole box, want surgical per-slot invalidation")
@@ -848,7 +848,7 @@ func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
 
 	x1, y1, x2, y2 := findTwoLinks(t, v)
 
-	v.Hover(x1, y1)
+	v.hover(x1, y1)
 	if v.ctx.HighlightNode == nil {
 		t.Fatal("HighlightNode = nil after hovering link one")
 	}
@@ -857,11 +857,11 @@ func TestViewHoverSurvivesRebuildInBetween(t *testing.T) {
 
 	// The next frame's Hover call, mouse unmoved - what cmd/whynot does
 	// every tick - refreshes highlightSlot before anything needs it.
-	v.Hover(x1, y1)
+	v.hover(x1, y1)
 
 	// Move to the other link - link one must actually un-highlight, not
 	// get stuck, despite the rebuild in between.
-	v.Hover(x2, y2)
+	v.hover(x2, y2)
 
 	hit, _ := hitAt(v, x1, y1)
 	text, ok := hit.(*engine.TextBox)
@@ -896,9 +896,9 @@ func BenchmarkViewHover(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if i%2 == 0 {
-			v.Hover(x, y)
+			v.hover(x, y)
 		} else {
-			v.Hover(0, 0)
+			v.hover(0, 0)
 		}
 	}
 }
@@ -1075,8 +1075,8 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	}
 	_, slot := v.linkNodeAt(x, y)
 
-	v.Hover(x, y)
-	v.Hover(-1, -1)
+	v.hover(x, y)
+	v.hover(-1, -1)
 
 	if v.stack.box.Slots[slot].Box != nil {
 		t.Fatal("test setup: slot wasn't actually invalidated by Hover")
@@ -1145,7 +1145,7 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	source := []byte("first paragraph\n\n[a link](url)\n\nthird paragraph\n\nfourth paragraph\n\nfifth paragraph")
 	v := NewView(Parse(source), fonts.NewGoSelector(), stylingtest.Basic())
 	v.Layout(300, 1000, 1, 0)
-	v.Scroll(20) // resolve a couple of slots, the way real scrolling would
+	v.ScrollBy(-20) // resolve a couple of slots, the way real scrolling would
 
 	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
@@ -1156,8 +1156,8 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 	wantVisible := v.VisibleViewBounds(image.Pt(300, 200))
 
 	for i := 0; i < 4; i++ {
-		v.Hover(x, y)   // HighlightNode: nil -> the link (rebuilds)
-		v.Hover(-1, -1) // HighlightNode: the link -> nil (rebuilds again)
+		v.hover(x, y)   // HighlightNode: nil -> the link (rebuilds)
+		v.hover(-1, -1) // HighlightNode: the link -> nil (rebuilds again)
 		if got := v.DocumentBounds(); got != wantDoc {
 			t.Fatalf("DocumentBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantDoc)
 		}
@@ -1585,7 +1585,7 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	waitForSettled(t, v.ctx.ImageCache, "testdata/cat.jpeg")
 
 	for v.stack.cursor.Index < imgSlot {
-		v.Scroll(-50)
+		v.ScrollBy(50)
 		v.Layout(300, viewportHeight, 1, 0)
 	}
 

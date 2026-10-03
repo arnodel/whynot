@@ -195,15 +195,16 @@ func (s *hscrollState) unhover() {
 }
 
 // scrollAt scrolls the box at p by dx (positive moves the content right,
-// revealing its start) at now, reporting whether there was one.
-func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) bool {
+// revealing its start) at now, returning its source, or nil if there's
+// none.
+func (s *hscrollState) scrollAt(p image.Point, dx float64, now time.Duration) engine.Block {
 	a, ok := s.regionAt(p)
 	if !ok {
-		return false
+		return nil
 	}
 	s.offsets[a.Source] = clamp(a, s.offsets[a.Source]-dx)
 	s.reveal(a.Source, now)
-	return true
+	return a.Source
 }
 
 // beginDrag starts dragging the scrollbar at p, if there is one.

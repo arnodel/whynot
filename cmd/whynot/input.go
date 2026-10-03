@@ -13,7 +13,7 @@ func (g *game) Update() error {
 	defer func() { g.updateDuration = time.Since(start) }()
 
 	// The wheel scrolls by zoomed pixels, like a browser's.
-	g.input.Scale = g.panel.Scale()
+	g.input.Scale = g.panel.Scale() * g.panel.Zoom()
 	g.panel.Frame(g.input.Events(), time.Since(g.start))
 
 	// pointerState so these buttons work with a touch too, not just a mouse.
@@ -67,18 +67,20 @@ func (g *game) Update() error {
 			g.panel.PageDown()
 		}
 	}
-	// A few lines at a time, repeating while held (see keyRepeat) -
-	// finer-grained than Space's page jump, for nudging up/down a
-	// short way without overshooting. Calls View.Scroll directly rather
-	// than panel.ScrollDown/Up, which scale by panel's own combined
-	// scale (deviceScale*zoom) - this stays deviceScale-alone,
-	// deliberately zoom-independent like Space above.
-	const arrowScrollLines = 40
+	// A step at a time, repeating while held (see keyRepeat) -
+	// finer-grained than Space's page jump, for nudging a short way
+	// without overshooting.
 	switch {
 	case keyRepeat(ebiten.KeyDown):
-		g.panel.View().Scroll(-arrowScrollLines * g.deviceScale)
+		g.panel.ScrollDown()
 	case keyRepeat(ebiten.KeyUp):
-		g.panel.View().Scroll(arrowScrollLines * g.deviceScale)
+		g.panel.ScrollUp()
+	}
+	switch {
+	case keyRepeat(ebiten.KeyLeft):
+		g.panel.ScrollLeft()
+	case keyRepeat(ebiten.KeyRight):
+		g.panel.ScrollRight()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {

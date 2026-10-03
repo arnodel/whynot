@@ -57,27 +57,27 @@ func TestCodeBlockScrollsOnlyWhenWider(t *testing.T) {
 	}
 }
 
-func TestViewScrollHorizontal(t *testing.T) {
+func TestViewScrollSideways(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
 	at := area.Visible.Min.Add(image.Pt(10, 10))
 	before := drawnTextX(t, v, "wide")
 
-	if !v.ScrollHorizontal(at.X, at.Y, -50) {
-		t.Fatal("ScrollHorizontal over the code block = false, want true")
+	if !scrollHorizontal(v, at.X, at.Y, -50) {
+		t.Fatal("scrollHorizontal over the code block = false, want true")
 	}
 	if got := drawnTextX(t, v, "wide"); got != before-50 {
 		t.Errorf("text at x=%d after scrolling by -50, want %d", got, before-50)
 	}
 
-	if v.ScrollHorizontal(area.Visible.Min.X+10, area.Visible.Min.Y-5, -50) {
-		t.Error("ScrollHorizontal above the code block = true, want false")
+	if scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y-5, -50) {
+		t.Error("scrollHorizontal above the code block = true, want false")
 	}
 
-	v.ScrollHorizontal(at.X, at.Y, 1e6)
+	scrollHorizontal(v, at.X, at.Y, 1e6)
 	if got := drawnTextX(t, v, "wide"); got != before {
 		t.Errorf("text at x=%d after scrolling far back, want %d (clamped at the start)", got, before)
 	}
-	v.ScrollHorizontal(at.X, at.Y, -1e6)
+	scrollHorizontal(v, at.X, at.Y, -1e6)
 	maxOffset := area.ContentSize - area.Box.Dx()
 	if got := drawnTextX(t, v, "wide"); got != before-maxOffset {
 		t.Errorf("text at x=%d after scrolling far forward, want %d (clamped at the end)", got, before-maxOffset)
@@ -87,7 +87,7 @@ func TestViewScrollHorizontal(t *testing.T) {
 func TestViewHorizontalOffsetSurvivesRelayout(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
 	before := drawnTextX(t, v, "wide")
-	v.ScrollHorizontal(area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
+	scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
 
 	v.SetStyleSheet(stylingtest.NoViewMargin())
 	if got := drawnTextX(t, v, "wide"); got != before-50 {
@@ -105,7 +105,7 @@ func TestScrollBoxHitTestFollowsOffset(t *testing.T) {
 	if hit, _ := hitAt(v, p.X, p.Y); !isShort(hit) {
 		t.Fatalf("HitTest on the second line = %T, want the \"short\" text", hit)
 	}
-	v.ScrollHorizontal(p.X, p.Y, -200)
+	scrollHorizontal(v, p.X, p.Y, -200)
 	if hit, _ := hitAt(v, p.X, p.Y); isShort(hit) {
 		t.Error("HitTest still finds \"short\" after scrolling it out of view")
 	}
@@ -147,17 +147,17 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 		t.Error("scrollbar drawn without hovering, want it hidden")
 	}
 
-	v.Hover(area.Visible.Min.X+10, area.Visible.Min.Y+10)
+	v.hover(area.Visible.Min.X+10, area.Visible.Min.Y+10)
 	if !thumbDrawn(draw()) {
 		t.Error("scrollbar not drawn while hovering the code block")
 	}
-	v.Hover(area.Visible.Min.X+10, area.Visible.Min.Y-5)
+	v.hover(area.Visible.Min.X+10, area.Visible.Min.Y-5)
 	v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade)
 	if thumbDrawn(draw()) {
 		t.Error("scrollbar still drawn once faded out after the pointer left the code block")
 	}
 
-	v.ScrollHorizontal(area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
+	scrollHorizontal(v, area.Visible.Min.X+10, area.Visible.Min.Y+10, -50)
 	if left, right := fadesAt(draw()); !left || !right {
 		t.Errorf("mid-scroll: left fade %v, right fade %v, want both", left, right)
 	}
@@ -429,29 +429,29 @@ func TestHoverScrollbarFadesWhenIdle(t *testing.T) {
 	later := func() { v.Layout(300, 400, 1, v.ctx.Time+hscrollRevealHold+hscrollRevealFade) }
 	opacity := func() float64 { return s.barOpacity(area.Source, v.ctx.Time) }
 
-	v.Hover(over.X, over.Y)
+	v.hover(over.X, over.Y)
 	if got := opacity(); got != 1 {
 		t.Errorf("opacity after moving over the block = %v, want 1", got)
 	}
 	later()
-	v.Hover(over.X, over.Y) // same position: the pointer rests
+	v.hover(over.X, over.Y) // same position: the pointer rests
 	if got := opacity(); got != 0 {
 		t.Errorf("opacity after resting on the block = %v, want 0 (faded)", got)
 	}
-	v.Hover(over.X+1, over.Y)
+	v.hover(over.X+1, over.Y)
 	if got := opacity(); got != 1 {
 		t.Errorf("opacity after moving again = %v, want 1", got)
 	}
 	later()
-	v.ScrollHorizontal(over.X+1, over.Y, -10)
+	scrollHorizontal(v, over.X+1, over.Y, -10)
 	if got := opacity(); got != 1 {
 		t.Errorf("opacity after scrolling the block = %v, want 1", got)
 	}
 
 	bar := s.thumb(area).Min.Add(image.Pt(1, 1))
-	v.Hover(bar.X, bar.Y)
+	v.hover(bar.X, bar.Y)
 	later()
-	v.Hover(bar.X, bar.Y)
+	v.hover(bar.X, bar.Y)
 	if got := opacity(); got != 1 {
 		t.Errorf("opacity while resting on the scrollbar = %v, want 1", got)
 	}
@@ -466,4 +466,11 @@ func unwrap(b engine.Block) engine.Block {
 		}
 		b = mb.Block
 	}
+}
+
+// scrollHorizontal scrolls the sideways-scrolling block at (x, y), in
+// the View's coordinates, by dx (positive moves its content right),
+// reporting whether there was one.
+func scrollHorizontal(v *View, x, y int, dx float64) bool {
+	return v.hscroll.scrollAt(image.Pt(x, y), dx, v.ctx.Time) != nil
 }

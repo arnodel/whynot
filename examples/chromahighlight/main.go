@@ -78,7 +78,7 @@ type game struct {
 
 func (g *game) Update() error {
 	_, dy := ebiten.Wheel()
-	g.view.Scroll(dy * 2)
+	g.view.ScrollBy(-dy * 2)
 	return nil
 }
 
