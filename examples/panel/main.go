@@ -1,9 +1,8 @@
-// Command panel is a runnable example of ebitenrenderer.Panel embedded
-// in a larger game window: it fills the whole window with a solid
+// Command panel is a runnable example of a whynot.Panel embedded in a
+// larger Ebitengine game window: it fills the whole window with a solid
 // color standing in for "other game content," then draws a Panel into
-// an inset rectangle, proving Panel.Draw's SubImage clipping holds on
-// all four edges - something cmd/whynot never has to demonstrate,
-// since its View occupies basically the whole window.
+// an inset rectangle, showing its drawing stays within its bounds on
+// all four edges.
 package main
 
 import (
@@ -12,6 +11,7 @@ import (
 	"image/color"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -32,7 +32,7 @@ var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF} // green, to make it di
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Panel example\n\n")
-	b.WriteString("This document exists to prove that `ebitenrenderer.Panel` clips its drawing to\n")
+	b.WriteString("This document exists to prove that `whynot.Panel` clips its drawing to\n")
 	b.WriteString("its own bounds even when embedded inside a larger window that draws other\n")
 	b.WriteString("content around it.\n\n")
 	for i := 1; i <= 8; i++ {
@@ -46,27 +46,32 @@ func exampleDoc() string {
 func main() {
 	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
-	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
+	panel := whynot.NewPanel(view, bounds)
+	panel.SetScrollbar(true)
 
 	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetWindowTitle("whynot panel example")
-	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
+	g := &game{panel: panel, renderer: ebitenrenderer.New(), start: time.Now()}
+	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
 
 type game struct {
-	panel *ebitenrenderer.Panel
+	panel    *whynot.Panel
+	renderer *ebitenrenderer.Renderer
+	input    ebitenrenderer.Input
+	start    time.Time
 }
 
 func (g *game) Update() error {
-	g.panel.Update()
+	g.panel.Frame(g.input.Events(), time.Since(g.start))
 	return nil
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(backgroundColor)
-	g.panel.Draw(screen)
+	g.panel.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

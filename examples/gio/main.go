@@ -1,8 +1,8 @@
 // Command gio is a runnable example of whynot rendering through
 // giorenderer (Gio, gioui.org) instead of ebitenrenderer - a
-// giorenderer.Panel showing one document, with scroll, link hover/
-// click, and a scrollbar. See examples/panel for the ebiten-backed
-// equivalent this mirrors.
+// whynot.Panel showing one document, with scroll, link hover/click, and
+// a scrollbar. See examples/panel for the ebiten-backed equivalent this
+// mirrors.
 package main
 
 import (
@@ -10,6 +10,7 @@ import (
 	"image"
 	"log"
 	"strings"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/op"
@@ -27,7 +28,7 @@ func exampleDoc() string {
 	b.WriteString("three primitives ebitenrenderer implements: text (this paragraph, mixed\n")
 	b.WriteString("with `inline code` and **bold**), a filled rect (the thematic break\n")
 	b.WriteString("below), and an image. It's also long enough to need scrolling, to check\n")
-	b.WriteString("giorenderer.Panel's scroll/hover/click/scrollbar handling.\n\n")
+	b.WriteString("whynot.Panel's scroll/hover/click/scrollbar handling.\n\n")
 	b.WriteString("Try the mouse wheel, dragging the scrollbar on the right, and hovering/\n")
 	b.WriteString("clicking [this link](https://example.com).\n\n")
 	b.WriteString("---\n\n")
@@ -50,13 +51,18 @@ func main() {
 
 func run() error {
 	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
-	panel := giorenderer.NewPanel(view, giorenderer.New(), image.Rectangle{}, giorenderer.WithScrollbar())
+	panel := whynot.NewPanel(view, image.Rectangle{})
+	panel.SetScrollbar(true)
 	panel.OnLinkClick = func(dest string) { log.Printf("clicked: %s", dest) }
 	panel.OnLinkHover = func(dest string) {
 		if dest != "" {
 			log.Printf("hovering: %s", dest)
 		}
 	}
+
+	renderer := giorenderer.New()
+	var in giorenderer.Input
+	start := time.Now()
 
 	w := new(app.Window)
 	var ops op.Ops
@@ -76,8 +82,13 @@ func run() error {
 				panel.SetScale(scale)
 			}
 
-			panel.Update(gtx)
-			panel.Draw(gtx)
+			now := time.Since(start)
+			panel.Frame(in.Source(gtx, panel, bounds).Events(), now)
+			// Gio only produces frames when something happens.
+			if panel.Animating() {
+				gtx.Execute(op.InvalidateCmd{})
+			}
+			panel.Draw(renderer.NewCanvas(gtx.Ops, bounds), now)
 			e.Frame(gtx.Ops)
 		}
 	}

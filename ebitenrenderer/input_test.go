@@ -9,7 +9,7 @@ import (
 
 // TestInputMouseEvents checks Input reports what changed between ticks.
 func TestInputMouseEvents(t *testing.T) {
-	in := Input{Scale: 2}
+	var in Input
 	steps := []struct {
 		name string
 		st   mouseInput
@@ -25,8 +25,8 @@ func TestInputMouseEvents(t *testing.T) {
 		{"release", mouseInput{x: 15, y: 20},
 			[]input.Event{input.PointerButton{X: 15, Y: 20, Button: input.ButtonPrimary}}},
 		// ebiten.Wheel is positive up; Wheel events are positive down,
-		// in pixels: -1 * wheelPixels * Scale.
-		{"wheel down", mouseInput{x: 15, y: 20, wheelY: -1},
+		// in pixels: -1 * wheelPixels * scale.
+		{"wheel down", mouseInput{x: 15, y: 20, wheelY: -1, scale: 2},
 			[]input.Event{input.Wheel{X: 15, Y: 20, DY: wheelPixels * 2}}},
 	}
 	for _, s := range steps {

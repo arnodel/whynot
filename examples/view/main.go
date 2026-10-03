@@ -1,6 +1,6 @@
 // Command view is a runnable example of whynot.View wired up by hand -
 // full control over input handling, at the cost of doing it yourself.
-// See examples/panel for the turnkey alternative, ebitenrenderer.Panel.
+// See examples/panel for the turnkey alternative, whynot.Panel.
 package main
 
 import (
@@ -21,7 +21,7 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# View example\n\n")
 	b.WriteString("This document is rendered by wiring `whynot.View` up directly - full control\n")
-	b.WriteString("over input handling, at the cost of doing it yourself (see `ebitenrenderer.Panel`\n")
+	b.WriteString("over input handling, at the cost of doing it yourself (see `whynot.Panel`\n")
 	b.WriteString("for the turnkey alternative).\n\n")
 	for i := 1; i <= 8; i++ {
 		fmt.Fprintf(&b, "## Section %d\n\n", i)

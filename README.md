@@ -17,9 +17,9 @@ it, [Ebitengine](https://ebitengine.org/) (`ebitenrenderer`) and [Gio](https://g
 - **Customizable styling** - colors, margins, and text styles come from a
   `StyleSheet` (dark and light ones built in, or your own from a theme),
   swappable at runtime
-- **Drop-in embedding** - `ebitenrenderer.Panel`/`giorenderer.Panel` add a
-  scrollable, zoomable Markdown view to part of a larger window in a few
-  lines, with resizing, hover/click, and an optional scrollbar all
+- **Drop-in embedding** - `whynot.Panel` adds a scrollable, zoomable
+  Markdown view to part of a larger window in a few lines, with
+  Ebitengine or Gio, with resizing, hover/click, and an optional scrollbar all
   handled for you
 
 ## Try the standalone viewer
@@ -73,13 +73,17 @@ closely (see [`cmd/giowhynot`](cmd/giowhynot) and
 [`examples/gio`](examples/gio) for the Gio-backed equivalents). Either
 way, two levels of control to pick from.
 
-### The turnkey way: `ebitenrenderer.Panel`
+### The turnkey way: `whynot.Panel`
 
 `Panel` wraps a `View` with input handling already done for you -
-scrolling, link hover/click, and an optional draggable scrollbar
-(`WithScrollbar()`) - all scoped to whatever rectangle you give it, so
+scrolling, link hover/click, touch, and an optional draggable scrollbar
+(`SetScrollbar(true)`) - all scoped to whatever rectangle you give it, so
 it's safe to embed as part of a larger game window without stepping on
 whatever else is there. It's what `cmd/whynot` itself is built on.
+
+`Panel` doesn't depend on Ebitengine: each frame, your game hands it the
+frame's input events (`ebitenrenderer.Input`), a canvas to draw on
+(`ebitenrenderer.Renderer.NewCanvas`), and the time.
 
 [`examples/panel`](examples/panel) inset a `Panel` into part of a window
 that fills the rest with plain green - other game content standing in -
@@ -97,6 +101,7 @@ import (
 	"image/color"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -117,7 +122,7 @@ var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF} // green, to make it di
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Panel example\n\n")
-	b.WriteString("This document exists to prove that `ebitenrenderer.Panel` clips its drawing to\n")
+	b.WriteString("This document exists to prove that `whynot.Panel` clips its drawing to\n")
 	b.WriteString("its own bounds even when embedded inside a larger window that draws other\n")
 	b.WriteString("content around it.\n\n")
 	for i := 1; i <= 8; i++ {
@@ -131,27 +136,32 @@ func exampleDoc() string {
 func main() {
 	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
-	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
+	panel := whynot.NewPanel(view, bounds)
+	panel.SetScrollbar(true)
 
 	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetWindowTitle("whynot panel example")
-	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
+	g := &game{panel: panel, renderer: ebitenrenderer.New(), start: time.Now()}
+	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
 
 type game struct {
-	panel *ebitenrenderer.Panel
+	panel    *whynot.Panel
+	renderer *ebitenrenderer.Renderer
+	input    ebitenrenderer.Input
+	start    time.Time
 }
 
 func (g *game) Update() error {
-	g.panel.Update()
+	g.panel.Frame(g.input.Events(), time.Since(g.start))
 	return nil
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(backgroundColor)
-	g.panel.Draw(screen)
+	g.panel.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -161,9 +171,10 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 Run it yourself: `go run ./examples/panel`.
 
-`giorenderer.Panel` is the Gio equivalent, same shape (`NewPanel`,
-`WithScrollbar`, `OnLinkClick`/`OnLinkHover`), plus `WithNativeScrollbar` to
-use Gio's own scrollbar widget instead of whynot's - see
+With Gio, the same `Panel` takes its input from `giorenderer.Input` and
+draws through `giorenderer.Renderer`; since Gio only redraws on events,
+ask for another frame while `Panel.Animating()`. `giorenderer.NativeScrollbar`
+puts Gio's own scrollbar widget on it instead of whynot's - see
 [`examples/gio`](examples/gio) for a runnable version, or
 [`cmd/giowhynot`](cmd/giowhynot) for a full app built on it.
 
@@ -198,7 +209,7 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# View example\n\n")
 	b.WriteString("This document is rendered by wiring `whynot.View` up directly - full control\n")
-	b.WriteString("over input handling, at the cost of doing it yourself (see `ebitenrenderer.Panel`\n")
+	b.WriteString("over input handling, at the cost of doing it yourself (see `whynot.Panel`\n")
 	b.WriteString("for the turnkey alternative).\n\n")
 	for i := 1; i <= 8; i++ {
 		fmt.Fprintf(&b, "## Section %d\n\n", i)
@@ -537,8 +548,8 @@ by implementation order now that most of the list is done.
       rather than unsupported, since no Markdown renderer ever shows them either
 
 **Embedding**
-- [x] `ebitenrenderer.Panel`/`giorenderer.Panel` embed a scrollable document into part of
-      a larger window - coordinate translation, hover/click, wheel scroll gated on its own
+- [x] `whynot.Panel` embeds a scrollable document into part of
+      a larger window, with Ebitengine or Gio - coordinate translation, hover/click, wheel scroll gated on its own
       bounds, and an optional draggable scrollbar, all bounds-aware so a panel never
       affects anything outside its own rectangle. See
       [above](#embed-a-markdown-viewer-in-your-game)
@@ -565,12 +576,12 @@ by implementation order now that most of the list is done.
 - [x] Back/forward history, light/dark theme, zoom
 - [x] Renders document text in this platform's own fonts when it can find them
       (`systemfont.RegisterPreferredFont`), falling back to the bundled Go fonts
-- [x] Scrollbar - the View's own (`whynot.WithScrollbar()`, or a Panel's
-      `WithScrollbar()`), fully defined by the StyleSheet: colors, thickness, inset,
+- [x] Scrollbar - the View's own (`whynot.WithScrollbar()`, or
+      `Panel.SetScrollbar`), fully defined by the StyleSheet: colors, thickness, inset,
       minimum thumb length, and whether it stays visible or fades when idle. Draggable,
       with hover/drag color feedback. It's optional: `View.DocumentBounds`/
       `VisibleViewBounds` expose the geometry to build your own, and a Gio app can use
-      Gio's native scrollbar instead (`giorenderer.WithNativeScrollbar()`)
+      Gio's native scrollbar instead (`giorenderer.NativeScrollbar`)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 

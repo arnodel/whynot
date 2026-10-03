@@ -58,7 +58,7 @@ type App struct {
 	// Panel owns the current View, its layout, and all document-area
 	// input handling - everything except the toolbar and navigation,
 	// which stay this type's or the caller's own concern.
-	Panel whynot.Panel
+	Panel *whynot.Panel
 
 	// OnTitleChange is called with the current document's own title
 	// (Document.Title(), or a generic fallback) whenever it changes -

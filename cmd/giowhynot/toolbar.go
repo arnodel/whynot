@@ -47,8 +47,7 @@ type toolbar struct {
 	editing       bool
 	// editTheme is only for addressEditor's own chrome (cursor,
 	// selection, font/shaper) - Gio's own text stack, not whynot's
-	// font.Face, and unrelated to giorenderer.Panel's own theme (used
-	// only for its scrollbar).
+	// font.Face, and unrelated to the document's NativeScrollbar theme.
 	editTheme *material.Theme
 
 	faceSelector fonts.FaceSelector
@@ -95,7 +94,7 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 	// Gio's key-focus model is independent of pointer clicks (clicking
 	// a widget that doesn't itself claim key focus never blurs whatever
 	// does) - so clicking any of these while editing the address bar
-	// needs an explicit cancel, same reason as Panel.OnPress below.
+	// needs an explicit cancel, same reason as document.onPress.
 	if backClicked || forwardClicked || reloadClicked || tocClicked || zoomOutClicked || zoomInClicked || themeClicked {
 		tb.cancelEdit()
 	}
@@ -136,7 +135,7 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 // gtx.Focused(&tb.addressEditor) alone can't detect "clicked away"; this
 // is called explicitly instead, from Escape, and from anything else
 // that itself represents "the user clicked away" (toolbar buttons in
-// update, giorenderer.Panel.OnPress for the document).
+// update, document.onPress for the document).
 func (tb *toolbar) cancelEdit() {
 	tb.editing = false
 }

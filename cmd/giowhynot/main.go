@@ -1,18 +1,21 @@
 // Command giowhynot is cmd/whynot's Gio (gioui.org) counterpart: the
 // same browser.App - navigation history, theme, zoom, document/image
-// loading, welcome page - driving a giorenderer.Panel instead of an
-// ebitenrenderer.Panel, with a Gio-native toolbar (see toolbar.go).
+// loading, welcome page - drawn with giorenderer instead of
+// ebitenrenderer, with Gio's own scrollbar and a Gio-native toolbar (see
+// toolbar.go).
 package main
 
 import (
 	"flag"
 	"image"
 	"log"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/op"
 	"gioui.org/unit"
 
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/internal/browser"
@@ -54,16 +57,13 @@ func main() {
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light)
 	renderer := giorenderer.New()
 	view := browserApp.NewView(source, location)
-	panel := giorenderer.NewPanel(view, renderer, image.Rectangle{},
-		giorenderer.WithNativeScrollbar(),
-		giorenderer.WithStyleSheet(styleSheet),
-	)
+	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel
 	panel.OnLinkClick = browserApp.Follow
 	panel.OnLinkHover = browserApp.OnLinkHover
 
 	tb := newToolbar(fonts.NewGoSelector(), renderer)
-	panel.OnPress = tb.cancelEdit
+	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit}
 
 	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
@@ -71,14 +71,14 @@ func main() {
 	browserApp.Open(location)
 
 	go func() {
-		if err := run(win, browserApp, panel, tb); err != nil {
+		if err := run(win, browserApp, doc, tb); err != nil {
 			log.Fatal(err)
 		}
 	}()
 	app.Main()
 }
 
-func run(win *app.Window, browserApp *browser.App, panel *giorenderer.Panel, tb *toolbar) error {
+func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) error {
 	var ops op.Ops
 	for {
 		e := win.Event()
@@ -100,11 +100,9 @@ func run(win *app.Window, browserApp *browser.App, panel *giorenderer.Panel, tb 
 			// filters match regardless of focus, so e.g. typing "-" or
 			// space into it would otherwise also fire ZoomOut/PageDown.
 			if !tb.editing {
-				pollKeys(gtx, browserApp, panel, deviceScale)
+				pollKeys(gtx, browserApp, doc.panel, deviceScale)
 			}
-			panel.Update(gtx)
-
-			panel.Draw(gtx)
+			doc.layout(gtx)
 			tb.layout(gtx, browserApp)
 
 			e.Frame(gtx.Ops)

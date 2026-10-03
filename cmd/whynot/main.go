@@ -4,9 +4,11 @@ import (
 	"flag"
 	"image"
 	"log"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/ebitenrenderer"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/browser"
@@ -62,22 +64,14 @@ func main() {
 		debugStats:          *debugStats,
 		outsideWidth:        initialWindowWidth,
 		outsideHeight:       initialWindowHeight,
+		start:               time.Now(),
 	}
 	g.applyDeviceScale()
 
 	view := app.NewView(source, location)
 	initialHeight := int(float64(initialWindowHeight) * scale)
-	g.panel = ebitenrenderer.NewPanel(view, g.renderer,
-		image.Rect(0, g.toolbarHeight, g.width, initialHeight),
-		ebitenrenderer.WithScrollbar(),
-		// Load-bearing, not cosmetic: panel's own scrollbar color reads
-		// its own remembered StyleSheet (only ever set via
-		// SetStyleSheet/WithStyleSheet), not the View's - without this,
-		// the scrollbar would render with panel's flat gray fallback
-		// until the user's first theme toggle, even though the View
-		// itself is already correctly themed via app.NewView above.
-		ebitenrenderer.WithStyleSheet(styleSheet),
-	)
+	g.panel = whynot.NewPanel(view, image.Rect(0, g.toolbarHeight, g.width, initialHeight))
+	g.panel.SetScrollbar(true)
 	app.Panel = g.panel
 	app.OnTitleChange = ebiten.SetWindowTitle
 

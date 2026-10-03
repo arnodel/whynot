@@ -385,6 +385,16 @@ func (c *Controller) hscroll() *hscrollState {
 	return c.view.hscroll
 }
 
+// scrollAtPointer scrolls the block under the mouse pointer sideways by
+// dx (see View.ScrollHorizontal), reporting whether there was one.
+func (c *Controller) scrollAtPointer(dx float64) bool {
+	if !c.hasPointer || !c.pointer.In(c.bounds) {
+		return false
+	}
+	local := c.pointer.Sub(c.bounds.Min)
+	return c.view.ScrollHorizontal(local.X, local.Y, dx)
+}
+
 // scrollTarget scrolls the sideways-scrolling block target by dx, showing
 // its scrollbar (there's no hover on touch).
 func (c *Controller) scrollTarget(target engine.Block, dx float64) {

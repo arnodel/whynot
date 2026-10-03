@@ -20,41 +20,14 @@ const (
 	testHeight = 200
 )
 
-// fakePanel is a minimal whynot.Panel, mirroring the real ones'
-// SetBounds/SetScale/SetView-triggers-relayout behavior closely enough
-// for App's own tests, without depending on either rendering backend.
-type fakePanel struct {
-	view   *whynot.View
-	bounds image.Rectangle
-	scale  float64
-
-	// lastStyleSheet records SetStyleSheet's most recent argument, so
-	// tests can check App.SetTheme actually reached the panel.
-	lastStyleSheet whynot.StyleSheet
+// usesStyleSheet reports whether v looks styled by s, comparing the
+// colors a View reports with those of a fresh View using s, since a
+// StyleSheet is opaque.
+func usesStyleSheet(v *whynot.View, s whynot.StyleSheet) bool {
+	ref := whynot.NewView(whynot.Parse(nil), fonts.NewGoSelector(), s)
+	return v.HighlightColor() == ref.HighlightColor() &&
+		v.ScrollbarColor(false, false) == ref.ScrollbarColor(false, false)
 }
-
-var _ whynot.Panel = (*fakePanel)(nil)
-
-func (p *fakePanel) relayout() {
-	if p.view != nil {
-		p.view.Layout(p.bounds.Dx(), p.bounds.Dy(), p.scale, 0)
-	}
-}
-
-func (p *fakePanel) View() *whynot.View          { return p.view }
-func (p *fakePanel) SetView(v *whynot.View)      { p.view = v; p.relayout() }
-func (p *fakePanel) Bounds() image.Rectangle     { return p.bounds }
-func (p *fakePanel) SetBounds(r image.Rectangle) { p.bounds = r; p.relayout() }
-func (p *fakePanel) Scale() float64              { return p.scale }
-func (p *fakePanel) SetScale(s float64)          { p.scale = s; p.relayout() }
-func (p *fakePanel) SetStyleSheet(s whynot.StyleSheet) {
-	p.lastStyleSheet = s
-	p.view.SetStyleSheet(s)
-}
-func (p *fakePanel) ScrollDown() { p.view.Scroll(-40 * p.scale) }
-func (p *fakePanel) ScrollUp()   { p.view.Scroll(40 * p.scale) }
-func (p *fakePanel) PageDown()   { p.view.Scroll(-float64(p.bounds.Dy()) * 0.9) }
-func (p *fakePanel) PageUp()     { p.view.Scroll(float64(p.bounds.Dy()) * 0.9) }
 
 // writeTempMD writes content to dir/name and returns its file: URL, via
 // the same absFileURL this package uses for a real command-line path -
@@ -73,7 +46,7 @@ func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 	return u
 }
 
-// newTestApp constructs an App with a fakePanel already showing source,
+// newTestApp constructs an App with a Panel already showing source,
 // laid out and current (as if Open had just been called at startup) -
 // deviceScale 1, no toolbar, so width/height match testWidth/testHeight
 // exactly.
@@ -81,9 +54,8 @@ func newTestApp(t *testing.T, dir string, location *url.URL, source string) *App
 	t.Helper()
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte(source), location)
-	app.Panel = &fakePanel{}
+	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
-	app.Panel.SetView(view)
 	app.Open(location)
 	return app
 }
@@ -350,14 +322,13 @@ func TestAppSetThemeSyncsDarkThemeAndPanel(t *testing.T) {
 		t.Fatal("DarkTheme() = false right after construction with dark=true, want true")
 	}
 
-	// A StyleSheet is opaque, so check identity with App's own
-	// StyleSheet() instead, confirming SetTheme actually reached the
-	// panel rather than just updating App's own bookkeeping.
+	// Check SetTheme reached the panel's View, not just App's own
+	// bookkeeping.
 	app.SetTheme(false)
 	if app.DarkTheme() {
 		t.Error("DarkTheme() = true after SetTheme(false), want false")
 	}
-	if app.Panel.(*fakePanel).lastStyleSheet != app.StyleSheet() {
+	if !usesStyleSheet(app.Panel.View(), app.StyleSheet()) {
 		t.Error("panel's StyleSheet after SetTheme(false) != App.StyleSheet(), want them in sync")
 	}
 	lightSheet := app.StyleSheet()
@@ -366,7 +337,7 @@ func TestAppSetThemeSyncsDarkThemeAndPanel(t *testing.T) {
 	if !app.DarkTheme() {
 		t.Error("DarkTheme() = false after SetTheme(true), want true")
 	}
-	if app.Panel.(*fakePanel).lastStyleSheet != app.StyleSheet() {
+	if !usesStyleSheet(app.Panel.View(), app.StyleSheet()) {
 		t.Error("panel's StyleSheet after SetTheme(true) != App.StyleSheet(), want them in sync")
 	}
 	if app.StyleSheet() == lightSheet {
@@ -419,9 +390,8 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("# My Title"), loc)
-	app.Panel = &fakePanel{}
+	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
-	app.Panel.SetView(view)
 
 	var gotTitle string
 	var calls int
@@ -594,9 +564,8 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true)
 	view := app.NewView([]byte("no heading here"), loc)
-	app.Panel = &fakePanel{}
+	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
-	app.Panel.SetView(view)
 
 	var gotTitle string
 	app.OnTitleChange = func(title string) { gotTitle = title }

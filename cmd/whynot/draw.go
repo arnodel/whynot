@@ -16,12 +16,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 	start := time.Now()
 	defer func() { g.drawDuration = time.Since(start) }()
 
-	// panel fills its own background (from the View's StyleSheet),
-	// draws the document, and its scrollbar - real SubImage-clipped to
-	// its own bounds, so it can never bleed into the toolbar above it.
-	g.panel.Draw(screen)
-
+	// The panel draws only within its bounds, below the toolbar.
 	canvas := g.renderer.NewCanvas(screen)
+	g.panel.Draw(canvas, time.Since(g.start))
+
 	g.drawToolbar(screen, canvas)
 	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
 		g.app.DrawZoomIndicator(canvas, face)

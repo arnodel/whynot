@@ -17,25 +17,45 @@ import (
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
-// TestPanelTouchFlingKeepsScrollingAfterRelease checks that a touch fling
-// keeps scrolling once the finger lifts: Gio only produces frames when
-// something happens, so the Panel must request frames itself while
-// there's momentum left, and apply it on each.
-func TestPanelTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
-	doc := whynot.Parse([]byte(strings.Repeat("A paragraph of filler text to scroll through.\n\n", 400)))
-	bounds := image.Rect(0, 0, 400, 300)
-	panel := NewPanel(whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet), New(), bounds)
+// testApp drives a whynot.Panel with Gio's input the way an app does,
+// through a router standing in for the window.
+type testApp struct {
+	panel    *whynot.Panel
+	input    Input
+	renderer *Renderer
+	router   input.Router
+	ops      op.Ops
+	start    time.Time
+}
 
-	var router input.Router
-	var ops op.Ops
-	frame := func() {
-		ops.Reset()
-		gtx := layout.Context{Ops: &ops, Source: router.Source(), Now: time.Now()}
-		panel.Update(gtx)
-		router.Frame(&ops)
+func newTestApp(source string, bounds image.Rectangle) *testApp {
+	view := whynot.NewView(whynot.Parse([]byte(source)), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+	return &testApp{panel: whynot.NewPanel(view, bounds), renderer: New(), start: time.Now()}
+}
+
+// frame runs one frame: input, then drawing.
+func (a *testApp) frame() {
+	a.ops.Reset()
+	gtx := layout.Context{Ops: &a.ops, Source: a.router.Source(), Now: time.Now()}
+	now := time.Since(a.start)
+	a.panel.Frame(a.input.Source(gtx, a.panel, a.panel.Bounds()).Events(), now)
+	if a.panel.Animating() {
+		gtx.Execute(op.InvalidateCmd{})
 	}
+	a.panel.Draw(a.renderer.NewCanvas(gtx.Ops, a.panel.Bounds()), now)
+	a.router.Frame(&a.ops)
+}
+
+// TestTouchFlingKeepsScrollingAfterRelease checks that a touch fling
+// keeps scrolling once the finger lifts: Gio only produces frames when
+// something happens, so the app must request frames while the Panel is
+// animating.
+func TestTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
+	bounds := image.Rect(0, 0, 400, 300)
+	app := newTestApp(strings.Repeat("A paragraph of filler text to scroll through.\n\n", 400), bounds)
+	frame, router := app.frame, &app.router
 	top := func() int {
-		return panel.View().VisibleViewBounds(bounds.Size()).Min.Y
+		return app.panel.View().VisibleViewBounds(bounds.Size()).Min.Y
 	}
 	touch := func(kind pointer.Kind, y float32) {
 		router.Queue(pointer.Event{Kind: kind, Source: pointer.Touch, Position: f32.Pt(200, y)})
@@ -68,26 +88,15 @@ func TestPanelTouchFlingKeepsScrollingAfterRelease(t *testing.T) {
 	}
 }
 
-// TestPanelTouchLeavesNoHover checks that a tap doesn't leave anything
+// TestTouchLeavesNoHover checks that a tap doesn't leave anything
 // hovered once the finger lifts. There's no hover on touch, and Gio sends
 // no further pointer events to move it off again - so a tapped link would
 // stay highlighted, and a panned code block keep its scrollbar showing.
-func TestPanelTouchLeavesNoHover(t *testing.T) {
-	doc := whynot.Parse([]byte(strings.Repeat("[a link](#nowhere) ", 20)))
-	bounds := image.Rect(0, 0, 400, 300)
-	panel := NewPanel(whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet), New(), bounds)
+func TestTouchLeavesNoHover(t *testing.T) {
+	app := newTestApp(strings.Repeat("[a link](#nowhere) ", 20), image.Rect(0, 0, 400, 300))
+	frame, router, panel := app.frame, &app.router, app.panel
 	var hovered []string
 	panel.OnLinkHover = func(dest string) { hovered = append(hovered, dest) }
-
-	var router input.Router
-	var ops op.Ops
-	frame := func() {
-		ops.Reset()
-		gtx := layout.Context{Ops: &ops, Source: router.Source(), Now: time.Now()}
-		panel.Update(gtx)
-		panel.Draw(gtx)
-		router.Frame(&ops)
-	}
 	var link f32.Point
 	for y := 0; y < 100 && link == (f32.Point{}); y++ {
 		for x := 0; x < 200; x++ {

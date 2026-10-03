@@ -9,7 +9,7 @@
 // one embedded document (demo.md, a copy of testdata/demo.md - go:embed
 // can't reach outside this package's own directory, so keep the two in
 // sync by hand if one changes), scroll and window-resize reflow via
-// ebitenrenderer.Panel, no toolbar, no file loading (a local path or
+// a whynot.Panel, no toolbar, no file loading (a local path or
 // http(s) URL argument wouldn't mean the same thing in a browser
 // sandbox - see the README), and no link-click handling (Panel's
 // OnLinkClick is left unset, so a link's hover-highlight still shows but
@@ -24,6 +24,7 @@ import (
 	_ "embed"
 	"image"
 	"log"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -45,25 +46,30 @@ var demoDoc []byte
 func main() {
 	view := whynot.NewView(whynot.Parse(demoDoc), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
 	bounds := image.Rect(0, 0, initialWidth, initialHeight)
-	panel := ebitenrenderer.NewPanel(view, ebitenrenderer.New(), bounds, ebitenrenderer.WithScrollbar())
+	panel := whynot.NewPanel(view, bounds)
+	panel.SetScrollbar(true)
 
 	ebiten.SetWindowTitle("whynot wasm example")
-	if err := ebiten.RunGame(&game{panel: panel}); err != nil {
+	g := &game{panel: panel, renderer: ebitenrenderer.New(), start: time.Now()}
+	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
 
 type game struct {
-	panel *ebitenrenderer.Panel
+	panel    *whynot.Panel
+	renderer *ebitenrenderer.Renderer
+	input    ebitenrenderer.Input
+	start    time.Time
 }
 
 func (g *game) Update() error {
-	g.panel.Update()
+	g.panel.Frame(g.input.Events(), time.Since(g.start))
 	return nil
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	g.panel.Draw(screen)
+	g.panel.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
 }
 
 // Layout fills the whole window/canvas with the Panel, tracking its
@@ -78,5 +84,6 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	height := int(float64(outsideHeight) * scale)
 	g.panel.SetBounds(image.Rect(0, 0, width, height))
 	g.panel.SetScale(scale)
+	g.input.Scale = scale
 	return width, height
 }
