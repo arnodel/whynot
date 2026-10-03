@@ -8,6 +8,30 @@ import (
 	"github.com/arnodel/whynot/internal/engine"
 )
 
+// codeBlockTabExpansion is what a literal tab in a code block's source is
+// replaced with - see the KindCodeBlock case below.
+const codeBlockTabExpansion = "    "
+
+// pluginsFor returns the registered plugins that handle language, in
+// registration order - resolved once per distinct language and cached
+// from then on.
+func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
+	if ps, ok := c.pluginCache[language]; ok {
+		return ps
+	}
+	if c.pluginCache == nil {
+		c.pluginCache = make(map[string][]codeblocks.Plugin)
+	}
+	var ps []codeblocks.Plugin
+	for _, p := range c.codeBlockPlugins {
+		if p.Handles(language) {
+			ps = append(ps, p)
+		}
+	}
+	c.pluginCache[language] = ps
+	return ps
+}
+
 // codeBlock builds a fenced or indented code block's content from its
 // rawLines, through the first of plugins (those handling its language,
 // in registration order) that makes something of it: Tokens become a

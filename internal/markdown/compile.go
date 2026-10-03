@@ -1,14 +1,15 @@
+// Package markdown is whynot's Markdown compiler: it parses source with
+// goldmark and builds the engine's block and inline tree, alongside the
+// semantic ast.Node tree they refer to (Compile). Fenced code blocks go
+// through the codeblocks.Plugin given for them.
+//
+// It only builds structure: appearance comes later, from a View's
+// StyleSheet, and layout and drawing are the engine's job.
 package markdown
 
 import (
-	"fmt"
-	"log"
-	"strings"
-	"unicode"
-
 	gmast "github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/extension"
-	extast "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
 
 	"github.com/arnodel/whynot/codeblocks"
@@ -68,6 +69,33 @@ func Compile(source []byte, plugins []codeblocks.Plugin) *Result {
 	}
 }
 
+// compiler compiles Markdown source into a Block/ast.Node tree - structure
+// only, no appearance. See Parse.
+type compiler struct {
+	source []byte
+
+	// codeBlockPlugins is every codeblocks.Plugin registered via
+	// WithCodeBlockPlugin, in registration order. pluginCache remembers
+	// which of them handle a given language, populated lazily by
+	// pluginsFor - so a document with many fences in the same language
+	// only calls Handles once per plugin per language, not once per
+	// fence.
+	codeBlockPlugins []codeblocks.Plugin
+	pluginCache      map[string][]codeblocks.Plugin
+
+	// pendingSpace is true when a breakable space has been seen in the
+	// source but not yet attached to the next appended Inline item - see
+	// appendString. Reset to true at the start of each fresh run of
+	// inline content (a paragraph, heading, list item head, or table
+	// cell), since there's nothing for the first item there to glue to.
+	pendingSpace bool
+
+	// headings and soleImages accumulate the Result fields of the same
+	// names as top-level blocks are compiled.
+	headings   []Heading
+	soleImages map[engine.Block]string
+}
+
 // compileBlocks compiles first and its following siblings under parent,
 // dropping any that compile to nothing.
 func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []engine.Block {
@@ -88,438 +116,4 @@ func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []engine.Bl
 func (c *compiler) compileInlines(node gmast.Node, astNode *ast.Node) []engine.Inline {
 	c.pendingSpace = true
 	return c.appendChildren(nil, node, astNode)
-}
-
-// codeBlockTabExpansion is what a literal tab in a code block's source is
-// replaced with - see the KindCodeBlock case below.
-const codeBlockTabExpansion = "    "
-
-func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block {
-	switch node.Kind() {
-	case gmast.KindParagraph:
-		return c.compileTextBlock(node, parent.AddChild(ast.TagParagraph), parent == nil)
-	case gmast.KindHeading:
-		astNode := parent.AddChild(headingTag(node.(*gmast.Heading).Level))
-		if attr, ok := node.Attribute("id"); ok {
-			astNode.ID = attr.Value(c.source)
-		}
-		return c.compileTextBlock(node, astNode, parent == nil)
-	case gmast.KindList:
-		list := node.(*gmast.List)
-		astNode := parent.AddChild(ast.TagList)
-		var items []engine.Block
-		index := 0
-		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			items = append(items, c.compileListItem(child, list, index, astNode))
-			index++
-		}
-		return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: items}, MarginNode: astNode}
-	case gmast.KindCodeBlock:
-		astNode := parent.AddChild(ast.TagCodeBlock)
-		cb := node.(*gmast.CodeBlock)
-		segs := cb.Value.Segments()
-		rawLines := make([]string, len(segs))
-		for i, seg := range segs {
-			// A code block's content is verbatim source, tabs included -
-			// unlike indentation elsewhere in the document, this isn't
-			// tab-expanded before it reaches us. Most fonts have no glyph
-			// for a raw tab, rendering it as a placeholder box instead of
-			// whitespace, so expand it here to keep indentation looking
-			// like indentation.
-			rawLines[i] = strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
-		}
-
-		language, _ := cb.Language(c.source)
-		block := c.codeBlock(astNode, language, rawLines, c.pluginsFor(language))
-		return &engine.MarginBlock{Block: block, MarginNode: astNode}
-	case gmast.KindThematicBreak:
-		astNode := parent.AddChild(ast.TagThematicBreak)
-		return &engine.MarginBlock{
-			Block:      &engine.ThematicBreakBlock{ASTNode: astNode},
-			MarginNode: astNode,
-		}
-	case gmast.KindBlockquote:
-		astNode := parent.AddChild(ast.TagBlockquote)
-		return &engine.MarginBlock{
-			Block:      &engine.BlockquoteBlock{Inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode)), ASTNode: astNode},
-			MarginNode: astNode,
-		}
-	case extast.KindTable:
-		return c.compileTable(node, parent)
-	case gmast.KindLinkReferenceDefinition:
-		// A `[foo]: /url "title"` line - already consumed by goldmark to
-		// resolve reference-style links elsewhere in the document (see
-		// KindLink), and, like in any other Markdown renderer, invisible
-		// in its own right.
-		return nil
-	case gmast.KindHTMLBlock:
-		if node.(*gmast.HTMLBlock).HTMLBlockKind == gmast.HTMLBlockKind2 {
-			// A <!-- comment -->, invisible in any Markdown renderer -
-			// not "unsupported", never meant to be shown at all.
-			return nil
-		}
-	}
-	return c.compileUnsupportedBlock(node, parent)
-}
-
-// compileTextBlock compiles a paragraph or heading, whose ast.Node the
-// caller has already created. A top-level one is also recorded in the
-// Result: a heading as a Heading, and one whose only content is an
-// image as a SoleImages entry.
-func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel bool) engine.Block {
-	items := c.compileInlines(node, astNode)
-	block := &engine.MarginBlock{Block: &engine.TextBlock{Parts: items, ASTNode: astNode}, MarginNode: astNode}
-
-	if !topLevel {
-		return block
-	}
-	if astNode.Tag >= ast.TagHeading1 && astNode.Tag <= ast.TagHeading6 {
-		c.headings = append(c.headings, Heading{
-			ID:    astNode.ID,
-			Level: int(astNode.Tag-ast.TagHeading1) + 1,
-			Text:  plainText(items),
-		})
-	}
-	if len(items) == 1 {
-		if img, ok := items[0].(*engine.InlineImage); ok {
-			if c.soleImages == nil {
-				c.soleImages = make(map[engine.Block]string)
-			}
-			c.soleImages[block] = img.Src
-		}
-	}
-	return block
-}
-
-// plainText joins items' words with single spaces; anything but an
-// *InlineText (e.g. an image) contributes nothing.
-func plainText(items []engine.Inline) string {
-	var words []string
-	for _, item := range items {
-		if it, ok := item.(*engine.InlineText); ok {
-			words = append(words, it.Text)
-		}
-	}
-	return strings.Join(words, " ")
-}
-
-// compileUnsupportedBlock handles any block-level Markdown construct
-// whynot doesn't have a case for above. Rather than taking down the
-// whole document, it logs a warning and renders the construct as a
-// code block in StyleSheet.UnsupportedColor, showing its raw source
-// where possible so the gap is visible rather than silently dropped.
-func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ast.Node) engine.Block {
-	astNode := parent.AddChild(ast.TagUnsupported)
-	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
-
-	var items []engine.Inline
-	if html, ok := node.(*gmast.HTMLBlock); ok {
-		for _, seg := range html.Value.Segments() {
-			items = append(items, &engine.InlineText{Text: string(seg.Bytes(c.source)), ASTNode: astNode})
-		}
-	}
-	if len(items) == 0 {
-		items = []engine.Inline{&engine.InlineText{Text: fmt.Sprintf("(unsupported: %s)", node.Kind()), ASTNode: astNode}}
-	}
-	lines := make([][]engine.Inline, len(items))
-	for i, item := range items {
-		lines[i] = []engine.Inline{item}
-	}
-	return &engine.MarginBlock{Block: &engine.CodeBlock{Lines: lines, ASTNode: astNode}, MarginNode: astNode}
-}
-
-// headingTag maps a heading level (1-6) to its ast.Tag - safe because
-// ast.TagHeading1..TagHeading6 are declared consecutively.
-func headingTag(level int) ast.Tag {
-	return ast.TagHeading1 + ast.Tag(level-1)
-}
-
-// compileListItem compiles the item at index (0-based) in list.
-func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ast.Node) engine.Block {
-	itemNode := parent.AddChild(ast.TagListItem)
-	var marker engine.Inline
-	if status, ok := extension.TaskStatusOf(node); ok {
-		marker = &engine.TaskCheckbox{Checked: status == extension.TaskStatusCompleted, ASTNode: itemNode}
-	} else {
-		marker = &engine.InlineText{Text: listMarker(list, index), ASTNode: itemNode}
-	}
-
-	// A leading Paragraph is the item's own text, flowed with the marker
-	// hanging off its first line (see ListItemHeadBlock.GetBlockLayout).
-	// Anything after it - a nested List, or (in a loose list) further
-	// paragraphs - stacks below as trailing block content. An item with no
-	// leading paragraph has no parts, so the marker ends up on a line of
-	// its own.
-	var parts []engine.Inline
-	next := node.FirstChild()
-	if next != nil && next.Kind() == gmast.KindParagraph {
-		parts = c.compileInlines(next, itemNode)
-		next = next.NextSibling()
-	}
-
-	head := engine.Block(&engine.ListItemHeadBlock{
-		Marker:  marker,
-		Parts:   parts,
-		ASTNode: itemNode,
-	})
-	if !list.IsTight {
-		// Loose items get real paragraph spacing on their own leading text
-		// too, not a tight head's zero margins. This also grows the gap
-		// between items with no separate constant: StackBlock.Margins()
-		// reports its first child's margin, so it collapses outward
-		// through the item's own MarginBlock and the list's own
-		// StackBlock, like any sibling gap.
-		//
-		// A dedicated ast.TagParagraph child, not itemNode itself: the head's
-		// own margins should resolve as a paragraph's (matching what this
-		// looked like before StyleSheet), distinct from itemNode's tag,
-		// which the marker/parts' own inline styling still uses.
-		head = &engine.MarginBlock{Block: head, MarginNode: itemNode.AddChild(ast.TagParagraph)}
-	}
-	blocks := []engine.Block{head}
-
-	if trailingBlocks := c.compileBlocks(next, itemNode); len(trailingBlocks) > 0 {
-		blocks = append(blocks, wrapBlocks(trailingBlocks))
-	}
-
-	// The whole item - head plus any trailing content - is a StackBlock
-	// carrying the item's real margins (crucially Left, for indentation).
-	// Not wrapBlocks: that returns a single block unwrapped when there's
-	// only one, which would lose these margins for the common
-	// no-trailing-content tight case (ListItemHeadBlock's own Margins() is
-	// zero then).
-	return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: blocks}, MarginNode: itemNode}
-}
-
-// listMarker is the marker text for the item at index (0-based) in list:
-// the bullet character itself, or the item's number (counting from the
-// list's own start number) followed by the list's delimiter.
-func listMarker(list *gmast.List, index int) string {
-	if list.IsOrdered() {
-		return fmt.Sprintf("%d%c", list.Start+index, list.Marker)
-	}
-	return string(list.Marker)
-}
-
-// compileTable compiles a Table node. The header is mandatory (GFM
-// requires it); the body is not - a table can legitimately have zero
-// data rows, in which case Table has no TableBody child at all.
-func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) engine.Block {
-	astNode := parent.AddChild(ast.TagTable)
-	headerNode := node.FirstChild()
-	header := c.compileTableRow(headerNode, astNode)
-
-	var rows [][]engine.TableCell
-	if bodyNode := headerNode.NextSibling(); bodyNode != nil {
-		for row := bodyNode.FirstChild(); row != nil; row = row.NextSibling() {
-			rows = append(rows, c.compileTableRow(row, astNode))
-		}
-	}
-
-	return &engine.MarginBlock{
-		Block:      &engine.TableBlock{Header: header, Rows: rows, ASTNode: astNode},
-		MarginNode: astNode,
-	}
-}
-
-// compileTableRow compiles the cells of a TableHeader or a TableRow -
-// both have TableCell children directly, no intermediate node, so one
-// method handles both despite the different AST kinds.
-func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []engine.TableCell {
-	var cells []engine.TableCell
-	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
-		tc := cellNode.(*extast.TableCell)
-		cellNode := parent.AddChild(ast.TagTableCell)
-		cells = append(cells, engine.TableCell{
-			Content:   &engine.TextBlock{Parts: c.compileInlines(tc, cellNode), ASTNode: cellNode},
-			Alignment: tableCellAlignment(tc.Alignment),
-		})
-	}
-	return cells
-}
-
-// spanTags maps each inline construct that only wraps other inline
-// content to the ast.Tag it applies to that content.
-var spanTags = map[gmast.NodeKind]ast.Tag{
-	gmast.KindEmphasis:       ast.TagEmphasis,
-	gmast.KindStrong:         ast.TagStrong,
-	extast.KindStrikethrough: ast.TagStrikethrough,
-}
-
-// appendChildren appends node's inline children, under astNode.
-func (c *compiler) appendChildren(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		items = c.appendInline(items, child, astNode)
-	}
-	return items
-}
-
-// appendInline walks an inline subtree, appending each leaf as an
-// Inline. astNode is node's parent in the ast.Node tree - extended only by
-// the constructs that get their own ast.Tag, and threaded straight through
-// everywhere else. Appearance (font, color, strike) is never resolved
-// here - each produced Inline just carries the ast.Node it was created
-// under, resolved later by engine.Context against a StyleSheet.
-func (c *compiler) appendInline(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
-	if tag, ok := spanTags[node.Kind()]; ok {
-		return c.appendChildren(items, node, astNode.AddChild(tag))
-	}
-	switch node.Kind() {
-	case gmast.KindText:
-		t := node.(*gmast.Text)
-		items = c.appendString(items, t.Value.Value(c.source), astNode)
-		// The newline itself isn't in either Text node's Value - goldmark
-		// represents a line break purely via this flag - so without this,
-		// the next word would glue on with no space (e.g. "laid\nout" ->
-		// "laidout"). No forced-break rendering exists yet, so both
-		// kinds just become a space.
-		if t.SoftLineBreak() || t.HardLineBreak() {
-			c.pendingSpace = true
-		}
-		return items
-	case gmast.KindCodeSpan:
-		cs := node.(*gmast.CodeSpan)
-		childNode := astNode.AddChild(ast.TagCodeSpan)
-		return c.appendString(items, cs.Value.Value(c.source), childNode)
-	case gmast.KindImage:
-		imgNode := node.(*gmast.Image)
-		imageNode := astNode.AddChild(ast.TagImage)
-		glued := !c.pendingSpace
-		c.pendingSpace = false
-		return append(items, &engine.InlineImage{
-			Src:     imgNode.Destination.Value(c.source),
-			Alt:     altText(imgNode, c.source),
-			Title:   imgNode.Title.Value(c.source),
-			ASTNode: imageNode,
-			// fallbackNode is precomputed once, here, rather than
-			// on demand inside GetInlineLayout - a layout-time
-			// "does the image load" check can run many times
-			// (every resize/zoom/reload), and ast.Node.AddChild
-			// isn't idempotent, so mutating the tree there would
-			// grow a new child every time instead of reusing one.
-			FallbackNode: imageNode.AddChild(ast.TagUnsupported),
-			Glued:        glued,
-		})
-	case gmast.KindLink:
-		linkNode := astNode.AddChild(ast.TagLink)
-		linkNode.Destination = node.(*gmast.Link).Destination.Value(c.source)
-		return c.appendChildren(items, node, linkNode)
-	case gmast.KindAutoLink:
-		al := node.(*gmast.AutoLink)
-		childNode := astNode.AddChild(ast.TagLink)
-		childNode.Destination = al.Destination.Value(c.source)
-		return c.appendString(items, al.Label.Value(c.source), childNode)
-	default:
-		return c.appendUnsupportedInline(items, node, astNode)
-	}
-}
-
-// appendUnsupportedInline is appendInline's fallback for any inline
-// Markdown construct whynot doesn't have a case for - the inline
-// counterpart to compileUnsupportedBlock. Inline content can't hold a
-// block-level box, so the raw source (where available) is spliced into
-// the surrounding paragraph as ordinary words, styled in
-// StyleSheet.UnsupportedColor via ast.TagUnsupported.
-func (c *compiler) appendUnsupportedInline(items []engine.Inline, node gmast.Node, astNode *ast.Node) []engine.Inline {
-	text := fmt.Sprintf("(unsupported: %s)", node.Kind())
-	if raw, ok := node.(*gmast.RawHTML); ok {
-		text = raw.Value.Value(c.source)
-		if strings.HasPrefix(text, "<!--") {
-			// A <!-- comment -->, invisible in any Markdown renderer -
-			// not "unsupported", never meant to be shown at all. Unlike
-			// HTMLBlockKind2, goldmark gives inline RawHTML no kind of
-			// its own to check instead.
-			return items
-		}
-	}
-	log.Printf("whynot: unsupported %s inline content, showing its source instead", node.Kind())
-	return c.appendString(items, text, astNode.AddChild(ast.TagUnsupported))
-}
-
-// tableCellAlignment translates goldmark's own alignment enum to
-// whynot's - see cellAlignment's doc comment for why they're kept
-// distinct.
-func tableCellAlignment(a extast.Alignment) engine.CellAlignment {
-	switch a {
-	case extast.AlignLeft:
-		return engine.AlignLeft
-	case extast.AlignRight:
-		return engine.AlignRight
-	case extast.AlignCenter:
-		return engine.AlignCenter
-	default:
-		return engine.AlignNone
-	}
-}
-
-// wrapBlocks returns blocks[0] directly if there's exactly one, or a
-// StackBlock of all of them otherwise - for a Block field that holds "one
-// or more" blocks without unconditionally wrapping a single child.
-func wrapBlocks(blocks []engine.Block) engine.Block {
-	if len(blocks) == 1 {
-		return blocks[0]
-	}
-	return &engine.StackBlock{Blocks: blocks}
-}
-
-// altText flattens an image's child nodes - CommonMark allows arbitrary
-// inline content in an image's alt-text description (`![a *b*](x.png)`
-// is valid) - into a plain string, the same way HTML rendering flattens
-// it into an <img alt="..."> attribute. whynot has nowhere to show
-// formatted alt text either, so this recurses into any node kind
-// generically rather than special-casing Emphasis/Strong/etc.
-func altText(node gmast.Node, source []byte) string {
-	var b strings.Builder
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		if child.Kind() == gmast.KindText {
-			b.WriteString(child.(*gmast.Text).Value.Value(source))
-		} else {
-			b.WriteString(altText(child, source))
-		}
-	}
-	return b.String()
-}
-
-// nbsp is a non-breaking space (U+00A0) - what a literal NBSP character or
-// an `&nbsp;` entity in the source both normalize to by the time goldmark
-// hands us a Text node's Value (there's no AST-level distinction between
-// them, or from an ordinary space, confirmed against goldmark v2 directly).
-const nbsp = ' '
-
-// appendString splits s into Inline items along the same lines a browser
-// would collapse/wrap plain text: each maximal run of ordinary breakable
-// whitespace becomes a gap between words (as strings.Fields did before),
-// but unlike strings.Fields, a literal non-breaking space is never treated
-// as that kind of gap - it becomes its own atomic word instead, so it
-// can carry Glued (see InlineLayout.Glued) on both sides and end up
-// visually spaced but never a line-break point.
-//
-// Each produced item's Glued reflects c.pendingSpace, the whitespace
-// carried over from wherever the previous item (in this call or an
-// earlier one, however many sibling nodes back) left off - see
-// compiler.pendingSpace's own doc comment for why that carry is
-// needed at all (a whitespace-only Text node between two non-text
-// siblings, e.g. "**a** *b*", produces zero items of its own here but
-// still needs to un-glue whatever comes next).
-func (c *compiler) appendString(items []engine.Inline, s string, node *ast.Node) []engine.Inline {
-	runes := []rune(s)
-	for i := 0; i < len(runes); {
-		switch r := runes[i]; {
-		case r == nbsp:
-			items = append(items, &engine.InlineText{Text: string(nbsp), ASTNode: node, Glued: !c.pendingSpace})
-			c.pendingSpace = false
-			i++
-		case unicode.IsSpace(r):
-			c.pendingSpace = true
-			i++
-		default:
-			start := i
-			for i < len(runes) && runes[i] != nbsp && !unicode.IsSpace(runes[i]) {
-				i++
-			}
-			items = append(items, &engine.InlineText{Text: string(runes[start:i]), ASTNode: node, Glued: !c.pendingSpace})
-			c.pendingSpace = false
-		}
-	}
-	return items
 }

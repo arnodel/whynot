@@ -655,9 +655,8 @@ func goRegularFace(t *testing.T) font.Face {
 }
 
 // TestTaskCheckboxFallsBackToCheckboxBox checks the path that actually
-// runs against the real bundled Go fonts today: they have no ☐/☑ glyphs
-// (see compile.go's own comment on why □/■ were used before TaskCheckbox
-// existed), so GetInlineLayout must fall back to checkboxBox rather than
+// runs against the real bundled Go fonts today: they have no ☐/☑ glyphs,
+// so GetInlineLayout must fall back to checkboxBox rather than
 // a TextBox with an unrenderable glyph.
 func TestTaskCheckboxFallsBackToCheckboxBox(t *testing.T) {
 	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}

@@ -257,7 +257,7 @@ func TestASTHTMLCommentInlineIsInvisible(t *testing.T) {
 }
 
 // TestASTUnsupportedHTMLBlockShowsSource checks that a raw HTML block -
-// a real Markdown construct compile.go has no case for - renders as a
+// a real Markdown construct the compiler has no case for - renders as a
 // ast.TagUnsupported code block showing its own source, rather than
 // panicking and taking down the whole document.
 func TestASTUnsupportedHTMLBlockShowsSource(t *testing.T) {

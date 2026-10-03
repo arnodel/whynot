@@ -450,7 +450,7 @@ callers only query points already within their own rendered viewport.
 
 ## Graceful degradation for unsupported Markdown
 
-`compileBlock`/`appendInline` ([compile.go](internal/markdown/compile.go)) don't
+`compileBlock`/`appendInline` ([blocks.go](internal/markdown/blocks.go), [inlines.go](internal/markdown/inlines.go)) don't
 `panic` on a goldmark node kind they have no case for - see
 `compileUnsupportedBlock`/`appendUnsupportedInline`. Instead they log a
 warning and render the construct as text/a code block tagged
