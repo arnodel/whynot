@@ -13,7 +13,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
 | Path | What it is |
 |---|---|
-| repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Interaction`, `StyleSheet`; no rendering backend dependency |
+| repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Controller`, `StyleSheet`; no rendering backend dependency |
 | `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks; `whynot.Parse` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
@@ -272,13 +272,14 @@ scrollbar-drag input handling, all gated on its own bounds) into a
 reusable type for embedding a `View` into part of a larger window -
 deliberately backend-specific, unlike `View` itself, since a caller
 embedding one is never going to swap engines out from under it. The
-scroll-gating/hover-click/momentum logic the two `Panel`s share is
-factored into `whynot.Interaction` ([interaction.go](interaction.go)),
-in the root package (so both backends can depend on it without
-depending on each other) - deliberately *not* including scrollbar-drag,
-which each backend represents too differently to share: `ebitenrenderer`
-hand-draws its own thumb, `giorenderer` drives Gio's native
-`widget.Scrollbar` instead.
+`Panel`s don't interpret input themselves: each translates its
+framework's input into [`input`](input) events (pointer moves and
+buttons, wheel, touches) and passes each frame's events to a
+`whynot.Controller` ([controller.go](controller.go)), which owns
+scrolling, hover and clicks, touch pans and flings, and sideways
+scrollbars. Each Panel's own vertical scrollbar is still its own:
+`ebitenrenderer` hand-draws its thumb and keeps the pointer while it's
+dragged, `giorenderer` drives Gio's native `widget.Scrollbar`.
 
 `DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller
 scales the ratio between them to whatever real pixel track it's drawing a

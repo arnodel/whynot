@@ -2,105 +2,124 @@ package ebitenrenderer
 
 import (
 	"image"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/arnodel/whynot/input"
 )
 
-// Update reads this tick's input (touch if active, else mouse) and
-// drives scroll/hover/click - call once per game tick. A touch drag
-// scrolls the page, or a block that scrolls sideways (see
-// whynot.Interaction.TouchStart), and keeps coasting after release,
-// decaying like native touch scrolling, until a new drag or a mouse
-// wheel/click cancels it.
-func (p *Panel) Update() {
-	now := time.Now()
+// wheelPixels is how far one unit of ebiten.Wheel scrolls, in logical
+// pixels.
+const wheelPixels = 2
 
-	if cx, cy, dx, dy, justPressed, ok := p.touchInput(); ok {
+// Update reads this tick's input (touch if active, else mouse) and
+// passes it to the Panel's Controller - call once per game tick.
+func (p *Panel) Update() {
+	if cx, cy, justPressed, ok := p.touchInput(); ok {
 		p.touching = true
+		var e input.Event = input.TouchMove{ID: int(p.activeTouch), X: cx, Y: cy}
 		if justPressed {
-			// Before update, whose hover/click then knows it's a touch.
-			p.interaction.TouchStart(cx, cy, now)
+			e = input.TouchStart{ID: int(p.activeTouch), X: cx, Y: cy}
 		}
-		// The page is scrolled by TouchDrag below, not by update.
-		p.update(cx, cy, 0, true, justPressed)
-		switch {
-		case justPressed:
-		case p.draggingScrollbar:
-			p.interaction.CancelMomentum()
-		default:
-			p.interaction.TouchDrag(dx, dy, now)
-		}
+		p.apply([]input.Event{e}, cx, cy, true, justPressed)
 		return
 	}
+	var events []input.Event
 	if p.touching {
 		p.touching = false
-		p.interaction.TouchEnd()
+		events = append(events, input.TouchEnd{ID: int(p.activeTouch)})
 	}
 
 	cx, cy := ebiten.CursorPosition()
-	wheelDx, wheelDy := ebiten.Wheel()
+	wx, wy := ebiten.Wheel()
+	st := mouseInput{x: cx, y: cy, down: ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft), wheelX: wx, wheelY: wy, mods: modifiers()}
+	events = append(events, p.mouseEvents(st)...)
+	p.apply(events, cx, cy, st.down, inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft))
+}
+
+// mouseInput is one tick's mouse state.
+type mouseInput struct {
+	x, y           int
+	down           bool // the primary button
+	wheelX, wheelY float64
+	mods           input.Modifiers
+}
+
+// mouseEvents reports what changed in st since the last tick, as events.
+func (p *Panel) mouseEvents(st mouseInput) []input.Event {
+	var events []input.Event
+	pos := image.Pt(st.x, st.y)
+	if !p.hasCursor || pos != p.cursor {
+		events = append(events, input.PointerMove{X: st.x, Y: st.y})
+		p.cursor, p.hasCursor = pos, true
+	}
+	if st.down != p.mouseDown {
+		events = append(events, input.PointerButton{X: st.x, Y: st.y, Button: input.ButtonPrimary, Down: st.down, Mods: st.mods})
+		p.mouseDown = st.down
+	}
+	if st.wheelX != 0 || st.wheelY != 0 {
+		// ebiten.Wheel is positive up and left; Wheel events are
+		// positive towards the end, in pixels.
+		k := -wheelPixels * p.scale
+		events = append(events, input.Wheel{X: st.x, Y: st.y, DX: st.wheelX * k, DY: st.wheelY * k, Mods: st.mods})
+	}
+	return events
+}
+
+// modifiers reports the modifier keys held now.
+func modifiers() input.Modifiers {
+	var m input.Modifiers
 	if ebiten.IsKeyPressed(ebiten.KeyShift) {
-		// Shift+wheel scrolls sideways. Some platforms (macOS) already
-		// report it as horizontal wheel movement, leaving wheelDy 0.
-		wheelDx, wheelDy = wheelDx+wheelDy, 0
+		m |= input.ModShift
 	}
-	mouseDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
-	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-
-	if wheelDx != 0 || wheelDy != 0 || justPressed {
-		p.interaction.CancelMomentum()
-	} else {
-		p.interaction.Momentum(now)
+	if ebiten.IsKeyPressed(ebiten.KeyControl) {
+		m |= input.ModCtrl
 	}
-	p.syncInteraction()
-	if p.interaction.DragHorizontalScrollbar(cx, cy, mouseDown, justPressed) {
-		return
+	if ebiten.IsKeyPressed(ebiten.KeyAlt) {
+		m |= input.ModAlt
 	}
-	p.interaction.ScrollHorizontal(cx, cy, wheelDx*p.scale*2)
-	p.update(cx, cy, wheelDy*p.scale*2, mouseDown, justPressed)
+	if ebiten.IsKeyPressed(ebiten.KeyMeta) {
+		m |= input.ModMeta
+	}
+	return m
 }
 
-// syncInteraction copies the Panel's current settings into interaction.
-func (p *Panel) syncInteraction() {
-	p.interaction.View = p.view
-	p.interaction.Bounds = p.bounds
-	p.interaction.OnLinkClick = p.OnLinkClick
-	p.interaction.OnLinkHover = p.OnLinkHover
-	p.interaction.AnchorScrolling = p.anchorScrolling
-}
-
-// update takes this tick's input as parameters rather than reading
-// ebiten itself, so it's testable without a live ebiten context.
-// scrollDelta is in Scroll's own units, ready to pass straight through.
-// Delegates scroll/hover/click to whynot.Interaction (shared with
-// giorenderer.Panel) - only the scrollbar-drag check stays here, since
-// each backend represents its scrollbar too differently to share.
-func (p *Panel) update(cx, cy int, scrollDelta float64, pointerDown, justPressed bool) {
-	p.syncInteraction()
-	p.interaction.Scroll(cx, cy, scrollDelta)
-
+// apply passes events to the Controller, after the Panel's own scrollbar
+// has had the pointer, at (cx, cy) with the given button state: while
+// it's dragged, only wheel events go through.
+func (p *Panel) apply(events []input.Event, cx, cy int, pointerDown, justPressed bool) {
+	p.syncController()
 	if p.scrollbarEnabled && p.updateScrollbarDrag(cx, cy, pointerDown, justPressed) {
-		// The drag owns this frame - don't also treat it as a document
-		// hover/click underneath it.
-		return
+		var kept []input.Event
+		for _, e := range events {
+			if _, ok := e.(input.Wheel); ok {
+				kept = append(kept, e)
+			}
+		}
+		events = kept
+		p.controller.CancelMomentum()
 	}
-	p.interaction.HoverAndClick(cx, cy, justPressed)
+	p.controller.Frame(events, p.elapsed())
 }
 
-// touchInput is Update's touch equivalent of reading mouse state - ok
-// is false when there's no touch, so Update falls back to the mouse.
-// Tracks at most one touch, ignoring any second simultaneous one. dx, dy
-// is how far it moved since the last tick, 0 on its first tick since
-// there's no previous position yet to diff against.
-func (p *Panel) touchInput() (cx, cy, dx, dy int, justPressed bool, ok bool) {
+// syncController copies the Panel's link callbacks, which a host may
+// reassign at any time, into its Controller.
+func (p *Panel) syncController() {
+	p.controller.OnLinkClick = p.OnLinkClick
+	p.controller.OnLinkHover = p.OnLinkHover
+	p.controller.AnchorScrolling = p.anchorScrolling
+}
+
+// touchInput reports the touch being tracked - ok is false when there's
+// none, so Update falls back to the mouse. Tracks at most one touch,
+// ignoring any second simultaneous one.
+func (p *Panel) touchInput() (cx, cy int, justPressed bool, ok bool) {
 	if p.trackingTouch {
 		for _, id := range ebiten.AppendTouchIDs(nil) {
 			if id == p.activeTouch {
 				x, y := ebiten.TouchPosition(id)
-				px, py := inpututil.TouchPositionInPreviousTick(id)
-				return x, y, x - px, y - py, false, true
+				return x, y, false, true
 			}
 		}
 		// The touch we were tracking ended - fall through to look for a
@@ -110,24 +129,19 @@ func (p *Panel) touchInput() (cx, cy, dx, dy int, justPressed bool, ok bool) {
 
 	ids := ebiten.AppendTouchIDs(nil)
 	if len(ids) == 0 {
-		return 0, 0, 0, 0, false, false
+		return 0, 0, false, false
 	}
 	p.activeTouch = ids[0]
 	p.trackingTouch = true
 	x, y := ebiten.TouchPosition(p.activeTouch)
-	return x, y, 0, 0, true, true
+	return x, y, true, true
 }
 
 // updateScrollbarDrag handles pressing, dragging, and releasing the
-// scrollbar thumb, reporting whether it consumed this frame's
-// input. Takes this tick's raw input as parameters for the same
-// testability reason as update. The target ratio is recomputed from
-// the cursor's current position every call, not a value captured once
-// at drag start, so a jump into not-yet-resolved territory (see
-// View.ScrollToRatio) only ever corrects toward the cursor, never
-// drifts from it. Likewise, the thumb rect is re-fetched every call
-// (not just at drag start) so scrollbarGrabRatio is always applied to
-// the thumb's *current* height.
+// scrollbar thumb, reporting whether it consumed this frame's input. The
+// target is recomputed from the cursor every call, so a jump into
+// not-yet-laid-out territory (see View.ScrollToRatio) only ever corrects
+// toward the cursor.
 func (p *Panel) updateScrollbarDrag(cx, cy int, pointerDown, justPressed bool) bool {
 	r, ok := p.scrollbarThumbRect()
 	hovering := ok && (image.Point{X: cx, Y: cy}).In(r)

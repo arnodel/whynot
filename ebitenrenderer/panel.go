@@ -56,13 +56,15 @@ type Panel struct {
 	anchorScrolling  bool
 	start            time.Time // Panel's own elapsed-time clock, see elapsed()
 
-	// interaction is the backend-agnostic scroll/hover/click/momentum
-	// core (see whynot.Interaction) - its View/Bounds/OnLinkClick/
-	// OnLinkHover/AnchorScrolling fields are kept in sync with this
-	// Panel's own at the top of every Update, since those can change
-	// (SetView, SetBounds, or direct assignment to OnLinkClick/
-	// OnLinkHover) between calls.
-	interaction whynot.Interaction
+	// controller turns this Panel's input into scrolling, hovering and
+	// clicking.
+	controller *whynot.Controller
+
+	// The mouse state at the last Update, to report what changed as
+	// events (see mouseEvents).
+	cursor    image.Point
+	hasCursor bool
+	mouseDown bool
 
 	// Scrollbar drag state, mirroring cmd/whynot's own (grabRatio is a
 	// fraction of thumb height, not an absolute offset, since the
@@ -75,8 +77,8 @@ type Panel struct {
 	// Touch state - see touchInput. At most one touch tracked at a time.
 	trackingTouch bool
 	activeTouch   ebiten.TouchID
-	// touching is whether the last Update saw a touch, to end the
-	// gesture (whynot.Interaction.TouchEnd) once it lifts.
+	// touching is whether the last Update saw a touch, to report its end
+	// once it lifts.
 	touching bool
 }
 
@@ -123,6 +125,7 @@ func NewPanel(view *whynot.View, renderer *Renderer, bounds image.Rectangle, opt
 		scale:    1,
 		start:    time.Now(),
 	}
+	p.controller = whynot.NewController(view, bounds)
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -151,7 +154,7 @@ func (p *Panel) SetView(v *whynot.View) {
 	if p.styleSheet != nil {
 		p.view.SetStyleSheet(p.styleSheet)
 	}
-	p.interaction.Reset()
+	p.controller.SetView(v)
 	p.draggingScrollbar = false
 	p.scrollbarState = buttonState{}
 	p.relayout()
@@ -168,6 +171,7 @@ func (p *Panel) Bounds() image.Rectangle {
 // new size before the next Draw, rather than lagging a frame behind.
 func (p *Panel) SetBounds(bounds image.Rectangle) {
 	p.bounds = bounds
+	p.controller.SetBounds(bounds)
 	p.relayout()
 }
 

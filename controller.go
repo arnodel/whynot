@@ -1,0 +1,426 @@
+package whynot
+
+import (
+	"image"
+	"math"
+	"strings"
+	"time"
+
+	"github.com/arnodel/whynot/input"
+	"github.com/arnodel/whynot/internal/engine"
+)
+
+// controllerMomentumDecayPerSecond/controllerMomentumMinVelocity tune
+// post-touch scroll momentum: the fraction of velocity (pixels/second)
+// retained after one second, and the speed below which it stops.
+const (
+	controllerMomentumDecayPerSecond = 0.05
+	controllerMomentumMinVelocity    = 30
+)
+
+// Controller turns a backend's input events into what they do to a View:
+// scrolling, link hover and clicks, sideways-scrolling blocks and their
+// scrollbars, touch pans and flings. Feed it each frame's events with
+// Frame. The View's own vertical scrollbar is the backend's.
+type Controller struct {
+	view   *View
+	bounds image.Rectangle
+
+	// OnLinkClick is called with a link's destination when it's clicked
+	// or tapped, OnLinkHover when the hovered link changes ("" when
+	// none). With AnchorScrolling, a "#fragment" link scrolls the View to
+	// that heading instead of calling OnLinkClick.
+	OnLinkClick     func(destination string)
+	OnLinkHover     func(destination string)
+	AnchorScrolling bool
+
+	hoverDest string
+
+	// lastTick is the time of the last tick; ticked is whether there was
+	// one.
+	lastTick time.Duration
+	ticked   bool
+
+	// pointer is the mouse pointer's last position; hasPointer is false
+	// before it's known, and after it leaves.
+	pointer    image.Point
+	hasPointer bool
+
+	// momentum is the page's coasting velocity after a vertical touch
+	// fling; hMomentum that of hTarget, after a sideways one.
+	momentum  float64
+	hMomentum float64
+	hTarget   engine.Block
+
+	// The touch in progress: touching is set from its TouchStart to its
+	// TouchEnd, even for a touch outside the bounds. Other touches are
+	// ignored.
+	touching     bool
+	touchID      int
+	touchPos     image.Point
+	touchAxis    touchAxis
+	touchTarget  engine.Block // the sideways-scrolling block it started on, if any
+	touchPending image.Point
+}
+
+// touchAxis is what a touch drag scrolls.
+type touchAxis int
+
+const (
+	touchNone       touchAxis = iota // no touch, or one that started outside the bounds
+	touchUndecided                   // on a sideways-scrolling block, not moved far enough to tell
+	touchVertical                    // the page
+	touchHorizontal                  // touchTarget
+)
+
+// touchAxisLockDistance is how far, in logical pixels, a touch starting
+// on a sideways-scrolling block moves before its dominant direction
+// decides whether it scrolls the block or the page.
+const touchAxisLockDistance = 10
+
+// NewController returns a Controller for v, acting on input inside
+// bounds: where the View is drawn, in the input's coordinates.
+func NewController(v *View, bounds image.Rectangle) *Controller {
+	return &Controller{view: v, bounds: bounds}
+}
+
+// View returns the View the Controller drives.
+func (c *Controller) View() *View {
+	return c.view
+}
+
+// SetView makes the Controller drive v instead, forgetting what was
+// hovered in the previous View.
+func (c *Controller) SetView(v *View) {
+	c.view = v
+	c.hoverDest = ""
+}
+
+// Bounds returns where the View is drawn, in the input's coordinates.
+func (c *Controller) Bounds() image.Rectangle {
+	return c.bounds
+}
+
+// SetBounds sets where the View is drawn, in the input's coordinates.
+func (c *Controller) SetBounds(r image.Rectangle) {
+	c.bounds = r
+}
+
+// Frame applies one frame's input events, in order, at now: elapsed time
+// on the clock the View is laid out with (see View.Layout). Call it once
+// per frame, with no events if there were none, so flings keep coasting.
+func (c *Controller) Frame(events []input.Event, now time.Duration) {
+	var (
+		pressed      bool        // a primary press inside the bounds, for a click
+		pressedAt    image.Point // where
+		wheeled      bool
+		touchStarted bool
+		touchEnded   bool
+		touchDelta   image.Point
+	)
+	for _, e := range events {
+		switch e := e.(type) {
+		case input.PointerMove:
+			c.pointer, c.hasPointer = image.Pt(e.X, e.Y), true
+			if s := c.hscroll(); s != nil && s.dragging != nil {
+				s.dragTo(e.X - c.bounds.Min.X)
+			}
+		case input.PointerLeave:
+			c.hasPointer = false
+		case input.PointerButton:
+			if e.Button != input.ButtonPrimary {
+				continue
+			}
+			p := image.Pt(e.X, e.Y)
+			c.pointer, c.hasPointer = p, true
+			s := c.hscroll()
+			if !e.Down {
+				if s != nil && s.dragging != nil {
+					s.endDrag(c.view.ctx.Time)
+					s.hover(p.Sub(c.bounds.Min), c.view.ctx.Time)
+				}
+				continue
+			}
+			c.CancelMomentum()
+			if !p.In(c.bounds) {
+				continue
+			}
+			if s != nil && s.beginDrag(p.Sub(c.bounds.Min)) {
+				continue
+			}
+			pressed, pressedAt = true, p
+		case input.Wheel:
+			p := image.Pt(e.X, e.Y)
+			if !p.In(c.bounds) {
+				continue
+			}
+			c.CancelMomentum()
+			wheeled = true
+			dx, dy := e.DX, e.DY
+			if e.Mods.Contain(input.ModShift) {
+				// Shift+wheel scrolls sideways. Some platforms (macOS)
+				// already report it as horizontal, leaving dy 0.
+				dx, dy = dx+dy, 0
+			}
+			// View.Scroll and ScrollHorizontal move content, the
+			// opposite of the wheel's direction.
+			c.view.Scroll(-dy)
+			if dx != 0 {
+				local := p.Sub(c.bounds.Min)
+				c.view.ScrollHorizontal(local.X, local.Y, -dx)
+			}
+		case input.TouchStart:
+			if c.touching {
+				continue
+			}
+			c.touching, c.touchID, c.touchPos = true, e.ID, image.Pt(e.X, e.Y)
+			touchStarted = true
+			c.touchStart(c.touchPos, now)
+		case input.TouchMove:
+			if c.touching && e.ID == c.touchID {
+				p := image.Pt(e.X, e.Y)
+				touchDelta = touchDelta.Add(p.Sub(c.touchPos))
+				c.touchPos = p
+			}
+		case input.TouchEnd:
+			if c.touching && e.ID == c.touchID {
+				touchEnded = true
+			}
+		case input.TouchCancel:
+			if c.touching && e.ID == c.touchID {
+				touchEnded = true
+			}
+		}
+	}
+
+	switch {
+	case c.touching:
+		// Also while the finger is held still (no movement), so the
+		// velocity decays before release rather than flinging.
+		c.touchDrag(touchDelta.X, touchDelta.Y, now)
+	case !pressed && !wheeled:
+		c.coastMomentum(now)
+	}
+
+	if touchStarted && c.touchPos.In(c.bounds) {
+		// A touch only taps: it highlights and clicks the link under it,
+		// but hovers nothing else (a block's scrollbar shows only while
+		// panning it).
+		local := c.touchPos.Sub(c.bounds.Min)
+		dest, ok := c.view.hoverLink(local.X, local.Y)
+		if s := c.hscroll(); s != nil {
+			s.unhover()
+		}
+		c.setHover(dest, ok)
+		if ok {
+			c.click(dest)
+		}
+	} else if !c.touching {
+		c.hover()
+		if pressed {
+			local := pressedAt.Sub(c.bounds.Min)
+			if dest, ok := c.view.LinkAt(local.X, local.Y); ok {
+				c.click(dest)
+			}
+		}
+	}
+
+	if touchEnded {
+		c.touchEnd()
+	}
+}
+
+// hover updates the hover from the pointer's position, unless a
+// sideways-scrollbar drag owns the pointer.
+func (c *Controller) hover() {
+	if s := c.hscroll(); s != nil && s.dragging != nil {
+		return
+	}
+	if !c.hasPointer || !c.pointer.In(c.bounds) {
+		// (-1, -1) can't land on anything.
+		c.view.Hover(-1, -1)
+		c.setHover("", false)
+		return
+	}
+	local := c.pointer.Sub(c.bounds.Min)
+	c.setHover(c.view.Hover(local.X, local.Y))
+}
+
+// setHover records the hovered link, calling OnLinkHover on a change.
+func (c *Controller) setHover(dest string, ok bool) {
+	if !ok {
+		dest = ""
+	}
+	if dest != c.hoverDest && c.OnLinkHover != nil {
+		c.OnLinkHover(dest)
+	}
+	c.hoverDest = dest
+}
+
+// click follows the link to dest.
+func (c *Controller) click(dest string) {
+	if c.AnchorScrolling && strings.HasPrefix(dest, "#") {
+		c.view.ScrollToAnchor(strings.TrimPrefix(dest, "#"))
+	} else if c.OnLinkClick != nil {
+		c.OnLinkClick(dest)
+	}
+}
+
+// tick returns the seconds elapsed since its last call (0 the first
+// time).
+func (c *Controller) tick(now time.Duration) float64 {
+	dt := 0.0
+	if c.ticked {
+		dt = (now - c.lastTick).Seconds()
+	}
+	c.lastTick, c.ticked = now, true
+	return dt
+}
+
+// touchStart begins a touch drag at p, stopping any fling. A drag
+// starting on a block that scrolls sideways locks to whichever direction
+// it first clearly moves in, scrolling the block or the page; any other
+// drag inside the bounds scrolls the page, and one outside nothing.
+func (c *Controller) touchStart(p image.Point, now time.Duration) {
+	c.CancelMomentum()
+	c.tick(now)
+	c.touchPending = image.Point{}
+	c.touchTarget = nil
+	switch {
+	case !p.In(c.bounds):
+		c.touchAxis = touchNone
+	case c.hscroll() != nil:
+		if r, ok := c.hscroll().regionAt(p.Sub(c.bounds.Min)); ok {
+			c.touchTarget = r.Source
+			c.touchAxis = touchUndecided
+			return
+		}
+		fallthrough
+	default:
+		c.touchAxis = touchVertical
+	}
+}
+
+// touchDrag applies one frame of a touch drag: dx, dy is how far the
+// finger moved since the last frame ("content follows the finger").
+func (c *Controller) touchDrag(dx, dy int, now time.Duration) {
+	if c.touchAxis == touchUndecided {
+		c.touchPending = c.touchPending.Add(image.Pt(dx, dy))
+		d := c.touchPending
+		if math.Hypot(float64(d.X), float64(d.Y)) < touchAxisLockDistance*c.view.ctx.Scale {
+			c.tick(now)
+			return
+		}
+		// Apply everything moved so far, along the locked axis.
+		dx, dy = d.X, d.Y
+		if abs(dx) > abs(dy) {
+			c.touchAxis = touchHorizontal
+		} else {
+			c.touchAxis = touchVertical
+		}
+	}
+	switch c.touchAxis {
+	case touchVertical:
+		c.view.Scroll(float64(dy))
+		c.accumulate(&c.momentum, float64(dy), now)
+	case touchHorizontal:
+		c.scrollTarget(c.touchTarget, float64(dx))
+		c.hTarget = c.touchTarget
+		c.accumulate(&c.hMomentum, float64(dx), now)
+	}
+}
+
+// touchEnd ends the touch drag; a fling keeps coasting. After a sideways
+// pan, the block's scrollbar fades out from now. It also clears hover:
+// whatever the finger was on mustn't stay hovered after it lifts.
+func (c *Controller) touchEnd() {
+	if s := c.hscroll(); s != nil && c.touchAxis == touchHorizontal {
+		s.reveal(c.touchTarget, c.view.ctx.Time)
+	}
+	c.touching = false
+	c.touchAxis = touchNone
+	c.view.Hover(-1, -1)
+	c.setHover("", false)
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func (c *Controller) hscroll() *hscrollState {
+	return c.view.hscroll
+}
+
+// scrollTarget scrolls the sideways-scrolling block target by dx, showing
+// its scrollbar (there's no hover on touch).
+func (c *Controller) scrollTarget(target engine.Block, dx float64) {
+	if s := c.hscroll(); s != nil && target != nil {
+		s.scrollSource(target, dx)
+		s.reveal(target, c.view.ctx.Time)
+	}
+}
+
+// accumulate blends delta, moved since the last tick, into the coasting
+// velocity v.
+func (c *Controller) accumulate(v *float64, delta float64, now time.Duration) {
+	dt := c.tick(now)
+	if dt <= 0 {
+		return
+	}
+	*v = *v*0.5 + delta/dt*0.5
+}
+
+// CancelMomentum stops any fling outright.
+func (c *Controller) CancelMomentum() {
+	c.momentum = 0
+	c.hMomentum = 0
+}
+
+// moving reports whether there's a velocity fast enough to coast.
+func (c *Controller) moving() bool {
+	return fastEnough(c.momentum) || fastEnough(c.hMomentum)
+}
+
+// Animating reports whether frames must keep coming even without input:
+// while a fling coasts, or a scrollbar fades out. A backend whose frames
+// are event-driven (like Gio's) must keep requesting frames while it's
+// true, or the animation stops dead.
+func (c *Controller) Animating() bool {
+	s := c.hscroll()
+	return c.moving() || s != nil && s.animating(c.view.ctx.Time)
+}
+
+func fastEnough(v float64) bool {
+	return math.Abs(v) >= controllerMomentumMinVelocity
+}
+
+// coastMomentum applies one frame of decay to any velocity left over
+// from a touch drag that's since ended.
+func (c *Controller) coastMomentum(now time.Duration) {
+	dt := c.tick(now)
+	c.momentum = coast(c.momentum, dt, c.view.Scroll)
+	c.hMomentum = coast(c.hMomentum, dt, func(d float64) { c.scrollTarget(c.hTarget, d) })
+}
+
+// coast applies dt seconds of velocity v through apply, and returns v
+// decayed over that time - 0 once it's too slow to act on.
+func coast(v, dt float64, apply func(float64)) float64 {
+	if !fastEnough(v) {
+		// Dropped before applying any of it: a slow velocity left over a
+		// long gap between calls would otherwise turn into a jump.
+		return 0
+	}
+	if dt <= 0 {
+		return v
+	}
+	delta := v * dt
+	v *= math.Pow(controllerMomentumDecayPerSecond, dt)
+	if !fastEnough(v) {
+		v = 0
+	}
+	apply(delta)
+	return v
+}

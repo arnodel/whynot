@@ -10,9 +10,7 @@
 // What's deliberately not here: toolbar layout, drawing, and input -
 // cmd/whynot's hand-rolled rect-hit-testing and a future Gio app's
 // native widget.Clickable-based toolbar are different enough, and
-// simple enough, that sharing the input layer isn't worth it (see
-// whynot.Interaction's doc comment for the same reasoning applied to
-// the document panel's scrollbar, which is the same kind of exception).
+// simple enough, that sharing the input layer isn't worth it.
 package browser
 
 import (
