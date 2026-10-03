@@ -89,3 +89,10 @@ const (
 func (m Modifiers) Contain(mods Modifiers) bool {
 	return m&mods == mods
 }
+
+// Source is a backend's input reader. Each call to Events returns what
+// the user did since the previous call, in order, as this package's
+// events.
+type Source interface {
+	Events() []Event
+}

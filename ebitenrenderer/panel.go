@@ -4,8 +4,6 @@ import (
 	"image"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/arnodel/whynot"
 )
 
@@ -60,11 +58,13 @@ type Panel struct {
 	// clicking.
 	controller *whynot.Controller
 
-	// The mouse state at the last Update, to report what changed as
-	// events (see mouseEvents).
-	cursor    image.Point
-	hasCursor bool
-	mouseDown bool
+	// input reads Ebitengine's input as events.
+	input Input
+
+	// The pointer, mouse or touch, as followed through the events, for
+	// the Panel's own scrollbar (see followPointer).
+	pointer     image.Point
+	pointerDown bool
 
 	// Scrollbar drag state, mirroring cmd/whynot's own (grabRatio is a
 	// fraction of thumb height, not an absolute offset, since the
@@ -73,13 +73,6 @@ type Panel struct {
 	draggingScrollbar  bool
 	scrollbarGrabRatio float64
 	scrollbarState     buttonState
-
-	// Touch state - see touchInput. At most one touch tracked at a time.
-	trackingTouch bool
-	activeTouch   ebiten.TouchID
-	// touching is whether the last Update saw a touch, to report its end
-	// once it lifts.
-	touching bool
 }
 
 // buttonState is the scrollbar thumb's per-frame hover/pressed state,

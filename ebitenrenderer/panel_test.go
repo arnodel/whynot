@@ -30,8 +30,8 @@ func newTestPanel(t *testing.T, source string, opts ...PanelOption) *Panel {
 // the button down or not, and the wheel moved by wheelY (ebiten.Wheel's
 // units).
 func tick(p *Panel, x, y int, wheelY float64, down bool) {
-	justPressed := down && !p.mouseDown
-	p.apply(p.mouseEvents(mouseInput{x: x, y: y, down: down, wheelY: wheelY}), x, y, down, justPressed)
+	p.input.Scale = p.scale
+	p.apply(p.input.mouseEvents(mouseInput{x: x, y: y, down: down, wheelY: wheelY}))
 }
 
 func TestScrollbarThumbRectShortDocument(t *testing.T) {
