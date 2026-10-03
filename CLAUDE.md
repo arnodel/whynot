@@ -27,3 +27,26 @@ type: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `ci:`.
 GoReleaser groups release notes by these prefixes (see `.goreleaser.yml`),
 and a squash merge uses the PR title as the commit message, so the PR title
 needs the prefix too.
+
+## Comments
+
+Write doc comments for someone *using* the function or type, not for
+someone reconstructing how it was built.
+
+- Keep: one or two sentences on what it is or does, the non-obvious
+  details a caller needs to use it correctly, and the *why* when there's
+  an obvious alternative someone could reasonably prefer.
+- Cut: anything already visible in the signature or body; lists of
+  callers ("used by X and Y" - grep finds them); history ("this used to
+  do X") beyond a clause of why the current shape was chosen; design
+  narratives (alternatives explored, how a value was derived), which
+  belong in the commit message or PR description.
+- Don't refer to things a reader of the source can't see, such as
+  conversations or notes outside the repository.
+
+Inline comments explain *why* a piece of code is the way it is, not what
+the next lines do.
+
+Contract packages (`canvas`, `images`, `codeblocks`, `fonts`) are the
+exception to brevity where precision is needed: their doc comments are
+the specification implementers work from.
