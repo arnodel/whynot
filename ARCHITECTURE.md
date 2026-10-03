@@ -2,7 +2,7 @@
 
 Why Not is a library for rendering a Markdown document onto a `Canvas` -
 an interface, not a specific rendering backend - plus two packages
-implementing that interface, `ebitenrenderer` (on top of `ebiten`) and
+implementing that interface, `ebitenbackend` (on top of `ebiten`) and
 `giorenderer` (on top of [Gio](https://gioui.org/)), and a standalone CLI
 built on each. The library lives at the repo root (package `whynot`,
 `github.com/arnodel/whynot`); `cmd/whynot`/`cmd/giowhynot` are thin
@@ -16,16 +16,16 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Controller`, `StyleSheet`; no rendering backend dependency |
 | `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks; `whynot.Parse` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
-| `ebitenrenderer/` | implements `canvas.Canvas` on top of `ebiten`, and `Panel` for embedding a `View` in part of a larger game window |
-| `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `ebitenrenderer/` |
+| `backends/ebitenbackend/` | the Ebitengine backend: `canvas.Canvas` on top of `ebiten`, and an `input.Source` reading Ebitengine's input |
+| `giorenderer/` | implements `canvas.Canvas` on top of Gio, and `Panel` - the Gio counterpart to `backends/ebitenbackend/` |
 | `internal/browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
 | `images/` | the image contract: `Source` (src → `AsyncImage`), `AsyncImage` (a key and a fetch) and the default `FileSource` |
 | `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, through an `images.Source`) and animated GIF decoding |
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
-| `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `ebitenrenderer/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
+| `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `backends/ebitenbackend/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
 | `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`; implementations in subpackages |
-| `codeblocks/chromahighlight/` | a `codeblocks.Plugin` producing `Tokens` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `ebitenrenderer/` |
+| `codeblocks/chromahighlight/` | a `codeblocks.Plugin` producing `Tokens` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `backends/ebitenbackend/` |
 | `codeblocks/kroki/` | a `codeblocks.Plugin` producing an `Image`: renders Mermaid fences as images through a Kroki server |
 | `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
 | `cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
@@ -58,7 +58,7 @@ flowchart TD
     subgraph L3["Layer 3 — Canvas boundary (canvas/)"]
         D -- "DrawBlockLayout(box, dst, x, y, now)" --> E["Canvas calls\n(DrawText, DrawImage)"]
     end
-    subgraph L4["ebitenrenderer — a Canvas implementation"]
+    subgraph L4["ebitenbackend — a Canvas implementation"]
         E --> F["pixels on ebiten.Image"]
     end
 ```
@@ -190,7 +190,7 @@ also breaks out of its child loop once a child starts past the viewport's
 bottom edge — safe because children are laid out top-to-bottom with no
 overlap, so nothing further down can be visible either.
 
-`ebitenrenderer.Renderer`/`Canvas` and `giorenderer.Renderer`/`Canvas` are
+`ebitenbackend.Renderer`/`Canvas` and `giorenderer.Renderer`/`Canvas` are
 the two implementations today. Both follow the same shape: a `Renderer`
 owns caches (each decoded `image.Image`'s uploaded texture, keyed by the
 `image.Image`'s own identity; per-`font.Face` glyph caches) that should
@@ -198,7 +198,7 @@ persist across frames; `NewCanvas(...)` returns a cheap per-frame
 `Canvas` sharing those caches, so multiple `View`s drawn through one
 `Renderer` share GPU uploads and glyph caches instead of duplicating
 them. `giorenderer`'s own glyph cache exists for a different reason than
-`ebitenrenderer`'s, though: Gio has no equivalent of a `font.Face`-
+`ebitenbackend`'s, though: Gio has no equivalent of a `font.Face`-
 consuming text drawer (its own `text.Shaper` owns the whole shaping
 pipeline from raw font bytes, with no public per-glyph API), so
 `giorenderer.Canvas.DrawText` rasterizes each rune itself via
@@ -274,7 +274,7 @@ gated on its own bounds) into a reusable type for embedding a `View`
 into part of a larger window. It doesn't depend on a graphics library:
 each frame, the app passes it [`input`](input) events (pointer moves
 and buttons, wheel, touches) read by a backend's input reader
-(`ebitenrenderer.Input`, `giorenderer.Input`), a `canvas.Canvas` from
+(`ebitenbackend.Input`, `giorenderer.Input`), a `canvas.Canvas` from
 the backend's renderer, and the time. What's left to the app is only
 what's shaped by its framework: where those come from, and its frame
 loop. The Panel passes the events to a

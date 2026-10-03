@@ -1,5 +1,5 @@
 // Command gio is a runnable example of whynot rendering through
-// giorenderer (Gio, gioui.org) instead of ebitenrenderer - a
+// giorenderer (Gio, gioui.org) instead of ebitenbackend - a
 // whynot.Panel showing one document, with scroll, link hover/click, and
 // a scrollbar. See examples/panel for the ebiten-backed equivalent this
 // mirrors.
@@ -25,7 +25,7 @@ func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Gio example\n\n")
 	b.WriteString("This document exists to check giorenderer's `Canvas` against the same\n")
-	b.WriteString("three primitives ebitenrenderer implements: text (this paragraph, mixed\n")
+	b.WriteString("three primitives ebitenbackend implements: text (this paragraph, mixed\n")
 	b.WriteString("with `inline code` and **bold**), a filled rect (the thematic break\n")
 	b.WriteString("below), and an image. It's also long enough to need scrolling, to check\n")
 	b.WriteString("whynot.Panel's scroll/hover/click/scrollbar handling.\n\n")

@@ -16,7 +16,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -51,7 +51,7 @@ func main() {
 
 	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetWindowTitle("whynot panel example")
-	g := &game{panel: panel, renderer: ebitenrenderer.New(), start: time.Now()}
+	g := &game{panel: panel, renderer: ebitenbackend.New(), start: time.Now()}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
@@ -59,8 +59,8 @@ func main() {
 
 type game struct {
 	panel    *whynot.Panel
-	renderer *ebitenrenderer.Renderer
-	input    ebitenrenderer.Input
+	renderer *ebitenbackend.Renderer
+	input    ebitenbackend.Input
 	start    time.Time
 }
 

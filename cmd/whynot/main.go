@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/browser"
 	"github.com/arnodel/whynot/styles/simpletheme"
@@ -59,7 +59,7 @@ func main() {
 	g := &game{
 		app:                 app,
 		toolbarFaceSelector: fonts.NewGoSelector(),
-		renderer:            ebitenrenderer.New(),
+		renderer:            ebitenbackend.New(),
 		debugHit:            *debugHit,
 		debugStats:          *debugStats,
 		outsideWidth:        initialWindowWidth,

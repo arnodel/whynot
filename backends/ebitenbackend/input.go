@@ -1,4 +1,4 @@
-package ebitenrenderer
+package ebitenbackend
 
 import (
 	"image"

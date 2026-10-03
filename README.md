@@ -5,7 +5,7 @@ real formatted text (patch notes, an in-game journal, help screens, a credits sc
 without pulling in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
 the document onto a `canvas.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
 to parse. The core library has no rendering backend dependency of its own - two ship with
-it, [Ebitengine](https://ebitengine.org/) (`ebitenrenderer`) and [Gio](https://gioui.org/)
+it, [Ebitengine](https://ebitengine.org/) (`ebitenbackend`) and [Gio](https://gioui.org/)
 (`giorenderer`).
 
 - **Broad Markdown coverage** - tables, nested lists, images (including
@@ -66,9 +66,9 @@ anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 The library (root package `whynot`) has no rendering backend dependency -
 it only depends on `goldmark` for parsing. Two backends implement
-`canvas.Canvas`: `ebitenrenderer` (on top of `ebiten`) and `giorenderer`
+`canvas.Canvas`: `ebitenbackend` (on top of `ebiten`) and `giorenderer`
 (on top of [Gio](https://gioui.org/)). The examples below use
-`ebitenrenderer` - `giorenderer`'s own `Panel`/`Canvas` mirror its shape
+`ebitenbackend` - `giorenderer`'s own `Panel`/`Canvas` mirror its shape
 closely (see [`cmd/giowhynot`](cmd/giowhynot) and
 [`examples/gio`](examples/gio) for the Gio-backed equivalents). Either
 way, two levels of control to pick from.
@@ -82,8 +82,8 @@ it's safe to embed as part of a larger game window without stepping on
 whatever else is there. It's what `cmd/whynot` itself is built on.
 
 `Panel` doesn't depend on Ebitengine: each frame, your game hands it the
-frame's input events (`ebitenrenderer.Input`), a canvas to draw on
-(`ebitenrenderer.Renderer.NewCanvas`), and the time.
+frame's input events (`ebitenbackend.Input`), a canvas to draw on
+(`ebitenbackend.Renderer.NewCanvas`), and the time.
 
 [`examples/panel`](examples/panel) inset a `Panel` into part of a window
 that fills the rest with plain green - other game content standing in -
@@ -106,7 +106,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -141,7 +141,7 @@ func main() {
 
 	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetWindowTitle("whynot panel example")
-	g := &game{panel: panel, renderer: ebitenrenderer.New(), start: time.Now()}
+	g := &game{panel: panel, renderer: ebitenbackend.New(), start: time.Now()}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
@@ -149,8 +149,8 @@ func main() {
 
 type game struct {
 	panel    *whynot.Panel
-	renderer *ebitenrenderer.Renderer
-	input    ebitenrenderer.Input
+	renderer *ebitenbackend.Renderer
+	input    ebitenbackend.Input
 	start    time.Time
 }
 
@@ -180,7 +180,7 @@ puts Gio's own scrollbar widget on it instead of whynot's - see
 
 ### Finer control: `whynot.View` directly
 
-Drop to `View` (plus `ebitenrenderer.Canvas`) yourself for full control
+Drop to `View` (plus `ebitenbackend.Canvas`) yourself for full control
 over input handling, or to fit whynot into an `Update`/`Draw` structure
 that doesn't match what `Panel` assumes - the same building blocks
 `Panel` itself is built on:
@@ -201,7 +201,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -222,7 +222,7 @@ func exampleDoc() string {
 
 type game struct {
 	view     *whynot.View
-	renderer *ebitenrenderer.Renderer
+	renderer *ebitenbackend.Renderer
 	start    time.Time
 }
 
@@ -246,7 +246,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func main() {
 	g := &game{
 		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet),
-		renderer: ebitenrenderer.New(),
+		renderer: ebitenbackend.New(),
 		start:    time.Now(),
 	}
 	ebiten.SetWindowSize(800, 600)

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/browser"
 )
@@ -17,14 +17,14 @@ import (
 type game struct {
 	app   *browser.App
 	panel *whynot.Panel
-	input ebitenrenderer.Input
+	input ebitenbackend.Input
 	start time.Time // the clock the panel runs on
 
 	// toolbarFaceSelector serves the toolbar's plain Go fonts, separate
 	// from the document's system fonts. Toolbar text is drawn at
 	// deviceScale*72 dpi, not zoomed with the document.
 	toolbarFaceSelector fonts.FaceSelector
-	renderer            *ebitenrenderer.Renderer
+	renderer            *ebitenbackend.Renderer
 	debugHit            bool
 
 	// debugStats shows FPS/TPS and per-frame timing (see

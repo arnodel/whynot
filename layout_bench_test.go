@@ -1,5 +1,5 @@
 // External test package: benchmarks that need to actually draw (not just
-// lay out) depend on ebitenrenderer, which itself depends on whynot - an
+// lay out) depend on ebitenbackend, which itself depends on whynot - an
 // import cycle if this file were `package whynot` like box_test.go.
 package whynot_test
 
@@ -10,7 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/ebitenrenderer"
+	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/engine"
@@ -106,7 +106,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenbackend.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
 	engine.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
@@ -148,7 +148,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 	totalHeight := box.Bounds().Dy()
 	offsetY := -(totalHeight + 100000)
 
-	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenbackend.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
 	engine.DrawBlockLayout(box, dst, 0, offsetY, 0) // warm caches
 
@@ -187,7 +187,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 
 	box := block.GetBlockLayout(ctx, width)
 	totalHeight := box.Bounds().Dy()
-	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, totalHeight))
+	dst := ebitenbackend.New().NewCanvas(ebiten.NewImage(width, totalHeight))
 
 	engine.DrawBlockLayout(box, dst, 0, 0, 0) // warm caches
 
@@ -233,7 +233,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 	totalHeight := probeBox.Bounds().Dy()
 	offsetY := -int(float64(totalHeight-viewportHeight) * offsetFraction)
 
-	dst := ebitenrenderer.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
+	dst := ebitenbackend.New().NewCanvas(ebiten.NewImage(width, viewportHeight))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
