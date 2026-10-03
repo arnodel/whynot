@@ -11,9 +11,9 @@
 // sync by hand if one changes), scroll and window-resize reflow via
 // a whynot.Panel, no toolbar, no file loading (a local path or
 // http(s) URL argument wouldn't mean the same thing in a browser
-// sandbox - see the README), and no link-click handling (Panel's
-// OnLinkClick is left unset, so a link's hover-highlight still shows but
-// clicking one does nothing yet). demo.md's own local images/links
+// sandbox - see the README), and no handling of links to other
+// documents (Panel's OnLinkClick is left unset, so clicking one does
+// nothing; a "#heading" link still scrolls, the Panel's default). demo.md's own local images/links
 // (cat.jpeg, test-large.md, ...) don't resolve here since only the
 // Markdown text itself is embedded - whynot's existing graceful
 // degradation shows their alt text/does nothing on click instead of

@@ -34,4 +34,20 @@
 // the document's height is an estimate until all of it has been laid
 // out: [View.VisibleRange] reports the part in view as fractions of the
 // height, and [View.ScrollToRatio] scrolls to one.
+//
+// # Links
+//
+// A [Controller] highlights the link under the pointer and reports it
+// to its OnLinkHover callback. What a click or tap on a link does
+// depends on where it leads:
+//
+//   - A link within the document, "#id", scrolls the View to the heading
+//     with that id ([View.ScrollToAnchor]) by default. Setting the
+//     OnAnchorClick callback replaces that, for an app that also wants
+//     to record history, say.
+//   - Any other link is passed to the OnLinkClick callback, since
+//     following it (resolving it, loading another document) is up to the
+//     app. By default, nothing happens.
+//
+// A Panel has the same callbacks.
 package whynot

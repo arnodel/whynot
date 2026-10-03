@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"strings"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -157,8 +158,10 @@ func (v *View) RestoreScrollPosition(p ScrollPosition) {
 
 // ScrollToAnchor scrolls to put the heading with the given anchor id at
 // the top of the viewport, e.g. after following a link with a URL
-// fragment. ok is false, and the scroll position unchanged, if no heading
-// has that id or nothing has been laid out yet.
+// fragment. As in a browser, the empty id, and "top" when no heading has
+// that id, scroll to the top of the document. ok is false, and the scroll
+// position unchanged, if no heading has that id or nothing has been laid
+// out yet.
 //
 // Only top-level headings are found: not one nested in a blockquote or
 // list.
@@ -166,14 +169,22 @@ func (v *View) ScrollToAnchor(id string) bool {
 	if !v.stack.laidOut() {
 		return false
 	}
+	slot := -1
 	for i := range v.stack.len() {
-		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id {
-			v.stack.scrollToSlot(i)
-			v.moves++
-			return true
+		if n := nodeOf(v.stack.blockAt(i)); n != nil && n.ID == id && id != "" {
+			slot = i
+			break
 		}
 	}
-	return false
+	if slot < 0 && (id == "" || strings.EqualFold(id, "top")) {
+		slot = 0
+	}
+	if slot < 0 {
+		return false
+	}
+	v.stack.scrollToSlot(slot)
+	v.moves++
+	return true
 }
 
 // ScrollToRatio puts the top of the View at ratio (clamped to [0, 1]) of

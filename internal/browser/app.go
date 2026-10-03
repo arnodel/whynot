@@ -269,7 +269,20 @@ func (a *App) Follow(dest string) {
 		log.Printf("link destination %q: %v", dest, err)
 		return
 	}
+	a.follow(resolved)
+}
 
+// FollowAnchor is Follow for a link within the current document to the
+// heading with the given id, already percent-decoded: for
+// Panel.OnAnchorClick.
+func (a *App) FollowAnchor(id string) {
+	resolved := *a.location
+	resolved.Fragment, resolved.RawFragment = id, ""
+	a.follow(&resolved)
+}
+
+// follow is Follow once dest is resolved.
+func (a *App) follow(resolved *url.URL) {
 	if a.tocDocView != nil {
 		docView := a.tocDocView
 		a.pushHistoryFor(a.location, docView)

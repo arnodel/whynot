@@ -155,26 +155,43 @@ func TestControllerTapFollowsLink(t *testing.T) {
 	}
 }
 
-func TestControllerAnchorScrolling(t *testing.T) {
+// TestControllerAnchorDefault checks a "#id" link scrolls to its
+// heading when OnAnchorClick is nil, without calling OnLinkClick.
+func TestControllerAnchorDefault(t *testing.T) {
 	// The link sits at the very top (easy to find without scrolling);
 	// the heading it targets is far below.
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"
 	c, v := newTestController(t, doc)
-	c.AnchorScrolling = true
-
 	lx, ly := findLinkPos(t, v)
 
 	var clicked bool
 	c.OnLinkClick = func(string) { clicked = true }
 
-	beforeTop := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
+	before, _ := v.VisibleRange()
 	frame(c, press(lx, ly))
 	if clicked {
-		t.Error("OnLinkClick was called for a #fragment link with AnchorScrolling set")
+		t.Error("OnLinkClick was called for a #id link")
 	}
-	afterTop := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
-	if afterTop <= beforeTop {
-		t.Errorf("VisibleViewBounds top after clicking the anchor link = %d, want more than before (%d)", afterTop, beforeTop)
+	if after, _ := v.VisibleRange(); after <= before {
+		t.Errorf("VisibleRange start after clicking the anchor link = %v, want more than %v", after, before)
+	}
+}
+
+// TestControllerOnAnchorClick checks OnAnchorClick replaces the default
+// scrolling, and gets the id percent-decoded.
+func TestControllerOnAnchorClick(t *testing.T) {
+	doc := "[jump](#a%20target)\n\n" + strings.Repeat(longDoc, 10) + "# A target"
+	c, v := newTestController(t, doc)
+	lx, ly := findLinkPos(t, v)
+
+	var got []string
+	c.OnAnchorClick = func(id string) { got = append(got, id) }
+	frame(c, press(lx, ly))
+	if len(got) != 1 || got[0] != "a target" {
+		t.Errorf("OnAnchorClick called with %q, want [\"a target\"]", got)
+	}
+	if start, _ := v.VisibleRange(); start != 0 {
+		t.Errorf("VisibleRange start = %v after OnAnchorClick, want 0 (no default scrolling)", start)
 	}
 }
 

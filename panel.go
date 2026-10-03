@@ -19,17 +19,21 @@ import (
 // and a canvas.Canvas to draw on, along with the time.
 type Panel struct {
 	// OnLinkClick is called with a link's destination when it's clicked
-	// or tapped; nil makes links inert. See also
-	// AnchorScrolling.
+	// or tapped, unless it's a link within the document (see
+	// OnAnchorClick). Nil means the default: nothing happens, since
+	// following a link to another document is up to the app.
 	OnLinkClick func(destination string)
+
+	// OnAnchorClick is called when a link within the document ("#id") is
+	// clicked or tapped, with id percent-decoded. Nil means the default:
+	// the View scrolls to that heading ([View.ScrollToAnchor]). Set it to
+	// do something else as well, such as recording history.
+	OnAnchorClick func(id string)
+
 	// OnLinkHover is called when the hovered link changes, with "" when
 	// none is. The View already highlights it; this is for the app's own
 	// reactions, like a status bar.
 	OnLinkHover func(destination string)
-	// AnchorScrolling makes a clicked "#fragment" link scroll the View to
-	// its heading instead of calling OnLinkClick: for a document with no
-	// location to resolve a fragment against.
-	AnchorScrolling bool
 
 	view       *View
 	controller *Controller
@@ -125,7 +129,7 @@ func (p *Panel) SetStyleSheet(s StyleSheet) {
 func (p *Panel) Frame(events []input.Event, now time.Duration) {
 	p.controller.OnLinkClick = p.OnLinkClick
 	p.controller.OnLinkHover = p.OnLinkHover
-	p.controller.AnchorScrolling = p.AnchorScrolling
+	p.controller.OnAnchorClick = p.OnAnchorClick
 	p.controller.Frame(events, now)
 }
 
