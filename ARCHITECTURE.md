@@ -29,7 +29,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `codeblocks/kroki/` | a `codeblocks.Plugin` producing an `Image`: renders Mermaid fences as images through a Kroki server |
 | `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
 | `cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
-| `examples/panel/` | runnable example of `ebitenrenderer.Panel` embedded alongside other game content (`go run ./examples/panel`) |
+| `examples/panel/` | runnable example of a `whynot.Panel` embedded alongside other game content (`go run ./examples/panel`) |
 | `examples/view/` | runnable example of `whynot.View` wired up by hand (`go run ./examples/view`) |
 | `examples/gio/` | runnable example of `giorenderer.Canvas`/`Panel` (`go run ./examples/gio`) |
 | `examples/wasm/` | minimal browser demo via Ebitengine's own `js`/`wasm` backend, independent of `cmd/whynot`'s own (larger) browser build |
@@ -265,22 +265,22 @@ elapsed time since the embedder started rendering, needs to keep
 advancing for animated images even when nothing else did — see "Image
 loading" below; the layout tree itself still only rebuilds when width
 or scale change). `cmd/whynot`'s `layout.go` (`relayout`) is the minimal
-example of wiring this up by hand; `ebitenrenderer.Panel`
-([panel.go](ebitenrenderer/panel.go)) and its Gio counterpart
-`giorenderer.Panel` package the same wiring (plus hover/click/wheel/
-scrollbar-drag input handling, all gated on its own bounds) into a
-reusable type for embedding a `View` into part of a larger window -
-deliberately backend-specific, unlike `View` itself, since a caller
-embedding one is never going to swap engines out from under it. The
-`Panel`s don't interpret input themselves: each translates its
-framework's input into [`input`](input) events (pointer moves and
-buttons, wheel, touches) and passes each frame's events to a
+example of wiring this up by hand; `whynot.Panel`
+([panel.go](panel.go)) packages the same wiring (plus input handling,
+gated on its own bounds) into a reusable type for embedding a `View`
+into part of a larger window. It doesn't depend on a graphics library:
+each frame, the app passes it [`input`](input) events (pointer moves
+and buttons, wheel, touches) read by a backend's input reader
+(`ebitenrenderer.Input`, `giorenderer.Input`), a `canvas.Canvas` from
+the backend's renderer, and the time. What's left to the app is only
+what's shaped by its framework: where those come from, and its frame
+loop. The Panel passes the events to a
 `whynot.Controller` ([controller.go](controller.go)), which owns
 scrolling, hover and clicks, touch pans and flings, and sideways
 scrollbars, and the View's own vertical scrollbar (`WithScrollbar`,
 [scrollbar.go](scrollbar.go)), drawn by the View as its StyleSheet says.
 A Gio app may use Gio's native `widget.Scrollbar` instead
-(`giorenderer.WithNativeScrollbar`), styled best-effort from the same
+(`giorenderer.NativeScrollbar`), styled best-effort from the same
 StyleSheet's colors.
 
 `DocumentBounds`/`VisibleViewBounds` expose scroll-position geometry (a caller

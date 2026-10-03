@@ -4,7 +4,7 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/layout"
 
-	"github.com/arnodel/whynot/giorenderer"
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/internal/browser"
 )
 
@@ -18,7 +18,7 @@ const arrowScrollLines = 40
 // pointer.Filter these need no prior area/event.Op registration: call
 // once per frame, from anywhere. deviceScale is the display's own
 // scale, with no zoom applied.
-func pollKeys(gtx layout.Context, app *browser.App, panel *giorenderer.Panel, deviceScale float64) {
+func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel, deviceScale float64) {
 	for {
 		e, ok := gtx.Event(
 			key.Filter{Name: key.NameDeleteBackward},
