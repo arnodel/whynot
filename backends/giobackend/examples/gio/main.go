@@ -1,5 +1,5 @@
 // Command gio is a runnable example of whynot rendering through
-// giorenderer (Gio, gioui.org) instead of ebitenbackend - a
+// giobackend (Gio, gioui.org) instead of ebitenbackend - a
 // whynot.Panel showing one document, with scroll, link hover/click, and
 // a scrollbar. See examples/panel for the ebiten-backed equivalent this
 // mirrors.
@@ -16,15 +16,15 @@ import (
 	"gioui.org/op"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
 	var b strings.Builder
 	b.WriteString("# Gio example\n\n")
-	b.WriteString("This document exists to check giorenderer's `Canvas` against the same\n")
+	b.WriteString("This document exists to check giobackend's `Canvas` against the same\n")
 	b.WriteString("three primitives ebitenbackend implements: text (this paragraph, mixed\n")
 	b.WriteString("with `inline code` and **bold**), a filled rect (the thematic break\n")
 	b.WriteString("below), and an image. It's also long enough to need scrolling, to check\n")
@@ -54,8 +54,8 @@ func run() error {
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	panel.SetScrollbar(true)
 
-	renderer := giorenderer.New()
-	var in giorenderer.Input
+	renderer := giobackend.New()
+	var in giobackend.Input
 	start := time.Now()
 
 	w := new(app.Window)

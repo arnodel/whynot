@@ -34,17 +34,17 @@ jobs:
       # them - the same build a local `GOOS=js GOARCH=wasm go build`
       # from that directory would produce. giowhynot gets a subpath
       # (cmd/whynot/web/giowhynot/) rather than its own top-level
-      # site: cmd/giowhynot/web/index.html is still the canonical
+      # site: backends/giobackend/cmd/giowhynot/web/index.html is still the canonical
       # source for that page, just copied into place here alongside a
       # fresh giowhynot.wasm and the same wasm_exec.js (Go's own wasm
       # runtime glue, not specific to either backend, so not built or
-      # committed a second time - see cmd/giowhynot/web/README.md).
+      # committed a second time - see backends/giobackend/cmd/giowhynot/web/README.md).
       - name: Build whynot.wasm and giowhynot.wasm
         run: |
           GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
           mkdir -p cmd/whynot/web/giowhynot
-          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/giowhynot/giowhynot.wasm ./cmd/giowhynot
-          cp cmd/giowhynot/web/index.html cmd/whynot/web/wasm_exec.js cmd/whynot/web/giowhynot/
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/giowhynot/giowhynot.wasm ./backends/giobackend/cmd/giowhynot
+          cp backends/giobackend/cmd/giowhynot/web/index.html cmd/whynot/web/wasm_exec.js cmd/whynot/web/giowhynot/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -1,6 +1,6 @@
 // Command giowhynot is cmd/whynot's Gio (gioui.org) counterpart: the
 // same browser.App - navigation history, theme, zoom, document/image
-// loading, welcome page - drawn with giorenderer instead of
+// loading, welcome page - drawn with giobackend instead of
 // ebitenbackend, with Gio's own scrollbar and a Gio-native toolbar (see
 // toolbar.go).
 package main
@@ -16,8 +16,8 @@ import (
 	"gioui.org/unit"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/giorenderer"
 	"github.com/arnodel/whynot/internal/browser"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -55,7 +55,7 @@ func main() {
 	}
 
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light)
-	renderer := giorenderer.New()
+	renderer := giobackend.New()
 	view := browserApp.NewView(source, location)
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel

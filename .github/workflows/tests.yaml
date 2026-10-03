@@ -25,8 +25,8 @@ jobs:
       with:
         go-version: 1.25
 
-    # examples/gio (giorenderer's demo) needs Gio's own native build
-    # deps - giorenderer itself has none of these, only the actual
+    # backends/giobackend/examples/gio (giobackend's demo) needs Gio's own native build
+    # deps - giobackend itself has none of these, only the actual
     # windowing package (gioui.org/app) does. Exact list per
     # https://gioui.org/doc/install/linux.
     - name: Install Gio's Linux build dependencies

@@ -1,14 +1,4 @@
-// Package giorenderer implements canvas.Canvas on top of Gio (gioui.org).
-// It's the only place in the module outside examples/gio that depends on
-// Gio - the core whynot package has no rendering backend dependency at
-// all.
-//
-// Gio has no equivalent of a font.Face-consuming text drawer (its own
-// text.Shaper owns the whole shaping pipeline from raw font bytes, with
-// no public per-glyph API) - so DrawText rasterizes each rune itself via
-// font.Face.Glyph and paints the resulting bitmap through Gio's op/paint
-// primitives, caching the rasterized result.
-package giorenderer
+package giobackend
 
 import (
 	"image"

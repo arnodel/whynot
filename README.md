@@ -6,7 +6,7 @@ without pulling in a full UI toolkit. Point it at a `[]byte` of Markdown and it 
 the document onto a `canvas.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
 to parse. The core library has no rendering backend dependency of its own - two ship with
 it, [Ebitengine](https://ebitengine.org/) (`ebitenbackend`) and [Gio](https://gioui.org/)
-(`giorenderer`).
+(`giobackend`).
 
 - **Broad Markdown coverage** - tables, nested lists, images (including
   animated GIFs), links, blockquotes, code blocks, and more - degrading
@@ -26,22 +26,22 @@ it, [Ebitengine](https://ebitengine.org/) (`ebitenbackend`) and [Gio](https://gi
 
 Two small standalone apps, built entirely on the library, are the easiest way to see what
 whynot can do - identical document viewer, history, zoom, and theming; the difference is
-the rendering engine underneath (and, for now, that `cmd/giowhynot` isn't packaged in a
+the rendering engine underneath (and, for now, that `backends/giobackend/cmd/giowhynot` isn't packaged in a
 release, so `go install` is its only native option).
 
 | Engine | Platforms | Install | Web demo |
 |---|---|---|---|
 | [Ebitengine](https://ebitengine.org/) ([`cmd/whynot`](cmd/whynot)) | macOS, Linux, Windows, wasm | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
-| [Gio](https://gioui.org/) ([`cmd/giowhynot`](cmd/giowhynot)) | macOS, Linux, Windows, wasm | `go install github.com/arnodel/whynot/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
+| [Gio](https://gioui.org/) ([`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot)) | macOS, Linux, Windows, wasm | `go install github.com/arnodel/whynot/backends/giobackend/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
 
 Both web demos run entirely client-side (see [`cmd/whynot/web`](cmd/whynot/web)/
-[`cmd/giowhynot/web`](cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local
+[`backends/giobackend/cmd/giowhynot/web`](backends/giobackend/cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local
 file opening and paste-to-open aren't wired up in either (there's no real filesystem or
 clipboard access in a browser sandbox), and a link to a webpage opens in a new tab rather
 than the system browser - everything else, including opening a Markdown document by URL
 (`?doc=<url>`, or just follow a link), works the same as installed.
 
-`cmd/giowhynot` has one feature `cmd/whynot` doesn't: the address bar is editable - click
+`backends/giobackend/cmd/giowhynot` has one feature `cmd/whynot` doesn't: the address bar is editable - click
 it, type a path/URL/"welcome", Enter to go there. `-debug-hit`/`-debug-stats` aren't
 implemented there yet, otherwise the two are the same feature set.
 
@@ -66,11 +66,11 @@ anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 The library (root package `whynot`) has no rendering backend dependency -
 it only depends on `goldmark` for parsing. Two backends implement
-`canvas.Canvas`: `ebitenbackend` (on top of `ebiten`) and `giorenderer`
+`canvas.Canvas`: `ebitenbackend` (on top of `ebiten`) and `giobackend`
 (on top of [Gio](https://gioui.org/)). The examples below use
-`ebitenbackend` - `giorenderer`'s own `Panel`/`Canvas` mirror its shape
-closely (see [`cmd/giowhynot`](cmd/giowhynot) and
-[`examples/gio`](examples/gio) for the Gio-backed equivalents). Either
+`ebitenbackend` - `giobackend`'s own `Panel`/`Canvas` mirror its shape
+closely (see [`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) and
+[`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) for the Gio-backed equivalents). Either
 way, two levels of control to pick from.
 
 ### The turnkey way: `whynot.Panel`
@@ -171,12 +171,12 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 Run it yourself: `go run ./examples/panel`.
 
-With Gio, the same `Panel` takes its input from `giorenderer.Input` and
-draws through `giorenderer.Renderer`; since Gio only redraws on events,
-ask for another frame while `Panel.Animating()`. `giorenderer.NativeScrollbar`
+With Gio, the same `Panel` takes its input from `giobackend.Input` and
+draws through `giobackend.Renderer`; since Gio only redraws on events,
+ask for another frame while `Panel.Animating()`. `giobackend.NativeScrollbar`
 puts Gio's own scrollbar widget on it instead of whynot's - see
-[`examples/gio`](examples/gio) for a runnable version, or
-[`cmd/giowhynot`](cmd/giowhynot) for a full app built on it.
+[`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) for a runnable version, or
+[`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) for a full app built on it.
 
 ### Finer control: `whynot.View` directly
 
@@ -399,7 +399,7 @@ that needs real type/binding information a lexer doesn't have (see `chromahighli
 
 See [`examples/chromahighlight`](examples/chromahighlight) for a runnable version.
 
-## `cmd/whynot`/`cmd/giowhynot`: standalone viewers
+## `cmd/whynot`/`giowhynot`: standalone viewers
 
 ```
 go run ./cmd/whynot path/to/some.md
@@ -410,7 +410,7 @@ Run with no argument and it opens a built-in welcome page (embedded in the binar
 `http(s)` URL (Cmd/Ctrl+V) to open it, and pasting the word "welcome" to come back. Beyond
 scrolling and resizing, it demonstrates what a caller can build on top of the library -
 this section is about `cmd/whynot` specifically, but everything except the toolbar itself
-(see [above](#try-the-standalone-viewer)) is shared with `cmd/giowhynot` via `browser.App`:
+(see [above](#try-the-standalone-viewer)) is shared with `backends/giobackend/cmd/giowhynot` via `browser.App`:
 
 - **Document text uses this platform's own fonts** (`systemfont.Selector`,
   via `RegisterPreferredFont` - see [above](#fonts)) when it can find them, falling back
@@ -457,7 +457,7 @@ None of the link-following/history logic lives in the library itself -
 `ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
 files, fetching URLs, and keeping a history stack all live in
 `browser` (`internal/browser`, `browser.App`, internal to this module) - the
-backend-agnostic app layer [`cmd/giowhynot`](cmd/giowhynot) is built on
+backend-agnostic app layer [`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) is built on
 too, sharing this exact behavior rather than reimplementing it (its own
 toolbar and input handling are Gio-native instead - see
 [above](#embed-a-markdown-viewer-in-your-game)). Image loading follows
@@ -582,7 +582,7 @@ by implementation order now that most of the list is done.
       minimum thumb length, and whether it stays visible or fades when idle. Draggable,
       with hover/drag color feedback. It's optional: `View.VisibleRange`
       exposes the geometry to build your own, and a Gio app can use
-      Gio's native scrollbar instead (`giorenderer.NativeScrollbar`)
+      Gio's native scrollbar instead (`giobackend.NativeScrollbar`)
 - [ ] A real app icon instead of the generic terminal one when launched as a bundled
       macOS/Windows/Linux app
 
