@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
@@ -162,31 +163,31 @@ func TestScrollBoxFadesAndScrollbar(t *testing.T) {
 	}
 }
 
-func TestInteractionDragsHorizontalScrollbar(t *testing.T) {
+// TestControllerDragsHorizontalScrollbar checks pressing a sideways
+// scrollbar's thumb and moving drags it, and a press elsewhere doesn't.
+func TestControllerDragsHorizontalScrollbar(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	c := NewController(v, image.Rect(0, 0, 300, 400))
 	before := drawnTextX(t, v, "wide")
 	thumb := v.hscroll.thumb(area)
 	grab := image.Pt(thumb.Min.X+2, thumb.Min.Y+1)
 
-	if in.DragHorizontalScrollbar(grab.X, grab.Y+100, true, true) {
+	frame(c, press(grab.X, grab.Y+100))
+	if v.hscroll.dragging != nil {
 		t.Error("press away from the scrollbar started a drag")
 	}
-	in.DragHorizontalScrollbar(grab.X, grab.Y+100, false, false)
+	frame(c, release(grab.X, grab.Y+100))
 
-	if !in.DragHorizontalScrollbar(grab.X, grab.Y, true, true) {
+	frame(c, press(grab.X, grab.Y))
+	if v.hscroll.dragging == nil {
 		t.Fatal("press on the thumb didn't start a drag")
 	}
-	if !in.DragHorizontalScrollbar(grab.X+40, grab.Y+30, true, false) {
-		t.Fatal("moving while pressed isn't part of the drag")
-	}
+	frame(c, input.PointerMove{X: grab.X + 40, Y: grab.Y + 30})
 	if got := drawnTextX(t, v, "wide"); got >= before {
 		t.Errorf("text at x=%d after dragging the thumb right, want less than %d (content scrolled left)", got, before)
 	}
-	if !in.DragHorizontalScrollbar(grab.X+40, grab.Y+30, false, false) {
-		t.Error("the release ending the drag isn't reported as part of it")
-	}
-	if in.DragHorizontalScrollbar(grab.X+40, grab.Y+30, true, false) {
+	frame(c, release(grab.X+40, grab.Y+30))
+	if v.hscroll.dragging != nil {
 		t.Error("still dragging after the release")
 	}
 }
@@ -208,8 +209,9 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	if thumb.Max.Y > 400 || thumb.Min.Y < 0 {
 		t.Errorf("thumb at %v, want within the 400px viewport", thumb)
 	}
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
-	if !in.DragHorizontalScrollbar(thumb.Min.X+2, thumb.Min.Y+1, true, true) {
+	c := NewController(v, image.Rect(0, 0, 300, 400))
+	frame(c, press(thumb.Min.X+2, thumb.Min.Y+1))
+	if v.hscroll.dragging == nil {
 		t.Error("press on the on-screen thumb didn't start a drag")
 	}
 }
@@ -235,23 +237,55 @@ func pageTop(v *View) int {
 	return v.VisibleViewBounds(image.Pt(v.width, 400)).Min.Y
 }
 
+// toucher drives a Controller with one finger.
+type toucher struct {
+	c   *Controller
+	pos image.Point
+	now time.Duration
+}
+
+func newToucher(v *View) *toucher {
+	return &toucher{c: NewController(v, image.Rect(0, 0, 300, 400)), now: time.Second}
+}
+
+func (tc *toucher) start(p image.Point) {
+	tc.pos = p
+	tc.c.Frame([]input.Event{input.TouchStart{ID: 1, X: p.X, Y: p.Y}}, tc.now)
+}
+
+// drag moves the finger by (dx, dy), 16ms after the previous frame.
+func (tc *toucher) drag(dx, dy int) {
+	tc.pos = tc.pos.Add(image.Pt(dx, dy))
+	tc.now += 16 * time.Millisecond
+	tc.c.Frame([]input.Event{input.TouchMove{ID: 1, X: tc.pos.X, Y: tc.pos.Y}}, tc.now)
+}
+
+func (tc *toucher) end() {
+	tc.c.Frame([]input.Event{input.TouchEnd{ID: 1}}, tc.now)
+}
+
+// coast runs a frame without input, 16ms later.
+func (tc *toucher) coast() {
+	tc.now += 16 * time.Millisecond
+	tc.c.Frame(nil, tc.now)
+}
+
 func TestTouchPansCodeBlockSideways(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
 	x, top := drawnTextX(t, v, "wide"), pageTop(v)
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.TouchDrag(-4, 1, now.Add(16*time.Millisecond))
+	tc.start(start)
+	tc.drag(-4, 1)
 	if got := drawnTextX(t, v, "wide"); got != x || pageTop(v) != top {
 		t.Fatalf("moved before passing the lock distance: text x %d (want %d), page top %d (want %d)", got, x, pageTop(v), top)
 	}
-	in.TouchDrag(-20, 2, now.Add(32*time.Millisecond))
+	tc.drag(-20, 2)
 	if got := drawnTextX(t, v, "wide"); got != x-24 {
 		t.Errorf("text x = %d after a mostly sideways drag, want %d (all movement so far applied)", got, x-24)
 	}
-	in.TouchDrag(-10, -30, now.Add(48*time.Millisecond))
+	tc.drag(-10, -30)
 	if got := drawnTextX(t, v, "wide"); got != x-34 || pageTop(v) != top {
 		t.Errorf("once locked sideways: text x %d (want %d), page top %d (want %d, unchanged)", got, x-34, pageTop(v), top)
 	}
@@ -259,13 +293,12 @@ func TestTouchPansCodeBlockSideways(t *testing.T) {
 
 func TestTouchOnCodeBlockMostlyVerticalScrollsPage(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
 	x, top := drawnTextX(t, v, "wide"), pageTop(v)
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.TouchDrag(3, -20, now.Add(16*time.Millisecond))
+	tc.start(start)
+	tc.drag(3, -20)
 	if got := pageTop(v); got != top+20 {
 		t.Errorf("page top = %d after a mostly vertical drag, want %d", got, top+20)
 	}
@@ -276,12 +309,11 @@ func TestTouchOnCodeBlockMostlyVerticalScrollsPage(t *testing.T) {
 
 func TestTouchOffCodeBlockScrollsPageImmediately(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	top := pageTop(v)
-	now := time.Now()
 
-	in.TouchStart(10, area.Visible.Min.Y-5, now) // just above the code block
-	in.TouchDrag(0, -3, now.Add(16*time.Millisecond))
+	tc.start(image.Pt(10, area.Visible.Min.Y-5)) // just above the code block
+	tc.drag(0, -3)
 	if got := pageTop(v); got != top+3 {
 		t.Errorf("page top = %d after a small drag off the code block, want %d (no lock delay)", got, top+3)
 	}
@@ -289,19 +321,18 @@ func TestTouchOffCodeBlockScrollsPageImmediately(t *testing.T) {
 
 func TestTouchSidewaysFlingCoasts(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.TouchDrag(-20, 0, now.Add(16*time.Millisecond))
-	in.TouchDrag(-20, 0, now.Add(32*time.Millisecond))
-	in.TouchEnd()
+	tc.start(start)
+	tc.drag(-20, 0)
+	tc.drag(-20, 0)
+	tc.end()
 	released := drawnTextX(t, v, "wide")
-	if !in.Animating() {
+	if !tc.c.Animating() {
 		t.Fatal("Animating() = false right after a sideways fling, want true")
 	}
-	in.Momentum(now.Add(48 * time.Millisecond))
+	tc.coast()
 	if got := drawnTextX(t, v, "wide"); got >= released {
 		t.Errorf("text x = %d after a frame of coasting, want less than %d (still moving left)", got, released)
 	}
@@ -309,12 +340,11 @@ func TestTouchSidewaysFlingCoasts(t *testing.T) {
 
 func TestTouchPanRevealsScrollbarThenFades(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
-	now := time.Now()
-	in.TouchStart(start.X, start.Y, now)
-	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
-	in.TouchEnd()
+	tc.start(start)
+	tc.drag(-30, 0)
+	tc.end()
 
 	s := v.hscroll
 	if got := s.barOpacity(area.Source, v.ctx.Time); got != 1 {
@@ -339,14 +369,12 @@ func TestTouchPanRevealsScrollbarThenFades(t *testing.T) {
 // HoverAndClick while the finger was down.
 func TestTouchEndUnhoversPannedBlock(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.HoverAndClick(start.X, start.Y, true)
-	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
-	in.TouchEnd()
+	tc.start(start)
+	tc.drag(-30, 0)
+	tc.end()
 
 	fadeMid := v.ctx.Time + hscrollRevealHold + hscrollRevealFade/2
 	if got := v.hscroll.barOpacity(area.Source, fadeMid); got >= 1 {
@@ -360,13 +388,11 @@ func TestTouchEndUnhoversPannedBlock(t *testing.T) {
 // through HoverAndClick (for a tap on a link).
 func TestTouchVerticalScrollOnBlockShowsNoScrollbar(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.HoverAndClick(start.X, start.Y, true)
-	in.TouchDrag(0, -30, now.Add(16*time.Millisecond))
+	tc.start(start)
+	tc.drag(0, -30)
 	if got := v.hscroll.barOpacity(area.Source, v.ctx.Time); got != 0 {
 		t.Errorf("scrollbar opacity while scrolling the page = %v, want 0", got)
 	}
@@ -377,16 +403,15 @@ func TestTouchVerticalScrollOnBlockShowsNoScrollbar(t *testing.T) {
 // longer than the fade takes before lifting.
 func TestTouchEndStartsScrollbarFade(t *testing.T) {
 	v, area := hscrollTestView(t, 300)
-	in := &Interaction{View: v, Bounds: image.Rect(0, 0, 300, 400)}
+	tc := newToucher(v)
 	start := area.Visible.Min.Add(image.Pt(10, 10))
-	now := time.Now()
 
-	in.TouchStart(start.X, start.Y, now)
-	in.TouchDrag(-30, 0, now.Add(16*time.Millisecond))
+	tc.start(start)
+	tc.drag(-30, 0)
 	// The finger rests (no frames - Gio draws none without events), then
 	// lifts after longer than the whole reveal.
 	v.Layout(300, 400, 1, v.ctx.Time+2*(hscrollRevealHold+hscrollRevealFade))
-	in.TouchEnd()
+	tc.end()
 
 	if got := v.hscroll.barOpacity(area.Source, v.ctx.Time); got != 1 {
 		t.Errorf("scrollbar opacity when the finger lifts = %v, want 1 (fading from here)", got)

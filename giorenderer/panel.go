@@ -12,7 +12,7 @@ import (
 
 // Panel adapts a whynot.View for embedding in a larger Gio UI - the Gio
 // counterpart to ebitenrenderer.Panel, sharing its scroll/hover/click/
-// momentum logic via whynot.Interaction, but using Gio's own native
+// momentum logic via whynot.Controller, but using Gio's own native
 // widget.Scrollbar for the scrollbar rather than a hand-drawn one.
 var _ whynot.Panel = (*Panel)(nil)
 
@@ -40,19 +40,17 @@ type Panel struct {
 
 	styleSheet whynot.StyleSheet
 
-	interaction whynot.Interaction
+	// controller turns this Panel's input into scrolling, hovering and
+	// clicking.
+	controller *whynot.Controller
 
 	scrollbarEnabled bool
 	anchorScrolling  bool
 	scrollbar        widget.Scrollbar
 	theme            *material.Theme
 
-	// Touch-drag state - see Update. At most one drag tracked at a time.
-	dragging    bool
-	lastDragPos image.Point
-
-	// mouseDown is whether the mouse button is pressed - for dragging a
-	// sideways-scrolling block's scrollbar (see whynot.Interaction).
+	// mouseDown is whether the primary mouse button is pressed, to report
+	// its release.
 	mouseDown bool
 
 	start time.Time
@@ -99,6 +97,7 @@ func NewPanel(view *whynot.View, renderer *Renderer, bounds image.Rectangle, opt
 		theme:    material.NewTheme(),
 		start:    time.Now(),
 	}
+	p.controller = whynot.NewController(view, bounds)
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -117,7 +116,7 @@ func (p *Panel) SetView(v *whynot.View) {
 	if p.styleSheet != nil {
 		p.view.SetStyleSheet(p.styleSheet)
 	}
-	p.interaction.Reset()
+	p.controller.SetView(v)
 	p.relayout()
 }
 
@@ -129,6 +128,7 @@ func (p *Panel) Bounds() image.Rectangle {
 // SetBounds resizes/repositions the panel.
 func (p *Panel) SetBounds(bounds image.Rectangle) {
 	p.bounds = bounds
+	p.controller.SetBounds(bounds)
 	p.relayout()
 }
 

@@ -26,6 +26,14 @@ func newTestPanel(t *testing.T, source string, opts ...PanelOption) *Panel {
 	return NewPanel(v, New(), image.Rect(0, 0, testPanelWidth, testPanelHeight), opts...)
 }
 
+// tick runs one Update's worth of mouse input: the pointer at (x, y),
+// the button down or not, and the wheel moved by wheelY (ebiten.Wheel's
+// units).
+func tick(p *Panel, x, y int, wheelY float64, down bool) {
+	justPressed := down && !p.mouseDown
+	p.apply(p.mouseEvents(mouseInput{x: x, y: y, down: down, wheelY: wheelY}), x, y, down, justPressed)
+}
+
 func TestScrollbarThumbRectShortDocument(t *testing.T) {
 	p := newTestPanel(t, "just one short line", WithScrollbar())
 	if _, ok := p.scrollbarThumbRect(); ok {
@@ -162,31 +170,31 @@ func TestUpdateHoverAndClick(t *testing.T) {
 	p.OnLinkClick = func(dest string) { clicked = dest; clickCount++ }
 
 	// Outside bounds entirely - no hover.
-	p.update(0, 0, 0, false, false)
+	tick(p, 0, 0, 0, false)
 	if len(hoverEvents) != 0 {
 		t.Errorf("hover events outside bounds = %v, want none", hoverEvents)
 	}
 
 	// Over the link.
-	p.update(cx, cy, 0, false, false)
+	tick(p, cx, cy, 0, false)
 	if len(hoverEvents) != 1 || hoverEvents[0] != "dest" {
 		t.Errorf("hover events after moving onto the link = %v, want [dest]", hoverEvents)
 	}
 
 	// Same position again - no new event (edge-triggered).
-	p.update(cx, cy, 0, false, false)
+	tick(p, cx, cy, 0, false)
 	if len(hoverEvents) != 1 {
 		t.Errorf("hover events after a second identical call = %v, want still just 1", hoverEvents)
 	}
 
 	// Click it.
-	p.update(cx, cy, 0, true, true)
+	tick(p, cx, cy, 0, true)
 	if clickCount != 1 || clicked != "dest" {
 		t.Errorf("OnLinkClick called %d time(s) with %q, want once with \"dest\"", clickCount, clicked)
 	}
 
 	// Move off - hover clears.
-	p.update(bounds.Min.X, bounds.Min.Y, 0, false, false)
+	tick(p, bounds.Min.X, bounds.Min.Y, 0, false)
 	if len(hoverEvents) != 2 || hoverEvents[1] != "" {
 		t.Errorf("hover events after moving off the link = %v, want a trailing \"\"", hoverEvents)
 	}
@@ -208,7 +216,7 @@ func TestUpdateAnchorScrolling(t *testing.T) {
 	p.OnLinkClick = func(string) { clicked = true }
 
 	beforeTop := v.VisibleViewBounds(image.Pt(testPanelWidth, testPanelHeight)).Min.Y
-	p.update(lx, ly, 0, true, true)
+	tick(p, lx, ly, 0, true)
 	if clicked {
 		t.Error("OnLinkClick was called for a #fragment link with WithAnchorScrolling set")
 	}
@@ -218,23 +226,24 @@ func TestUpdateAnchorScrolling(t *testing.T) {
 	}
 }
 
-// TestUpdateScrollDeltaPassesThroughUnscaled checks that update passes
-// scrollDelta straight to View.Scroll with no extra scaling.
-func TestUpdateScrollDeltaPassesThroughUnscaled(t *testing.T) {
+// TestWheelScrollsByWheelPixels checks one unit of ebiten.Wheel scrolls
+// wheelPixels (at scale 1), with ebiten's sign: positive is up.
+func TestWheelScrollsByWheelPixels(t *testing.T) {
 	p := newTestPanel(t, strings.Repeat(longDoc, 20))
 	viewport := image.Pt(testPanelWidth, testPanelHeight)
 
-	// Scroll deep into the document first (negative moves down, see
-	// ScrollDown) so a small delta afterwards has room to move.
-	p.update(0, 0, -5000, false, false)
+	// Scroll deep into the document first, so scrolling back up
+	// afterwards has room to move.
+	tick(p, 0, 0, -2500, false)
 	before := p.view.VisibleViewBounds(viewport).Min.Y
+	if before == 0 {
+		t.Fatal("test setup: a negative wheel didn't scroll down")
+	}
 
-	const delta = 37.0
-	p.update(0, 0, delta, false, false)
+	tick(p, 0, 0, 10, false)
 	after := p.view.VisibleViewBounds(viewport).Min.Y
-
-	if got, want := float64(before-after), delta; got != want {
-		t.Errorf("VisibleViewBounds top moved by %v, want exactly %v (scrollDelta unscaled)", got, want)
+	if got, want := before-after, 10*wheelPixels; got != want {
+		t.Errorf("VisibleViewBounds top moved up by %d, want %d", got, want)
 	}
 }
 

@@ -28,7 +28,7 @@ const toolbarLogicalHeight = 36
 // toolbar is the back/forward/reload/zoom/theme button row and address
 // bar - cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
 // hand-rolled draw.go/layout.go/input.go. Unlike the document panel's
-// scroll/hover/click (shared via whynot.Interaction), this input layer
+// scroll/hover/click (shared via whynot.Controller), this input layer
 // isn't shared with ebitenrenderer: these are plain momentary buttons,
 // simple enough that Gio's own widget.Clickable is a better fit than
 // extracting a second shared implementation - see the browser package's

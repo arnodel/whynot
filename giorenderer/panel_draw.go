@@ -61,10 +61,8 @@ func (p *Panel) drawScrollbar(gtx layout.Context) {
 	// ScrollDistance is normalized ([-1,1], fraction of the document),
 	// not pixels - and positive same as pointer.Event.Scroll (moving
 	// the viewport toward the document's end), so negated for
-	// View.Scroll the same reason Update negates wheel scroll. Applied
-	// directly, not through Interaction.Scroll's bounds gate: a
-	// scrollbar drag isn't gated on cursor-over-document the way wheel/
-	// touch scroll is - the user is dragging the scrollbar itself, not
+	// View.Scroll. Applied directly, not through the Controller's
+	// bounds gate: the user is dragging the scrollbar itself, not
 	// scrolling the document surface.
 	if d := p.scrollbar.ScrollDistance(); d != 0 {
 		p.view.Scroll(-float64(d) * float64(doc.Dy()))

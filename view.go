@@ -20,7 +20,7 @@ import (
 //
 // A View reads no input itself: the embedding app calls Layout when its
 // size or scale changes, and Scroll, Hover and so on from its own input
-// handling (or uses an Interaction to do so).
+// handling (or uses a Controller to do so).
 type View struct {
 	doc *Document
 	ctx engine.Context
