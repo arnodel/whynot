@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/url"
@@ -90,10 +91,10 @@ func LoadDocument(location *url.URL) ([]byte, error) {
 
 // openImageLocation fetches the bytes at location - the same file-or-
 // http(s) rule LoadDocument uses (see fetchImage).
-func openImageLocation(location *url.URL) (io.ReadCloser, error) {
+func openImageLocation(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
 	switch location.Scheme {
 	case "http", "https":
-		return fetchImage(location)
+		return fetchImage(ctx, location)
 	case "file", "":
 		return os.Open(location.Path)
 	default:

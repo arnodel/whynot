@@ -2,6 +2,7 @@ package whynot
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/png"
 	"io"
@@ -31,7 +32,7 @@ func (s *countingImageSource) Image(src string) (images.AsyncImage, error) {
 	if s.resolveErr != nil {
 		return images.AsyncImage{}, s.resolveErr
 	}
-	return images.AsyncImage{Key: s.resolved, Fetch: func() (io.ReadCloser, error) {
+	return images.AsyncImage{Key: s.resolved, Fetch: func(context.Context) (io.ReadCloser, error) {
 		s.openCalls++
 		if s.open != nil {
 			return s.open()

@@ -6,6 +6,7 @@
 package images
 
 import (
+	"context"
 	"io"
 	"os"
 )
@@ -32,7 +33,7 @@ type Source interface {
 type FileSource struct{}
 
 func (FileSource) Image(src string) (AsyncImage, error) {
-	return AsyncImage{Key: src, Fetch: func() (io.ReadCloser, error) { return os.Open(src) }}, nil
+	return AsyncImage{Key: src, Fetch: func(context.Context) (io.ReadCloser, error) { return os.Open(src) }}, nil
 }
 
 // AsyncImage is one slow-to-produce image, cached by Key. A plain
@@ -51,6 +52,8 @@ type AsyncImage struct {
 	// Fetch performs the actual (possibly slow) work, returning encoded
 	// image bytes in any format image.Decode has registered (PNG, JPEG
 	// and GIF are). Called at most once per Key, on a background
-	// goroutine.
-	Fetch func() (io.ReadCloser, error)
+	// goroutine. ctx may be cancelled once the image is no longer
+	// needed: Fetch should then give up and return an error, e.g. by
+	// passing ctx to http.NewRequestWithContext.
+	Fetch func(ctx context.Context) (io.ReadCloser, error)
 }

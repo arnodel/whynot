@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -59,10 +60,10 @@ func LoadDocument(location *url.URL) ([]byte, error) {
 
 // openImageLocation is load_notjs.go's counterpart, minus the "file"/""
 // (local path) case - see fetchImage for the shared http(s) GET.
-func openImageLocation(location *url.URL) (io.ReadCloser, error) {
+func openImageLocation(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
 	switch location.Scheme {
 	case "http", "https":
-		return fetchImage(location)
+		return fetchImage(ctx, location)
 	default:
 		return nil, fmt.Errorf("unsupported image scheme %q", location.Scheme)
 	}

@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"mime"
@@ -58,9 +59,13 @@ func fetchDocument(location *url.URL) ([]byte, error) {
 // image's varies far more widely (image/png, image/jpeg, image/gif,
 // ...) than Markdown/plain-text's narrow set, so there's nothing
 // useful to check here.
-func fetchImage(location *url.URL) (io.ReadCloser, error) {
+func fetchImage(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 	client := http.Client{Timeout: httpTimeout}
-	resp, err := client.Get(location.String())
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -141,11 +146,11 @@ func (s docImageSource) Image(src string) (images.AsyncImage, error) {
 		return images.AsyncImage{}, err
 	}
 	location := resolved.String()
-	return images.AsyncImage{Key: location, Fetch: func() (io.ReadCloser, error) {
+	return images.AsyncImage{Key: location, Fetch: func(ctx context.Context) (io.ReadCloser, error) {
 		u, err := url.Parse(location)
 		if err != nil {
 			return nil, err
 		}
-		return openImageLocation(u)
+		return openImageLocation(ctx, u)
 	}}, nil
 }

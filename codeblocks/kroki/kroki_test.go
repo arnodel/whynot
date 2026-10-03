@@ -1,7 +1,9 @@
 package kroki
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +60,7 @@ func TestDiagramImageFetchPostsExpectedRequest(t *testing.T) {
 
 	r := Renderer{BaseURL: server.URL}
 	img := r.image("mermaid", "graph TD; A-->B;")
-	rc, err := img.Fetch()
+	rc, err := img.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch() = _, %v, want nil error", err)
 	}
@@ -96,8 +98,24 @@ func TestDiagramImageFetchNonOKStatus(t *testing.T) {
 
 	r := Renderer{BaseURL: server.URL}
 	img := r.image("mermaid", "not valid mermaid")
-	if _, err := img.Fetch(); err == nil {
+	if _, err := img.Fetch(context.Background()); err == nil {
 		t.Error("Fetch() with a 400 response = nil error, want one")
+	}
+}
+
+// TestDiagramImageFetchCancelled checks Fetch gives up when its context
+// is cancelled, rather than waiting for Kroki.
+func TestDiagramImageFetchCancelled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("an image"))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	img := Renderer{BaseURL: server.URL}.image("mermaid", "graph TD; A-->B;")
+	if _, err := img.Fetch(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("Fetch() with a cancelled context = %v, want context.Canceled", err)
 	}
 }
 
