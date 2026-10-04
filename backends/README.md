@@ -66,7 +66,9 @@ A few rules apply either way:
   window, they're window coordinates, in the same pixels.
 - A wheel's deltas are an amount to scroll, not a position: they're in logical pixels,
   so convert the framework's wheel units (or device pixels, divided by the screen's
-  density) to those. The Controller scales them to the View's pixels itself.
+  density) to those. The Controller scales them to the View's pixels itself. A
+  framework's wheel units often differ between platforms: `ebitenbackend`'s
+  `wheel_*.go` files show one way to handle that.
 - Report all the input you see. The Controller ignores what falls outside its View's
   bounds, except that a press inside them captures the pointer until it's released.
 - Keyboard input isn't part of it: the program binds keys to commands such as

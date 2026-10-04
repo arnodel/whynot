@@ -8,9 +8,9 @@ import (
 	"github.com/arnodel/whynot/input"
 )
 
-// wheelPixels is how far one unit of ebiten.Wheel scrolls, in logical
-// pixels.
-const wheelPixels = 2
+// wheelPixels, how far one unit of ebiten.Wheel scrolls in logical
+// pixels, depends on the platform, because so does the unit: see the
+// wheel_*.go files.
 
 // Input is an input.Source reading Ebitengine's input: Events reports
 // what changed since the previous call, which should be once per tick,
