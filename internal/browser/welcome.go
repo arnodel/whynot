@@ -50,16 +50,28 @@ func welcomeShortcut() string {
 	return "Ctrl+V"
 }
 
-// versionSuffix is what {{VERSION}} in the welcome page expands to -
-// "dev" for an ordinary local build (Version is still its zero value),
-// "vX.Y.Z" for a real tagged release. The page's own heading already
-// has a leading space before {{VERSION}}, so this doesn't add one
-// itself.
+// versionSuffix is what {{VERSION}} in the welcome page's heading, and so
+// the window title, expands to: "vX.Y.Z" for a release, or "dev" plus
+// the commit, if known, for any other build.
 func versionSuffix() string {
-	if Version == "dev" {
-		return Version
+	if Version != "dev" {
+		return "v" + Version
 	}
-	return "v" + Version
+	if b, ok := readVCSBuild(); ok {
+		return "dev " + b.short()
+	}
+	return Version
+}
+
+// buildLine is what {{BUILD}} expands to: a line saying which commit the
+// binary was built from, and when that was, so a build can be identified
+// (say, which version a web demo is serving); nothing if that isn't
+// known.
+func buildLine() string {
+	if b, ok := readVCSBuild(); ok {
+		return b.line()
+	}
+	return ""
 }
 
 // renderWelcome reads the embedded welcome page and fills in its
@@ -73,6 +85,8 @@ func renderWelcome() []byte {
 	}
 	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
 	md = bytes.ReplaceAll(md, []byte("{{VERSION}}"), []byte(versionSuffix()))
+	// Like {{ADDRESS_BAR_TIP}}, replaces the whole line.
+	md = bytes.ReplaceAll(md, []byte("{{BUILD}}\n"), []byte(buildLine()))
 	// Replaces the whole placeholder line, trailing newline included, so
 	// a false AddressBarEditable removes the line entirely rather than
 	// leaving a blank one in the middle of the bullet list.
