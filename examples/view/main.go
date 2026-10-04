@@ -15,6 +15,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -35,12 +36,19 @@ func exampleDoc() string {
 type game struct {
 	view     *whynot.View
 	renderer *ebitenbackend.Renderer
+	input    ebitenbackend.Input
 	start    time.Time
 }
 
 func (g *game) Update() error {
-	_, dy := ebiten.Wheel()
-	g.view.ScrollBy(-dy * 2)
+	// Without a Controller, interpreting input is up to the program: here,
+	// only the wheel scrolls. Its deltas are in logical pixels, so they're
+	// scaled to the view's pixels.
+	for _, e := range g.input.Events() {
+		if w, ok := e.(input.Wheel); ok {
+			g.view.ScrollBy(w.DY * g.view.Scale())
+		}
+	}
 	return nil
 }
 

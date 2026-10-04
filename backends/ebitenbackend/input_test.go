@@ -25,9 +25,9 @@ func TestInputMouseEvents(t *testing.T) {
 		{"release", mouseInput{x: 15, y: 20},
 			[]input.Event{input.PointerButton{X: 15, Y: 20, Button: input.ButtonPrimary}}},
 		// ebiten.Wheel is positive up; Wheel events are positive down,
-		// in pixels: -1 * wheelPixels * scale.
-		{"wheel down", mouseInput{x: 15, y: 20, wheelY: -1, scale: 2},
-			[]input.Event{input.Wheel{X: 15, Y: 20, DY: wheelPixels * 2}}},
+		// in logical pixels.
+		{"wheel down", mouseInput{x: 15, y: 20, wheelY: -1},
+			[]input.Event{input.Wheel{X: 15, Y: 20, DY: wheelPixels}}},
 	}
 	for _, s := range steps {
 		if got := in.mouseEvents(s.st); !reflect.DeepEqual(got, s.want) {

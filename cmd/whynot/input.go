@@ -12,8 +12,6 @@ func (g *game) Update() error {
 	start := time.Now()
 	defer func() { g.updateDuration = time.Since(start) }()
 
-	// The wheel scrolls by zoomed pixels, like a browser's.
-	g.input.Scale = g.panel.Scale() * g.panel.Zoom()
 	g.app.HandleEvents(g.panel.Frame(g.input.Events(), time.Since(g.start)))
 
 	// pointerState so these buttons work with a touch too, not just a mouse.

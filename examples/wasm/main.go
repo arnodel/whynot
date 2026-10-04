@@ -85,6 +85,5 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	height := int(float64(outsideHeight) * scale)
 	g.panel.SetBounds(image.Rect(0, 0, width, height))
 	g.panel.SetScale(scale)
-	g.input.Scale = scale
 	return width, height
 }
