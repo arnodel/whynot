@@ -302,8 +302,8 @@ flowchart TB
 3. The **View** lays out the part of the document that's on screen, and draws it.
 4. The **backend's Canvas** carries out the View's drawing with the framework.
 
-A Panel puts the Controller and the View together. Before any of this, `whynot.Parse`
-turns the Markdown into a `Document`, using [goldmark](https://github.com/yuin/goldmark).
+A Panel puts the Controller and the View together. `whynot.Parse` uses
+[goldmark](https://github.com/yuin/goldmark) to read the Markdown.
 
 The library is split into packages along these lines:
 
