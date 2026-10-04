@@ -83,16 +83,22 @@ func main() {
 	flag.Parse()
 
 	selector := systemfont.New()
-	if *family != "" {
-		selector.RegisterSystemFont(fonts.Proportional, *family)
-	} else {
-		selector.RegisterPreferredFont(fonts.Proportional)
+	// register registers the named font for f, or this platform's usual
+	// one if name is empty. A failure isn't fatal: the bundled Go fonts
+	// serve f instead.
+	register := func(f fonts.Family, name string) {
+		var err error
+		if name != "" {
+			err = selector.RegisterSystemFont(f, name)
+		} else {
+			err = selector.RegisterPreferredFont(f)
+		}
+		if err != nil {
+			log.Print(err)
+		}
 	}
-	if *monospaceFamily != "" {
-		selector.RegisterSystemFont(fonts.Monospace, *monospaceFamily)
-	} else {
-		selector.RegisterPreferredFont(fonts.Monospace)
-	}
+	register(fonts.Proportional, *family)
+	register(fonts.Monospace, *monospaceFamily)
 
 	g := &game{
 		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), selector, simpletheme.DarkStyleSheet),
