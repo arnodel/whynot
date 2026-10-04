@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/arnodel/whynot/images"
 )
@@ -51,16 +52,10 @@ func welcomeShortcut() string {
 }
 
 // versionSuffix is what {{VERSION}} in the welcome page's heading, and so
-// the window title, expands to: "vX.Y.Z" for a release, or "dev" plus
-// the commit, if known, for any other build.
+// the window title, expands to: see versionFrom.
 func versionSuffix() string {
-	if Version != "dev" {
-		return "v" + Version
-	}
-	if b, ok := readVCSBuild(); ok {
-		return "dev " + b.short()
-	}
-	return Version
+	info, _ := debug.ReadBuildInfo()
+	return versionFrom(Version, info)
 }
 
 // buildLine is what {{BUILD}} expands to: a line saying which commit the

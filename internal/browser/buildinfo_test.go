@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,31 @@ func TestVCSBuildLine(t *testing.T) {
 	b.modified = true
 	if got := b.line(); !strings.Contains(got, ", with local changes.*") {
 		t.Errorf("line() with local changes = %q, want it to say so", got)
+	}
+}
+
+// TestVersionFrom checks which source of the version wins, for each kind
+// of build.
+func TestVersionFrom(t *testing.T) {
+	checkout := &debug.BuildInfo{
+		Main:     debug.Module{Version: "(devel)"},
+		Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "67109f6aaaabbbb"}},
+	}
+	installed := &debug.BuildInfo{Main: debug.Module{Version: "v0.6.0"}}
+	for _, c := range []struct {
+		name    string
+		stamped string
+		info    *debug.BuildInfo
+		want    string
+	}{
+		{"release build", "0.6.0", checkout, "v0.6.0"},
+		{"go install pkg@version", "dev", installed, "v0.6.0"},
+		{"build from a checkout", "dev", checkout, "dev 67109f6"},
+		{"no build info", "dev", nil, "dev"},
+	} {
+		if got := versionFrom(c.stamped, c.info); got != c.want {
+			t.Errorf("%s: versionFrom = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 
