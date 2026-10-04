@@ -404,4 +404,7 @@ Known issues are listed in [ARCHITECTURE.md](ARCHITECTURE.md#known-issues). Idea
 future are tracked as
 [GitHub issues](https://github.com/arnodel/whynot/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement).
 
+Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) explains how the project is
+worked on.
+
 whynot is released under the [Apache License 2.0](LICENSE).
