@@ -1,7 +1,3 @@
-// Package kroki implements codeblocks.Plugin on top of kroki.io's
-// hosted diagram-rendering service (https://kroki.io), so a fenced code
-// block in a recognized diagram language renders as an actual diagram
-// instead of its raw/highlighted definition text.
 package kroki
 
 import (
@@ -16,23 +12,21 @@ import (
 	"github.com/arnodel/whynot/images"
 )
 
-// defaultBaseURL is kroki.io's own public instance, used unless Renderer
+// defaultBaseURL is kroki.io's own public instance, used unless a Plugin
 // has its own BaseURL (e.g. a self-hosted instance).
 const defaultBaseURL = "https://kroki.io"
 
-// Renderer implements codeblocks.Plugin, rendering recognized
-// fenced-code-block languages via Kroki's POST .../{type}/png endpoint
-// - no output-size control (Kroki renders at whatever the underlying
-// tool's native resolution is), but that's fine: whynot's own fitWidth
-// never scales an image up, only down to fit the column. PNG rather
-// than SVG because whynot has no SVG decoder.
-type Renderer struct {
+// Plugin is a codeblocks.Plugin that turns diagram code blocks into
+// images, rendered by Kroki. The images are PNGs, since whynot can't
+// decode SVG, at the diagram tool's own resolution: a View scales an
+// image down to fit, never up.
+type Plugin struct {
 	// BaseURL overrides the default https://kroki.io - e.g. a
 	// self-hosted instance. Empty uses the default.
 	BaseURL string
 }
 
-var _ codeblocks.Plugin = Renderer{}
+var _ codeblocks.Plugin = Plugin{}
 
 // diagramTypes maps a fenced code block's language to Kroki's own
 // diagram-type slug - currently just mermaid, the one this package was
@@ -43,20 +37,20 @@ var diagramTypes = map[string]string{
 }
 
 // Handles reports whether language is a diagram type Kroki renders.
-func (r Renderer) Handles(language string) bool {
+func (r Plugin) Handles(language string) bool {
 	_, ok := diagramTypes[language]
 	return ok
 }
 
 // Parse returns the diagram as an Image, rendered by Kroki.
-func (r Renderer) Parse(language, code string) codeblocks.Content {
+func (r Plugin) Parse(language, code string) codeblocks.Content {
 	return codeblocks.Image{AsyncImage: r.image(language, code)}
 }
 
 // image builds an AsyncImage directly - no type of kroki's own needed,
 // since a closure already captures everything Fetch needs (baseURL,
 // diagramType, code).
-func (r Renderer) image(language, code string) images.AsyncImage {
+func (r Plugin) image(language, code string) images.AsyncImage {
 	diagramType := diagramTypes[language]
 	baseURL := r.baseURL()
 	return images.AsyncImage{
@@ -93,7 +87,7 @@ func (r Renderer) image(language, code string) images.AsyncImage {
 	}
 }
 
-func (r Renderer) baseURL() string {
+func (r Plugin) baseURL() string {
 	if r.BaseURL != "" {
 		return r.BaseURL
 	}
