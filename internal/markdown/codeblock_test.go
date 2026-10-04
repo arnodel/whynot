@@ -1,10 +1,10 @@
 package markdown
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/arnodel/whynot/codeblocks"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
@@ -146,7 +146,11 @@ func TestTokenLinesMismatchedLineCountFails(t *testing.T) {
 // plugins.
 func codeBlockOf(rawLines []string, plugins ...codeblocks.Plugin) (engine.Block, *ast.Node) {
 	astNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
-	return (&compiler{}).codeBlock(astNode, "go", rawLines, plugins), astNode
+	ps := make([]plugin, len(plugins))
+	for i, p := range plugins {
+		ps[i] = plugin{Plugin: p, namespace: fmt.Sprintf("#%d:", i+1)}
+	}
+	return (&compiler{}).codeBlock(astNode, "go", rawLines, ps), astNode
 }
 
 // TestCodeBlockPassesSourceVerbatim is a regression test: rawLines each
@@ -199,17 +203,16 @@ func TestCodeBlockSkipsDecliningAndBadPlugins(t *testing.T) {
 // TestCodeBlockImageFallsBackToNextPlugin checks an Image becomes a
 // diagram whose fallback is what the next plugin makes of the block.
 func TestCodeBlockImageFallsBackToNextPlugin(t *testing.T) {
-	img := images.AsyncImage{Key: "diagram"}
 	diagram := fakePlugin{parse: func(string, string) codeblocks.Content {
-		return codeblocks.Image{AsyncImage: img}
+		return codeblocks.Image{Source: keySource("diagram")}
 	}}
 	block, _ := codeBlockOf([]string{"graph\n"}, diagram, wholeCode(codeblocks.ClassKeyword))
 	d, ok := block.(*engine.DiagramBlock)
 	if !ok {
 		t.Fatalf("block = %T, want *DiagramBlock", block)
 	}
-	if d.Image.Key != img.Key {
-		t.Errorf("image key = %q, want %q", d.Image.Key, img.Key)
+	if want := "#1:diagram"; d.Image.Key() != want {
+		t.Errorf("image key = %q, want %q", d.Image.Key(), want)
 	}
 	fallback, ok := d.Fallback.(*engine.CodeBlock)
 	if !ok {

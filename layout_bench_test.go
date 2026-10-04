@@ -12,7 +12,6 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/styles/simpletheme"
@@ -28,7 +27,7 @@ func benchmarkGetBlockLayout(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	const width = 1024
 
@@ -64,7 +63,7 @@ func benchmarkBoxBoundsWarm(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	box := block.GetBlockLayout(ctx, 1024)
 
@@ -97,7 +96,7 @@ func benchmarkStackBoxDraw(b *testing.B, path string, offsetFraction float64) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -139,7 +138,7 @@ func benchmarkStackBoxDrawOffscreen(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	const width = 1024
 	const viewportHeight = 768
@@ -181,7 +180,7 @@ func benchmarkStackBoxDrawUnculled(b *testing.B, path string) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	const width = 1024
 
@@ -221,7 +220,7 @@ func benchmarkStackBoxDrawCold(b *testing.B, path string, offsetFraction float64
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       simpletheme.DarkStyleSheet.Styles(),
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	const width = 1024
 	const viewportHeight = 768

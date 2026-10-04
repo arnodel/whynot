@@ -1,12 +1,13 @@
 package browser
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
+	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/arnodel/whynot/fetch"
 )
 
 // ResolveLocationArg is the browser build's counterpart to
@@ -58,13 +59,10 @@ func LoadDocument(location *url.URL) ([]byte, error) {
 	}
 }
 
-// openImageLocation is load_notjs.go's counterpart, minus the "file"/""
-// (local path) case - see fetchImage for the shared http(s) GET.
-func openImageLocation(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
-	switch location.Scheme {
-	case "http", "https":
-		return fetchImage(ctx, location)
-	default:
-		return nil, fmt.Errorf("unsupported image scheme %q", location.Scheme)
-	}
+// newImageRegistry is load_notjs.go's counterpart, without local files.
+func newImageRegistry() *fetch.Registry {
+	return fetch.NewRegistry(
+		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},
+		welcomeResolver{},
+	)
 }

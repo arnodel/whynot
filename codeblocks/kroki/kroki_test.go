@@ -29,10 +29,10 @@ func TestDiagramImageKeyDistinguishesCodeAndType(t *testing.T) {
 	r := Plugin{}
 	a := r.image("mermaid", "graph TD; A-->B;")
 	b := r.image("mermaid", "graph TD; A-->C;")
-	if a.Key == b.Key {
-		t.Errorf("Key for different source text matched: %q", a.Key)
+	if a.Key() == b.Key() {
+		t.Errorf("Key for different source text matched: %q", a.Key())
 	}
-	if a.Key != r.image("mermaid", "graph TD; A-->B;").Key {
+	if a.Key() != r.image("mermaid", "graph TD; A-->B;").Key() {
 		t.Error("Key differed for identical (language, code) - want a stable cache key")
 	}
 }
@@ -54,15 +54,19 @@ func TestDiagramImageFetchPostsExpectedRequest(t *testing.T) {
 		if err := json.NewDecoder(req.Body).Decode(&gotBody); err != nil {
 			t.Errorf("decoding request body: %v", err)
 		}
+		w.Header().Set("Content-Type", "image/png")
 		w.Write([]byte(pngBytes))
 	}))
 	defer server.Close()
 
 	r := Plugin{BaseURL: server.URL}
 	img := r.image("mermaid", "graph TD; A-->B;")
-	rc, err := img.Fetch(context.Background())
+	rc, mediaType, err := img.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Fetch() = _, %v, want nil error", err)
+		t.Fatalf("Fetch() = _, _, %v, want nil error", err)
+	}
+	if mediaType != "image/png" {
+		t.Errorf("media type = %q, want image/png", mediaType)
 	}
 	defer rc.Close()
 	got, err := io.ReadAll(rc)
@@ -98,7 +102,7 @@ func TestDiagramImageFetchNonOKStatus(t *testing.T) {
 
 	r := Plugin{BaseURL: server.URL}
 	img := r.image("mermaid", "not valid mermaid")
-	if _, err := img.Fetch(context.Background()); err == nil {
+	if _, _, err := img.Fetch(context.Background()); err == nil {
 		t.Error("Fetch() with a 400 response = nil error, want one")
 	}
 }
@@ -114,7 +118,7 @@ func TestDiagramImageFetchCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	img := Plugin{BaseURL: server.URL}.image("mermaid", "graph TD; A-->B;")
-	if _, err := img.Fetch(ctx); !errors.Is(err, context.Canceled) {
+	if _, _, err := img.Fetch(ctx); !errors.Is(err, context.Canceled) {
 		t.Errorf("Fetch() with a cancelled context = %v, want context.Canceled", err)
 	}
 }
@@ -126,7 +130,7 @@ func TestPluginParseIsImage(t *testing.T) {
 	if !ok {
 		t.Fatalf("Parse = %T, want codeblocks.Image", r.Parse("mermaid", "graph TD; A-->B;"))
 	}
-	if want := r.image("mermaid", "graph TD; A-->B;").Key; content.Key != want {
-		t.Errorf("Key = %q, want %q", content.Key, want)
+	if want := r.image("mermaid", "graph TD; A-->B;").Key(); content.Source.Key() != want {
+		t.Errorf("Key = %q, want %q", content.Source.Key(), want)
 	}
 }

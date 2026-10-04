@@ -8,7 +8,7 @@ import "embed"
 // runtime. Embedding the whole tree, not just welcome.md itself, means
 // an image the welcome page wants to show (e.g. assets/screenshot.png,
 // referenced from welcome.md as "screenshot.png") is bundled right
-// along with it - see welcomeImageSource in welcome.go.
+// along with it - see welcomeResolver in welcome.go.
 //
 //go:embed assets
 var assetsFS embed.FS

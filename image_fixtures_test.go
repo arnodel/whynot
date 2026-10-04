@@ -6,42 +6,56 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
-// countingImageSource is an images.Source serving a fixed image (or a
-// fixed error) under the key resolved, counting Image calls
-// (resolveCalls) and fetches (openCalls). open, if set, replaces the
-// default fetch - for tests that need to control when it returns.
-type countingImageSource struct {
-	resolved     string
-	resolveErr   error
-	data         []byte
-	openErr      error
-	open         func() (io.ReadCloser, error)
-	resolveCalls int
-	openCalls    int
+// testImage is a fetch.Source serving fixed data (or a fixed error)
+// under key, counting its fetches. open, if set, replaces the default
+// fetch - for tests that need to control when it returns.
+type testImage struct {
+	key        string
+	data       []byte
+	openErr    error
+	open       func() (io.ReadCloser, error)
+	fetchCalls atomic.Int32
 }
 
-func (s *countingImageSource) Image(src string) (images.AsyncImage, error) {
-	s.resolveCalls++
-	if s.resolveErr != nil {
-		return images.AsyncImage{}, s.resolveErr
+func (s *testImage) Key() string { return s.key }
+
+func (s *testImage) Fetch(context.Context) (io.ReadCloser, string, error) {
+	s.fetchCalls.Add(1)
+	if s.open != nil {
+		rc, err := s.open()
+		return rc, "", err
 	}
-	return images.AsyncImage{Key: s.resolved, Fetch: func(context.Context) (io.ReadCloser, error) {
-		s.openCalls++
-		if s.open != nil {
-			return s.open()
-		}
-		if s.openErr != nil {
-			return nil, s.openErr
-		}
-		return io.NopCloser(bytes.NewReader(s.data)), nil
-	}}, nil
+	if s.openErr != nil {
+		return nil, "", s.openErr
+	}
+	return io.NopCloser(bytes.NewReader(s.data)), "", nil
+}
+
+// testResolver resolves file: URLs to img, or, if img is nil, to an
+// image keyed by the URL's path that has no data.
+type testResolver struct{ img *testImage }
+
+func (testResolver) Schemes() []string { return []string{"file"} }
+
+func (r testResolver) Resolve(u *url.URL) (fetch.Source, error) {
+	if r.img != nil {
+		return r.img, nil
+	}
+	return &testImage{key: u.Path}, nil
+}
+
+// withTestImage is a ParseOption resolving every image src to img.
+func withTestImage(img *testImage) ParseOption {
+	return WithImageRegistry(fetch.NewRegistry(testResolver{img}))
 }
 
 func onePixelPNG(t *testing.T) []byte {
@@ -67,16 +81,16 @@ func (r blockingReader) Read(p []byte) (int, error) {
 
 // waitForSettled polls cache.Load(src) until it's no longer pending,
 // failing the test after 2s - fetches run on their own goroutine.
-func waitForSettled(t *testing.T, cache *imagecache.Cache, src string) imagecache.Result {
+func waitForSettled(t *testing.T, cache *imagecache.Cache, src fetch.Source) imagecache.Result {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		_, result := cache.Load(src)
+		result := cache.Load(src)
 		if result.Status != imagecache.Pending {
 			return result
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("Load(%q) still pending after 2s", src)
+			t.Fatalf("Load(%q) still pending after 2s", src.Key())
 		}
 		time.Sleep(time.Millisecond)
 	}

@@ -254,9 +254,22 @@ own. [`examples/chromahighlight`](examples/chromahighlight) shows syntax highlig
 ### Images
 
 Images are loaded in the background, so a slow image never holds up scrolling or drawing.
-By default, whynot treats an image's source as the path of a local file. To load images
-from somewhere else, such as relative to the URL a document came from, give the View an
-`images.Source` with the `whynot.WithImageSource` option.
+For safety, nothing is fetched unless you allow it: a document parsed without an image
+registry shows each image's alternative text instead. A registry from the
+[`fetch`](fetch) package says which URL schemes images can come from, and you give it to
+`whynot.Parse` with the URL that relative image sources are relative to:
+
+```go
+root, err := os.OpenRoot("docs") // local images are only read from beneath this directory
+if err != nil {
+	log.Fatal(err)
+}
+registry := fetch.NewRegistry(fetch.FileResolver{Root: root}, fetch.HTTPResolver{})
+doc := whynot.Parse(markdown, whynot.WithBaseURL(location), whynot.WithImageRegistry(registry))
+```
+
+`fetch.HTTPResolver` fetches `https` images only, unless you set its `AllowHTTP` field.
+You can also write a resolver of your own for another URL scheme.
 
 ### Examples
 
@@ -343,7 +356,7 @@ The library is split into packages along these lines:
 |---|---|
 | `whynot` | Parsing, and the View, Controller and Panel |
 | `canvas`, `input` | What a backend implements: drawing, and input events |
-| `fonts`, `images`, `codeblocks` | What a View can be given: fonts, image loading, code-block plugins |
+| `fonts`, `fetch`, `codeblocks` | What a document and a View can be given: fonts, fetching images, code-block plugins |
 | `styles/simpletheme` | Stylesheets and their ready-made themes |
 | `fonts/systemfont`, `codeblocks/chromahighlight`, `codeblocks/kroki` | Ready-made fonts and plugins |
 | `backends/ebitenbackend`, `backends/giobackend` | The two backends |

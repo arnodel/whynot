@@ -8,8 +8,9 @@ import (
 	"path"
 	"runtime"
 	"runtime/debug"
+	"strings"
 
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/fetch"
 )
 
 // WelcomeURL identifies the embedded welcome page - an opaque, non-file,
@@ -96,21 +97,24 @@ func addressBarTip() string {
 	return "- Click the address bar, type a path, URL, or \"welcome\", then press Enter.\n"
 }
 
-// welcomeImageSource implements images.Source for images the
-// welcome page itself references - always bundled in assetsFS
-// alongside welcome.md, never fetched, so a src is just a path
-// relative to assets/ (e.g. an image sitting right next to welcome.md
-// is referenced from it as "screenshot.png", the same as any other
-// relative image reference). Used instead of docImageSource only when
-// the current document's location is WelcomeURL - see App.NewView.
-type welcomeImageSource struct{}
+// welcomeResolver resolves whynot: URLs to the files bundled in
+// assetsFS, so the welcome page's images are bundled with it: an image
+// next to welcome.md is referenced from it as "screenshot.png", like any
+// other relative image.
+type welcomeResolver struct{}
 
-func (welcomeImageSource) Image(src string) (images.AsyncImage, error) {
-	return images.AsyncImage{Key: src, Fetch: func(context.Context) (io.ReadCloser, error) {
-		data, err := assetsFS.ReadFile(path.Join("assets", src))
-		if err != nil {
-			return nil, err
-		}
-		return io.NopCloser(bytes.NewReader(data)), nil
-	}}, nil
+func (welcomeResolver) Schemes() []string { return []string{WelcomeURL.Scheme} }
+
+func (welcomeResolver) Resolve(u *url.URL) (fetch.Source, error) {
+	return assetSource(path.Join("assets", strings.TrimPrefix(u.Path, "/"))), nil
+}
+
+// assetSource is a file in assetsFS, by its path.
+type assetSource string
+
+func (s assetSource) Key() string { return string(s) }
+
+func (s assetSource) Fetch(context.Context) (io.ReadCloser, string, error) {
+	f, err := assetsFS.Open(string(s))
+	return f, "", err
 }

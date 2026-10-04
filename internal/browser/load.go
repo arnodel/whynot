@@ -1,7 +1,6 @@
 package browser
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"mime"
@@ -9,13 +8,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/arnodel/whynot/images"
 )
 
-// httpTimeout bounds every document/image fetch - shared by
-// fetchDocument and fetchImage so a hung server can't leave the game
-// loop waiting forever.
+// httpTimeout bounds every document and image fetch, so a hung server
+// can't leave a document or an image loading forever.
 const httpTimeout = 10 * time.Second
 
 // fetchDocument performs the http(s) GET both LoadDocument variants
@@ -52,28 +48,6 @@ func fetchDocument(location *url.URL) ([]byte, error) {
 		}
 	}
 	return io.ReadAll(resp.Body)
-}
-
-// fetchImage performs the http(s) GET both openImageLocation variants
-// use for that scheme - no Content-Type gate, unlike fetchDocument: an
-// image's varies far more widely (image/png, image/jpeg, image/gif,
-// ...) than Markdown/plain-text's narrow set, so there's nothing
-// useful to check here.
-func fetchImage(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	client := http.Client{Timeout: httpTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("%s: %s", location, resp.Status)
-	}
-	return resp.Body, nil
 }
 
 // webPageError means LoadDocument found a web page rather than a
@@ -125,32 +99,4 @@ func looksLikeHost(s string) bool {
 		host = h
 	}
 	return host == "localhost" || strings.Contains(host, ".")
-}
-
-// docImageSource implements images.Source by resolving an image's
-// src against base (a document's own location) exactly the way
-// App.ResolveLink resolves a link's href, then fetching it the same
-// way LoadDocument does - so a relative or http(s) image works
-// regardless of where its document came from. Resolving (cheap, no I/O)
-// is kept separate from the actual fetch (the returned AsyncImage's own
-// Fetch) so whynot's image cache can cache by the resolved identifier
-// without re-resolving-and-fetching on every call - only a genuine
-// cache miss ever calls Fetch.
-type docImageSource struct {
-	base *url.URL
-}
-
-func (s docImageSource) Image(src string) (images.AsyncImage, error) {
-	resolved, err := resolveAgainst(s.base, src)
-	if err != nil {
-		return images.AsyncImage{}, err
-	}
-	location := resolved.String()
-	return images.AsyncImage{Key: location, Fetch: func(ctx context.Context) (io.ReadCloser, error) {
-		u, err := url.Parse(location)
-		if err != nil {
-			return nil, err
-		}
-		return openImageLocation(ctx, u)
-	}}, nil
 }

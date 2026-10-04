@@ -3,13 +3,15 @@
 package browser
 
 import (
-	"context"
 	"fmt"
-	"io"
+	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/arnodel/whynot/fetch"
 )
 
 // absFileURL turns a command-line path into a file: URL with an
@@ -89,15 +91,17 @@ func LoadDocument(location *url.URL) ([]byte, error) {
 	}
 }
 
-// openImageLocation fetches the bytes at location - the same file-or-
-// http(s) rule LoadDocument uses (see fetchImage).
-func openImageLocation(ctx context.Context, location *url.URL) (io.ReadCloser, error) {
-	switch location.Scheme {
-	case "http", "https":
-		return fetchImage(ctx, location)
-	case "file", "":
-		return os.Open(location.Path)
-	default:
-		return nil, fmt.Errorf("unsupported image scheme %q", location.Scheme)
+// newImageRegistry returns what documents' images can be fetched from:
+// any local file, http(s), and the welcome page's own bundled images.
+func newImageRegistry() *fetch.Registry {
+	resolvers := []fetch.Resolver{
+		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},
+		welcomeResolver{},
 	}
+	if root, err := os.OpenRoot("/"); err == nil {
+		resolvers = append(resolvers, fetch.FileResolver{Root: root})
+	} else {
+		log.Printf("local images disabled: %v", err)
+	}
+	return fetch.NewRegistry(resolvers...)
 }

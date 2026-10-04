@@ -1,11 +1,11 @@
 package engine
 
 import (
+	"errors"
 	"image"
 	"testing"
 
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
@@ -54,17 +54,17 @@ func TestImageGetInlineLayoutWithoutImageCache(t *testing.T) {
 // friends) - not the file's raw pixel size unconditionally, which would
 // leave images pixel-locked against zoom/DPI scale.
 func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
-	img := &InlineImage{Src: "../../testdata/cat.jpeg"} // 400x600
+	img := &InlineImage{Src: "../../testdata/cat.jpeg", Image: fileImage("../../testdata/cat.jpeg")} // 400x600
 	// FaceSelector/Styles: the first call sees the fetch still pending
 	// and falls back to text ("(loading image…)"), which needs both.
 	ctx := Context{
 		Scale:        2,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, NaturalWidthMeasure)
-	waitForSettled(t, ctx.ImageCache, img.Src)
+	waitForSettled(t, ctx.ImageCache, img.Image)
 	box, ok := img.GetInlineLayout(ctx, NaturalWidthMeasure).(*ImageBox)
 	if !ok {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, NaturalWidthMeasure))
@@ -84,15 +84,15 @@ func TestImageGetInlineLayoutScalesBounds(t *testing.T) {
 // applied to an inline image, so a document author's own image at its
 // native resolution never overflows the page.
 func TestImageGetInlineLayoutFitsWidth(t *testing.T) {
-	img := &InlineImage{Src: "../../testdata/cat.jpeg"} // 400x600
+	img := &InlineImage{Src: "../../testdata/cat.jpeg", Image: fileImage("../../testdata/cat.jpeg")} // 400x600
 	ctx := Context{
 		Scale:        1,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, 200)
-	waitForSettled(t, ctx.ImageCache, img.Src)
+	waitForSettled(t, ctx.ImageCache, img.Image)
 	box, ok := img.GetInlineLayout(ctx, 200).(*ImageBox)
 	if !ok {
 		t.Fatalf("GetInlineLayout returned %T, want *ImageBox", img.GetInlineLayout(ctx, 200))
@@ -114,7 +114,7 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 		Scale:        1,
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       styleSheet,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 	}
 	fallbackNode := (*ast.Node)(nil).AddChild(ast.TagImage).AddChild(ast.TagUnsupported)
 
@@ -122,17 +122,17 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 	// differ), so waiting once here - before any of them look at the
 	// result - is enough: the rest hit the already-settled cache entry
 	// directly.
-	ctx.ImageCache.Load("nope.png")
-	waitForSettled(t, ctx.ImageCache, "nope.png")
+	nope := fileImage("nope.png")
+	waitForSettled(t, ctx.ImageCache, nope)
 
 	for _, tc := range []struct {
 		name string
 		img  *InlineImage
 		want string
 	}{
-		{"alt wins", &InlineImage{Src: "nope.png", Alt: "a lovely cat", Title: "title", FallbackNode: fallbackNode}, "a lovely cat"},
-		{"title when no alt", &InlineImage{Src: "nope.png", Title: "a lovely cat", FallbackNode: fallbackNode}, "a lovely cat"},
-		{"generic message when neither", &InlineImage{Src: "nope.png", FallbackNode: fallbackNode}, "(image not found: nope.png)"},
+		{"alt wins", &InlineImage{Src: "nope.png", Image: nope, Alt: "a lovely cat", Title: "title", FallbackNode: fallbackNode}, "a lovely cat"},
+		{"title when no alt", &InlineImage{Src: "nope.png", Image: nope, Title: "a lovely cat", FallbackNode: fallbackNode}, "a lovely cat"},
+		{"generic message when neither", &InlineImage{Src: "nope.png", Image: nope, FallbackNode: fallbackNode}, "(image not found: nope.png)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			box, ok := tc.img.GetInlineLayout(ctx, NaturalWidthMeasure).(*TextBox)
@@ -149,19 +149,42 @@ func TestImageGetInlineLayoutFallsBackWhenMissing(t *testing.T) {
 	}
 }
 
+// TestImageGetInlineLayoutUnresolved checks that an image whose src
+// couldn't be resolved shows why, in its fallback text, without touching
+// the cache.
+func TestImageGetInlineLayoutUnresolved(t *testing.T) {
+	ctx := Context{
+		Scale:        1,
+		FaceSelector: fonts.NewGoSelector(),
+		Styles:       stylingtest.Basic(),
+		ImageCache:   imagecache.NewCache(),
+	}
+	img := &InlineImage{Src: "a.png", ImageErr: errors.New("no resolver for file: URLs")}
+	box, ok := img.GetInlineLayout(ctx, NaturalWidthMeasure).(*TextBox)
+	if !ok {
+		t.Fatalf("GetInlineLayout returned %T, want *TextBox", img.GetInlineLayout(ctx, NaturalWidthMeasure))
+	}
+	if want := "(image not loaded: no resolver for file: URLs)"; box.Text != want {
+		t.Errorf("Text = %q, want %q", box.Text, want)
+	}
+	if changes, _ := ctx.ImageCache.ChangedSince(0); len(changes) != 0 {
+		t.Errorf("cache changes = %v, want none", changes)
+	}
+}
+
 // TestImageGetInlineLayoutAnimated checks that an animated GIF src
 // produces an ImageBox with anim set (not img), with bounds scaled
 // from the animation's own (shared, per-frame) size.
 func TestImageGetInlineLayoutAnimated(t *testing.T) {
-	img := &InlineImage{Src: "../../testdata/animated.gif"} // 64x64
+	img := &InlineImage{Src: "../../testdata/animated.gif", Image: fileImage("../../testdata/animated.gif")} // 64x64
 	ctx := Context{
 		Scale:        2,
-		ImageCache:   imagecache.NewCache(images.FileSource{}),
+		ImageCache:   imagecache.NewCache(),
 		FaceSelector: fonts.NewGoSelector(),
 		Styles:       stylingtest.Basic(),
 	}
 	img.GetInlineLayout(ctx, NaturalWidthMeasure)
-	waitForSettled(t, ctx.ImageCache, img.Src)
+	waitForSettled(t, ctx.ImageCache, img.Image)
 
 	box, ok := img.GetInlineLayout(ctx, NaturalWidthMeasure).(*ImageBox)
 	if !ok {

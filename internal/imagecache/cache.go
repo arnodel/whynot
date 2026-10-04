@@ -1,5 +1,5 @@
-// Package imagecache loads the images a document shows through an
-// images.Source: an asynchronous cache that fetches and decodes each
+// Package imagecache loads the images a document shows from their
+// fetch.Sources: an asynchronous cache that fetches and decodes each
 // image once, and decoding of animated GIFs.
 package imagecache
 
@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/fetch"
 )
 
 // Status is an image's state within a Cache.
@@ -31,7 +31,7 @@ const (
 	Failed
 )
 
-// Result is what Cache.Load returns for one src.
+// Result is what Cache.Load returns for one image.
 type Result struct {
 	Status Status
 	// Bounds is the image's native pixel size - known once Status ==
@@ -53,9 +53,9 @@ type Result struct {
 
 // Change is one entry Cache.ChangedSince reports.
 type Change struct {
-	Src string
+	Key string // the image's fetch.Source key
 	// BoundsRevealed is true if, since the mark passed to
-	// ChangedSince, this src's bounds became known for the first time
+	// ChangedSince, this image's bounds became known for the first time
 	// - the one transition that can change a slot's height
 	// unpredictably (everything else - becoming ready, a retry's
 	// outcome - happens at an already-known, already-laid-out size).
@@ -85,7 +85,6 @@ const defaultRetryDelay = 10 * time.Second
 // codebase, which is only ever touched from ebiten's single game-loop
 // goroutine and has no need to be.
 type Cache struct {
-	source     images.Source
 	retryDelay time.Duration
 
 	mu      sync.Mutex
@@ -109,34 +108,19 @@ type cacheEntry struct {
 	boundsRevealedAt uint64
 }
 
-// NewCache returns a Cache loading the srcs passed to Load through
-// source.
-func NewCache(source images.Source) *Cache {
+// NewCache returns an empty Cache.
+func NewCache() *Cache {
 	return &Cache{
-		source:     source,
 		retryDelay: defaultRetryDelay,
 		cache:      map[string]*cacheEntry{},
 	}
 }
 
-// Load resolves src through the Source and returns its current state,
+// Load returns the current state of the image src, by its key,
 // starting a fetch in the background on a genuine miss, or on a failed
 // entry old enough to retry - never blocking on the fetch itself.
-// resolved is the AsyncImage's Key, or src itself when the Source
-// failed - InlineImage's fallback text names it in a missing- or
-// broken-image message.
-func (c *Cache) Load(src string) (resolved string, result Result) {
-	img, err := c.source.Image(src)
-	if err != nil {
-		return src, Result{Status: Failed, Err: err}
-	}
-	return img.Key, c.LoadImage(img)
-}
-
-// LoadImage is Load for an image that needs no resolving - e.g. a code
-// block plugin's diagram, whose fetch might be a POST rather than a GET.
-func (c *Cache) LoadImage(img images.AsyncImage) Result {
-	key := img.Key
+func (c *Cache) Load(src fetch.Source) Result {
+	key := src.Key()
 	c.mu.Lock()
 	entry, ok := c.cache[key]
 	start := !ok || (entry.status == Failed && time.Since(entry.lastAttempt) > c.retryDelay)
@@ -148,7 +132,7 @@ func (c *Cache) LoadImage(img images.AsyncImage) Result {
 	c.mu.Unlock()
 
 	if start {
-		go c.fetchAndDecode(key, img.Fetch)
+		go c.fetchAndDecode(key, src)
 	}
 	return result
 }
@@ -161,10 +145,10 @@ func (c *Cache) LoadImage(img images.AsyncImage) Result {
 func (c *Cache) ChangedSince(mark uint64) (changed []Change, newMark uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for resolved, entry := range c.cache {
+	for key, entry := range c.cache {
 		if entry.changedAt > mark {
 			changed = append(changed, Change{
-				Src:            resolved,
+				Key:            key,
 				BoundsRevealed: entry.boundsRevealedAt > mark,
 			})
 		}
@@ -173,7 +157,7 @@ func (c *Cache) ChangedSince(mark uint64) (changed []Change, newMark uint64) {
 }
 
 // fetchAndDecode does the actual (potentially slow) work, entirely off
-// the caller's goroutine, via fetch. It
+// the caller's goroutine, via src. It
 // probes dimensions via image.DecodeConfig first, through a TeeReader
 // that mirrors whatever bytes it reads into header - PNG/GIF/JPEG all
 // put their size near the front of the file, so this is normally a
@@ -185,9 +169,10 @@ func (c *Cache) ChangedSince(mark uint64) (changed []Change, newMark uint64) {
 // (DecodeConfig's own format name, already read to get here) decodes
 // every frame via decodeAnimatedGIF instead of image.Decode's
 // single-frame result.
-func (c *Cache) fetchAndDecode(key string, fetch func(context.Context) (io.ReadCloser, error)) {
-	// Nothing cancels a fetch yet.
-	rc, err := fetch(context.Background())
+func (c *Cache) fetchAndDecode(key string, src fetch.Source) {
+	// Nothing cancels a fetch yet. The media type is ignored: decoding
+	// tells what the bytes are.
+	rc, _, err := src.Fetch(context.Background())
 	if err != nil {
 		c.setFailed(key, err)
 		return

@@ -19,8 +19,8 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `backends/ebitenbackend/` | the Ebitengine backend: `canvas.Canvas` on top of `ebiten`, and an `input.Source` reading Ebitengine's input |
 | `backends/giobackend/` | the Gio backend: `canvas.Canvas` on top of Gio, an `input.Source` for Gio's pointer events, and `NativeScrollbar` (Gio's own scrollbar). It also holds the Gio-only programs: `cmd/giowhynot` and `examples/gio`. **Its own Go module** (v0 while Gio is), so the core module doesn't depend on Gio; `go.work` at the root puts both modules in one workspace for development |
 | `internal/browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `backends/giobackend/cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
-| `images/` | the image contract: `Source` (src → `AsyncImage`), `AsyncImage` (a key and a fetch) and the default `FileSource` |
-| `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, through an `images.Source`) and animated GIF decoding |
+| `fetch/` | where content comes from: `Source` (a key and a fetch), `Resolver` (a URL scheme's Sources), `Registry` (resolves a reference against a base URL, by scheme), and the `file` and `http(s)` resolvers |
+| `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, from its `fetch.Source`) and animated GIF decoding |
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `backends/ebitenbackend/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
@@ -305,13 +305,16 @@ nothing carries over between frames for it to drift from.
 
 ## Image loading
 
-An image's `src` never blocks layout or drawing. `imagecache.Cache`
-([internal/imagecache](internal/imagecache)) loads images through an embedder-supplied
-`images.Source` ([images](images): resolve + fetch bytes; `images.FileSource` by default,
-`browser`'s `docImageSource` resolves relative to the document's own
-location and fetches over `http(s)` too, shared by `cmd/whynot` and
-`backends/giobackend/cmd/giowhynot`) and does the actual resolving,
-fetching, and decoding on a background goroutine — `Load` always
+An image's `src` is resolved once, at `Parse`: the compiler hands it to the
+`fetch.Registry` given with `whynot.WithImageRegistry`, which resolves it
+against the document's base URL and turns it into a `fetch.Source` through
+the `Resolver` for its scheme, so the engine only ever sees Sources. A
+code-block plugin's diagram is a Source too, its key put in a namespace of
+the plugin's own (`#1:`, `#2:`, ...), which no URL scheme can clash with.
+
+An image never blocks layout or drawing. `imagecache.Cache`
+([internal/imagecache](internal/imagecache)) does the fetching and
+decoding on a background goroutine — `Load` always
 returns immediately with whatever's currently known (`imagecache.Pending`,
 `imagecache.Ready`, or `imagecache.Failed`), never waiting on I/O itself. A cache
 entry's dimensions are often known before the rest of the fetch/decode
