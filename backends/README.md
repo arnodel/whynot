@@ -95,7 +95,5 @@ panel.Draw(canvas, now) // draw onto the backend's Canvas for this frame
 
 ## Where to put a new backend
 
-A backend can live in its own repository: the `canvas` and `input` packages are public,
-and they're all it needs. If the framework hasn't reached version 1, give the backend a
-Go module of its own, as `giobackend` has, so that the framework's breaking changes don't
-force breaking changes on whynot's users.
+A backend doesn't have to be part of whynot: it can live in its own repository, because
+the `canvas` and `input` packages it needs are public.

@@ -28,6 +28,10 @@ the root) and the Gio backend (`backends/giobackend`, with its programs).
 developing; `./...` from the root covers the core only, so build and test
 the Gio module from its own directory too (CI does both).
 
+A backend added to this repository goes under `backends/`. If its framework
+hasn't reached version 1, it gets its own module, as `giobackend` has, so
+the framework's breaking changes can't force breaking changes on the core.
+
 `go install` and users ignore `go.work`: the Gio module's `go.mod` must
 require a core version that has everything it uses. Before tagging the
 Gio module (`backends/giobackend/vX.Y.Z`), tag the core if needed, then
