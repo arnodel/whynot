@@ -17,8 +17,8 @@ github.com/alecthomas/chroma/v2 v2.27.0 h1:FodwmyOBgJULFYmDqibcp9pvfDLWdtPRh9v/r
 github.com/alecthomas/chroma/v2 v2.27.0/go.mod h1:NjJ3ciIgrqBNeIkWZ4e46nseoLDslxU1LmfCoL+wcY8=
 github.com/alecthomas/repr v0.5.2 h1:SU73FTI9D1P5UNtvseffFSGmdNci/O6RsqzeXJtP0Qs=
 github.com/alecthomas/repr v0.5.2/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
-github.com/arnodel/whynot v0.5.1-0.20261003213308-61f27aaf2137 h1:F7NwO8X4RA+NpIANWd8KwLbbcquG0IcHt+LqwNIWN2I=
-github.com/arnodel/whynot v0.5.1-0.20261003213308-61f27aaf2137/go.mod h1:uP89ybSyRigIuSq2SFVO47bEL8PsQs4nGLaTxqdsmB4=
+github.com/arnodel/whynot v0.6.0 h1:2+0eh/eCp5R7p4ln0cdtTgjQ+kehOFwgyl+pSboRG1M=
+github.com/arnodel/whynot v0.6.0/go.mod h1:uP89ybSyRigIuSq2SFVO47bEL8PsQs4nGLaTxqdsmB4=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dlclark/regexp2/v2 v2.2.1 h1:mf4KkFUj0gJuarK8P+LgiS+Lit7m9N1yAwEfPbee7R0=
