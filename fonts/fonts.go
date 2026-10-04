@@ -1,10 +1,3 @@
-// Package fonts is how whynot gets the fonts it draws text with: a View is
-// given a FaceSelector, which turns a TextStyle into a font face.
-//
-// The package provides two selectors: GoSelector serves the Go fonts
-// bundled with golang.org/x/image, and CustomSelector serves fonts you
-// register yourself, falling back to the Go fonts for anything it lacks.
-// See the systemfont subpackage for fonts installed on the system.
 package fonts
 
 import (

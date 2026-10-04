@@ -1,18 +1,3 @@
-// Package input is the contract between a backend's input and whynot: a
-// backend reports what the user did as Events, which a whynot.Controller
-// turns into scrolling, hovering, clicking and so on.
-//
-// Positions are in the coordinate space of the Canvas the View is drawn
-// on (device pixels for whynot's own backends): see Coordinates in
-// package whynot's documentation. A wheel's deltas are an amount to
-// scroll rather than a position, so they're in logical pixels instead,
-// independent of the screen's density (see [Wheel]). A backend reports all
-// the input it sees; a Controller acts on events inside its View's
-// bounds, except that a press inside captures the pointer until it's
-// released.
-//
-// Keyboard input isn't part of it: keys belong to the app, which binds
-// them to commands such as paging.
 package input
 
 // Event is something the user did. Only this package defines kinds of

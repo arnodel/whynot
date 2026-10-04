@@ -1,12 +1,3 @@
-// Package codeblocks is the contract between whynot's Markdown compiler
-// and code-block plugins. A Plugin parses the source of the fenced code
-// blocks in the languages it handles into Content: classified tokens,
-// for syntax coloring, or an image, such as a diagram. The compiler
-// turns that Content into the document; plugins are given to
-// whynot.Parse as options, in priority order.
-//
-// Implementations live in subpackages: chromahighlight (Tokens, for
-// syntax highlighting) and kroki (Images, for diagrams).
 package codeblocks
 
 import "github.com/arnodel/whynot/images"
