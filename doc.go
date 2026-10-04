@@ -20,14 +20,16 @@
 //     survive showing another document: the simplest way to put a document
 //     on screen.
 //
-// A View is given what decides how the document looks:
+// [NewView]'s options decide how the document looks, and each has a
+// default:
 //
-//   - a [StyleSheet], for colors, text styles, margins and scrollbars,
-//     made by a package under styles/, such as styles/simpletheme;
-//   - a [fonts.FaceSelector], for the fonts the text is drawn with (see
-//     package [fonts]);
-//   - optionally, an [images.Source], for where images come from
-//     ([WithImageSource]; see package [images]).
+//   - a [StyleSheet], for colors, text styles, margins and scrollbars
+//     ([WithStyleSheet]), made by a package under styles/: by default,
+//     the dark theme of styles/simpletheme;
+//   - a [fonts.FaceSelector], for the fonts the text is drawn with
+//     ([WithFaceSelector]; see package [fonts]): by default, the Go fonts;
+//   - an [images.Source], for where images come from ([WithImageSource];
+//     see package [images]): by default, local files.
 //
 // [Parse] can be given code-block plugins ([WithCodeBlockPlugin]; see
 // package [codeblocks]), for syntax highlighting or diagrams.
@@ -45,7 +47,7 @@
 //	renderer := ebitenbackend.New() // keeps image textures and glyph caches across frames
 //
 //	doc := whynot.Parse(markdown)
-//	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+//	view := whynot.NewView(doc)            // Go fonts, dark theme
 //	panel := whynot.NewPanel(view, bounds) // where it's drawn on the screen
 //	panel.SetScale(scale)                  // the screen's density
 //

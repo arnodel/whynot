@@ -21,7 +21,8 @@ import (
 
 // GoSelector is a FaceSelector serving the Go fonts bundled with
 // golang.org/x/image. They have no bold small caps: asking for one is an
-// error.
+// error. Like the faces it returns ([font.Face]), it's not safe for
+// concurrent use.
 type GoSelector struct {
 	fonts map[TextStyle]*opentype.Font // parsed on first use, keyed by fontKey
 	faces map[faceKey]font.Face

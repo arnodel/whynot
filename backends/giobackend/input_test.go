@@ -13,9 +13,7 @@ import (
 	"gioui.org/op"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/fonts"
 	winput "github.com/arnodel/whynot/input"
-	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // testApp drives a whynot.Panel with Gio's input the way an app does,
@@ -30,7 +28,7 @@ type testApp struct {
 }
 
 func newTestApp(source string, bounds image.Rectangle) *testApp {
-	view := whynot.NewView(whynot.Parse([]byte(source)), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+	view := whynot.NewView(whynot.Parse([]byte(source)))
 	return &testApp{panel: whynot.NewPanel(view, bounds), renderer: New(), start: time.Now()}
 }
 

@@ -25,7 +25,7 @@
 //	if err != nil {
 //		log.Fatal(err)
 //	}
-//	view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
+//	view := whynot.NewView(doc, whynot.WithFaceSelector(selector))
 //
 // The last argument picks a font within a collection file (.ttc or .otc);
 // it's 0 for an ordinary font file.

@@ -85,8 +85,9 @@ so only packages in the module can make a `StyleSheet`: the theme packages
 under [styles/](styles). [styles/simpletheme](styles/simpletheme) is a public
 struct of fields (`Theme`) whose `StyleSheet()` converts a snapshot of it into
 `styling.Basic`, the field-configured `Styles` implementation. The core has no
-look of its own: `NewView` takes a `StyleSheet`, and the dark and light presets
-are defined in `simpletheme`. This keeps theme vocabulary (field names like
+look of its own: the dark and light presets are defined in `simpletheme`, and
+`NewView` defaults to the dark one, which is why `simpletheme` doesn't import
+the root package (its `StyleSheet` type satisfies `whynot.StyleSheet`). This keeps theme vocabulary (field names like
 `ParagraphMargins`) out of the core API: a more expressive way to write
 stylesheets later is a new package under `styles/`, and the engine can change
 what it queries without breaking anyone. Outside code that needs a color, like

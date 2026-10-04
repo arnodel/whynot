@@ -11,6 +11,7 @@ import (
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // View renders a Document into a rectangle of a Canvas, its Bounds,
@@ -79,17 +80,47 @@ func WithImageSource(s images.Source) ViewOption {
 	}
 }
 
-// NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
-// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), at scale 1 and
-// zoom 1. It
-// has empty bounds, so it shows nothing until SetBounds is called.
-func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
+// WithFaceSelector sets where the View's fonts come from, instead of the
+// Go fonts (see [fonts.GoSelector]).
+//
+// Backends cache what they make from each font face, so give Views drawn
+// by the same Renderer the same selector, rather than a new one each: then
+// they share its faces, and the backend's caches. Views on different
+// goroutines need different selectors, because font faces aren't safe
+// for concurrent use.
+func WithFaceSelector(s fonts.FaceSelector) ViewOption {
+	return func(v *View) {
+		v.ctx.FaceSelector = s
+	}
+}
+
+// WithStyleSheet sets how the View looks, instead of the default,
+// [simpletheme.DarkStyleSheet]. [View.SetStyleSheet] changes it later.
+func WithStyleSheet(s StyleSheet) ViewOption {
+	return func(v *View) {
+		v.ctx.Styles = s.Styles()
+	}
+}
+
+// defaultFaceSelector serves every View not given a selector of its own,
+// so that they all share the same faces.
+var defaultFaceSelector = fonts.NewGoSelector()
+
+// NewView returns a View of doc (see [Parse]), at scale 1 and zoom 1. By
+// default it uses the Go fonts and the dark theme of package simpletheme:
+// opts can change that. It has empty bounds, so it shows nothing until
+// [View.SetBounds] is called.
+//
+// Views with the default fonts share one selector, so use them all from
+// one goroutine, as a user interface does, or give the others a selector
+// of their own with [WithFaceSelector].
+func NewView(doc *Document, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,
 		ctx: engine.Context{
 			Scale:        1,
-			FaceSelector: faceSelector,
-			Styles:       styleSheet.Styles(),
+			FaceSelector: defaultFaceSelector,
+			Styles:       simpletheme.DarkStyleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
 		},
 		hscroll:      newHScrollState(),

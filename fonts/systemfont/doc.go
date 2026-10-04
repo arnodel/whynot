@@ -8,7 +8,7 @@
 //	if err := selector.RegisterPreferredFont(fonts.Proportional); err != nil {
 //		log.Print(err) // not fatal: the Go fonts are used instead
 //	}
-//	view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
+//	view := whynot.NewView(doc, whynot.WithFaceSelector(selector))
 //
 // [New] scans the system's font directories, so make one Selector when
 // the program starts, rather than one per document.

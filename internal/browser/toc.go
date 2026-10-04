@@ -42,8 +42,8 @@ func (a *App) ShowTOC() {
 
 	tocView := whynot.NewView(
 		whynot.Parse(buildTOCSource(entries, currentID)),
-		a.faceSelector,
-		a.styleSheet,
+		whynot.WithFaceSelector(a.faceSelector),
+		whynot.WithStyleSheet(a.styleSheet),
 	)
 	a.place(tocView)
 	if currentID != "" {
