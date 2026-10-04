@@ -153,6 +153,14 @@ frame. The [package documentation](https://pkg.go.dev/github.com/arnodel/whynot/
 shows the whole frame loop, and [`examples/gio`](backends/giobackend/examples/gio) is a
 program you can run.
 
+### Another framework
+
+A backend for another framework provides two things: a `canvas.Canvas` that draws text,
+images and rectangles with the framework, and an input reader that turns the framework's
+input into whynot's input events. Your program then runs the same frame loop as above.
+[backends/README.md](backends/README.md) explains what each part has to do, and the two
+existing backends are short enough to serve as examples.
+
 ### More control: View and Controller
 
 A Panel is made of two parts, which you can also use directly when you need more control
