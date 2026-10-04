@@ -19,8 +19,8 @@ type vscrollbar struct {
 	// while dragging: the thumb's length can change during a drag.
 	grab float64
 
-	// The bar shows until revealUntil (on the clock of View.Layout's
-	// now), fading out at the end.
+	// The bar shows until revealUntil (on the clock of View.Draw's now),
+	// fading out at the end.
 	revealUntil time.Duration
 }
 

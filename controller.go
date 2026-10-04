@@ -129,7 +129,7 @@ func (c *Controller) SetScale(s float64) {
 }
 
 // Frame applies one frame's input events, in order, at now: elapsed time
-// on the clock the View is laid out with (see View.Layout). Call it once
+// on the clock the View is drawn with (see [View.Draw]). Call it once
 // per frame, with no events if there were none, so flings keep coasting.
 //
 // It returns what happened that the app may want to react to, such as a

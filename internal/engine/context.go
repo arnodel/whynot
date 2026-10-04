@@ -42,8 +42,7 @@ type Context struct {
 
 	// Time is elapsed time since the embedder started rendering (its
 	// own reference point - only ever used relative to itself, never
-	// compared against a wall-clock timestamp), set every View.Layout
-	// call. The one consumer today is imagecache.Animation.CurrentFrame,
+	// compared against a wall-clock timestamp), set by every View.Draw. The one consumer today is imagecache.Animation.CurrentFrame,
 	// reached via DrawInline - kept here rather than read from a direct
 	// time.Now() call so frame selection stays a pure, deterministic
 	// function of its inputs, easy to test without any real waiting.
