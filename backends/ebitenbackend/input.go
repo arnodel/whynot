@@ -12,7 +12,7 @@ import (
 // pixels, depends on the platform, because so does the unit: see the
 // wheel_*.go files.
 
-// Input is an input.Source reading Ebitengine's input: Events reports
+// Input is an [input.Source] reading Ebitengine's input: Events reports
 // what changed since the previous call, which should be once per tick,
 // from the game's Update. A touch, while there is one, takes over from
 // the mouse; at most one touch is tracked.
@@ -30,7 +30,7 @@ type Input struct {
 
 var _ input.Source = (*Input)(nil)
 
-// Events implements input.Source.
+// Events implements [input.Source].
 func (in *Input) Events() []input.Event {
 	if cx, cy, justPressed, ok := in.touchInput(); ok {
 		in.touching = true

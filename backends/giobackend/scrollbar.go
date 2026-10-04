@@ -13,7 +13,7 @@ import (
 
 // NativeScrollbar is Gio's material scrollbar, scrolling a View: for an
 // app that wants its scrollbar to match the rest of its Gio UI rather
-// than use the View's own (whynot.WithScrollbar). Its colors come from
+// than use the View's own ([whynot.WithScrollbar]). Its colors come from
 // the View's StyleSheet; its width from Theme.
 type NativeScrollbar struct {
 	// Theme sets the scrollbar's size; nil means material.NewTheme().

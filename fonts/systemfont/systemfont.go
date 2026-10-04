@@ -21,13 +21,13 @@ type finder interface {
 	Match(query string) *sysfont.Font
 }
 
-// Selector is a fonts.FaceSelector that resolves fonts by name from
+// Selector is a [fonts.FaceSelector] that resolves fonts by name from
 // whatever's installed on the host machine. It wraps a
-// fonts.CustomSelector: RegisterSystemFont locates an installed
+// [fonts.CustomSelector]: RegisterSystemFont locates an installed
 // font file for a family and registers every subfont in it that
 // AddFontCollection can classify and match - anything it can't find or
 // classify is left for the underlying CustomSelector's fallback (a
-// fonts.GoSelector by default) to serve instead.
+// [fonts.GoSelector] by default) to serve instead.
 //
 // New scans the host's real font directories once,
 // synchronously - construct it during setup, not per frame or document.
@@ -41,8 +41,8 @@ var _ fonts.FaceSelector = (*Selector)(nil)
 // New returns a Selector with nothing
 // registered yet - every SelectFace call delegates to its fallback
 // FaceSelector until RegisterSystemFont is called. opts configures the
-// underlying CustomSelector exactly as they would fonts.NewCustomSelector,
-// e.g. fonts.WithFallback.
+// underlying CustomSelector exactly as they would [fonts.NewCustomSelector],
+// e.g. [fonts.WithFallback].
 func New(opts ...fonts.CustomOption) *Selector {
 	return &Selector{
 		CustomSelector: fonts.NewCustomSelector(opts...),
