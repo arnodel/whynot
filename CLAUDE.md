@@ -1,8 +1,10 @@
 # Working on whynot
 
-Follow [CONTRIBUTING.md](CONTRIBUTING.md): building and testing, issues and pull
+Follow CONTRIBUTING.md, imported below: building and testing, issues and pull
 requests, comments, package documentation, modules and releases. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for how the code is organized.
+
+@CONTRIBUTING.md
 
 ## Workflow
 
