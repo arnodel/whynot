@@ -90,8 +90,9 @@ func (p *Panel) Zoom() float64 {
 	return p.zoom
 }
 
-// SetZoom magnifies the document by zoom (1 is 100%): the View is laid
-// out at Scale times Zoom. Scrolling steps don't change with the zoom.
+// SetZoom magnifies the document by zoom (1 is 100%), in the current View
+// and every View the Panel shows after it (see View.SetZoom). Scrolling
+// steps don't change with the zoom.
 func (p *Panel) SetZoom(zoom float64) {
 	p.zoom = zoom
 	p.relayout()
@@ -182,6 +183,7 @@ func (p *Panel) PageUp() { p.controller.PageUp() }
 // relayout applies the Panel's geometry to the View and Controller.
 func (p *Panel) relayout() {
 	p.controller.SetScale(p.scale)
-	p.view.SetScale(p.scale * p.zoom)
+	p.view.SetScale(p.scale)
+	p.view.SetZoom(p.zoom)
 	p.view.SetBounds(p.bounds)
 }

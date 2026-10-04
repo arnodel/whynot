@@ -95,12 +95,9 @@ type App struct {
 	zoomIndicatorUntil time.Time
 
 	// deviceScale, width, height, toolbarHeight are Relayout's most
-	// recent inputs/outputs - see its own doc comment. scale is
-	// deviceScale*zoom, passed to View.Layout as the document's own
-	// font/DPI scale.
+	// recent inputs/outputs - see its own doc comment.
 	deviceScale                  float64
 	width, height, toolbarHeight int
-	scale                        float64
 
 	// tocDocView is the real document's View, saved here while a
 	// synthetic table-of-contents View is current in Panel instead - nil
@@ -511,7 +508,8 @@ const zoomStep = 0.1
 // place lays view out where Panel shows its View, so it can be scrolled
 // (e.g. to an anchor) before it's shown.
 func (a *App) place(view *whynot.View) {
-	view.SetScale(a.scale)
+	view.SetScale(a.deviceScale)
+	view.SetZoom(a.zoom)
 	view.SetBounds(a.Panel.Bounds())
 }
 
@@ -540,7 +538,7 @@ func (a *App) SetZoom(zoom float64) {
 	a.zoomIndicatorUntil = time.Now().Add(zoomIndicatorDuration)
 }
 
-// Relayout recomputes width/height/scale from outsideWidth/
+// Relayout recomputes width/height from outsideWidth/
 // outsideHeight (the window's logical/device-independent size),
 // deviceScale (the display's own scale, with no zoom applied), and
 // toolbarHeight (physical pixels already reserved above the document,
@@ -551,7 +549,6 @@ func (a *App) SetZoom(zoom float64) {
 // animated GIF gets fresh timing every rendered frame).
 func (a *App) Relayout(outsideWidth, outsideHeight int, deviceScale float64, toolbarHeight int) {
 	a.deviceScale = deviceScale
-	a.scale = deviceScale * a.zoom
 	a.width = int(float64(outsideWidth) * deviceScale)
 	a.height = int(float64(outsideHeight) * deviceScale)
 	a.toolbarHeight = toolbarHeight

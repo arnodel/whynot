@@ -8,6 +8,9 @@ import (
 // layoutView places v at the canvas origin, width by height, at scale,
 // and does a frame's work at now without drawing.
 func layoutView(v *View, width, height int, scale float64, now time.Duration) {
+	if v.zoom == 0 {
+		v.zoom = 1 // a View built as a literal in a test, rather than by NewView
+	}
 	v.SetScale(scale)
 	v.SetBounds(image.Rect(0, 0, width, height))
 	v.update(now)

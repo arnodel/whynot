@@ -20,7 +20,7 @@ import (
 //
 // A View reads no input itself: a Controller turns input into hovering,
 // clicking and scrolling. Its own methods are for programmatic use:
-// SetBounds and SetScale when the window or zoom change, and positioning
+// SetBounds, SetScale and SetZoom when the window, screen or zoom change, and positioning
 // with ScrollBy, ScrollToRatio, ScrollToAnchor and RestoreScrollPosition.
 //
 // All its positions and distances are in canvas pixels (see Coordinates
@@ -42,6 +42,11 @@ type View struct {
 	bounds image.Rectangle
 	width  int
 	scale  float64
+
+	// displayScale and zoom make up the scale the View lays out at,
+	// ctx.Scale: see SetScale and SetZoom.
+	displayScale float64
+	zoom         float64
 
 	// vbar is the View's own vertical scrollbar, if enabled.
 	vbar vscrollbar
@@ -75,7 +80,8 @@ func WithImageSource(s images.Source) ViewOption {
 }
 
 // NewView returns a View of doc (see Parse), drawn with faceSelector's fonts
-// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), at scale 1. It
+// in styleSheet's style (e.g. simpletheme.DarkStyleSheet), at scale 1 and
+// zoom 1. It
 // has empty bounds, so it shows nothing until SetBounds is called.
 func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleSheet, opts ...ViewOption) *View {
 	v := &View{
@@ -86,7 +92,9 @@ func NewView(doc *Document, faceSelector fonts.FaceSelector, styleSheet StyleShe
 			Styles:       styleSheet.Styles(),
 			ImageCache:   imagecache.NewCache(images.FileSource{}),
 		},
-		hscroll: newHScrollState(),
+		hscroll:      newHScrollState(),
+		displayScale: 1,
+		zoom:         1,
 	}
 	v.ctx.ScrollOffset = v.hscroll.scrollOffset
 	v.ctx.Scrollbar = func(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration) {
@@ -231,17 +239,33 @@ func (v *View) SetBounds(r image.Rectangle) {
 	v.relayout()
 }
 
-// Scale returns the scale the View is laid out at (see SetScale).
+// Scale returns the display's scale (see SetScale).
 func (v *View) Scale() float64 {
-	return v.ctx.Scale
+	return v.displayScale
 }
 
-// SetScale sets the scale the View is laid out at: canvas pixels per
-// logical pixel (the display's scale), times any zoom. Fonts are sized
-// at scale*72 DPI, and the StyleSheet's dimensions are multiplied by it.
-// A change lays the document out again, keeping the scroll position.
+// SetScale sets the display's scale: canvas pixels per logical pixel, so
+// that text and margins are sized for the screen's density. The document
+// is laid out at the scale times the zoom (see SetZoom): fonts at that
+// times 72 DPI, and the StyleSheet's dimensions multiplied by it. A
+// change lays the document out again, keeping the scroll position.
 func (v *View) SetScale(scale float64) {
-	v.ctx.Scale = scale
+	v.displayScale = scale
+	v.ctx.Scale = v.displayScale * v.zoom
+	v.relayout()
+}
+
+// Zoom returns the document's zoom (see SetZoom).
+func (v *View) Zoom() float64 {
+	return v.zoom
+}
+
+// SetZoom magnifies the document by zoom (1 is 100%), on top of the
+// display's scale (see SetScale). A change lays the document out again,
+// keeping the scroll position.
+func (v *View) SetZoom(zoom float64) {
+	v.zoom = zoom
+	v.ctx.Scale = v.displayScale * v.zoom
 	v.relayout()
 }
 

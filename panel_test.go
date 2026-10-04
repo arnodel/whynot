@@ -159,8 +159,9 @@ func TestPanelZoomedScrollStep(t *testing.T) {
 	p := newTestPanel(strings.Repeat(longDoc, 40), image.Rect(0, 0, testWidth, testHeight))
 	p.SetScale(2)
 	p.SetZoom(1.5)
-	if got := p.View().ctx.Scale; got != 3 {
-		t.Errorf("View laid out at scale %v, want 3", got)
+	v := p.View()
+	if v.Scale() != 2 || v.Zoom() != 1.5 || v.ctx.Scale != 3 {
+		t.Errorf("View's scale, zoom and layout scale = %v, %v, %v; want 2, 1.5, 3", v.Scale(), v.Zoom(), v.ctx.Scale)
 	}
 	top := func() int { return visibleViewBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
 	before := top()
