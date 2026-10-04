@@ -1,20 +1,94 @@
-// Package whynot renders Markdown documents in Go programs, onto any
-// graphics library a backend adapts (see package [canvas]).
+// Package whynot shows Markdown documents in Go programs, such as games and
+// GUI apps: it lays a document out, draws it, and lets the user scroll
+// through it and click its links. It draws through a small interface
+// rather than a particular graphics library, and receives input as plain
+// values, so it works with any framework a backend adapts: whynot comes
+// with backends for Ebitengine and Gio.
 //
-// [Parse] turns Markdown into a [Document]. A [View] draws a Document into
-// a rectangle of a canvas, scrolled to a position. A [Controller] turns a
-// backend's input events (see package [input]) into what they do to a
-// View: scrolling, hovering, clicking links. A [Panel] puts a View and a
-// Controller together, for an app that just wants a document on screen.
+// # Overview
+//
+// The package has four main types:
+//
+//   - [Parse] turns Markdown into a [Document].
+//   - A [View] lays a Document out and draws it into a rectangle of a
+//     canvas, scrolled to a position. It only lays out what's on screen,
+//     so long documents cost no more than short ones.
+//   - A [Controller] turns the user's input into what it does to a View:
+//     scrolling (by wheel, touch, scrollbar or command), highlighting the
+//     link under the pointer, and reporting clicks.
+//   - A [Panel] is a View and a Controller together, with settings that
+//     survive showing another document: the simplest way to put a document
+//     on screen.
+//
+// A View is given what decides how the document looks:
+//
+//   - a [StyleSheet], for colors, text styles, margins and scrollbars,
+//     made by a package under styles/, such as styles/simpletheme;
+//   - a [fonts.FaceSelector], for the fonts the text is drawn with (see
+//     package [fonts]);
+//   - optionally, an [images.Source], for where images come from
+//     ([WithImageSource]; see package [images]).
+//
+// [Parse] can be given code-block plugins ([WithCodeBlockPlugin]; see
+// package [codeblocks]), for syntax highlighting or diagrams.
+//
+// # Showing a document
+//
+// A backend provides two things: an [input.Source] that reads the user's
+// input from the framework, and a [canvas.Canvas] to draw on. Here is how
+// to use them with Ebitengine.
+//
+// Once, when your program starts, make the backend's input reader and
+// renderer, and set a Panel up:
+//
+//	var source ebitenbackend.Input  // reads Ebitengine's input: an input.Source
+//	renderer := ebitenbackend.New() // keeps image textures and glyph caches across frames
+//
+//	doc := whynot.Parse(markdown)
+//	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+//	panel := whynot.NewPanel(view, bounds) // where it's drawn on the screen
+//	panel.SetScale(scale)                  // the screen's density
+//
+// Then, every frame, pass the input to the Panel, with the time, and
+// react to what happened. With Ebitengine, do that in your game's Update
+// method:
+//
+//	events := panel.Frame(source.Events(), now)
+//	// react to events, such as a LinkClick
+//
+// Draw the Panel every frame too. Ebitengine gives your game's Draw
+// method the screen image to draw on each time, so make a canvas onto it
+// each time as well. That's cheap: the renderer holds what's worth
+// keeping.
+//
+//	panel.Draw(renderer.NewCanvas(screen), now)
+//
+// With Gio, a giobackend.Input and a giobackend.Renderer play the same
+// roles, and the frame loop is shaped by Gio's events instead. The
+// packages backends/ebitenbackend and backends/giobackend each show a
+// complete program. When the window is resized, the screen changes or the
+// user zooms, call [Panel.SetBounds], [Panel.SetScale] or [Panel.SetZoom]:
+// the document is laid out again, keeping the scroll position.
+//
+// # A Panel, or a View and a Controller
+//
+// A Panel covers what most programs need. Use a View and a Controller
+// directly for more control: you can then drive a View with input of your
+// own, fit it into a structure of your own, or move it by code alone
+// ([View.ScrollBy], [View.ScrollToAnchor], [View.ScrollToRatio]). A View
+// also answers questions about what it shows: the link under the pointer
+// ([View.HoveredLink]), the part of the document in view
+// ([View.VisibleRange]), the heading currently on screen
+// ([View.CurrentHeadingID]).
 //
 // # Coordinates
 //
-// whynot uses one coordinate space: the canvas's. The [canvas.Canvas] a
-// View draws on, the input events a Controller acts on, a View's or
-// Panel's bounds, and everything a View reports by position
-// ([View.HitTest], [View.LinkAt]) share the same origin and the same unit,
-// canvas pixels: device pixels for whynot's own backends. Where the
-// canvas sits in a window is the backend's business, not whynot's.
+// whynot uses one coordinate space: the canvas's. The Canvas a View draws
+// on, the input events a Controller acts on, a View's or Panel's bounds,
+// and everything a View reports by position ([View.HitTest],
+// [View.LinkAt]) share the same origin and the same unit, canvas pixels:
+// device pixels for whynot's own backends. Where the canvas sits in a
+// window is the backend's business, not whynot's.
 //
 // A View is a window onto that space: [View.SetBounds] says where it is,
 // and it draws and answers only there. There is no separate coordinate
@@ -26,10 +100,10 @@
 // scale relates them to logical pixels, the unit of a StyleSheet's
 // dimensions: it's the number of canvas pixels per logical pixel
 // ([View.SetScale]), and a View is laid out at its scale times its zoom
-// ([View.SetZoom]). Command
-// scrolling ([Controller.ScrollDown], [Controller.ScrollLeft] and the
-// like, also on a Panel) steps in logical pixels without the zoom, so a
-// step covers the same distance on screen at any zoom.
+// ([View.SetZoom]). Command scrolling ([Controller.ScrollDown],
+// [Controller.ScrollLeft] and the like, also on a Panel) steps in logical
+// pixels without the zoom, so a step covers the same distance on screen
+// at any zoom.
 //
 // How far a View is scrolled into its document isn't in pixels, because
 // the document's height is an estimate until all of it has been laid
@@ -38,12 +112,12 @@
 //
 // # Events and state
 //
-// What happens in a View that an app may react to comes out of
+// What happens in a View that a program may react to comes out of
 // [Controller.Frame] as [Event] values, in order: the counterpart of the
-// input events going in. They're a sealed set, like input's, so new
-// kinds can be added without breaking anyone:
+// input events going in. They're a sealed set, like input's, so new kinds
+// can be added without breaking anyone:
 //
-//	for _, e := range panel.Frame(in.Events(), now) {
+//	for _, e := range panel.Frame(source.Events(), now) {
 //		switch e := e.(type) {
 //		case whynot.LinkClick:
 //			// follow e.Destination: load another document, say
@@ -52,13 +126,27 @@
 //		}
 //	}
 //
-// A Controller only reports events. A Panel also acts on one: it
-// scrolls to an [AnchorClick]'s heading, the way a browser follows a
-// "#id" link, unless [Panel.SetAnchorScrolling] turns that off for an
-// app that handles it itself, to record history first, say. Following
-// a [LinkClick] is always up to the app.
+// A Controller only reports events. A Panel also acts on one: it scrolls
+// to an [AnchorClick]'s heading, the way a browser follows a "#id" link,
+// unless [Panel.SetAnchorScrolling] turns that off for a program that
+// handles it itself, to record history first, say. Following a
+// [LinkClick] is always up to the program.
 //
 // What's true at the moment, rather than what happened, is read from the
 // View when needed, such as the link under the pointer
-// ([View.HoveredLink]), which an app may show in a status bar.
+// ([View.HoveredLink]), which a program may show in a status bar.
+//
+// # Related packages
+//
+// The contracts whynot works with each have a package of their own, so
+// that each can be implemented separately:
+//
+//   - [canvas] and [input]: what a backend provides, drawing and input
+//     events. The backends are under backends/.
+//   - [fonts], [images] and [codeblocks]: fonts, image loading and
+//     code-block plugins. Ready-made implementations are in their
+//     subpackages: fonts/systemfont (fonts installed on the system),
+//     codeblocks/chromahighlight (syntax highlighting) and codeblocks/kroki
+//     (diagrams).
+//   - Stylesheets: styles/simpletheme, with light and dark themes.
 package whynot
