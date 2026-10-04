@@ -1,16 +1,3 @@
-// Package simpletheme makes a whynot.StyleSheet from a fixed set of
-// fields: margins, text styles and colors for each kind of Markdown
-// element.
-//
-// Use a ready-made stylesheet:
-//
-//	view := whynot.NewView(doc, faces, simpletheme.DarkStyleSheet)
-//
-// or start from a preset and change what you need:
-//
-//	theme := simpletheme.Dark()
-//	theme.LinkColor = color.RGBA{0xFF, 0x40, 0x40, 0xFF}
-//	view.SetStyleSheet(theme.StyleSheet())
 package simpletheme
 
 import (
