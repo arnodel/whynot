@@ -70,12 +70,17 @@ changelog:
       - '^chore:'
       - '^ci:'
   groups:
+    # Any type marked breaking with "!" (feat!:, refactor!:, ...), first:
+    # a commit goes in the first group it matches.
+    - title: "Breaking Changes"
+      regexp: '^[a-z]+!:'
+      order: 0
     - title: "Features"
       regexp: '^feat:'
-      order: 0
+      order: 1
     - title: "Bug Fixes"
       regexp: '^fix:'
-      order: 1
+      order: 2
     - title: "Other Changes"
       order: 999
 
@@ -118,7 +123,10 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     directory: Casks
-    description: "A Markdown file renderer for Ebitengine games"
+    # A pre-release (v1.0.0-rc.1, say) isn't published to the tap, so
+    # brew users only ever get releases.
+    skip_upload: auto
+    description: "A Markdown document viewer: open files and web pages, follow links"
     homepage: "https://github.com/arnodel/whynot"
     license: "Apache-2.0"
     commit_author:
