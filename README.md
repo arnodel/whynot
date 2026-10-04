@@ -267,17 +267,17 @@ Each frame, information flows around a loop between your program, its graphics f
 and whynot:
 
 ```mermaid
-flowchart LR
+flowchart TB
     fw["Your graphics framework<br/>(Ebitengine or Gio)"]
-    input["Backend's Input<br/>turns the framework's input<br/>into whynot input events"]
-    ctrl["Controller<br/>scrolls the view, highlights links,<br/>reports clicks"]
-    view["View<br/>lays out and draws<br/>the visible part of the document"]
-    canvas["Backend's Canvas<br/>draws text, images and rectangles<br/>with the framework"]
+    input["The backend's Input"]
+    ctrl["Controller"]
+    view["View"]
+    canvas["The backend's Canvas"]
     app["Your program"]
-    fw -- "mouse, wheel, touch" --> input
+    fw -- "mouse, wheel and touch" --> input
     input -- "input events" --> ctrl
-    ctrl -- "scrolls and highlights" --> view
-    ctrl -- "events, such as a link clicked" --> app
+    ctrl -- "events, such as<br/>a link clicked" --> app
+    ctrl -- "scrolls, highlights links" --> view
     view -- "drawing calls" --> canvas
     canvas -- "pixels" --> fw
 ```
