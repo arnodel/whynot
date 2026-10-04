@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
@@ -15,7 +14,7 @@ import (
 // at testWidth x testHeight, and a Controller for it.
 func scrollbarView(t *testing.T, source string, opts ...ViewOption) (*View, *Controller) {
 	t.Helper()
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic(), append([]ViewOption{WithScrollbar()}, opts...)...)
+	v := NewView(Parse([]byte(source)), append([]ViewOption{WithStyleSheet(stylingtest.Basic()), WithScrollbar()}, opts...)...)
 	layoutView(v, testWidth, testHeight, 1, 0)
 	return v, NewController(v)
 }
@@ -107,7 +106,7 @@ func TestScrollbarFades(t *testing.T) {
 func TestScrollbarAlwaysVisible(t *testing.T) {
 	style := stylingtest.Basic()
 	style.Scrollbar.ScrollbarGeometry = styling.ScrollbarGeometry{Thickness: 6, Inset: 2, MinThumbLength: 24, AlwaysVisible: true}
-	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), style, WithScrollbar())
+	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), WithStyleSheet(style), WithScrollbar())
 	layoutView(v, testWidth, testHeight, 1, 0)
 	if got := v.scrollbarOpacity(v.ctx.Time); got != 1 {
 		t.Errorf("opacity of an always-visible scrollbar = %v, want 1", got)

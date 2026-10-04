@@ -25,7 +25,7 @@ const (
 // colors a View reports with those of a fresh View using s, since a
 // StyleSheet is opaque.
 func usesStyleSheet(v *whynot.View, s whynot.StyleSheet) bool {
-	ref := whynot.NewView(whynot.Parse(nil), fonts.NewGoSelector(), s)
+	ref := whynot.NewView(whynot.Parse(nil), whynot.WithStyleSheet(s))
 	return v.HighlightColor() == ref.HighlightColor() &&
 		v.ScrollbarColor(false, false) == ref.ScrollbarColor(false, false)
 }

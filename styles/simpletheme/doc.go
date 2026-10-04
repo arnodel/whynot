@@ -1,11 +1,12 @@
-// Package simpletheme makes stylesheets ([whynot.StyleSheet]) from a fixed
+// Package simpletheme makes stylesheets ([StyleSheet]) from a fixed
 // set of fields: margins, text styles and colors for each kind of
 // Markdown element, plus the scrollbars and the colors of highlighted
 // code. It's one way to style whynot: the core has no look of its own.
 //
-// Use a ready-made stylesheet, [DarkStyleSheet] or [LightStyleSheet]:
+// Use a ready-made stylesheet, [DarkStyleSheet] or [LightStyleSheet]. A
+// whynot View uses DarkStyleSheet unless it's given another:
 //
-//	view := whynot.NewView(doc, faces, simpletheme.DarkStyleSheet)
+//	view := whynot.NewView(doc, whynot.WithStyleSheet(simpletheme.LightStyleSheet))
 //
 // or start from one of the themes, [Dark] or [Light], and change what you
 // need:

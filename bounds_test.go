@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -19,7 +18,7 @@ func TestViewBoundsShiftEverything(t *testing.T) {
 	d := image.Pt(50, 30)
 	views := make([]*View, 2)
 	for i, origin := range []image.Point{{}, d} {
-		views[i] = NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic(), WithScrollbar())
+		views[i] = NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.Basic()), WithScrollbar())
 		views[i].SetBounds(image.Rectangle{Min: origin, Max: origin.Add(image.Pt(testWidth, testHeight))})
 	}
 	at, moved := views[0], views[1]
@@ -69,7 +68,7 @@ func TestViewBoundsShiftEverything(t *testing.T) {
 // only its height, keeps its layout and scroll position, while a new
 // width lays it out again.
 func TestViewSetBoundsKeepsLayout(t *testing.T) {
-	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
+	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), WithStyleSheet(stylingtest.Basic()))
 	v.SetBounds(image.Rect(0, 0, testWidth, testHeight))
 	v.ScrollBy(200)
 	box, pos := v.stack.box, v.ScrollPosition()
@@ -85,7 +84,7 @@ func TestViewSetBoundsKeepsLayout(t *testing.T) {
 }
 
 func TestViewVisibleRange(t *testing.T) {
-	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
+	v := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), WithStyleSheet(stylingtest.Basic()))
 	if start, end := v.VisibleRange(); start != 0 || end != 1 {
 		t.Errorf("VisibleRange before SetBounds = %v, %v; want 0, 1", start, end)
 	}

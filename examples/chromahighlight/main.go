@@ -17,9 +17,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/codeblocks/chromahighlight"
-	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
-	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
@@ -108,8 +106,6 @@ func main() {
 	g := &game{
 		view: whynot.NewView(
 			whynot.Parse([]byte(exampleDoc()), whynot.WithCodeBlockPlugin(chromahighlight.Plugin{})),
-			fonts.NewGoSelector(),
-			simpletheme.DarkStyleSheet,
 		),
 		renderer: ebitenbackend.New(),
 		start:    time.Now(),

@@ -17,8 +17,6 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/giobackend"
-	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
@@ -50,7 +48,7 @@ func main() {
 }
 
 func run() error {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())))
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	panel.SetScrollbar(true)
 

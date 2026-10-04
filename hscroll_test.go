@@ -20,7 +20,7 @@ func hscrollTestView(t *testing.T, width int) (*View, drawnRegion) {
 	// Filler after the code block, so the page itself can scroll too.
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.NoViewMargin()))
 	layoutView(v, width, 400, 1, 0)
 	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, width, 400)}, v.ctx.Time)
 	if len(v.hscroll.regions) != 1 {
@@ -197,7 +197,7 @@ func TestControllerDragsHorizontalScrollbar(t *testing.T) {
 // not at its own off-screen bottom.
 func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 	source := "```\n" + strings.Repeat("wide ", 100) + "\n" + strings.Repeat("line\n", 100) + "```\n"
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.NoViewMargin()))
 	layoutView(v, 300, 400, 1, 0)
 	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 400)}, v.ctx.Time)
 	area := v.hscroll.regions[0]

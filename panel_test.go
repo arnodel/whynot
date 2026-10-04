@@ -6,14 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 
 func newTestPanel(source string, bounds image.Rectangle) *Panel {
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.Basic()))
 	return NewPanel(v, bounds)
 }
 
@@ -94,7 +93,7 @@ func TestPanelSetViewKeepsSettings(t *testing.T) {
 	p := newTestPanel(strings.Repeat(longDoc, 20), image.Rect(0, 0, testWidth, testHeight))
 	p.SetStyleSheet(style)
 	p.SetScrollbar(true)
-	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
+	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), WithStyleSheet(stylingtest.Basic()))
 	p.SetView(v2)
 
 	if p.View() != v2 {
@@ -177,7 +176,7 @@ func TestPanelScrollLeftRight(t *testing.T) {
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
 	bounds := image.Rect(50, 30, 350, 430)
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.NoViewMargin()))
 	p := NewPanel(v, bounds)
 	p.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 1000, 1000)}, 0)
 	area := v.hscroll.regions[0]
@@ -226,7 +225,7 @@ func TestControllerSidewaysTargetTouched(t *testing.T) {
 	source := "Intro.\n\n```\n" + strings.Repeat("wide ", 100) + "\nshort\n```\n\n" +
 		strings.Repeat("Filler paragraph.\n\n", 60)
 	bounds := image.Rect(0, 0, 300, 400)
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.NoViewMargin())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.NoViewMargin()))
 	p := NewPanel(v, bounds)
 	p.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 1000, 1000)}, 0)
 	on := v.hscroll.regions[0].Visible.Min.Add(image.Pt(10, 10))

@@ -26,7 +26,6 @@ import (
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/fonts/systemfont"
 	"github.com/arnodel/whynot/input"
-	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 func exampleDoc() string {
@@ -101,7 +100,7 @@ func main() {
 	register(fonts.Monospace, *monospaceFamily)
 
 	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), selector, simpletheme.DarkStyleSheet),
+		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), whynot.WithFaceSelector(selector)),
 		renderer: ebitenbackend.New(),
 		start:    time.Now(),
 	}

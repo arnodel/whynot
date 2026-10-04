@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -35,7 +34,7 @@ func findLinkPos(t *testing.T, v *View) (x, y int) {
 
 func newTestController(t *testing.T, source string) (*Controller, *View) {
 	t.Helper()
-	v := NewView(Parse([]byte(source)), fonts.NewGoSelector(), stylingtest.Basic())
+	v := NewView(Parse([]byte(source)), WithStyleSheet(stylingtest.Basic()))
 	layoutView(v, testWidth, testHeight, 1, 0)
 	return NewController(v), v
 }
@@ -166,7 +165,7 @@ func TestControllerSetViewClearsHover(t *testing.T) {
 	lx, ly := findLinkPos(t, v)
 	frame(c, input.PointerMove{X: lx, Y: ly})
 
-	plain := NewView(Parse([]byte("Just text, no links at all.")), fonts.NewGoSelector(), stylingtest.Basic())
+	plain := NewView(Parse([]byte("Just text, no links at all.")), WithStyleSheet(stylingtest.Basic()))
 	plain.SetBounds(v.Bounds())
 	c.SetView(plain)
 	if got := hovered(v); got != "" {
@@ -263,7 +262,7 @@ func TestControllerSetViewStopsFling(t *testing.T) {
 	c, _ := newTestController(t, strings.Repeat(longDoc, 20))
 	now := fling(c, -60, 100*time.Millisecond)
 
-	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), fonts.NewGoSelector(), stylingtest.Basic())
+	v2 := NewView(Parse([]byte(strings.Repeat(longDoc, 20))), WithStyleSheet(stylingtest.Basic()))
 	layoutView(v2, testWidth, testHeight, 1, now)
 	c.SetView(v2)
 	c.Frame(nil, now+100*time.Millisecond)

@@ -74,8 +74,6 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
-	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 const source = "# Hello\n\nThis is **whynot**, showing [a link](https://example.com)."
@@ -117,8 +115,8 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	doc := whynot.Parse([]byte(source))
-	// A View draws a document, here in the bundled Go fonts and the dark theme.
-	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+	// A View draws a document, by default in the bundled Go fonts and a dark theme.
+	view := whynot.NewView(doc)
 	// The panel's bounds are set in Layout, once the window size is known.
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	panel.SetScrollbar(true)
@@ -170,7 +168,7 @@ than a Panel gives you, for example to fit whynot into a structure of your own:
   link under the pointer, and reporting clicks.
 
 ```go
-view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+view := whynot.NewView(doc)
 controller := whynot.NewController(view)
 
 // Then, every frame:
@@ -193,7 +191,8 @@ the documentation explains this in detail.
 A View's appearance comes from its stylesheet. The
 [`styles/simpletheme`](styles/simpletheme) package makes stylesheets from a set of plain
 fields: you can use one of its ready-made stylesheets, or start from one of its themes and
-change what you need, then make a stylesheet from it:
+change what you need, then make a stylesheet from it. A View uses the dark theme unless you
+give it another stylesheet, with `whynot.WithStyleSheet` or later with `SetStyleSheet`:
 
 ```go
 theme := simpletheme.Dark() // or simpletheme.Light()
@@ -210,7 +209,8 @@ light and a dark theme.
 The stylesheet decides the size, weight and family of each piece of text, and a font
 selector decides which font actually draws it. whynot comes with three:
 
-- `fonts.NewGoSelector()` uses the Go fonts, which are bundled with whynot.
+- `fonts.NewGoSelector()` uses the Go fonts, which are bundled with whynot. A View uses
+  them unless you give it another selector, with `whynot.WithFaceSelector`.
 - `fonts.NewCustomSelector()` uses font files you provide, for whichever families, weights
   and styles you choose, and the Go fonts for the rest. See
   [`examples/customfont`](examples/customfont).
@@ -229,7 +229,7 @@ if err := selector.RegisterPreferredFont(fonts.Proportional); err != nil {
 if err := selector.RegisterSystemFont(fonts.Monospace, "Menlo"); err != nil {
 	log.Print(err)
 }
-view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
+view := whynot.NewView(doc, whynot.WithFaceSelector(selector))
 ```
 
 ### Code blocks: highlighting and diagrams
@@ -278,8 +278,8 @@ are complete applications built the same way.
 ## How it works
 
 First, `whynot.Parse` turns the Markdown into a `Document`, with the help of any code-block
-plugins, and `whynot.NewView` makes a View to show it, with a stylesheet and fonts that
-decide how it looks:
+plugins, and `whynot.NewView` makes a View to show it. A stylesheet and fonts decide how it
+looks; without them, the View uses a dark theme and the bundled Go fonts:
 
 ```mermaid
 flowchart TB
@@ -295,8 +295,8 @@ flowchart TB
     plugins --> parse
     parse --> doc
     doc --> newview
-    sheet --> newview
-    fonts --> newview
+    sheet -. optional .-> newview
+    fonts -. optional .-> newview
     newview --> view
 ```
 

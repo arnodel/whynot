@@ -5,7 +5,6 @@ import (
 
 	"golang.org/x/image/font"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/codeblocks"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/styling"
@@ -331,9 +330,21 @@ var (
 	defaultLineHeight    = 1.2
 )
 
-// StyleSheet returns a snapshot of t, for a [whynot.View]: changing t
-// afterwards doesn't affect it.
-func (t *Theme) StyleSheet() whynot.StyleSheet {
+// StyleSheet is a stylesheet made from a [Theme], for a whynot View (see
+// [github.com/arnodel/whynot.WithStyleSheet]). Make one with
+// [Theme.StyleSheet]: the zero StyleSheet can't be used.
+type StyleSheet struct {
+	styles *styling.Basic
+}
+
+// Styles is for whynot's own use.
+func (s StyleSheet) Styles() styling.Styles {
+	return s.styles
+}
+
+// StyleSheet returns a snapshot of t: changing t afterwards doesn't
+// affect it.
+func (t *Theme) StyleSheet() StyleSheet {
 	b := &styling.Basic{Dims: dims}
 	b.ParagraphMargins = styling.Margins(t.ParagraphMargins)
 	b.ParagraphTextStyle = t.ParagraphTextStyle.partial()
@@ -374,7 +385,7 @@ func (t *Theme) StyleSheet() whynot.StyleSheet {
 	if b.Dims.LineHeight == 0 {
 		b.Dims.LineHeight = defaultLineHeight
 	}
-	return b
+	return StyleSheet{b}
 }
 
 // partial converts s to the engine's form, flagging its non-zero fields.
