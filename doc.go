@@ -36,10 +36,10 @@
 //
 // A backend provides two things: an [input.Source] that reads the user's
 // input from the framework, and a [canvas.Canvas] to draw on. Here is how
-// a program uses them with Ebitengine.
+// to use them with Ebitengine.
 //
-// Once, when the program starts, it makes the backend's input reader and
-// renderer, and sets a Panel up:
+// Once, when your program starts, make the backend's input reader and
+// renderer, and set a Panel up:
 //
 //	var source ebitenbackend.Input  // reads Ebitengine's input: an input.Source
 //	renderer := ebitenbackend.New() // keeps image textures and glyph caches across frames
@@ -49,17 +49,17 @@
 //	panel := whynot.NewPanel(view, bounds) // where it's drawn on the screen
 //	panel.SetScale(scale)                  // the screen's density
 //
-// Then, every frame, it passes the input to the Panel, with the time,
-// and reacts to what happened. With Ebitengine, that's in the game's
-// Update method:
+// Then, every frame, pass the input to the Panel, with the time, and
+// react to what happened. With Ebitengine, do that in your game's Update
+// method:
 //
 //	events := panel.Frame(source.Events(), now)
 //	// react to events, such as a LinkClick
 //
-// It also draws the Panel every frame. Ebitengine gives the game's Draw
-// method the screen image to draw on each time, so the program makes a
-// canvas onto it each time too, which is cheap: the renderer holds what's
-// worth keeping.
+// Draw the Panel every frame too. Ebitengine gives your game's Draw
+// method the screen image to draw on each time, so make a canvas onto it
+// each time as well. That's cheap: the renderer holds what's worth
+// keeping.
 //
 //	panel.Draw(renderer.NewCanvas(screen), now)
 //
@@ -67,15 +67,14 @@
 // roles, and the frame loop is shaped by Gio's events instead. The
 // packages backends/ebitenbackend and backends/giobackend each show a
 // complete program. When the window is resized, the screen changes or the
-// user zooms, the program calls [Panel.SetBounds], [Panel.SetScale] or
-// [Panel.SetZoom]; the document is laid out again, keeping the scroll
-// position.
+// user zooms, call [Panel.SetBounds], [Panel.SetScale] or [Panel.SetZoom]:
+// the document is laid out again, keeping the scroll position.
 //
 // # A Panel, or a View and a Controller
 //
-// A Panel covers what most programs need. Using a View and a Controller
-// directly gives more control: a program can drive a View with input of
-// its own, place it in a structure of its own, or move it by code alone
+// A Panel covers what most programs need. Use a View and a Controller
+// directly for more control: you can then drive a View with input of your
+// own, fit it into a structure of your own, or move it by code alone
 // ([View.ScrollBy], [View.ScrollToAnchor], [View.ScrollToRatio]). A View
 // also answers questions about what it shows: the link under the pointer
 // ([View.HoveredLink]), the part of the document in view
