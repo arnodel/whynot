@@ -935,10 +935,10 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 	}
 }
 
-// TestViewDocumentBounds checks that DocumentBounds' height is the sum
-// of every top-level slot's real (resolved) height, width the
-// last-known Layout width.
-func TestViewDocumentBounds(t *testing.T) {
+// TestViewStackBounds checks that the stack's height is the sum of every
+// top-level slot's real (resolved) height, and its width the laid-out
+// width.
+func TestViewStackBounds(t *testing.T) {
 	v := &View{
 		width: 300,
 		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
@@ -947,23 +947,23 @@ func TestViewDocumentBounds(t *testing.T) {
 			{Box: engine.NewEmptyBox(300, 30)},
 		}}},
 	}
-	if got, want := documentBounds(v), image.Rect(0, 0, 300, 60); got != want {
-		t.Errorf("DocumentBounds() = %v, want %v", got, want)
+	if got, want := stackBounds(v), image.Rect(0, 0, 300, 60); got != want {
+		t.Errorf("stackBounds = %v, want %v", got, want)
 	}
 }
 
-func TestViewDocumentBoundsNilBox(t *testing.T) {
+func TestViewStackBoundsNilBox(t *testing.T) {
 	v := &View{}
-	if got := documentBounds(v); got != (image.Rectangle{}) {
-		t.Errorf("DocumentBounds() with no box laid out = %v, want the zero Rectangle", got)
+	if got := stackBounds(v); got != (image.Rectangle{}) {
+		t.Errorf("stackBounds with no box laid out = %v, want the zero Rectangle", got)
 	}
 }
 
-// TestViewVisibleViewBounds checks that VisibleViewBounds's height is
+// TestViewStackVisibleBounds checks that the visible part's height is
 // exactly the viewport's own height (not wherever the last drawn slot
-// happens to end - see VisibleViewBounds' doc comment), clamped to the
+// happens to end - see documentStack.visibleRange), clamped to the
 // document's total.
-func TestViewVisibleViewBounds(t *testing.T) {
+func TestViewStackVisibleBounds(t *testing.T) {
 	v := &View{
 		width: 300,
 		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
@@ -978,15 +978,15 @@ func TestViewVisibleViewBounds(t *testing.T) {
 	// 2's own end), even though DrawFrom would still draw all of slot 2
 	// (its top at 100px is within the viewport) and only excludes slot
 	// 3 (top at 150px).
-	got := visibleViewBounds(v, image.Pt(300, 80))
+	got := stackVisibleBounds(v, image.Pt(300, 80))
 	if want := (image.Rect(0, 60, 300, 140)); got != want {
-		t.Errorf("VisibleViewBounds() = %v, want %v", got, want)
+		t.Errorf("stackVisibleBounds = %v, want %v", got, want)
 	}
 }
 
-// TestViewVisibleViewBoundsClampsAtDocumentEnd checks that a viewport
+// TestViewStackVisibleBoundsClampsAtDocumentEnd checks that a viewport
 // taller than the remaining document doesn't walk past the last slot.
-func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
+func TestViewStackVisibleBoundsClampsAtDocumentEnd(t *testing.T) {
 	v := &View{
 		width: 300,
 		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
@@ -994,20 +994,20 @@ func TestViewVisibleViewBoundsClampsAtDocumentEnd(t *testing.T) {
 			{Box: engine.NewEmptyBox(300, 50)},
 		}}, cursor: engine.StackCursor{Index: 1, Offset: 0}},
 	}
-	got := visibleViewBounds(v, image.Pt(300, 1000))
+	got := stackVisibleBounds(v, image.Pt(300, 1000))
 	if want := (image.Rect(0, 50, 300, 100)); got != want {
-		t.Errorf("VisibleViewBounds() = %v, want %v (clamped to the last slot)", got, want)
+		t.Errorf("stackVisibleBounds = %v, want %v (clamped to the last slot)", got, want)
 	}
 }
 
-// TestViewVisibleViewBoundsResolvesRealHeights checks that the forward
+// TestViewStackVisibleBoundsResolvesRealHeights checks that the forward
 // walk computing the bottom edge resolves each slot for real (the same
 // way DrawFrom itself would), not from documentStack's height estimate's extrapolated
 // average - using the average here was the actual bug behind the
 // thumb's size visibly jumping while scrolling: the average is a
 // moving target as more of the document gets visited, a real height
 // isn't.
-func TestViewVisibleViewBoundsResolvesRealHeights(t *testing.T) {
+func TestViewStackVisibleBoundsResolvesRealHeights(t *testing.T) {
 	v := &View{
 		width: 300,
 		stack: documentStack{box: &engine.StackBox{Context: &engine.Context{}, Slots: []engine.StackSlot{
@@ -1015,19 +1015,19 @@ func TestViewVisibleViewBoundsResolvesRealHeights(t *testing.T) {
 			{Block: &fixedHeightBlock{height: 500}, Width: 300}, // NOT resolved yet - real height 500, far from that average
 		}}},
 	}
-	got := visibleViewBounds(v, image.Pt(300, 1000))
+	got := stackVisibleBounds(v, image.Pt(300, 1000))
 	if want := (image.Rect(0, 0, 300, 510)); got != want {
-		t.Errorf("VisibleViewBounds() = %v, want %v (slot 1 resolved for real, not estimated from the average)", got, want)
+		t.Errorf("stackVisibleBounds = %v, want %v (slot 1 resolved for real, not estimated from the average)", got, want)
 	}
 	if v.stack.box.Slots[1].Box == nil {
-		t.Error("VisibleViewBounds didn't actually resolve slot 1 - want it forced, the way DrawFrom would")
+		t.Error("stackVisibleBounds didn't actually resolve slot 1 - want it forced, the way DrawFrom would")
 	}
 }
 
-func TestViewVisibleViewBoundsNilBox(t *testing.T) {
+func TestViewStackVisibleBoundsNilBox(t *testing.T) {
 	v := &View{}
-	if got := visibleViewBounds(v, image.Pt(300, 100)); got != (image.Rectangle{}) {
-		t.Errorf("VisibleViewBounds() with no box laid out = %v, want the zero Rectangle", got)
+	if got := stackVisibleBounds(v, image.Pt(300, 100)); got != (image.Rectangle{}) {
+		t.Errorf("stackVisibleBounds with no box laid out = %v, want the zero Rectangle", got)
 	}
 }
 
@@ -1046,15 +1046,15 @@ func TestViewHeightEstimateExtrapolates(t *testing.T) {
 	}
 	// avg of the two resolved slots (100, 300) is 200, extrapolated for
 	// the third -> total 100 + 300 + 200 = 600.
-	if got, want := documentBounds(v), image.Rect(0, 0, 300, 600); got != want {
-		t.Errorf("DocumentBounds() = %v, want %v (extrapolated)", got, want)
+	if got, want := stackBounds(v), image.Rect(0, 0, 300, 600); got != want {
+		t.Errorf("stackBounds = %v, want %v (extrapolated)", got, want)
 	}
 
 	// Resolve slot 2 to a real height well below the average - the
 	// estimate must track the real value, not the stale extrapolation.
 	v.stack.box.Slots[2].Box = engine.NewEmptyBox(300, 50)
-	if got, want := documentBounds(v), image.Rect(0, 0, 300, 450); got != want {
-		t.Errorf("DocumentBounds() after resolving slot 2 = %v, want %v", got, want)
+	if got, want := stackBounds(v), image.Rect(0, 0, 300, 450); got != want {
+		t.Errorf("stackBounds after resolving slot 2 = %v, want %v", got, want)
 	}
 }
 
@@ -1070,7 +1070,7 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	for i := range v.stack.box.Slots {
 		v.stack.box.BoxAt(i) // resolve every slot once
 	}
-	before := documentBounds(v)
+	before := stackBounds(v)
 
 	x, y, ok := findTag(v, ast.TagLink)
 	if !ok {
@@ -1087,8 +1087,8 @@ func TestViewHeightEstimatePersistsAcrossHoverInvalidation(t *testing.T) {
 	if got := v.stack.heights[slot]; got < 0 {
 		t.Fatalf("stack.heights[%d] = %v after invalidation, want the last-known real height preserved", slot, got)
 	}
-	if got := documentBounds(v); got != before {
-		t.Errorf("DocumentBounds() after hover invalidation = %v, want unchanged %v", got, before)
+	if got := stackBounds(v); got != before {
+		t.Errorf("stackBounds after hover invalidation = %v, want unchanged %v", got, before)
 	}
 }
 
@@ -1105,8 +1105,8 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 		ctx: engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.NoViewMargin()},
 	}
 	layoutView(v, 100, 1000, 1, 0)
-	v.stack.box.BoxAt(1)  // resolve slot 1 too, not just the cursor's own slot 0
-	_ = documentBounds(v) // populate stack.heights from both slots before the resize
+	v.stack.box.BoxAt(1) // resolve slot 1 too, not just the cursor's own slot 0
+	_ = stackBounds(v)   // populate stack.heights from both slots before the resize
 
 	// Resize - slot 1's real height is now 200px, but nothing has asked
 	// boxAt(1) again yet at the new width. rebuild() directly, not
@@ -1121,15 +1121,15 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 	// Slot 0 is resolved fresh (200px, real - rebuild's own cursor
 	// re-anchoring does this); slot 1 stays at its stale pre-resize
 	// estimate (100) until actually re-resolved.
-	if got, want := documentBounds(v), image.Rect(0, 0, 200, 300); got != want {
-		t.Errorf("DocumentBounds() after resize = %v, want %v (slot 1's stale estimate kept as a seed)", got, want)
+	if got, want := stackBounds(v), image.Rect(0, 0, 200, 300); got != want {
+		t.Errorf("stackBounds after resize = %v, want %v (slot 1's stale estimate kept as a seed)", got, want)
 	}
 
 	// Once slot 1 is actually re-resolved at the new width, its real
 	// (200px) height replaces the stale seed.
 	v.stack.box.BoxAt(1)
-	if got, want := documentBounds(v), image.Rect(0, 0, 200, 400); got != want {
-		t.Errorf("DocumentBounds() after resolving slot 1 = %v, want %v (stale seed replaced by the real height)", got, want)
+	if got, want := stackBounds(v), image.Rect(0, 0, 200, 400); got != want {
+		t.Errorf("stackBounds after resolving slot 1 = %v, want %v (stale seed replaced by the real height)", got, want)
 	}
 }
 
@@ -1138,8 +1138,8 @@ func TestViewHeightEstimateSeedsFromStaleValueAcrossResize(t *testing.T) {
 // Hover triggered a full rebuild on every highlight change, which
 // could reset a naive height estimate back to "just the current slot."
 // Hover is surgical now (see StackBox.invalidate) and never touches
-// stack.heights, so this passes not because DocumentBounds/
-// VisibleViewBounds are insulated from Hover's effects, but because
+// stack.heights, so this passes not because the stack's bounds are
+// insulated from Hover's effects, but because
 // there's genuinely nothing for a hover-only change to invalidate -
 // the persisted per-slot estimates for whatever Hover nils out (the
 // highlighted link's own slot, at most) stay exactly as accurate as
@@ -1155,17 +1155,17 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 		t.Fatal("no point in the document resolved to ast.TagLink")
 	}
 
-	wantDoc := documentBounds(v)
-	wantVisible := visibleViewBounds(v, image.Pt(300, 200))
+	wantDoc := stackBounds(v)
+	wantVisible := stackVisibleBounds(v, image.Pt(300, 200))
 
 	for i := 0; i < 4; i++ {
 		v.hover(x, y)   // HighlightNode: nil -> the link (rebuilds)
 		v.hover(-1, -1) // HighlightNode: the link -> nil (rebuilds again)
-		if got := documentBounds(v); got != wantDoc {
-			t.Fatalf("DocumentBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantDoc)
+		if got := stackBounds(v); got != wantDoc {
+			t.Fatalf("stackBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantDoc)
 		}
-		if got := visibleViewBounds(v, image.Pt(300, 200)); got != wantVisible {
-			t.Fatalf("VisibleViewBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantVisible)
+		if got := stackVisibleBounds(v, image.Pt(300, 200)); got != wantVisible {
+			t.Fatalf("stackVisibleBounds changed after hover rebuild #%d: got %v, want %v", i, got, wantVisible)
 		}
 	}
 }
@@ -1490,7 +1490,7 @@ func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
 // documentStack.preLayout's broader one: a slot well beyond preLayoutHeightRadius
 // behind the cursor - so documentStack.preLayout's own backward walk can't
 // reach it either - still gets re-resolved immediately once its
-// pending image settles, rather than freezing DocumentBounds' estimate
+// pending image settles, rather than freezing the height estimate
 // at a stale placeholder value forever.
 func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 	full, err := os.ReadFile("testdata/cat.jpeg") // 400x600 - much taller than the "(loading image…)" placeholder text
@@ -1536,7 +1536,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 
 	placeholderHeight := view.stack.box.BoxAt(imageSlotIndex).Bounds().Dy() // still pending, no bounds known yet - "(loading image…)" text height
 	view.stack.box.BoxAt(cursorSlotIndex)                                   // resolve the cursor's own slot too, seeding a real estimate
-	docBefore := documentBounds(view)
+	docBefore := stackBounds(view)
 
 	close(release)
 	waitForSettled(t, cache, "cat.jpeg")
@@ -1549,8 +1549,8 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 	if got := view.stack.box.Slots[imageSlotIndex].Box.Bounds().Dy(); got == placeholderHeight {
 		t.Errorf("slot %d's height is still the stale placeholder %d after the real image settled", imageSlotIndex, placeholderHeight)
 	}
-	if docAfter := documentBounds(view); docAfter == docBefore {
-		t.Error("DocumentBounds() unchanged after an already-passed slot's image resolved - want it to grow to reflect the real height")
+	if docAfter := stackBounds(view); docAfter == docBefore {
+		t.Error("stackBounds unchanged after an already-passed slot's image resolved - want it to grow to reflect the real height")
 	}
 }
 

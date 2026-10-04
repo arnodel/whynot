@@ -61,7 +61,7 @@ type hscrollState struct {
 	grab       int          // pointer x minus thumb x, while dragging
 
 	// revealed's scrollbar shows until revealUntil (on the clock of
-	// View.Layout's now), fading out at the end - see reveal.
+	// View.Draw's now), fading out at the end - see reveal.
 	revealed    engine.Block
 	revealUntil time.Duration
 }

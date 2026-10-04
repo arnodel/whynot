@@ -16,18 +16,18 @@ func layoutView(v *View, width, height int, scale float64, now time.Duration) {
 	v.update(now)
 }
 
-// documentBounds is the document's estimated extent in document
-// coordinates: v's width by the estimated total height.
-func documentBounds(v *View) image.Rectangle {
+// stackBounds is the laid-out document's estimated extent, in pixels
+// from its top: v's width by the estimated total height.
+func stackBounds(v *View) image.Rectangle {
 	if !v.stack.laidOut() {
 		return image.Rectangle{}
 	}
 	return image.Rect(0, 0, v.width, int(v.stack.totalHeight()))
 }
 
-// visibleViewBounds is the part of documentBounds in view, for a
-// viewport of viewportSize.
-func visibleViewBounds(v *View, viewportSize image.Point) image.Rectangle {
+// stackVisibleBounds is the part of stackBounds in view, for a viewport
+// of viewportSize.
+func stackVisibleBounds(v *View, viewportSize image.Point) image.Rectangle {
 	if !v.stack.laidOut() || v.stack.cursor.Index >= v.stack.len() {
 		return image.Rectangle{}
 	}

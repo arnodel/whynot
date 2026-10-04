@@ -129,7 +129,7 @@ func TestPanelDrawClipsToBounds(t *testing.T) {
 
 func TestPanelScrollAndPage(t *testing.T) {
 	p := newTestPanel(strings.Repeat(longDoc, 40), image.Rect(0, 0, testWidth, testHeight))
-	top := func() int { return visibleViewBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
+	top := func() int { return stackVisibleBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
 	page := float64(testHeight) * (1 - pageOverlap)
 
 	steps := []struct {
@@ -163,7 +163,7 @@ func TestPanelZoomedScrollStep(t *testing.T) {
 	if v.Scale() != 2 || v.Zoom() != 1.5 || v.ctx.Scale != 3 {
 		t.Errorf("View's scale, zoom and layout scale = %v, %v, %v; want 2, 1.5, 3", v.Scale(), v.Zoom(), v.ctx.Scale)
 	}
-	top := func() int { return visibleViewBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
+	top := func() int { return stackVisibleBounds(p.View(), image.Pt(testWidth, testHeight)).Min.Y }
 	before := top()
 	p.ScrollDown()
 	if d := top() - before; d != 2*commandStep {

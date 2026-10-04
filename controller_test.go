@@ -187,9 +187,9 @@ func TestControllerWheelScales(t *testing.T) {
 	moved := func(scale float64) int {
 		c, v := newTestController(t, strings.Repeat(longDoc, 20))
 		c.SetScale(scale)
-		before := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
+		before := stackVisibleBounds(v, image.Pt(testWidth, testHeight)).Min.Y
 		frame(c, input.Wheel{X: 10, Y: 10, DY: 30})
-		return visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y - before
+		return stackVisibleBounds(v, image.Pt(testWidth, testHeight)).Min.Y - before
 	}
 	if at1, at2 := moved(1), moved(2); at1 != 30 || at2 != 60 {
 		t.Errorf("a 30-logical-pixel wheel scrolled %d at scale 1 and %d at scale 2, want 30 and 60", at1, at2)
@@ -203,19 +203,19 @@ func TestControllerWheelGatedByBounds(t *testing.T) {
 	// Scroll deep into the document first, so scrolling back afterwards
 	// has room to move without clamping at the top.
 	frame(c, input.Wheel{X: 0, Y: 0, DY: 5000})
-	before := visibleViewBounds(v, viewport).Min.Y
+	before := stackVisibleBounds(v, viewport).Min.Y
 	if before == 0 {
 		t.Fatal("test setup: wheel didn't scroll down")
 	}
 
 	frame(c, input.Wheel{X: -1000, Y: -1000, DY: -37}) // outside bounds
-	if got := visibleViewBounds(v, viewport).Min.Y; got != before {
-		t.Errorf("VisibleViewBounds top after an out-of-bounds wheel = %d, want unchanged %d", got, before)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got != before {
+		t.Errorf("page top after an out-of-bounds wheel = %d, want unchanged %d", got, before)
 	}
 
 	frame(c, input.Wheel{X: 0, Y: 0, DY: -37}) // inside bounds
-	if got := visibleViewBounds(v, viewport).Min.Y; got != before-37 {
-		t.Errorf("VisibleViewBounds top after an in-bounds wheel of -37 = %d, want %d", got, before-37)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got != before-37 {
+		t.Errorf("page top after an in-bounds wheel of -37 = %d, want %d", got, before-37)
 	}
 }
 
@@ -234,26 +234,26 @@ func TestControllerMomentum(t *testing.T) {
 
 	// No fling yet - nothing to coast.
 	c.Frame(nil, 0)
-	if got := visibleViewBounds(v, viewport).Min.Y; got != 0 {
-		t.Fatalf("VisibleViewBounds top after a frame with no fling = %d, want 0", got)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got != 0 {
+		t.Fatalf("page top after a frame with no fling = %d, want 0", got)
 	}
 
 	now := fling(c, -60, 100*time.Millisecond) // -60px over 100ms = -600px/s
 
-	before := visibleViewBounds(v, viewport).Min.Y
+	before := stackVisibleBounds(v, viewport).Min.Y
 	now += 100 * time.Millisecond
 	c.Frame(nil, now)
-	if got := visibleViewBounds(v, viewport).Min.Y; got <= before {
-		t.Errorf("VisibleViewBounds top after coasting = %d, want more than %d (coasting forward)", got, before)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got <= before {
+		t.Errorf("page top after coasting = %d, want more than %d (coasting forward)", got, before)
 	}
 
 	// The app moving the View stops the fling.
 	v.ScrollBy(10)
-	before = visibleViewBounds(v, viewport).Min.Y
+	before = stackVisibleBounds(v, viewport).Min.Y
 	now += 100 * time.Millisecond
 	c.Frame(nil, now)
-	if got := visibleViewBounds(v, viewport).Min.Y; got != before {
-		t.Errorf("VisibleViewBounds top after coasting following View.ScrollBy = %d, want unchanged %d", got, before)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got != before {
+		t.Errorf("page top after coasting following View.ScrollBy = %d, want unchanged %d", got, before)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestControllerSetViewStopsFling(t *testing.T) {
 	layoutView(v2, testWidth, testHeight, 1, now)
 	c.SetView(v2)
 	c.Frame(nil, now+100*time.Millisecond)
-	if got := visibleViewBounds(v2, image.Pt(testWidth, testHeight)).Min.Y; got != 0 {
+	if got := stackVisibleBounds(v2, image.Pt(testWidth, testHeight)).Min.Y; got != 0 {
 		t.Errorf("new View's top after a frame = %d, want 0 (no fling carried over)", got)
 	}
 }
@@ -330,7 +330,7 @@ func TestControllerMomentumBelowMinimumNeverScrolls(t *testing.T) {
 	}
 	c.Frame(nil, 0)
 	c.Frame(nil, 3*time.Second)
-	if got := visibleViewBounds(v, viewport).Min.Y; got != 0 {
-		t.Errorf("VisibleViewBounds top = %d after coasting a below-minimum velocity, want 0 (no scroll)", got)
+	if got := stackVisibleBounds(v, viewport).Min.Y; got != 0 {
+		t.Errorf("page top = %d after coasting a below-minimum velocity, want 0 (no scroll)", got)
 	}
 }

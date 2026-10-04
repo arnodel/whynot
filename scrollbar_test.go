@@ -73,10 +73,10 @@ func TestScrollbarDrag(t *testing.T) {
 	if !v.vbar.dragging {
 		t.Fatal("a press on the thumb didn't start a drag")
 	}
-	before := visibleViewBounds(v, viewport).Min.Y
+	before := stackVisibleBounds(v, viewport).Min.Y
 	// Dragging keeps tracking the pointer even off the scrollbar.
 	frame(c, input.PointerMove{X: grab.X - 100, Y: grab.Y + testHeight/2})
-	if after := visibleViewBounds(v, viewport).Min.Y; after <= before {
+	if after := stackVisibleBounds(v, viewport).Min.Y; after <= before {
 		t.Errorf("page top after dragging the thumb down = %d, want more than %d", after, before)
 	}
 	frame(c, release(grab.X-100, grab.Y+testHeight/2))

@@ -234,7 +234,7 @@ func TestTableScrollsWhenTooWide(t *testing.T) {
 
 // pageTop is how far down the page v is scrolled.
 func pageTop(v *View) int {
-	return visibleViewBounds(v, image.Pt(v.width, 400)).Min.Y
+	return stackVisibleBounds(v, image.Pt(v.width, 400)).Min.Y
 }
 
 // toucher drives a Controller with one finger.
