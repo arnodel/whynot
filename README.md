@@ -263,20 +263,32 @@ are complete applications built the same way.
 
 ## How it works
 
-Each frame, information flows around a loop between your program, its graphics framework
-and whynot:
+First, whynot turns the Markdown into a `Document`, and a View is made to show it, with a
+stylesheet and fonts that decide how it looks:
+
+```mermaid
+flowchart LR
+    md["Markdown text"] -- "whynot.Parse,<br/>with code-block plugins" --> doc["Document"]
+    doc --> view["View"]
+    sheet["Stylesheet"] --> view
+    fonts["Fonts"] --> view
+```
+
+Then, every frame, your program runs a loop between its graphics framework and whynot:
 
 ```mermaid
 flowchart TB
     fw["Your graphics framework<br/>(Ebitengine or Gio)"]
-    input["The backend's Input"]
-    ctrl["Controller"]
-    view["View"]
-    canvas["The backend's Canvas"]
-    app["Your program"]
+    subgraph program["Your program, every frame"]
+        input["The backend's Input"]
+        ctrl["Controller"]
+        yours["Your code"]
+        view["View"]
+        canvas["The backend's Canvas"]
+    end
     fw -- "mouse, wheel and touch" --> input
     input -- "input events" --> ctrl
-    ctrl -- "events, such as<br/>a link clicked" --> app
+    ctrl -- "events, such as<br/>a link clicked" --> yours
     ctrl -- "scrolls, highlights links" --> view
     view -- "drawing calls" --> canvas
     canvas -- "pixels" --> fw
