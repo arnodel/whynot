@@ -2,6 +2,8 @@ package browser
 
 import (
 	"bytes"
+	"context"
+	"image/png"
 	"testing"
 )
 
@@ -31,5 +33,23 @@ func TestRenderWelcomeAddressBarTip(t *testing.T) {
 	// own paragraph, in either case.
 	if !bytes.Contains(md, []byte("Paste \"welcome\" at any time")) {
 		t.Error("renderWelcome() with AddressBarEditable=true lost the closing paragraph after the substitution")
+	}
+}
+
+// TestWelcomeResolverServesBundledImages checks that an image src
+// relative to the welcome page resolves to the file bundled next to
+// welcome.md.
+func TestWelcomeResolverServesBundledImages(t *testing.T) {
+	src, err := newImageRegistry().Resolve(WelcomeURL, "icons/add.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, err := src.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer body.Close()
+	if _, err := png.Decode(body); err != nil {
+		t.Errorf("decoding the fetched icon: %v", err)
 	}
 }

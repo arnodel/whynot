@@ -3,6 +3,7 @@ package whynot
 import (
 	"slices"
 
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/engine"
 )
 
@@ -15,8 +16,9 @@ type Document struct {
 	headings []TOCEntry
 
 	// soleImages maps each top-level text block consisting of a single
-	// image to that image's src - what View prefetches ahead of scrolling.
-	soleImages map[engine.Block]string
+	// image to that image's Source - what View prefetches ahead of
+	// scrolling.
+	soleImages map[engine.Block]fetch.Source
 }
 
 // TOCEntry is one heading of a Document - enough to build a table of

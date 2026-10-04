@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/imagecache"
 )
@@ -96,10 +97,14 @@ func (c *TaskCheckbox) GetInlineLayout(ctx Context, width int) InlineLayout {
 }
 
 type InlineImage struct {
-	Src     string
-	Alt     string
-	Title   string
-	ASTNode *ast.Node
+	Src string // as written in the Markdown
+	// Image is where the image comes from, resolved from Src at parse
+	// time, or nil if that failed, with ImageErr saying why.
+	Image    fetch.Source
+	ImageErr error
+	Alt      string
+	Title    string
+	ASTNode  *ast.Node
 	// FallbackNode is a ast.TagUnsupported child of node - see the
 	// compiler's KindImage case (internal/markdown/inlines.go) for why
 	// it's precomputed once, at parse time, rather than created on demand
@@ -116,12 +121,10 @@ func (i *InlineImage) Node() *ast.Node {
 	return i.ASTNode
 }
 
-// GetInlineLayout resolves, fetches, and decodes src via ctx.ImageCache
-// (letting the embedder decide the resolution/fetch policy - relative
-// to a document's location, over http(s), from an archive, whatever it
-// needs) - never blocking, since imagecache.Cache.Load never does. With no
-// image cache, the image isn't loaded and its fallback text is shown.
-// Otherwise there are three outcomes:
+// GetInlineLayout fetches and decodes Image via ctx.ImageCache - never
+// blocking, since imagecache.Cache.Load never does. If Src couldn't be
+// resolved, or there's no image cache, the image isn't loaded and its
+// fallback text is shown. Otherwise there are three outcomes:
 //
 //   - Ready: the decoded image, scaled by ctx.Scale like every other
 //     sized quantity in the layout system (Context.ScaledMargins
@@ -141,15 +144,19 @@ func (i *InlineImage) Node() *ast.Node {
 //     zero-size gap - reusing InlineText's own GetInlineLayout, so it
 //     renders exactly like any other construct whynot can't handle (see
 //     appendUnsupportedInline). Either way the resulting TextBox is
-//     stamped with which src it's standing in for, so
+//     stamped with the key of the image it's standing in for, so
 //     View.invalidateChangedImages knows to revisit it once that
 //     changes.
 func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
+	if i.Image == nil {
+		return i.fallback(fmt.Sprintf("(image not loaded: %v)", i.ImageErr)).GetInlineLayout(ctx, width)
+	}
 	cache := ctx.ImageCache
 	if cache == nil {
 		return i.fallback(fmt.Sprintf("(image not loaded: %s)", i.Src)).GetInlineLayout(ctx, width)
 	}
-	resolved, result := cache.Load(i.Src)
+	key := i.Image.Key()
+	result := cache.Load(i.Image)
 	switch result.Status {
 	case imagecache.Ready:
 		return &ImageBox{
@@ -164,17 +171,17 @@ func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
 			return &ImageBox{
 				Rect:             fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 				placeholderColor: ctx.Styles.BorderColor(i.ASTNode),
-				Pending:          []string{resolved},
+				Pending:          []string{key},
 				glued:            i.Glued,
 				source:           i,
 			}
 		}
 		box := (&InlineText{Text: "(loading image…)", ASTNode: i.ASTNode, Glued: i.Glued}).GetInlineLayout(ctx, width).(*TextBox)
-		box.pending = []string{resolved}
+		box.pending = []string{key}
 		return box
 	default: // imagecache.Failed
-		box := i.fallback(fmt.Sprintf("(image not found: %s)", resolved)).GetInlineLayout(ctx, width).(*TextBox)
-		box.pending = []string{resolved}
+		box := i.fallback(fmt.Sprintf("(image not found: %s)", i.Src)).GetInlineLayout(ctx, width).(*TextBox)
+		box.pending = []string{key}
 		return box
 	}
 }

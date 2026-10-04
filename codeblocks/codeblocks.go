@@ -1,6 +1,6 @@
 package codeblocks
 
-import "github.com/arnodel/whynot/images"
+import "github.com/arnodel/whynot/fetch"
 
 // Plugin parses fenced code blocks in the languages it handles.
 //
@@ -41,9 +41,10 @@ type Span struct {
 }
 
 // Image is a code block shown as an image, e.g. a rendered diagram,
-// loaded in the background.
+// fetched from Source in the background. Source's key only needs to be
+// unique among the plugin's own keys: whynot namespaces it.
 type Image struct {
-	images.AsyncImage
+	Source fetch.Source
 }
 
 func (Tokens) isContent() {}

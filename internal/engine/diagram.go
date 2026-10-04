@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/imagecache"
 )
 
-// NewDiagramBlock returns a Block that renders img's image once it
-// resolves, and fallback's own layout - typically the same CodeBlock
+// NewDiagramBlock returns a Block that renders src's image once it
+// loads, and fallback's own layout - typically the same CodeBlock
 // that would've rendered without a plugin - while it's still pending or
 // failed, so a diagram's raw source stays visible rather than a bare
 // placeholder message. See codeblocks.Plugin.
-func NewDiagramBlock(node *ast.Node, img images.AsyncImage, fallback Block) Block {
-	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Image: img, Fallback: fallback}
+func NewDiagramBlock(node *ast.Node, src fetch.Source, fallback Block) Block {
+	return &DiagramBlock{node: node, imageNode: node.AddChild(ast.TagImage), Image: src, Fallback: fallback}
 }
 
 type DiagramBlock struct {
@@ -30,7 +30,7 @@ type DiagramBlock struct {
 	// Its only job is giving the ready image's frame a StyleSheet.
 	// BorderColor to resolve (ast.TagCodeBlock, node's own tag, has none).
 	imageNode *ast.Node
-	Image     images.AsyncImage
+	Image     fetch.Source
 	Fallback  Block
 }
 
@@ -44,7 +44,7 @@ func (b *DiagramBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 	if ctx.ImageCache == nil {
 		return b.Fallback.GetBlockLayout(ctx, width)
 	}
-	result := ctx.ImageCache.LoadImage(b.Image)
+	result := ctx.ImageCache.Load(b.Image)
 	if result.Status != imagecache.Ready {
 		// Pending or Failed: show the fallback (raw/highlighted code)
 		// instead - but still report the diagram's own key as pending,
@@ -52,7 +52,7 @@ func (b *DiagramBlock) GetBlockLayout(ctx Context, width int) BlockLayout {
 		// fetch resolves (Pending -> Ready) or retries (Failed -> a
 		// later Pending/Ready, per imagecache.Cache's own retry timer), even
 		// though the fallback layout itself knows nothing about it.
-		return &diagramBox{inner: b.Fallback.GetBlockLayout(ctx, width), pendingKey: b.Image.Key}
+		return &diagramBox{inner: b.Fallback.GetBlockLayout(ctx, width), pendingKey: b.Image.Key()}
 	}
 
 	frameThickness := int(ctx.scaledThematicBreakThickness(b.imageNode))

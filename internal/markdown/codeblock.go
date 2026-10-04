@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/arnodel/whynot/codeblocks"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
@@ -12,17 +13,32 @@ import (
 // replaced with.
 const codeBlockTabExpansion = "    "
 
+// plugin is a code-block plugin, with the namespace its images' keys are
+// put in, so that two plugins' keys can't collide.
+type plugin struct {
+	codeblocks.Plugin
+	namespace string
+}
+
+// namespaced is a Source whose key is put in a namespace.
+type namespaced struct {
+	namespace string
+	fetch.Source
+}
+
+func (n namespaced) Key() string { return n.namespace + n.Source.Key() }
+
 // pluginsFor returns the registered plugins that handle language, in
 // registration order - resolved once per distinct language and cached
 // from then on.
-func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
+func (c *compiler) pluginsFor(language string) []plugin {
 	if ps, ok := c.pluginCache[language]; ok {
 		return ps
 	}
 	if c.pluginCache == nil {
-		c.pluginCache = make(map[string][]codeblocks.Plugin)
+		c.pluginCache = make(map[string][]plugin)
 	}
-	var ps []codeblocks.Plugin
+	var ps []plugin
 	for _, p := range c.codeBlockPlugins {
 		if p.Handles(language) {
 			ps = append(ps, p)
@@ -38,7 +54,7 @@ func (c *compiler) pluginsFor(language string) []codeblocks.Plugin {
 // colored code block, and an Image a diagram that falls back to what
 // the remaining plugins make of the block. With no plugin left, it's
 // plain text, one InlineText per line.
-func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []string, plugins []codeblocks.Plugin) engine.Block {
+func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []string, plugins []plugin) engine.Block {
 	for i, p := range plugins {
 		// rawLines carry their own trailing newlines - joining with ""
 		// avoids doubling them up.
@@ -50,8 +66,11 @@ func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []stri
 			}
 			// Tokens that don't reproduce the source: try the next plugin.
 		case codeblocks.Image:
+			if content.Source == nil {
+				continue // nothing to show: try the next plugin
+			}
 			fallback := c.codeBlock(astNode, language, rawLines, plugins[i+1:])
-			return engine.NewDiagramBlock(astNode, content.AsyncImage, fallback)
+			return engine.NewDiagramBlock(astNode, namespaced{p.namespace, content.Source}, fallback)
 		}
 	}
 	lines := make([][]engine.Inline, len(rawLines))

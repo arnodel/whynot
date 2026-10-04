@@ -3,6 +3,8 @@ package whynot
 import (
 	"slices"
 	"testing"
+
+	"github.com/arnodel/whynot/fetch"
 )
 
 // TestDocumentTitle checks that Title finds the document's first heading,
@@ -54,11 +56,11 @@ func TestDocumentTOCEntriesNoHeadings(t *testing.T) {
 // entire content is one image is recorded - not an image mixed into
 // text, and not one nested inside a blockquote.
 func TestDocumentSoleImages(t *testing.T) {
-	doc := Parse([]byte("![a](a.png)\n\ntext ![b](b.png)\n\n> ![c](c.png)\n"))
+	doc := Parse([]byte("![a](a.png)\n\ntext ![b](b.png)\n\n> ![c](c.png)\n"), WithImageRegistry(fetch.NewRegistry(testResolver{})))
 	if len(doc.soleImages) != 1 {
 		t.Fatalf("soleImages = %v, want exactly one entry", doc.soleImages)
 	}
-	if src, ok := doc.soleImages[doc.root.Blocks[0]]; !ok || src != "a.png" {
-		t.Errorf("soleImages[first block] = %q, %v, want %q, true", src, ok, "a.png")
+	if img, ok := doc.soleImages[doc.root.Blocks[0]]; !ok || img.Key() != "file:a.png" {
+		t.Errorf("soleImages[first block] = %v, %v, want the image keyed file:a.png", img, ok)
 	}
 }

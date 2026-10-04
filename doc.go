@@ -27,12 +27,13 @@
 //     ([WithStyleSheet]), made by a package under styles/: by default,
 //     the dark theme of styles/simpletheme;
 //   - a [fonts.FaceSelector], for the fonts the text is drawn with
-//     ([WithFaceSelector]; see package [fonts]): by default, the Go fonts;
-//   - an [images.Source], for where images come from ([WithImageSource];
-//     see package [images]): by default, local files.
+//     ([WithFaceSelector]; see package [fonts]): by default, the Go fonts.
 //
 // [Parse] can be given code-block plugins ([WithCodeBlockPlugin]; see
-// package [codeblocks]), for syntax highlighting or diagrams.
+// package [codeblocks]), for syntax highlighting or diagrams, and what
+// the document's images can be fetched from ([WithImageRegistry] and
+// [WithBaseURL]; see package [fetch]). Nothing is fetched by default: a
+// document parsed without a registry shows no images.
 //
 // # Showing a document
 //
@@ -143,7 +144,7 @@
 // A View, a Controller and a Panel are not safe for concurrent use: use
 // each from one goroutine, normally the one your framework draws on. Only
 // image fetching happens in the background, on goroutines of its own (see
-// [images.AsyncImage]).
+// [fetch.Source]).
 //
 // Views made without [WithFaceSelector] share one selector of the Go
 // fonts, and so share its font faces. That lets the backends cache what
@@ -160,7 +161,7 @@
 //
 //   - [canvas] and [input]: what a backend provides, drawing and input
 //     events. The backends are under backends/.
-//   - [fonts], [images] and [codeblocks]: fonts, image loading and
+//   - [fonts], [fetch] and [codeblocks]: fonts, fetching images and
 //     code-block plugins. Ready-made implementations are in their
 //     subpackages: fonts/systemfont (fonts installed on the system),
 //     codeblocks/chromahighlight (syntax highlighting) and codeblocks/kroki

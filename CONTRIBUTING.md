@@ -54,7 +54,7 @@ reconstructing how it was built.
 Inline comments explain *why* a piece of code is the way it is, not what the next lines
 do.
 
-Contract packages (`canvas`, `input`, `images`, `codeblocks`, `fonts`) are the exception
+Contract packages (`canvas`, `input`, `fetch`, `codeblocks`, `fonts`) are the exception
 to brevity where precision is needed: their doc comments are the specification that
 implementers work from.
 

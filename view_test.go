@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
@@ -931,7 +931,7 @@ func BenchmarkViewLayoutResizeDeep(b *testing.B) {
 		b.Fatal(err)
 	}
 	block := Parse(source)
-	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic(), ImageCache: imagecache.NewCache(images.FileSource{})}
+	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic(), ImageCache: imagecache.NewCache()}
 	const width = 1024
 
 	for i := 0; i < b.N; i++ {
@@ -1191,8 +1191,8 @@ func TestViewBoundsStableAcrossHoverRebuilds(t *testing.T) {
 func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	full := onePixelPNG(t)
 	release := make(chan struct{})
-	source := &countingImageSource{
-		resolved: "b.png",
+	source := &testImage{
+		key: "b.png",
 		open: func() (io.ReadCloser, error) {
 			// Split after the IHDR chunk (33 bytes: 8-byte signature +
 			// 4+4+13+4 for the chunk itself) so DecodeConfig can reveal
@@ -1203,11 +1203,11 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 			return io.NopCloser(r), nil
 		},
 	}
-	cache := imagecache.NewCache(source)
+	cache := imagecache.NewCache()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		_, result := cache.Load("b.png")
+		result := cache.Load(source)
 		if result.Status == imagecache.Pending && result.Bounds != (image.Rectangle{}) {
 			break
 		}
@@ -1239,7 +1239,7 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 	_, view.imageCacheMark = cache.ChangedSince(0)
 
 	close(release)
-	waitForSettled(t, cache, "b.png")
+	waitForSettled(t, cache, source)
 
 	// invalidateChangedImages directly, not Layout: this hand-built View
 	// has no real block for any slot (see above), so documentStack.preLayout -
@@ -1270,8 +1270,8 @@ func TestViewInvalidateChangedImagesTargetsOnlyAffectedSlot(t *testing.T) {
 func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	full := onePixelPNG(t)
 	release := make(chan struct{})
-	source := &countingImageSource{
-		resolved: "img.png",
+	source := &testImage{
+		key: "img.png",
 		open: func() (io.ReadCloser, error) {
 			<-release
 			return io.NopCloser(bytes.NewReader(full)), nil
@@ -1279,7 +1279,7 @@ func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 	}
 
 	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
-	view := NewView(Parse([]byte(doc)), WithStyleSheet(stylingtest.Basic()), WithImageSource(source))
+	view := NewView(Parse([]byte(doc), withTestImage(source)), WithStyleSheet(stylingtest.Basic()))
 	layoutView(view, 300, 1000, 1, 0)
 	view.stack.box.Bounds() // force every slot to resolve once, including the image's
 
@@ -1320,8 +1320,8 @@ func TestViewInvalidateChangedImagesSurgicalWhenBoundsRevealed(t *testing.T) {
 func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 	full := onePixelPNG(t)
 	release := make(chan struct{})
-	source := &countingImageSource{
-		resolved: "img.png",
+	source := &testImage{
+		key: "img.png",
 		open: func() (io.ReadCloser, error) {
 			<-release
 			return io.NopCloser(bytes.NewReader(full)), nil
@@ -1329,7 +1329,7 @@ func TestViewInvalidateChangedImagesReanchorsCursorOnItsOwnSlot(t *testing.T) {
 	}
 
 	doc := "first paragraph here\n\n![alt](img.png)\n\nthird paragraph here"
-	view := NewView(Parse([]byte(doc)), WithStyleSheet(stylingtest.Basic()), WithImageSource(source))
+	view := NewView(Parse([]byte(doc), withTestImage(source)), WithStyleSheet(stylingtest.Basic()))
 	layoutView(view, 300, 1000, 1, 0)
 	// Slots: 0 = leading view margin, 1 = "first paragraph here", 2 =
 	// inter-block gap, 3 = the image's own paragraph, 4 = gap, 5 =
@@ -1462,12 +1462,11 @@ func TestViewPreLayoutNearbyRespectsTimeBudget(t *testing.T) {
 // prefetchImageSources reaches an image slot well beyond
 // preLayoutHeightRadius (so documentStack.preLayout itself can't have resolved
 // it) and starts loading it - via imagecache.Cache.Load, observed here as
-// Resolve being called synchronously, since the actual fetch runs on
-// its own goroutine (see imagecache.Cache.Load) - without laying that slot
+// a fetch, which runs on its own goroutine - without laying that slot
 // out.
 func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
-	source := &countingImageSource{resolved: "b.png", data: onePixelPNG(t)}
-	cache := imagecache.NewCache(source)
+	source := &testImage{key: "b.png", data: onePixelPNG(t)}
+	cache := imagecache.NewCache()
 
 	const fillerHeight = 500
 	const imageSlotIndex = 10
@@ -1479,19 +1478,23 @@ func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
 	for i := 0; i < imageSlotIndex; i++ {
 		blocks = append(blocks, &fixedHeightBlock{height: fillerHeight})
 	}
-	imageBlock := &engine.TextBlock{Parts: []engine.Inline{&engine.InlineImage{Src: "b.png"}}}
+	imageBlock := &engine.TextBlock{Parts: []engine.Inline{&engine.InlineImage{Src: "b.png", Image: source}}}
 	blocks = append(blocks, imageBlock)
 	for i := 0; i < 3; i++ {
 		blocks = append(blocks, &fixedHeightBlock{height: fillerHeight})
 	}
 
 	v := newTestView(blocks...)
-	v.doc.soleImages = map[engine.Block]string{imageBlock: "b.png"}
+	v.doc.soleImages = map[engine.Block]fetch.Source{imageBlock: source}
 	v.ctx.ImageCache = cache
 	layoutView(v, 300, 0, 1, 0)
 
-	if source.resolveCalls == 0 {
-		t.Fatal("prefetchImageSources never started loading the far-ahead image")
+	deadline := time.Now().Add(2 * time.Second)
+	for source.fetchCalls.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("prefetchImageSources never started loading the far-ahead image")
+		}
+		time.Sleep(time.Millisecond)
 	}
 	if v.stack.box.Slots[imageSlotIndex].Box != nil {
 		t.Error("image slot got fully resolved - want prefetchImageSources to only kick off the load, not lay anything out")
@@ -1511,14 +1514,14 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	release := make(chan struct{})
-	source := &countingImageSource{
-		resolved: "cat.jpeg",
+	source := &testImage{
+		key: "cat.jpeg",
 		open: func() (io.ReadCloser, error) {
 			<-release
 			return io.NopCloser(bytes.NewReader(full)), nil
 		},
 	}
-	cache := imagecache.NewCache(source)
+	cache := imagecache.NewCache()
 
 	const fillerHeight = 1000
 	const imageSlotIndex = 3
@@ -1535,7 +1538,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 	// not a hand-built pending box - so re-resolving it after
 	// invalidation goes through the exact same GetBlockLayout path
 	// production code does.
-	slots[imageSlotIndex] = engine.StackSlot{Block: &engine.TextBlock{Parts: []engine.Inline{&engine.InlineImage{Src: "cat.jpeg"}}}, Width: 100}
+	slots[imageSlotIndex] = engine.StackSlot{Block: &engine.TextBlock{Parts: []engine.Inline{&engine.InlineImage{Src: "cat.jpeg", Image: source}}}, Width: 100}
 
 	ctx := engine.Context{Scale: 1, ImageCache: cache, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.NoViewMargin()}
 	view := &View{
@@ -1552,7 +1555,7 @@ func TestViewInvalidateChangedImagesReResolvesAlreadyPassedSlot(t *testing.T) {
 	docBefore := stackBounds(view)
 
 	close(release)
-	waitForSettled(t, cache, "cat.jpeg")
+	waitForSettled(t, cache, source)
 
 	layoutView(view, 100, 0, 1, 0)
 
@@ -1579,7 +1582,12 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 		strings.Repeat("Filler paragraph with a bit of text in it to take up some space.\n\n", 20) +
 		"![cat](testdata/cat.jpeg)\n\n" +
 		strings.Repeat("More filler text after the image.\n\n", 5)
-	v := NewView(Parse([]byte(doc)), WithStyleSheet(stylingtest.Basic()))
+	root, err := os.OpenRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	v := NewView(Parse([]byte(doc), WithImageRegistry(fetch.NewRegistry(fetch.FileResolver{Root: root}))), WithStyleSheet(stylingtest.Basic()))
 	const viewportHeight = 200
 	layoutView(v, 300, viewportHeight, 1, 0)
 
@@ -1598,7 +1606,7 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	// Layout call above) to settle before scrolling starts - same as
 	// real usage gets for free while the reader is still reading
 	// earlier content, just deterministic here instead of a fixed sleep.
-	waitForSettled(t, v.ctx.ImageCache, "testdata/cat.jpeg")
+	waitForSettled(t, v.ctx.ImageCache, v.doc.soleImages[v.stack.box.Slots[imgSlot].Block])
 
 	for v.stack.cursor.Index < imgSlot {
 		v.ScrollBy(50)

@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"testing"
@@ -8,8 +9,8 @@ import (
 	"golang.org/x/image/font"
 
 	"github.com/arnodel/whynot/codeblocks"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/styling"
@@ -628,7 +629,7 @@ func TestParseWithTokensPlugin(t *testing.T) {
 type fakeImagePlugin struct {
 	handles      map[string]bool
 	handlesCalls *int
-	image        func(language, code string) images.AsyncImage
+	image        func(language, code string) fetch.Source
 }
 
 func (p fakeImagePlugin) Handles(language string) bool {
@@ -639,22 +640,21 @@ func (p fakeImagePlugin) Handles(language string) bool {
 }
 
 func (p fakeImagePlugin) Parse(language, code string) codeblocks.Content {
-	return codeblocks.Image{AsyncImage: p.image(language, code)}
+	return codeblocks.Image{Source: p.image(language, code)}
 }
 
 // TestParseWithCodeBlockPlugin checks that a fenced code block in a
 // language an image plugin handles compiles via NewDiagramBlock instead
-// of a plain CodeBlock - with the plugin's own images.AsyncImage, and,
+// of a plain CodeBlock - with the plugin's own image, and,
 // with no other plugin, the plain source text as fallback.
 func TestParseWithCodeBlockPlugin(t *testing.T) {
-	wantImg := images.AsyncImage{Key: "diagram-key"}
 	plugin := fakeImagePlugin{
 		handles: map[string]bool{"mermaid": true},
-		image: func(language, code string) images.AsyncImage {
+		image: func(language, code string) fetch.Source {
 			if language != "mermaid" || code != "graph TD; A-->B;\n" {
 				t.Errorf("parse(%q, %q) called, want (\"mermaid\", \"graph TD; A-->B;\\n\")", language, code)
 			}
-			return wantImg
+			return keySource("diagram-key")
 		},
 	}
 	doc := parse([]byte("```mermaid\ngraph TD; A-->B;\n```"), plugin)
@@ -663,8 +663,8 @@ func TestParseWithCodeBlockPlugin(t *testing.T) {
 	if !ok {
 		t.Fatalf("block = %T, want *diagramBlock", unwrap(stack.Blocks[0]))
 	}
-	if diagram.Image.Key != wantImg.Key {
-		t.Errorf("img.Key = %q, want the plugin's own %q", diagram.Image.Key, wantImg.Key)
+	if want := "#1:diagram-key"; diagram.Image.Key() != want {
+		t.Errorf("image key = %q, want the plugin's own key in its namespace, %q", diagram.Image.Key(), want)
 	}
 	fallback, ok := diagram.Fallback.(*engine.CodeBlock)
 	if !ok {
@@ -704,7 +704,7 @@ func TestParseCodeBlockPluginRegistrationOrderAndCaching(t *testing.T) {
 	second := fakeImagePlugin{
 		handles:      map[string]bool{"mermaid": true},
 		handlesCalls: &secondCalls,
-		image:        func(language, code string) images.AsyncImage { return images.AsyncImage{Key: "k"} },
+		image:        func(language, code string) fetch.Source { return keySource("k") },
 	}
 	source := []byte("```mermaid\na\n```\n\n```mermaid\nb\n```\n\n```mermaid\nc\n```")
 	doc := parse(source, first, second)
@@ -997,6 +997,49 @@ func TestParseImageWithTitle(t *testing.T) {
 	}
 	if img.FallbackNode.Parent != img.ASTNode {
 		t.Errorf("fallbackNode.Parent = %#v, want img.node", img.FallbackNode.Parent)
+	}
+}
+
+// TestParseResolvesImages checks that each image's src is resolved at
+// compile time, through ResolveImage: an image that resolves gets its
+// Source, one that doesn't gets the error, and only a resolved sole
+// image is recorded for prefetching.
+func TestParseResolvesImages(t *testing.T) {
+	resolve := func(src string) (fetch.Source, error) {
+		if src == "bad.png" {
+			return nil, errors.New("unresolvable")
+		}
+		return keySource("resolved:" + src), nil
+	}
+	r := Compile([]byte("![a](a.png)\n\n![b](bad.png)\n"), Options{ResolveImage: resolve})
+	good := unwrap(r.Root.Blocks[0]).(*engine.TextBlock).Parts[0].(*engine.InlineImage)
+	if good.Image == nil || good.Image.Key() != "resolved:a.png" || good.ImageErr != nil {
+		t.Errorf("a.png: Image = %v, ImageErr = %v, want the resolved Source", good.Image, good.ImageErr)
+	}
+	bad := unwrap(r.Root.Blocks[1]).(*engine.TextBlock).Parts[0].(*engine.InlineImage)
+	if bad.Image != nil || bad.ImageErr == nil {
+		t.Errorf("bad.png: Image = %v, ImageErr = %v, want the error", bad.Image, bad.ImageErr)
+	}
+	if len(r.SoleImages) != 1 || r.SoleImages[r.Root.Blocks[0]] != good.Image {
+		t.Errorf("SoleImages = %v, want only a.png's", r.SoleImages)
+	}
+
+	unresolved := parse([]byte("![a](a.png)"))
+	if img := unwrap(unresolved.Root.Blocks[0]).(*engine.TextBlock).Parts[0].(*engine.InlineImage); img.ImageErr == nil {
+		t.Error("without ResolveImage, ImageErr = nil, want an error")
+	}
+}
+
+// TestParseNamespacesPluginImages checks that two plugins' images with the
+// same key get different keys, each in its plugin's namespace.
+func TestParseNamespacesPluginImages(t *testing.T) {
+	same := func(string, string) fetch.Source { return keySource("k") }
+	first := fakeImagePlugin{handles: map[string]bool{"a": true}, image: same}
+	second := fakeImagePlugin{handles: map[string]bool{"b": true}, image: same}
+	doc := parse([]byte("```a\nx\n```\n\n```b\nx\n```"), first, second)
+	keyOf := func(i int) string { return unwrap(doc.Root.Blocks[i]).(*engine.DiagramBlock).Image.Key() }
+	if keyOf(0) != "#1:k" || keyOf(1) != "#2:k" {
+		t.Errorf("keys = %q, %q, want \"#1:k\", \"#2:k\"", keyOf(0), keyOf(1))
 	}
 }
 

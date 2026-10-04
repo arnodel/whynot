@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	gmast "github.com/yuin/goldmark/v2/ast"
 	extast "github.com/yuin/goldmark/v2/extension/ast"
 
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
@@ -56,11 +58,15 @@ func (c *compiler) appendInline(items []engine.Inline, node gmast.Node, astNode 
 		imageNode := astNode.AddChild(ast.TagImage)
 		glued := !c.pendingSpace
 		c.pendingSpace = false
+		src := imgNode.Destination.Value(c.source)
+		img, err := c.resolve(src)
 		return append(items, &engine.InlineImage{
-			Src:     imgNode.Destination.Value(c.source),
-			Alt:     altText(imgNode, c.source),
-			Title:   imgNode.Title.Value(c.source),
-			ASTNode: imageNode,
+			Src:      src,
+			Image:    img,
+			ImageErr: err,
+			Alt:      altText(imgNode, c.source),
+			Title:    imgNode.Title.Value(c.source),
+			ASTNode:  imageNode,
 			// Made here, once: layout runs many times, and would add
 			// a new child each time.
 			FallbackNode: imageNode.AddChild(ast.TagUnsupported),
@@ -145,4 +151,12 @@ func (c *compiler) appendString(items []engine.Inline, s string, node *ast.Node)
 		}
 	}
 	return items
+}
+
+// resolve returns the Source of an image's src.
+func (c *compiler) resolve(src string) (fetch.Source, error) {
+	if c.resolveImage == nil {
+		return nil, errors.New("no image resolver")
+	}
+	return c.resolveImage(src)
 }

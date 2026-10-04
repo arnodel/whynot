@@ -9,6 +9,7 @@ import (
 	"github.com/yuin/goldmark/v2/extension"
 	extast "github.com/yuin/goldmark/v2/extension/ast"
 
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
@@ -95,11 +96,11 @@ func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel
 		})
 	}
 	if len(items) == 1 {
-		if img, ok := items[0].(*engine.InlineImage); ok {
+		if img, ok := items[0].(*engine.InlineImage); ok && img.Image != nil {
 			if c.soleImages == nil {
-				c.soleImages = make(map[engine.Block]string)
+				c.soleImages = make(map[engine.Block]fetch.Source)
 			}
-			c.soleImages[block] = img.Src
+			c.soleImages[block] = img.Image
 		}
 	}
 	return block

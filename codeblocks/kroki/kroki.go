@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 
 	"github.com/arnodel/whynot/codeblocks"
-	"github.com/arnodel/whynot/images"
+	"github.com/arnodel/whynot/fetch"
 )
 
 // defaultBaseURL is kroki.io's own public instance, used unless a Plugin
@@ -26,7 +27,10 @@ type Plugin struct {
 	BaseURL string
 }
 
-var _ codeblocks.Plugin = Plugin{}
+var (
+	_ codeblocks.Plugin = Plugin{}
+	_ fetch.Source      = diagram{}
+)
 
 // diagramTypes maps a fenced code block's language to Kroki's own
 // diagram-type slug - currently just mermaid, the one this package was
@@ -44,47 +48,51 @@ func (r Plugin) Handles(language string) bool {
 
 // Parse returns the diagram as an Image, rendered by Kroki.
 func (r Plugin) Parse(language, code string) codeblocks.Content {
-	return codeblocks.Image{AsyncImage: r.image(language, code)}
+	return codeblocks.Image{Source: r.image(language, code)}
 }
 
-// image builds an AsyncImage directly - no type of kroki's own needed,
-// since a closure already captures everything Fetch needs (baseURL,
-// diagramType, code).
-func (r Plugin) image(language, code string) images.AsyncImage {
-	diagramType := diagramTypes[language]
-	baseURL := r.baseURL()
-	return images.AsyncImage{
-		// Diagram type and exact source text, so recompiling identical
-		// source (a resize, a reload) reuses the cached result instead
-		// of re-fetching.
-		Key: "kroki:" + diagramType + ":" + code,
-		// Fetch POSTs the diagram source to Kroki's own JSON API (rather
-		// than its GET form, which embeds a zlib+base64 encoding of the
-		// source in the URL path and has a practical length limit) and
-		// returns the response body - a PNG on success.
-		Fetch: func(ctx context.Context) (io.ReadCloser, error) {
-			body, err := json.Marshal(struct {
-				DiagramSource string `json:"diagram_source"`
-			}{code})
-			if err != nil {
-				return nil, err
-			}
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/"+diagramType+"/png", bytes.NewReader(body))
-			if err != nil {
-				return nil, err
-			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return nil, err
-			}
-			if resp.StatusCode != http.StatusOK {
-				defer resp.Body.Close()
-				return nil, fmt.Errorf("kroki: %s", resp.Status)
-			}
-			return resp.Body, nil
-		},
+func (r Plugin) image(language, code string) diagram {
+	return diagram{baseURL: r.baseURL(), diagramType: diagramTypes[language], code: code}
+}
+
+// diagram is a [fetch.Source] for one diagram, rendered by Kroki.
+type diagram struct {
+	baseURL     string
+	diagramType string
+	code        string
+}
+
+// Key is the diagram type and exact source text, so recompiling
+// identical source (a resize, a reload) reuses the cached result instead
+// of fetching again.
+func (d diagram) Key() string { return d.diagramType + ":" + d.code }
+
+// Fetch POSTs the diagram source to Kroki's JSON API, rather than using
+// its GET form, which encodes the source in the URL and so has a
+// practical length limit. It returns the response body: a PNG on
+// success.
+func (d diagram) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
+	body, err := json.Marshal(struct {
+		DiagramSource string `json:"diagram_source"`
+	}{d.code})
+	if err != nil {
+		return nil, "", err
 	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.baseURL+"/"+d.diagramType+"/png", bytes.NewReader(body))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, "", fmt.Errorf("kroki: %s", resp.Status)
+	}
+	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	return resp.Body, mediaType, nil
 }
 
 func (r Plugin) baseURL() string {

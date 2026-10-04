@@ -24,8 +24,8 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/codeblocks/chromahighlight"
 	"github.com/arnodel/whynot/codeblocks/kroki"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -80,6 +80,8 @@ type App struct {
 
 	faceSelector fonts.FaceSelector
 	styleSheet   whynot.StyleSheet
+	// images is what documents' images can be fetched from.
+	images *fetch.Registry
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
 	// recovered from styleSheet itself.
@@ -114,6 +116,7 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 	return &App{
 		faceSelector: faceSelector,
 		styleSheet:   styleSheet,
+		images:       newImageRegistry(),
 		darkTheme:    dark,
 		zoom:         1,
 	}
@@ -231,21 +234,16 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 
 // NewView parses source, loaded from location, into a View - bundling
 // the options every call site needs together: the current StyleSheet,
-// an images.Source that resolves an image's src against location the
-// same way ResolveLink resolves a link's href (so a relative or
-// http(s) image works regardless of where its document came from), and
-// two code-block plugins: kroki.Plugin first, so a ```mermaid fence
-// renders as an actual diagram, then chromahighlight.Plugin for
-// syntax-colored code (and a diagram's source while it loads).
-// The welcome page is the one exception for images: its own (if any)
-// are bundled alongside it, not fetched, so it gets welcomeImageSource
-// instead of the general fetch-based one.
+// images resolved against location the same way ResolveLink resolves a
+// link's href (so a relative or http(s) image works regardless of where
+// its document came from), and two code-block plugins: kroki.Plugin
+// first, so a ```mermaid fence renders as an actual diagram, then
+// chromahighlight.Plugin for syntax-colored code (and a diagram's source
+// while it loads).
 func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
-	imageSource := images.Source(docImageSource{base: location})
-	if location.Scheme == "whynot" {
-		imageSource = welcomeImageSource{}
-	}
 	doc := whynot.Parse(source,
+		whynot.WithBaseURL(location),
+		whynot.WithImageRegistry(a.images),
 		whynot.WithCodeBlockPlugin(kroki.Plugin{}),
 		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 	)
@@ -253,7 +251,6 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 		doc,
 		whynot.WithFaceSelector(a.faceSelector),
 		whynot.WithStyleSheet(a.styleSheet),
-		whynot.WithImageSource(imageSource),
 	)
 }
 

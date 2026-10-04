@@ -7,7 +7,6 @@ import (
 
 	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/images"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
@@ -71,15 +70,6 @@ type View struct {
 // parameter.
 type ViewOption func(*View)
 
-// WithImageSource sets where the View's images come from, instead of the
-// default [images.FileSource] - e.g. relative to the document's location,
-// or over http(s). Each image is fetched at most once per View.
-func WithImageSource(s images.Source) ViewOption {
-	return func(v *View) {
-		v.ctx.ImageCache = imagecache.NewCache(s)
-	}
-}
-
 // WithFaceSelector sets where the View's fonts come from, instead of the
 // Go fonts (see [fonts.GoSelector]).
 //
@@ -122,7 +112,7 @@ func NewView(doc *Document, opts ...ViewOption) *View {
 			Scale:        1,
 			FaceSelector: defaultFaceSelector,
 			Styles:       simpletheme.DarkStyleSheet.Styles(),
-			ImageCache:   imagecache.NewCache(images.FileSource{}),
+			ImageCache:   imagecache.NewCache(),
 		},
 		hscroll:      newHScrollState(),
 		displayScale: 1,
@@ -485,7 +475,7 @@ func (v *View) invalidateChangedImages() {
 	}
 	changed := make(map[string]bool, len(changes))
 	for _, c := range changes {
-		changed[c.Src] = true
+		changed[c.Key] = true
 	}
 	v.stack.invalidateWhere(func(box engine.BlockLayout) bool {
 		for _, src := range box.PendingImages() {
@@ -512,8 +502,8 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 		return
 	}
 	v.stack.forEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block engine.Block) {
-		if src, ok := v.doc.soleImages[block]; ok {
-			v.ctx.ImageCache.Load(src)
+		if img, ok := v.doc.soleImages[block]; ok {
+			v.ctx.ImageCache.Load(img)
 		}
 	})
 }
