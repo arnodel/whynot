@@ -34,33 +34,42 @@
 //
 // # Showing a document
 //
-// A backend provides a [canvas.Canvas] to draw on and an [input.Source]
-// of the user's input. With Ebitengine, for example:
+// A backend provides two things: an [input.Source] that reads the user's
+// input from the framework, and a [canvas.Canvas] to draw on. Here is how
+// a program uses them with Ebitengine.
 //
-//	renderer := ebitenbackend.New()
-//	var source ebitenbackend.Input       // reads Ebitengine's input: an input.Source
-//	canvas := renderer.NewCanvas(screen) // draws on the game's screen: a canvas.Canvas
+// Once, when the program starts, it makes the backend's input reader and
+// renderer, and sets a Panel up:
 //
-// With Gio, a giobackend.Renderer and a giobackend.Input play the same
-// roles. A program sets a Panel up once:
+//	var source ebitenbackend.Input  // reads Ebitengine's input: an input.Source
+//	renderer := ebitenbackend.New() // keeps image textures and glyph caches across frames
 //
 //	doc := whynot.Parse(markdown)
 //	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
-//	panel := whynot.NewPanel(view, bounds) // where it's drawn on the canvas
+//	panel := whynot.NewPanel(view, bounds) // where it's drawn on the screen
 //	panel.SetScale(scale)                  // the screen's density
 //
-// then, every frame, passes it the input and the time, reacts to what
-// happened, and draws it:
+// Then, every frame, it passes the input to the Panel, with the time,
+// and reacts to what happened. With Ebitengine, that's in the game's
+// Update method:
 //
 //	events := panel.Frame(source.Events(), now)
 //	// react to events, such as a LinkClick
-//	panel.Draw(canvas, now)
 //
-// The packages backends/ebitenbackend and backends/giobackend show the
-// complete frame loop for their framework. When the window is resized,
-// the screen changes or the user zooms, the program calls
-// [Panel.SetBounds], [Panel.SetScale] or [Panel.SetZoom]; the document
-// is laid out again, keeping the scroll position.
+// It also draws the Panel every frame. Ebitengine gives the game's Draw
+// method the screen image to draw on each time, so the program makes a
+// canvas onto it each time too, which is cheap: the renderer holds what's
+// worth keeping.
+//
+//	panel.Draw(renderer.NewCanvas(screen), now)
+//
+// With Gio, a giobackend.Input and a giobackend.Renderer play the same
+// roles, and the frame loop is shaped by Gio's events instead. The
+// packages backends/ebitenbackend and backends/giobackend each show a
+// complete program. When the window is resized, the screen changes or the
+// user zooms, the program calls [Panel.SetBounds], [Panel.SetScale] or
+// [Panel.SetZoom]; the document is laid out again, keeping the scroll
+// position.
 //
 // # A Panel, or a View and a Controller
 //
