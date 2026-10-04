@@ -8,44 +8,82 @@ import (
 	"testing"
 )
 
-// TestFetchDocumentErrorKinds checks the errors App uses to decide what to
-// do with a link: an HTML page is a webPageError (open it in a web
-// browser), and a request that gets no response at all is a requestError
-// - which only the browser build turns into a webPageError.
-func TestFetchDocumentErrorKinds(t *testing.T) {
+// TestLoadDocumentChecksMediaType checks what LoadDocument does with
+// what it fetches: Markdown or other text is a document, an HTML page is
+// a webPageError (App opens it in a web browser), and anything else is
+// an error.
+func TestLoadDocumentChecksMediaType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/page.html" {
+		switch r.URL.Path {
+		case "/page.html":
 			w.Header().Set("Content-Type", "text/html")
-		} else {
+		case "/image.png":
+			w.Header().Set("Content-Type", "image/png")
+		case "/doc.md":
 			w.Header().Set("Content-Type", "text/markdown")
 		}
 		w.Write([]byte("# Hello"))
 	}))
-	get := func(path string) error {
+	defer server.Close()
+	registry := NewRegistry(nil)
+	load := func(path string) error {
 		t.Helper()
 		u, err := url.Parse(server.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = fetchDocument(u)
+		_, err = LoadDocument(registry, u)
 		return err
 	}
 
-	if err := get("/doc.md"); err != nil {
+	if err := load("/doc.md"); err != nil {
 		t.Errorf("Markdown document: err = %v, want nil", err)
 	}
 	var pageErr *webPageError
-	if err := get("/page.html"); !errors.As(err, &pageErr) {
+	if err := load("/page.html"); !errors.As(err, &pageErr) {
 		t.Errorf("HTML page: err = %v, want a *webPageError", err)
 	}
-
-	server.Close()
-	err := get("/doc.md")
-	var reqErr *requestError
-	if !errors.As(err, &reqErr) {
-		t.Errorf("unreachable server: err = %v, want a *requestError", err)
+	if err := load("/image.png"); err == nil || errors.As(err, &pageErr) {
+		t.Errorf("image: err = %v, want an error other than *webPageError", err)
 	}
-	if errors.As(err, &pageErr) {
-		t.Errorf("unreachable server: err = %v, is a *webPageError, want only the browser build to treat it as one", err)
+}
+
+func TestCheckMarkdown(t *testing.T) {
+	location := &url.URL{Scheme: "file", Path: "/doc"}
+	markdown := []byte("# Title\n\nSome text.")
+	readme := []byte("<p align=\"center\">\n  <img src=\"logo.png\">\n</p>\n\n# Project")
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+	var pageErr *webPageError
+	for _, c := range []struct {
+		name      string
+		mediaType string
+		data      []byte
+		wantErr   bool
+		wantPage  bool
+	}{
+		{"declared Markdown", "text/markdown", markdown, false, false},
+		{"other text", "text/plain", markdown, false, false},
+		{"declared HTML", "text/html", markdown, true, true},
+		{"declared image", "image/png", png, true, false},
+		{"unknown Markdown", "", markdown, false, false},
+		{"unknown Markdown starting with HTML", "", readme, false, false},
+		{"unknown binary", "", png, true, false},
+	} {
+		err := checkMarkdown(c.mediaType, c.data, location)
+		if (err != nil) != c.wantErr || errors.As(err, &pageErr) != c.wantPage {
+			t.Errorf("%s: err = %v, want error %v, web page %v", c.name, err, c.wantErr, c.wantPage)
+		}
+	}
+}
+
+// TestLoadDocumentWelcome checks the welcome page is served by the
+// registry, like any other document.
+func TestLoadDocumentWelcome(t *testing.T) {
+	md, err := LoadDocument(NewRegistry(nil), WelcomeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(md) == 0 {
+		t.Error("welcome page is empty")
 	}
 }

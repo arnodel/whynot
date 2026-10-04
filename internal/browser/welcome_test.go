@@ -40,7 +40,7 @@ func TestRenderWelcomeAddressBarTip(t *testing.T) {
 // relative to the welcome page resolves to the file bundled next to
 // welcome.md.
 func TestWelcomeResolverServesBundledImages(t *testing.T) {
-	src, err := newImageRegistry().Resolve(WelcomeURL, "icons/add.png")
+	src, err := NewRegistry(nil).Resolve(WelcomeURL, "icons/add.png")
 	if err != nil {
 		t.Fatal(err)
 	}

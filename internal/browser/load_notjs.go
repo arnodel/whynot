@@ -4,12 +4,12 @@ package browser
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/arnodel/whynot/fetch"
 )
@@ -74,34 +74,71 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 	return nil, fmt.Errorf("%q isn't \"welcome\", a URL, an existing file path, or a domain", text)
 }
 
-// LoadDocument fetches the bytes at location - a local read for a
-// file: URL, an HTTP GET for http(s) (see fetchDocument), the embedded
-// welcome page for WelcomeURL. Any other scheme (e.g. a mailto:
-// autolink) is rejected rather than misread as a file path.
-func LoadDocument(location *url.URL) ([]byte, error) {
-	switch location.Scheme {
-	case "whynot":
-		return renderWelcome(), nil
-	case "http", "https":
-		return fetchDocument(location)
-	case "file", "":
-		return os.ReadFile(location.Path)
-	default:
-		return nil, fmt.Errorf("unsupported link scheme %q", location.Scheme)
-	}
+// LoadDocument fetches the document at location through registry (see
+// NewRegistry). Content that isn't Markdown is an error, and a web page
+// is a *webPageError, which App opens in a web browser instead.
+func LoadDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
+	return fetchDocument(registry, location)
 }
 
-// newImageRegistry returns what documents' images can be fetched from:
-// any local file, http(s), and the welcome page's own bundled images.
-func newImageRegistry() *fetch.Registry {
-	resolvers := []fetch.Resolver{
+// NewRegistry returns what documents, and the images in them, can be
+// fetched from: http(s), the welcome page and its bundled files, and
+// local files - beneath root, or with a nil root, anywhere on the volume
+// of the file's path.
+func NewRegistry(root *os.Root) *fetch.Registry {
+	var files fetch.Resolver = &volumeResolver{roots: map[string]*os.Root{}}
+	if root != nil {
+		files = fetch.FileResolver{Root: root}
+	}
+	return fetch.NewRegistry(
+		files,
 		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},
 		welcomeResolver{},
+	)
+}
+
+// volumeResolver resolves file: URLs to any file on the volume of its
+// path: / on Unix, or a drive such as D:\ on Windows, so a document on
+// one drive can show images from that drive whatever the working
+// directory.
+type volumeResolver struct {
+	mu    sync.Mutex
+	roots map[string]*os.Root // by volume
+}
+
+func (*volumeResolver) Schemes() []string { return []string{"file"} }
+
+func (r *volumeResolver) Resolve(u *url.URL) (fetch.Source, error) {
+	p := u.Path
+	if p == "" {
+		p = u.Opaque
 	}
-	if root, err := os.OpenRoot("/"); err == nil {
-		resolvers = append(resolvers, fetch.FileResolver{Root: root})
-	} else {
-		log.Printf("local images disabled: %v", err)
+	// A Windows path in a URL has a slash before its drive: /C:/dir.
+	if len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+		p = p[1:]
 	}
-	return fetch.NewRegistry(resolvers...)
+	abs, err := filepath.Abs(filepath.FromSlash(p))
+	if err != nil {
+		return nil, err
+	}
+	root, err := r.root(filepath.VolumeName(abs) + string(filepath.Separator))
+	if err != nil {
+		return nil, err
+	}
+	return fetch.FileResolver{Root: root}.Resolve(u)
+}
+
+// root returns the Root of the directory dir, opening it the first time.
+func (r *volumeResolver) root(dir string) (*os.Root, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if root, ok := r.roots[dir]; ok {
+		return root, nil
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	r.roots[dir] = root
+	return root, nil
 }

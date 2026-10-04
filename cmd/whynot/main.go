@@ -4,6 +4,7 @@ import (
 	"flag"
 	"image"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -25,8 +26,18 @@ const initialWindowWidth, initialWindowHeight = 1024, 768
 func main() {
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
+	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
 	flag.Parse()
+
+	var root *os.Root
+	if *rootDir != "" {
+		var err error
+		if root, err = os.OpenRoot(*rootDir); err != nil {
+			log.Fatal(err)
+		}
+	}
+	registry := browser.NewRegistry(root)
 
 	// No file/URL given: land on the welcome page rather than a
 	// hardcoded local file, matching what a person launching whynot
@@ -39,7 +50,7 @@ func main() {
 			panic(err)
 		}
 	}
-	source, err := browser.LoadDocument(location)
+	source, err := browser.LoadDocument(registry, location)
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +65,7 @@ func main() {
 
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := browser.NewDocumentFaceSelector()
-	app := browser.NewApp(faceSelector, styleSheet, !*light)
+	app := browser.NewApp(faceSelector, styleSheet, !*light, registry)
 
 	g := &game{
 		app:                 app,

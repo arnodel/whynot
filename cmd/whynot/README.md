@@ -40,6 +40,7 @@ document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to c
 | Zoom | **+** / **-**, or the toolbar |
 | Table of contents | the toolbar; **Esc** closes it |
 | Light / dark theme | the toolbar, or start with `-light` |
+| Only open local files beneath a directory | start with `-root dir` |
 | Reload | the toolbar |
 | Show FPS and frame timings | **F**, or start with `-debug-stats` |
 | Outline what's under the pointer | start with `-debug-hit` |
@@ -47,10 +48,14 @@ document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to c
 ## What it does with links and images
 
 - A link to a Markdown document opens in the viewer. A link to a web page (one served as
-  HTML) opens in your web browser. A `#heading` link scrolls to that heading.
+  HTML, or a local `.html` file) opens in your web browser. Anything else that isn't text,
+  such as an image or a PDF, isn't opened. A `#heading` link scrolls to that heading.
 - Links and images resolve against the current document's location, so relative ones
   work the same whether the document came from disk or the web.
 - Images load in the background; one that can't load shows its alt text.
+- Local documents and images can come from anywhere on the document's drive. To be
+  stricter, start with `-root dir`: then only files beneath `dir` are opened, even
+  through `..` or a symbolic link.
 - Document text uses this platform's own fonts where it finds them (watch the log for
   what was picked), and the bundled Go fonts otherwise.
 

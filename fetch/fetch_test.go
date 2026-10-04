@@ -50,6 +50,7 @@ func TestRegistryResolve(t *testing.T) {
 		{base, "/a.png", "xx:/a.png"},
 		{base, "yy://other/b.png", "yy:/b.png"},
 		{base, "YY://other/b.png", "yy:/b.png"},
+		{base, "", "xx:/docs/README.md"},
 		{nil, "a.png", "file:a.png"},
 		{nil, "xx://host/c.png", "xx:/c.png"},
 	} {
