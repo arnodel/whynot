@@ -660,25 +660,28 @@ func TestViewScrollToRatioNilBox(t *testing.T) {
 	v.ScrollToRatio(0.5) // must not panic
 }
 
-// TestViewScrollToRatioSelfConsistent checks the property the whole
-// design leans on for drag-to-scroll: within one call, the ratio
-// ScrollToRatio is given and the ratio VisibleViewBounds reports back
-// afterward agree - both read the same documentStack's height estimate snapshot, so a
-// caller re-deriving its target from the current mouse position every
-// frame can only ever correct toward that position, never drift from
-// it (see project_scrollbar_hover_rebuild_tension).
-func TestViewScrollToRatioSelfConsistent(t *testing.T) {
+// TestViewScrollToRatioConverges checks the property drag-to-scroll
+// relies on. While heights are still estimates, ScrollToRatio can land a
+// little off its target, since laying out the slot it lands in refines
+// the estimate. But a scrollbar drag calls it again every frame with
+// the pointer's ratio, and each call refines the estimate further, so
+// the position converges on the target rather than drifting.
+//
+// Only SetBounds and ScrollToRatio lay anything out here: a frame's
+// look-ahead layout (View.Draw's) depends on a time budget, which would
+// make the estimates, and the test, depend on the machine's speed.
+func TestViewScrollToRatioConverges(t *testing.T) {
 	source := []byte(strings.Repeat("# Heading\n\nSome text, quite a bit of it actually.\n\n", 30))
 	v := NewView(Parse(source), fonts.NewGoSelector(), stylingtest.NoViewMargin())
-	layoutView(v, 300, 1000, 1, 0)
+	v.SetBounds(image.Rect(0, 0, 300, 200))
 
-	const viewportH = 200
 	for _, ratio := range []float64{0.1, 0.9, 0.3, 0.7, 0.5} {
 		v.ScrollToRatio(ratio)
-		doc := float64(documentBounds(v).Dy())
-		got := float64(visibleViewBounds(v, image.Pt(300, viewportH)).Min.Y) / doc
-		if diff := got - ratio; diff < -0.01 || diff > 0.01 {
-			t.Errorf("ScrollToRatio(%v): VisibleViewBounds ratio back = %v, want within 0.01", ratio, got)
+		first, _ := v.VisibleRange()
+		v.ScrollToRatio(ratio) // the next frame of a drag
+		second, _ := v.VisibleRange()
+		if d := math.Abs(second - ratio); d > 0.001 || d > math.Abs(first-ratio) {
+			t.Errorf("ScrollToRatio(%v), twice: VisibleRange starts at %v then %v, want the second within 0.001 and no further than the first", ratio, first, second)
 		}
 	}
 }
