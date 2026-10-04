@@ -1,106 +1,73 @@
 # Why Not?
 
-A Markdown document viewer for Go games and GUI apps - for anything that needs to show
-real formatted text (patch notes, an in-game journal, help screens, a credits scroll)
-without pulling in a full UI toolkit. Point it at a `[]byte` of Markdown and it lays out
-the document onto a `canvas.Canvas`, using [goldmark](https://github.com/yuin/goldmark)
-to parse. The core library has no rendering backend dependency of its own - two ship with
-it, [Ebitengine](https://ebitengine.org/) (`ebitenbackend`) and [Gio](https://gioui.org/)
-(`giobackend`).
+**whynot** is a Go library for showing Markdown documents inside games and GUI apps. Think
+of patch notes, an in-game journal, help screens or a credits scroll: real formatted text,
+with headings, lists, tables, images and links, but without bringing in a whole UI
+toolkit. You give whynot some Markdown, and it lays the document out, draws it, and lets
+the user scroll through it and click its links. It draws through a small interface rather
+than a particular graphics library, and it comes with backends for
+[Ebitengine](https://ebitengine.org/) and [Gio](https://gioui.org/).
 
-- **Broad Markdown coverage** - tables, nested lists, images (including
-  animated GIFs), links, blockquotes, code blocks, and more - degrading
-  gracefully instead of crashing on anything not yet supported
-- **Built for long documents** - layout and drawing are lazy, anchored at
-  the current scroll position, so a resize or scroll costs the same
-  whether the document is 10 lines or 10,000
-- **Customizable styling** - colors, margins, and text styles come from a
-  `StyleSheet` (dark and light ones built in, or your own from a theme),
-  swappable at runtime
-- **Drop-in embedding** - `whynot.Panel` adds a scrollable, zoomable
-  Markdown view to part of a larger window in a few lines, with
-  Ebitengine or Gio, with resizing, hover/click, and an optional scrollbar all
-  handled for you
+![whynot showing this README](assets/whynot-screenshot.png)
 
-## Try the standalone viewer
+- **Broad Markdown coverage.** Headings, emphasis, lists, tables, blockquotes, code
+  blocks, images (including animated GIFs) and links are all supported. Anything whynot
+  doesn't support yet is shown as flagged text rather than breaking the document.
+- **Built for long documents.** whynot only lays out the part of the document that's on
+  screen, so scrolling and resizing are just as fast for ten thousand lines as for ten.
+- **Easy to drop in.** A `whynot.Panel` shows a document in any rectangle of your window
+  and handles its input, including a scrollbar, touch scrolling and flings.
+- **Styled your way.** Colors, text styles, margins and scrollbars come from a stylesheet;
+  light and dark ones are ready-made. Text can use the bundled Go fonts, your own font
+  files, or the fonts installed on the system.
+- **Extensible code blocks.** Plugins can add syntax highlighting to code blocks, or turn
+  them into pictures, such as Mermaid diagrams.
+- **Independent of any graphics library.** whynot draws through a small `canvas`
+  interface and receives input as plain values, so supporting another framework only
+  takes a thin adapter.
 
-Two small standalone apps, built entirely on the library, are the easiest way to see what
-whynot can do - identical document viewer, history, zoom, and theming; the difference is
-the rendering engine underneath (and, for now, that `backends/giobackend/cmd/giowhynot` isn't packaged in a
-release, so `go install` is its only native option).
+## Try it
 
-| Engine | Platforms | Install | Web demo |
-|---|---|---|---|
-| [Ebitengine](https://ebitengine.org/) ([`cmd/whynot`](cmd/whynot)) | macOS, Linux, Windows, wasm | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
-| [Gio](https://gioui.org/) ([`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot)) | macOS, Linux, Windows, wasm | `go install github.com/arnodel/whynot/backends/giobackend/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
+There are two standalone document viewers built on the library, one for each backend.
+They behave the same way: they open Markdown files and web pages, follow links, keep a
+history, and support zoom and light and dark themes. They're the quickest way to see what
+whynot can do, and both also run in a web browser.
 
-Both web demos run entirely client-side (see [`cmd/whynot/web`](cmd/whynot/web)/
-[`backends/giobackend/cmd/giowhynot/web`](backends/giobackend/cmd/giowhynot/web)) via each engine's own `js`/`wasm` backend. Local
-file opening and paste-to-open aren't wired up in either (there's no real filesystem or
-clipboard access in a browser sandbox), and a link to a webpage opens in a new tab rather
-than the system browser - everything else, including opening a Markdown document by URL
-(`?doc=<url>`, or just follow a link), works the same as installed.
+| Viewer | Install | In your browser |
+|---|---|---|
+| [`whynot`](cmd/whynot) (Ebitengine) | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
+| [`giowhynot`](backends/giobackend/cmd/giowhynot) (Gio) | `go install github.com/arnodel/whynot/backends/giobackend/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
 
-`backends/giobackend/cmd/giowhynot` has one feature `cmd/whynot` doesn't: the address bar is editable - click
-it, type a path/URL/"welcome", Enter to go there. `-debug-hit`/`-debug-stats` aren't
-implemented there yet, otherwise the two are the same feature set.
-
-Run either with no argument and it opens a built-in welcome page explaining how to use it.
-Pass a Markdown file path (or URL) as an argument to view that file. Here is a screenshot
-from:
+Start a viewer with the path or URL of a Markdown document to open it, or with nothing to
+see its welcome page. For example, the screenshot above was taken with:
 
 ```bash
 whynot https://raw.githubusercontent.com/arnodel/whynot/refs/heads/main/README.md
 ```
 
-![whynot showing this README](assets/whynot-screenshot.png)
+Each viewer's own README describes its keys and options, and how its web version works.
 
-## Status
+## Use it in your program
 
-Pre-1.0 - the API may still change. See [Features](#features) below for
-what's implemented. Architecture, internal layout model, and the
-reasoning behind some of the trickier bits (lazy layout, scroll
-anchoring) are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+Add the library to your module with:
 
-## Embed a Markdown viewer in your game
+```bash
+go get github.com/arnodel/whynot
+```
 
-The library (root package `whynot`) has no rendering backend dependency -
-it only depends on `goldmark` for parsing. Two backends implement
-`canvas.Canvas`: `ebitenbackend` (on top of `ebiten`) and `giobackend`
-(on top of [Gio](https://gioui.org/)). The examples below use
-`ebitenbackend` - `giobackend`'s own `Panel`/`Canvas` mirror its shape
-closely (see [`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) and
-[`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) for the Gio-backed equivalents). Either
-way, two levels of control to pick from.
+### Quick start: a document in an Ebitengine game
 
-### The turnkey way: `whynot.Panel`
-
-`Panel` wraps a `View` with input handling already done for you -
-scrolling, link hover/click, touch, and an optional draggable scrollbar
-(`SetScrollbar(true)`) - all scoped to whatever rectangle you give it, so
-it's safe to embed as part of a larger game window without stepping on
-whatever else is there. It's what `cmd/whynot` itself is built on.
-
-`Panel` doesn't depend on Ebitengine: each frame, your game hands it the
-frame's input events (`ebitenbackend.Input`), a canvas to draw on
-(`ebitenbackend.Renderer.NewCanvas`), and the time.
-
-[`examples/panel`](examples/panel) inset a `Panel` into part of a window
-that fills the rest with plain green - other game content standing in -
-to prove it: nothing whynot draws ever leaks past its own bounds.
-
-![A Panel embedded with margin on every side, other content
-visible around it](examples/panel/screenshot.png)
+The simplest way to show a document is a `whynot.Panel`. A Panel displays a document in a
+rectangle of your window and reacts to the mouse, the wheel and touch. Every frame, your
+game gives it that frame's input and the current time, and the Panel tells you what
+happened, such as the user clicking a link. Here is a complete program:
 
 ```go
 package main
 
 import (
-	"fmt"
 	"image"
-	"image/color"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -111,493 +78,333 @@ import (
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
-const (
-	windowWidth  = 800
-	windowHeight = 600
-	panelMargin  = 60 // inset on all sides, so the background shows around the panel
-)
+const source = "# Hello\n\nThis is **whynot**, showing [a link](https://example.com)."
 
-var backgroundColor = color.RGBA{0x20, 0x60, 0x20, 0xFF} // green, to make it distinct from the panel contents
+type game struct {
+	panel    *whynot.Panel
+	renderer *ebitenbackend.Renderer // draws onto Ebitengine images
+	input    ebitenbackend.Input     // reads Ebitengine's mouse, wheel and touch
+	start    time.Time               // the start of the panel's clock
+}
 
-func exampleDoc() string {
-	var b strings.Builder
-	b.WriteString("# Panel example\n\n")
-	b.WriteString("This document exists to prove that `whynot.Panel` clips its drawing to\n")
-	b.WriteString("its own bounds even when embedded inside a larger window that draws other\n")
-	b.WriteString("content around it.\n\n")
-	for i := 1; i <= 8; i++ {
-		fmt.Fprintf(&b, "## Section %d\n\n", i)
-		b.WriteString("Some text, quite a bit of it actually, more than one line's worth, so the\n")
-		b.WriteString("document is tall enough to need scrolling within its panel.\n\n")
+func (g *game) Update() error {
+	// Pass this tick's input to the panel, which scrolls, highlights links
+	// and so on, and returns what the app may want to react to.
+	events := g.panel.Frame(g.input.Events(), time.Since(g.start))
+	for _, e := range events {
+		if link, ok := e.(whynot.LinkClick); ok {
+			log.Println("clicked a link to", link.Destination)
+		}
 	}
-	return b.String()
+	return nil
+}
+
+func (g *game) Draw(screen *ebiten.Image) {
+	// Draw the panel onto the screen, as it is at this time (animated
+	// images and fading scrollbars depend on it).
+	g.panel.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
+}
+
+func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
+	// Draw at the screen's real resolution, so text stays sharp on a
+	// high-density display.
+	scale := ebiten.Monitor().DeviceScaleFactor()
+	w, h := int(float64(outsideWidth)*scale), int(float64(outsideHeight)*scale)
+	g.panel.SetBounds(image.Rect(0, 0, w, h)) // fill the window, which may have been resized
+	g.panel.SetScale(scale)                   // size text and margins for that resolution
+	g.input.Scale = scale                     // convert wheel movements to pixels at that resolution
+	return w, h
 }
 
 func main() {
-	view := whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
-	bounds := image.Rect(panelMargin, panelMargin, windowWidth-panelMargin, windowHeight-panelMargin)
-	panel := whynot.NewPanel(view, bounds)
+	doc := whynot.Parse([]byte(source))
+	// A View draws a document, here in the bundled Go fonts and the dark theme.
+	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+	// The panel's bounds are set in Layout, once the window size is known.
+	panel := whynot.NewPanel(view, image.Rectangle{})
 	panel.SetScrollbar(true)
-
-	ebiten.SetWindowSize(windowWidth, windowHeight)
-	ebiten.SetWindowTitle("whynot panel example")
 	g := &game{panel: panel, renderer: ebitenbackend.New(), start: time.Now()}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
 }
-
-type game struct {
-	panel    *whynot.Panel
-	renderer *ebitenbackend.Renderer
-	input    ebitenbackend.Input
-	start    time.Time
-}
-
-func (g *game) Update() error {
-	g.panel.Frame(g.input.Events(), time.Since(g.start))
-	return nil
-}
-
-func (g *game) Draw(screen *ebiten.Image) {
-	screen.Fill(backgroundColor)
-	g.panel.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
-}
-
-func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return windowWidth, windowHeight
-}
 ```
 
-Run it yourself: `go run ./examples/panel`.
+When the user clicks a link to a heading in the same document (a `#heading` link), the
+Panel scrolls there by itself. Any other link is reported to your program as a
+`whynot.LinkClick`, and it's up to you what to do with it, because only your program knows
+where documents come from. [`examples/panel`](examples/panel) shows a Panel that covers
+only part of a game's window.
 
-With Gio, the same `Panel` takes its input from `giobackend.Input` and
-draws through `giobackend.Renderer`; since Gio only redraws on events,
-ask for another frame while `Panel.Animating()`. `giobackend.NativeScrollbar`
-puts Gio's own scrollbar widget on it instead of whynot's - see
-[`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) for a runnable version, or
-[`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) for a full app built on it.
+### With Gio
 
-### Finer control: `whynot.View` directly
+The Gio backend lives in its own module, so that programs which don't use Gio don't
+depend on it. Add it with:
 
-Drop to `View` (plus `ebitenbackend.Canvas`) yourself for full control
-over input handling, or to fit whynot into an `Update`/`Draw` structure
-that doesn't match what `Panel` assumes - the same building blocks
-`Panel` itself is built on:
-
-![A View filling the whole window, no toolbar or
-scrollbar](examples/view/screenshot.png)
-
-```go
-package main
-
-import (
-	"fmt"
-	"image"
-	"log"
-	"strings"
-	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
-
-	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/backends/ebitenbackend"
-	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/styles/simpletheme"
-)
-
-func exampleDoc() string {
-	var b strings.Builder
-	b.WriteString("# View example\n\n")
-	b.WriteString("This document is rendered by wiring `whynot.View` up directly - full control\n")
-	b.WriteString("over input handling, at the cost of doing it yourself (see `whynot.Panel`\n")
-	b.WriteString("for the turnkey alternative).\n\n")
-	for i := 1; i <= 8; i++ {
-		fmt.Fprintf(&b, "## Section %d\n\n", i)
-		b.WriteString("Some text, quite a bit of it actually, more than one line's worth, so the\n")
-		b.WriteString("document is tall enough to need scrolling.\n\n")
-	}
-	return b.String()
-}
-
-type game struct {
-	view     *whynot.View
-	renderer *ebitenbackend.Renderer
-	start    time.Time
-}
-
-func (g *game) Update() error {
-	_, dy := ebiten.Wheel()
-	g.view.ScrollBy(-dy * 2)
-	return nil
-}
-
-func (g *game) Draw(screen *ebiten.Image) {
-	// View.Draw fills its own background (from the View's StyleSheet) -
-	// no separate clear step needed here.
-	g.view.Draw(g.renderer.NewCanvas(screen), time.Since(g.start))
-}
-
-func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	g.view.SetBounds(image.Rect(0, 0, outsideWidth, outsideHeight))
-	return outsideWidth, outsideHeight
-}
-
-func main() {
-	g := &game{
-		view:     whynot.NewView(whynot.Parse([]byte(exampleDoc())), fonts.NewGoSelector(), simpletheme.DarkStyleSheet),
-		renderer: ebitenbackend.New(),
-		start:    time.Now(),
-	}
-	ebiten.SetWindowSize(800, 600)
-	ebiten.SetWindowTitle("whynot view example")
-	if err := ebiten.RunGame(g); err != nil {
-		log.Fatal(err)
-	}
-}
+```bash
+go get github.com/arnodel/whynot/backends/giobackend
 ```
 
-Run it yourself: `go run ./examples/view`.
+A Panel works the same way in a Gio window: `giobackend.Input` provides the input, and
+`giobackend.Renderer` provides the canvas to draw on. The one difference is that Gio only
+draws a new frame when something happens, so while the Panel is animating (a fling
+coasting to a stop, say, or a scrollbar fading out) your program must ask Gio for the next
+frame. The [package documentation](https://pkg.go.dev/github.com/arnodel/whynot/backends/giobackend)
+shows the whole frame loop, and [`examples/gio`](backends/giobackend/examples/gio) is a
+program you can run.
 
-[`cmd/whynot`](cmd/whynot) is a fuller example built the `Panel` way (see
-above), handling display scale, zoom, and a toolbar too.
+### Another framework
 
-## Styling
+A backend for another framework provides two things: a `canvas.Canvas` that draws text,
+images and rectangles with the framework, and an input reader that turns the framework's
+input into whynot's input events. Your program then runs the same frame loop as above.
+[backends/README.md](backends/README.md) explains what each part has to do, and the two
+existing backends are short enough to serve as examples.
 
-Appearance - colors, margins, text sizes and weights - comes from the `View`'s
-`StyleSheet`: an immutable, opaque value made by a theme package under
-[`styles/`](styles). [`styles/simpletheme`](styles/simpletheme) configures one through
-plain fields. Use a ready-made one, or start from a preset and change what you need:
+### More control: View and Controller
+
+A Panel is made of two parts, which you can also use directly when you need more control
+than a Panel gives you, for example to fit whynot into a structure of your own:
+
+- a **`View`** lays out and draws a document, scrolled to a position;
+- a **`Controller`** turns input into what it does to a View: scrolling, highlighting the
+  link under the pointer, and reporting clicks.
 
 ```go
-view := whynot.NewView(doc, faces, simpletheme.DarkStyleSheet)
+view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
+controller := whynot.NewController(view)
 
-theme := simpletheme.Dark() // or Light()
+// Then, every frame:
+view.SetBounds(rect)                 // the rectangle of the screen the view occupies
+events := controller.Frame(in, now) // apply this frame's input; get back what happened
+view.Draw(canvas, now)               // draw the view within its rectangle
+```
+
+Your own code can also move a View directly, without any input: `ScrollBy` scrolls by a
+distance, `ScrollToAnchor` jumps to a heading, and `ScrollToRatio` jumps to a point in the
+document. To draw a scrollbar of your own, `VisibleRange` tells you which part of the
+document is on screen, and `HoveredLink` tells you which link is under the pointer, for a
+status bar. [`examples/view`](examples/view) shows a View on its own, scrolled with the
+mouse wheel. All positions are measured in the canvas's pixels; the
+[Coordinates](https://pkg.go.dev/github.com/arnodel/whynot#hdr-Coordinates) section of
+the documentation explains this in detail.
+
+### Styles
+
+A View's appearance comes from its stylesheet. The
+[`styles/simpletheme`](styles/simpletheme) package makes stylesheets from a set of plain
+fields: you can use one of its ready-made stylesheets, or start from one of its themes and
+change what you need, then make a stylesheet from it:
+
+```go
+theme := simpletheme.Dark() // or simpletheme.Light()
 theme.LinkColor = myColor
-theme.HeadingTextStyles[0] = simpletheme.TextStyle{Size: 48, Weight: simpletheme.WeightBlack}
+theme.HeadingTextStyles[0] = simpletheme.TextStyle{Size: 48, Weight: simpletheme.WeightBlack} // top-level headings
 view.SetStyleSheet(theme.StyleSheet())
 ```
 
-A `simpletheme.TextStyle` only sets its non-zero fields; the rest are inherited from the
-enclosing element. `StyleSheet()` takes a snapshot, so changing the theme afterwards
-doesn't affect stylesheets already made from it. Swapping a `View`'s stylesheet at runtime
-(`View.SetStyleSheet`) re-lays-out the document immediately, which is all `cmd/whynot`'s
-theme toggle button does.
+You can change a View's stylesheet at any time, which is all it takes to switch between a
+light and a dark theme.
 
-## Fonts
+### Fonts
 
-`NewView`'s second argument is a `fonts.FaceSelector` ([fonts/fonts.go](fonts/fonts.go)) -
-`SelectFace(style TextStyle, dpi float64) (font.Face, error)`, with the size in points -
-the interface every example above passes `fonts.NewGoSelector()` to. The `View` passes
-the dpi it draws at (72 × its scale), so one selector can serve several views at
-different scales. If a selector returns an error, the `View` logs it and uses the
-bundled Go fonts instead. It's decoupled from
-the `StyleSheet`: the stylesheet decides *which* size/weight/style/family a piece of text
-gets, the `FaceSelector` decides what font file actually renders that combination.
+The stylesheet decides the size, weight and family of each piece of text, and a font
+selector decides which font actually draws it. whynot comes with three:
 
-- `fonts.GoSelector` serves the Go fonts embedded in `golang.org/x/image/font/gofont`
-  - what every example above uses.
-- `fonts.CustomSelector` loads your own TTF/OTF font bytes (`AddFont`) or files
-  (`AddFontFile`), per (family, weight, style) slot - both take a trailing subfont
-  `index` (almost always `0`; only matters for a `.ttc`/`.otc` collection) - falling
-  back to a `fonts.NewGoSelector()` for any slot you don't register, so you only need
-  to supply the fonts you actually want to override (or `fonts.WithFallback(...)` a
-  different one, `nil` included, at construction):
-
-  ```go
-  selector := fonts.NewCustomSelector()
-  selector.AddFontFile(fonts.Proportional, font.WeightNormal, font.StyleNormal, "myfont.ttf", 0)
-  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
-  ```
-
-  `AddFontCollection`/`AddFontCollectionFile` register every subfont a `.ttc`/`.otc`
-  contains that can be confidently classified from its own name-table data, instead of
-  picking one slot by index yourself - the primitive `systemfont` (below) builds on.
-
-  See [`examples/customfont`](examples/customfont) for a runnable version - `go run
-  ./examples/customfont` uses a bundled font (Pacifico, SIL Open Font License) by
-  default, or pass `-font path/to/font.ttf` to try your own.
-- `systemfont.Selector` (a separate package,
-  `github.com/arnodel/whynot/fonts/systemfont`, to keep its `adrg/sysfont` dependency out of
-  the core library) resolves fonts *by name* from whatever's installed on the host
-  machine, instead of requiring font bytes/files up front:
-
-  ```go
-  selector := systemfont.New()
-  selector.RegisterSystemFont(fonts.Proportional, "Arial")
-  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
-  ```
-
-  `RegisterSystemFont` finds the best-matching installed font, then uses
-  `fonts.CustomSelector.AddFontCollection` to read every subfont in its file (a plain
-  font, or every named variant in a `.ttc`/`.otc`) and register the ones it can
-  confidently classify into a (weight, style) slot - anything it can't find or classify
-  falls back to the bundled Go fonts.
-
-  Don't want to name a specific font at all? `RegisterPreferredFont` picks this
-  platform's most likely UI font for you, from a small curated, GOOS-aware candidate
-  list (e.g. Helvetica Neue/Helvetica on macOS, Segoe UI on Windows, DejaVu Sans on
-  Linux) - trying each in order until one actually resolves:
-
-  ```go
-  selector := systemfont.New()
-  selector.RegisterPreferredFont(fonts.Proportional)
-  selector.RegisterPreferredFont(fonts.Monospace)
-  view := whynot.NewView(whynot.Parse(source), selector, simpletheme.DarkStyleSheet)
-  ```
-
-  There's no portable way to ask the OS directly for its actual configured UI font
-  without new platform-specific work (cgo on macOS, a registry/API call on Windows,
-  `fontconfig` on Linux), so this is a best-effort guess, not a guarantee - it logs
-  exactly what it tried and what (if anything) resolved, the same as `RegisterSystemFont`
-  does. See [`examples/systemfont`](examples/systemfont) for a runnable version - with no
-  flags at all, it uses `RegisterPreferredFont` for both families.
-
-## Code block plugins: syntax highlighting and diagrams
-
-By default, a fenced or indented code block renders in one flat, neutral color
-(`simpletheme.Theme`'s `CodeBlockColor`) - inline `` `code` `` spans use a separate, more
-eye-catching accent color instead (`CodeSpanColor`), since a small isolated word in
-prose reads fine as an accent while a whole block of it would fight with any
-syntax-highlighted spans inside it.
-
-A `codeblocks.Plugin` changes how fenced blocks in the languages it handles are shown.
-It answers two questions: `Handles(language)`, and `Parse(language, code)`, which
-returns the block's `Content`:
-
-- `codeblocks.Tokens` - the source split into spans, each with a `Class` such as
-  `"keyword"` or `"string"`, colored by the theme;
-- `codeblocks.Image` - an image to show instead, e.g. a rendered diagram, loaded in the
-  background.
-
-Plugins are passed to `whynot.Parse` in priority order. The first plugin that handles a
-block's language parses it; if it returns an `Image`, the next plugin handling that
-language provides what's shown while the image loads, or if it fails (plain text if
-there's none):
+- `fonts.NewGoSelector()` uses the Go fonts, which are bundled with whynot.
+- `fonts.NewCustomSelector()` uses font files you provide, for whichever families, weights
+  and styles you choose, and the Go fonts for the rest. See
+  [`examples/customfont`](examples/customfont).
+- The [`fonts/systemfont`](fonts/systemfont) package uses fonts installed on the computer,
+  either by name or by picking the platform's usual interface font. See
+  [`examples/systemfont`](examples/systemfont).
 
 ```go
-doc := whynot.Parse(source,
-	whynot.WithCodeBlockPlugin(kroki.Renderer{}),        // ```mermaid fences as diagrams
-	whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}), // syntax coloring
-)
+selector := systemfont.New()
+selector.RegisterPreferredFont(fonts.Proportional)    // the platform's usual interface font
+selector.RegisterSystemFont(fonts.Monospace, "Menlo") // a font installed on the system, by name
 view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
 ```
 
-`chromahighlight` (`github.com/arnodel/whynot/codeblocks/chromahighlight`, a separate
-package to keep `github.com/alecthomas/chroma/v2`'s ~200 embedded language lexers out of
-the core library's dependency graph) handles every language chroma has a lexer for.
-Token classes are open-ended strings; `codeblocks` names the conventional ones
-(`ClassKeyword`, `ClassType`, `ClassFunction`, `ClassString`, `ClassNumber`,
-`ClassComment`), which `simpletheme`'s `SyntaxColors` colors - tuned separately for the
-dark and light themes, not taken from chroma's own named styles. Any other class shows
-in the code block's color. A builtin type (e.g. Go's `int`) and a declared custom
-type/class name share the `type` class, deliberately, and likewise for `function` -
-though a lexer can only ever recognize a *declaration* this way (and, for some
-languages' lexers, a function *call* too), not necessarily every later *usage*, since
-that needs real type/binding information a lexer doesn't have (see `chromahighlight`'s
-`classify` for the specifics).
+### Code blocks: highlighting and diagrams
 
-See [`examples/chromahighlight`](examples/chromahighlight) for a runnable version.
+By default, a code block is shown as plain text in a single color. Code-block plugins
+change that for the languages they handle: a plugin can split the code into colored
+tokens, for syntax highlighting, or replace the block with an image, such as a rendered
+diagram. Plugins are passed to `Parse`, and they're tried in the order given. That order
+matters when a plugin produces an image: while the image loads, or if it fails to, the
+next plugin's version of the block is shown, such as the diagram's source, highlighted.
 
-## `cmd/whynot`/`giowhynot`: standalone viewers
-
-```
-go run ./cmd/whynot path/to/some.md
+```go
+doc := whynot.Parse(source,
+	whynot.WithCodeBlockPlugin(kroki.Renderer{}),        // draws Mermaid and other diagrams, using kroki.io
+	whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}), // highlights code, using the chroma library
+)
 ```
 
-Run with no argument and it opens a built-in welcome page (embedded in the binary,
-`browser/assets/welcome.md`) explaining how to use it - including pasting a file path or
-`http(s)` URL (Cmd/Ctrl+V) to open it, and pasting the word "welcome" to come back. Beyond
-scrolling and resizing, it demonstrates what a caller can build on top of the library -
-this section is about `cmd/whynot` specifically, but everything except the toolbar itself
-(see [above](#try-the-standalone-viewer)) is shared with `backends/giobackend/cmd/giowhynot` via `browser.App`:
+The [`codeblocks`](codeblocks) package defines what a plugin is, so you can write your
+own. [`examples/chromahighlight`](examples/chromahighlight) shows syntax highlighting.
 
-- **Document text uses this platform's own fonts** (`systemfont.Selector`,
-  via `RegisterPreferredFont` - see [above](#fonts)) when it can find them, falling back
-  to the bundled Go fonts for anything it can't - watch stderr for exactly what got
-  resolved.
-- **`-light`** switches to the light theme at startup; the toolbar button
-  toggles between light and dark while running.
-- **Dragging the scrollbar** jumps to a position (`View.ScrollToRatio`) -
-  it self-corrects toward wherever the mouse currently is as
-  not-yet-resolved parts of the document get resolved during the drag,
-  rather than drifting away from the cursor. **↓**/**↑** nudge the scroll
-  position a bit at a time, repeating while held, and **←**/**→** scroll
-  the code block or table under the pointer (else the one last scrolled)
-  sideways.
-- **Hovering a link** highlights it (through `whynot.Controller`).
-- **Clicking a link follows it** - a relative path loads another local
-  file, an `http(s)` URL fetches it (opening it in the system's default
-  browser instead if its `Content-Type` turns out to be HTML rather than
-  Markdown/plain text - a real webpage, not a `.md` file), and a URL
-  fragment (`#some-heading`) scrolls to that heading
-  (`View.ScrollToAnchor`), even on a document just navigated to. Either
-  way it's resolved against the current document's own location
-  (`net/url.URL.ResolveReference`), so a relative link works the same
-  whether that document came from disk or from a fetch.
-- **Backspace goes back** to wherever a link was followed from, exact
-  scroll position included - whether that was a different document or
-  just an in-page anchor jump.
-- **Images resolve and load the same way** - a relative `src` is
-  resolved against the document's own location, an `http(s)` one is
-  fetched, regardless of whether the document itself came from disk or
-  a fetch. Fetching and decoding happen in the background, never
-  blocking rendering; a missing or undecodable image falls back to its
-  alt text (or title, or a generic message) instead of a silent gap.
-- **`-debug-hit`** outlines whatever `View.HitTest` resolves under the
-  cursor, for debugging.
-- **`-debug-stats`** (togglable at runtime with **F**) shows FPS/TPS and
-  per-frame Update/Draw timing.
-- A Markdown construct whynot doesn't understand (e.g. raw HTML) shows in
-  a distinct color with a warning logged, instead of crashing the whole
-  document - see [Features](#features).
+### Images
 
-None of the link-following/history logic lives in the library itself -
-`whynot` only exposes the primitives (`Controller`'s link callbacks,
-`ScrollToAnchor`, `ScrollPosition`/`RestoreScrollPosition`); loading
-files, fetching URLs, and keeping a history stack all live in
-`browser` (`internal/browser`, `browser.App`, internal to this module) - the
-backend-agnostic app layer [`backends/giobackend/cmd/giowhynot`](backends/giobackend/cmd/giowhynot) is built on
-too, sharing this exact behavior rather than reimplementing it (its own
-toolbar and input handling are Gio-native instead - see
-[above](#embed-a-markdown-viewer-in-your-game)). Image loading follows
-the same split, one layer further in: the library defines `images.Source`
-(defaulting to a plain local file open) and owns caching the result
-(an image cache - an image is resolved, fetched, and decoded at most once,
-however many times it's asked for, however many rendering backends ask
-for it); `browser` supplies the file-or-`http(s)`,
-resolved-against-the-document's-location `images.Source`, via
-`WithImageSource`.
+Images are loaded in the background, so a slow image never holds up scrolling or drawing.
+By default, whynot treats an image's source as the path of a local file. To load images
+from somewhere else, such as relative to the URL a document came from, give the View an
+`images.Source` with the `whynot.WithImageSource` option.
+
+### Examples
+
+Each of these is a small program you can run, for example with `go run ./examples/panel`:
+
+| Example | What it shows |
+|---|---|
+| [`examples/panel`](examples/panel) | A Panel covering part of an Ebitengine game's window |
+| [`examples/view`](examples/view) | A View used on its own, scrolled with the mouse wheel |
+| [`examples/chromahighlight`](examples/chromahighlight) | Syntax highlighting in code blocks |
+| [`examples/customfont`](examples/customfont) | Text in a font file of your choice |
+| [`examples/systemfont`](examples/systemfont) | Text in the fonts installed on the system |
+| [`examples/wasm`](examples/wasm) | whynot running in a web page, compiled to WebAssembly |
+| [`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) | A Panel in a Gio window |
+
+The two viewers, [`whynot`](cmd/whynot) and [`giowhynot`](backends/giobackend/cmd/giowhynot),
+are complete applications built the same way.
+
+## How it works
+
+First, `whynot.Parse` turns the Markdown into a `Document`, with the help of any code-block
+plugins, and `whynot.NewView` makes a View to show it, with a stylesheet and fonts that
+decide how it looks:
+
+```mermaid
+flowchart TB
+    md[/"Markdown text"/]
+    plugins["Code-block plugins<br/><code>chromahighlight.Plugin</code>, …"]
+    parse[["<code>whynot.Parse</code>"]]
+    doc["<code>whynot.Document</code>"]
+    sheet["Stylesheet<br/><code>simpletheme.DarkStyleSheet</code>"]
+    fonts["Fonts<br/><code>fonts.GoSelector</code>"]
+    newview[["<code>whynot.NewView</code>"]]
+    view["<code>whynot.View</code>"]
+    md --> parse
+    plugins --> parse
+    parse --> doc
+    doc --> newview
+    sheet --> newview
+    fonts --> newview
+    newview --> view
+```
+
+Then, every frame, your program runs a loop between its graphics framework and whynot.
+Here it is with Ebitengine; with Gio, the same roles are played by `giobackend.Input` and
+`giobackend.Canvas`:
+
+```mermaid
+flowchart TB
+    fw["Ebitengine<br/>(or another framework, such as Gio)"]
+    subgraph program["Your game, every frame"]
+        input["<code>ebitenbackend.Input</code>"]
+        subgraph panel["<code>whynot.Panel</code>"]
+            ctrl["<code>whynot.Controller</code>"]
+            view["<code>whynot.View</code>"]
+        end
+        yours["Your code"]
+        canvas["<code>ebitenbackend.Canvas</code>"]
+    end
+    fw -- "mouse, wheel and touch" --> input
+    input -- "<code>input.Event</code> values" --> ctrl
+    ctrl -- "<code>whynot.Event</code> values,<br/>such as <code>whynot.LinkClick</code>" --> yours
+    ctrl -- "calls to scroll it<br/>and highlight links" --> view
+    view -- "drawing calls" --> canvas
+    canvas -- "draws on the screen" --> fw
+```
+
+1. `ebitenbackend.Input` reads what the user did, and turns it into whynot's own input
+   events (`input.Event` values).
+2. A `whynot.Controller` decides what those events do to the View: scrolling it,
+   highlighting the link under the pointer, and so on. It returns anything your program
+   may want to react to, such as a click on a link, as `whynot.Event` values.
+3. The `whynot.View` lays out the part of the document that's on screen, and draws it.
+4. An `ebitenbackend.Canvas` carries out the View's drawing on the screen image.
+
+As the diagram shows, a `whynot.Panel` holds a Controller and a View together, so with a
+Panel your program deals with a single object, as in the quick start above. You only need
+the Controller and the View separately for finer control. `whynot.Parse` uses
+[goldmark](https://github.com/yuin/goldmark) to read the Markdown.
+
+The library is split into packages along these lines:
+
+| Packages | What they're for |
+|---|---|
+| `whynot` | Parsing, and the View, Controller and Panel |
+| `canvas`, `input` | What a backend implements: drawing, and input events |
+| `fonts`, `images`, `codeblocks` | What a View can be given: fonts, image loading, code-block plugins |
+| `styles/simpletheme` | Stylesheets and their ready-made themes |
+| `fonts/systemfont`, `codeblocks/chromahighlight`, `codeblocks/kroki` | Ready-made fonts and plugins |
+| `backends/ebitenbackend`, `backends/giobackend` | The two backends |
+| `internal/…` | The Markdown compiler, the layout engine and the image cache: not part of the API |
+
+[ARCHITECTURE.md](ARCHITECTURE.md) explains the design in depth: the layout model, how
+layout stays lazy, how the scroll position survives a resize, hit-testing, and image
+loading.
 
 ## Features
 
-Checked items are implemented; unchecked ones aren't yet. Grouped by theme rather than
-by implementation order now that most of the list is done.
+**Text**
+- [x] Headings, paragraphs, emphasis, strong text, strikethrough and inline code
+- [x] Typographic punctuation: smart quotes, dashes and ellipses
 
-**Text and inline formatting**
-- [x] Headings (all 6 levels), paragraphs
-- [x] Emphasis, strong, and both together (`*x*`, `**x**`, `***x***`)
-- [x] Strikethrough (`~~x~~`)
-- [x] Inline code
-- [x] Typographer (smart quotes/dashes, `"x"` -> "x", unspaced `--`/`---` -> en/em
-      dash, `...` -> ellipsis) - goldmark's `extension.TypographerParser`, enabled by
-      default. Was blocked on a real gap in the inline model (goldmark emits the
-      substitution as a separate Text node with no whitespace from its neighbor, e.g.
-      `Alice's` -> `"Alice"`, `"'"`, `"s "` as three siblings) until word-adjacency
-      tracking between sibling Inlines landed
-
-**Block structures**
-- [x] Fenced and indented code blocks
-- [x] Syntax highlighting for code blocks (opt-in, via a `codeblocks.Plugin` -
-      `chromahighlight` provides a `chroma`-backed one)
+**Blocks**
+- [x] Fenced and indented code blocks, which scroll sideways when they're wider than the
+      view
+- [x] Syntax highlighting and diagrams in code blocks, through plugins
 - [x] Blockquotes, including nested ones
-- [x] Thematic breaks (`---`)
-- [x] Ordered and unordered lists, tight or loose, nested to any depth, including task
-      lists (`- [ ]`)
-- [x] Tables (GFM), including column alignment and negotiated column widths - needed a
-      genuine 2D layout primitive (`tableBox`, row height = max of that row's cells),
-      not an extension of the existing 1D `StackBox`/`containerBox`
-- [ ] Footnotes, definition lists - goldmark extensions for both exist but aren't
-      enabled, so the syntax (`[^1]`, term/`: definition`) isn't recognized at all yet,
-      rendering as plain literal text
+- [x] Ordered and unordered lists, tight or loose, nested to any depth, and task lists
+- [x] Tables (GitHub style), with column alignment and column widths fitted to their
+      content, which scroll sideways when they're wider than the view
+- [x] Thematic breaks (horizontal rules)
+- [ ] Footnotes and definition lists, which are shown as plain text for now
+- [ ] Raw HTML, which is shown as flagged source text rather than rendered
 
 **Images**
-- [x] PNG/JPEG/GIF, including animated GIFs (disposal-correct compositing, always
-      looping) - resolved and loaded via a pluggable `images.Source`, fetched and decoded
-      at most once per image regardless of how many times it's asked for; alt text is
-      captured from arbitrary inline content, per CommonMark
-- [x] Loading never blocks rendering - a still-pending image shows a placeholder at its
-      final size once known (or a "loading" fallback before that); a missing or
-      undecodable image falls back to alt text, then title, then a generic message
-- [x] Prefetch images ahead of the scroll position - a standalone image's own load
-      starts well before its containing slot is actually resolved, in both scroll
-      directions (`View.Layout` lays out and prefetches ahead), not only
-      once it's scrolled right up to it
+- [x] PNG, JPEG and GIF images, including animated GIFs
+- [x] Background loading, starting ahead of the scroll position, with a placeholder of
+      the right size while an image loads, and its alternative text if it can't be loaded
 
-**Links and navigation**
-- [x] Links and autolinks, including reference-style (`[text][ref]`) - highlighted on
-      hover (`Controller`), destination resolvable at a point (`View.LinkAt`)
-- [x] Heading anchors: goldmark's auto-generated heading ids, scrollable to via
-      `View.ScrollToAnchor` - what a link's `#fragment` targets
-- [ ] Raw inline/block HTML rendered as HTML - currently shown as flagged unsupported
-      text instead, not a crash, but not styled/laid out as real HTML would be either
+**Links**
+- [x] Links, including automatic and reference-style links, highlighted under the pointer
+- [x] Links to headings within the document (`#heading`)
 
-**Rendering and performance**
-- [x] Scrolling, window resizing with reflow and scroll-position anchoring, and
-      viewport culling - all handled by `whynot.View`
-- [x] Smooth scrolling - `View.ScrollBy`'s position is a `float64`, accumulating
-      fractional wheel deltas exactly rather than rounding each call, so repeated
-      small scrolls end up exactly where one large one would
-- [x] `View.VisibleRange` exposes the scroll position as fractions of the document's
-      height, from real per-slot pixel heights (each top-level slot's height, once
-      resolved; extrapolated from the average of what's known for the rest, refined as
-      more of the document is visited) for a caller to build its own scrollbar, or feed to any other UI it wants to drive
-      from scroll position. `View.ScrollToRatio` is the other direction - a caller
-      driving a scrollbar thumb drag recomputes the ratio from the mouse's current
-      position every frame rather than a target captured once, so a jump into
-      not-yet-resolved territory only ever corrects toward the cursor, never drifts
-- [x] Large documents: layout and drawing are lazy, built outward from the current
-      scroll position rather than the whole document, so cost tracks what's on screen,
-      not the document's total size - a resize deep into a ~1000-line document costs
-      microseconds, not tens of milliseconds. See
-      [ARCHITECTURE.md](ARCHITECTURE.md#view-tying-the-layers-together-with-the-right-lifecycle)
-      for how
-- [x] Graceful degradation: a Markdown construct whynot doesn't recognize (e.g. raw
-      HTML) logs a warning and renders as flagged, distinctly colored text/code showing
-      its source, rather than crashing - a reference-style link's own `[ref]: url`
-      definition line and an HTML comment are recognized as intentionally invisible
-      rather than unsupported, since no Markdown renderer ever shows them either
-
-**Embedding**
-- [x] `whynot.Panel` embeds a scrollable document into part of
-      a larger window, with Ebitengine or Gio - coordinate translation, hover/click, wheel scroll gated on its own
-      bounds, and an optional draggable scrollbar, all bounds-aware so a panel never
-      affects anything outside its own rectangle. See
-      [above](#embed-a-markdown-viewer-in-your-game)
+**Viewing and interaction**
+- [x] Layout and drawing whose cost depends on what's on screen, not on the document's
+      length
+- [x] Smooth scrolling, with the scroll position kept when the window is resized or the
+      style changes
+- [x] Scrolling with the mouse wheel, by touch (with flings), or by keyboard commands
+      (a step, a page, or sideways)
+- [x] A built-in scrollbar styled by the stylesheet, or your own, built with
+      `VisibleRange`
+- [x] Zoom
+- [x] Anything not supported yet is shown as flagged text, with a warning in the log,
+      rather than breaking the document
 
 **Styling**
-- [x] Customizable styling (see [above](#styling)) - colors, margins, text
-      styles/sizes and line height, set on a `simpletheme.Theme`. Swappable at runtime
-      (`View.SetStyleSheet`) - `cmd/whynot`'s light/dark toggle switches between
-      `simpletheme.DarkStyleSheet` and `LightStyleSheet`
-- [x] Custom font files via `fonts.CustomSelector` (see [above](#fonts)) - register
-      your own TTF/OTF bytes per weight/style slot, falling back to the bundled Go
-      fonts for anything not overridden
-- [x] System-installed fonts by name via `systemfont.Selector` (see
-      [above](#fonts)) - resolves an installed font (e.g. "Arial") and registers every
-      style variant it can confidently classify, same fallback story. Don't know a name
-      to ask for? `RegisterPreferredFont` guesses this platform's likely UI font from a
-      short curated candidate list instead
+- [x] Colors, text styles, line height, margins and scrollbars set by a stylesheet, which
+      can be changed at any time; light and dark themes included
+- [x] The bundled Go fonts, your own font files, or the system's fonts
 
-**`cmd/whynot`, the standalone viewer**
-- [x] Built-in welcome page, shown by default, explaining how to use the app
-- [x] Paste a file path or `http(s)` URL to open it; paste "welcome" to return here
-- [x] A link to a webpage opens in the system browser (a new tab, on the web) instead of
-      failing; a link to Markdown opens in whynot itself (see [above](#cmdwhynot-a-standalone-viewer))
-- [x] Back/forward history, light/dark theme, zoom
-- [x] Renders document text in this platform's own fonts when it can find them
-      (`systemfont.RegisterPreferredFont`), falling back to the bundled Go fonts
-- [x] Scrollbar - the View's own (`whynot.WithScrollbar()`, or
-      `Panel.SetScrollbar`), fully defined by the StyleSheet: colors, thickness, inset,
-      minimum thumb length, and whether it stays visible or fades when idle. Draggable,
-      with hover/drag color feedback. It's optional: `View.VisibleRange`
-      exposes the geometry to build your own, and a Gio app can use
-      Gio's native scrollbar instead (`giobackend.NativeScrollbar`)
-- [ ] A real app icon instead of the generic terminal one when launched as a bundled
-      macOS/Windows/Linux app
+## Status
 
-## Known issues
+whynot follows [semantic versioning](https://semver.org/). From version 1.0.0, the API of
+every public package in the main module is stable. Packages under `internal/`, and the
+programs in `cmd/` and `examples/`, aren't part of that promise. The Gio backend is a
+separate module, and it stays at version 0 for as long as Gio does, because Gio's own
+types are part of its API.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#known-issues).
+Known issues are listed in [ARCHITECTURE.md](ARCHITECTURE.md#known-issues). Ideas for the
+future are tracked as
+[GitHub issues](https://github.com/arnodel/whynot/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement).
 
-## Ideas
+Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) explains how the project is
+worked on.
 
-Floated but not scoped or started:
-
-- A different Markdown parser, or a different input format entirely (e.g. reStructuredText) -
-  `Parse()` is the only goldmark-specific code in the library; everything downstream just
-  consumes a `Block` tree with no idea where it came from
-- Video - a static poster image with a play button, opening an external player rather than
-  playing in-app
-- Image zoom/lightbox - a click-to-open overlay for one image, independent of the document's
-  own zoom level
+whynot is released under the [Apache License 2.0](LICENSE).
