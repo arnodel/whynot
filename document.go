@@ -31,7 +31,7 @@ type TOCEntry struct {
 // or ok=false if it has none.
 //
 // Only a top-level heading is found: one nested inside a blockquote or
-// list isn't. The same holds for TOCEntries and View.ScrollToAnchor.
+// list isn't. The same holds for TOCEntries and [View.ScrollToAnchor].
 func (d *Document) Title() (string, bool) {
 	if len(d.headings) == 0 {
 		return "", false

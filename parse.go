@@ -33,7 +33,7 @@ type ParseOption func(*parseOptions)
 // WithCodeBlockPlugin registers a plugin that parses fenced code blocks
 // in the languages it handles, e.g. to color them or render them as
 // diagrams. Call it once per plugin: plugins are tried in registration
-// order (see codeblocks.Plugin).
+// order (see [codeblocks.Plugin]).
 func WithCodeBlockPlugin(p codeblocks.Plugin) ParseOption {
 	return func(o *parseOptions) {
 		o.plugins = append(o.plugins, p)

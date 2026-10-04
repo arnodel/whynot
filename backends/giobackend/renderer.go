@@ -152,7 +152,7 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 }
 
 // DrawImage scales the loaded image from its native pixel size to
-// width/height (usually not the same size - see canvas.Canvas's own doc
+// width/height (usually not the same size - see [canvas.Canvas]'s own doc
 // comment).
 func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
 	defer c.pushClip()()

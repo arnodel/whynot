@@ -136,8 +136,8 @@ func (c *Controller) SetScale(s float64) {
 // LinkClick, in order; nil if nothing did. The Controller doesn't act on
 // them itself.
 //
-// A fling stops if the app moves the View itself (with View.ScrollBy,
-// ScrollToAnchor and so on) or swaps it with SetView.
+// A fling stops if the app moves the View itself (with [View.ScrollBy],
+// [View.ScrollToAnchor] and so on) or swaps it with SetView.
 func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 	if c.view.moves != c.viewMoves {
 		c.cancelMomentum()

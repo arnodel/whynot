@@ -7,7 +7,7 @@ import (
 	"github.com/arnodel/whynot/codeblocks"
 )
 
-// Plugin is a codeblocks.Plugin that classifies the tokens of code
+// Plugin is a [codeblocks.Plugin] that classifies the tokens of code
 // blocks in any language chroma has a lexer for.
 type Plugin struct{}
 

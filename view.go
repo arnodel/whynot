@@ -71,7 +71,7 @@ type View struct {
 type ViewOption func(*View)
 
 // WithImageSource sets where the View's images come from, instead of the
-// default images.FileSource - e.g. relative to the document's location,
+// default [images.FileSource] - e.g. relative to the document's location,
 // or over http(s). Each image is fetched at most once per View.
 func WithImageSource(s images.Source) ViewOption {
 	return func(v *View) {

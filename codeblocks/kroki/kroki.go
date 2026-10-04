@@ -16,7 +16,7 @@ import (
 // has its own BaseURL (e.g. a self-hosted instance).
 const defaultBaseURL = "https://kroki.io"
 
-// Plugin is a codeblocks.Plugin that turns diagram code blocks into
+// Plugin is a [codeblocks.Plugin] that turns diagram code blocks into
 // images, rendered by Kroki. The images are PNGs, since whynot can't
 // decode SVG, at the diagram tool's own resolution: a View scales an
 // image down to fit, never up.

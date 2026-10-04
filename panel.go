@@ -16,8 +16,8 @@ import (
 // one document after another in the same place.
 //
 // A Panel doesn't depend on a graphics library. Each frame, the app
-// passes it the frame's input events (from a backend's input.Source)
-// and a canvas.Canvas to draw on, along with the time.
+// passes it the frame's input events (from a backend's [input.Source])
+// and a [canvas.Canvas] to draw on, along with the time.
 //
 // Unlike a Controller, a Panel acts on some Events itself: it follows
 // links within the document (see SetAnchorScrolling).
@@ -91,7 +91,7 @@ func (p *Panel) Zoom() float64 {
 }
 
 // SetZoom magnifies the document by zoom (1 is 100%), in the current View
-// and every View the Panel shows after it (see View.SetZoom). Scrolling
+// and every View the Panel shows after it (see [View.SetZoom]). Scrolling
 // steps don't change with the zoom.
 func (p *Panel) SetZoom(zoom float64) {
 	p.zoom = zoom
@@ -167,7 +167,7 @@ func (p *Panel) ScrollDown() { p.controller.ScrollDown() }
 func (p *Panel) ScrollUp() { p.controller.ScrollUp() }
 
 // ScrollLeft scrolls a block wider than the View a step towards its
-// start (see Controller.ScrollLeft), reporting whether there was one.
+// start (see [Controller.ScrollLeft]), reporting whether there was one.
 func (p *Panel) ScrollLeft() bool { return p.controller.ScrollLeft() }
 
 // ScrollRight scrolls a block wider than the View a step towards its

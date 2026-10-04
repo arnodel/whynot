@@ -115,7 +115,7 @@ func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
 }
 
 // DrawImage scales the loaded image from its native pixel size to
-// width/height (usually not the same size - see canvas.Canvas's own
+// width/height (usually not the same size - see [canvas.Canvas]'s own
 // doc comment) with linear filtering, so a zoomed-in image is smoothly
 // scaled rather than drawn blocky (ebiten's default nearest-neighbor
 // filter) or, worse, at the wrong size entirely.

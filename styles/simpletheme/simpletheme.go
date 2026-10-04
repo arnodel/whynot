@@ -107,7 +107,7 @@ type Scrollbar struct {
 }
 
 // SyntaxColors is the color of each conventional class of code token
-// (codeblocks.ClassKeyword and so on). Tokens of other classes, or of
+// ([codeblocks.ClassKeyword] and so on). Tokens of other classes, or of
 // these when the color is nil, show in the code block's color.
 type SyntaxColors struct {
 	Keyword  color.Color
@@ -331,7 +331,7 @@ var (
 	defaultLineHeight    = 1.2
 )
 
-// StyleSheet returns a snapshot of t, for a whynot.View: changing t
+// StyleSheet returns a snapshot of t, for a [whynot.View]: changing t
 // afterwards doesn't affect it.
 func (t *Theme) StyleSheet() whynot.StyleSheet {
 	b := &styling.Basic{Dims: dims}

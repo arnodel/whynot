@@ -13,15 +13,15 @@ import (
 )
 
 // Input reads Gio's pointer input for an area of the window. Gio only
-// has events within a frame, so each frame gets its own input.Source
-// (see Source).
+// has events within a frame, so each frame gets its own [input.Source]
+// (see [Input.Source]).
 type Input struct {
 	// mouseDown is whether the primary mouse button is pressed, to report
 	// its release.
 	mouseDown bool
 }
 
-// Source returns this frame's input.Source: the pointer events Gio has
+// Source returns this frame's [input.Source]: the pointer events Gio has
 // for area, registering it, with tag, to receive them. Call Events once.
 func (in *Input) Source(gtx layout.Context, tag event.Tag, area image.Rectangle) input.Source {
 	return frameSource{in: in, gtx: gtx, tag: tag, area: area}
