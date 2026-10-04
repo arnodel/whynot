@@ -24,8 +24,9 @@
 //
 // Distances are in canvas pixels too, such as [View.ScrollBy]'s. The
 // scale relates them to logical pixels, the unit of a StyleSheet's
-// dimensions: it's the number of canvas pixels per logical pixel, and a
-// View's scale ([View.SetScale]) also includes any zoom. Command
+// dimensions: it's the number of canvas pixels per logical pixel
+// ([View.SetScale]), and a View is laid out at its scale times its zoom
+// ([View.SetZoom]). Command
 // scrolling ([Controller.ScrollDown], [Controller.ScrollLeft] and the
 // like, also on a Panel) steps in logical pixels without the zoom, so a
 // step covers the same distance on screen at any zoom.
