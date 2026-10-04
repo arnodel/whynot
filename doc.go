@@ -35,7 +35,14 @@
 // # Showing a document
 //
 // A backend provides a [canvas.Canvas] to draw on and an [input.Source]
-// of the user's input. A program sets a Panel up once:
+// of the user's input. With Ebitengine, for example:
+//
+//	renderer := ebitenbackend.New()
+//	var source ebitenbackend.Input       // reads Ebitengine's input: an input.Source
+//	canvas := renderer.NewCanvas(screen) // draws on the game's screen: a canvas.Canvas
+//
+// With Gio, a giobackend.Renderer and a giobackend.Input play the same
+// roles. A program sets a Panel up once:
 //
 //	doc := whynot.Parse(markdown)
 //	view := whynot.NewView(doc, fonts.NewGoSelector(), simpletheme.DarkStyleSheet)
