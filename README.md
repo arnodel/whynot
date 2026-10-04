@@ -263,44 +263,58 @@ are complete applications built the same way.
 
 ## How it works
 
-First, whynot turns the Markdown into a `Document`, and a View is made to show it, with a
-stylesheet and fonts that decide how it looks:
-
-```mermaid
-flowchart LR
-    md["Markdown text"] -- "whynot.Parse,<br/>with code-block plugins" --> doc["Document"]
-    doc --> view["View"]
-    sheet["Stylesheet"] --> view
-    fonts["Fonts"] --> view
-```
-
-Then, every frame, your program runs a loop between its graphics framework and whynot:
+First, `whynot.Parse` turns the Markdown into a `Document`, with the help of any code-block
+plugins, and `whynot.NewView` makes a View to show it, with a stylesheet and fonts that
+decide how it looks:
 
 ```mermaid
 flowchart TB
-    fw["Your graphics framework<br/>(Ebitengine or Gio)"]
-    subgraph program["Your program, every frame"]
-        input["The backend's Input"]
-        ctrl["Controller"]
-        yours["Your code"]
-        view["View"]
-        canvas["The backend's Canvas"]
-    end
-    fw -- "mouse, wheel and touch" --> input
-    input -- "input events" --> ctrl
-    ctrl -- "events, such as<br/>a link clicked" --> yours
-    ctrl -- "scrolls, highlights links" --> view
-    view -- "drawing calls" --> canvas
-    canvas -- "pixels" --> fw
+    md[/"Markdown text"/]
+    plugins["Code-block plugins<br/><code>chromahighlight.Plugin</code>, …"]
+    parse[["<code>whynot.Parse</code>"]]
+    doc["<code>whynot.Document</code>"]
+    sheet["Stylesheet<br/><code>simpletheme.DarkStyleSheet</code>"]
+    fonts["Fonts<br/><code>fonts.GoSelector</code>"]
+    newview[["<code>whynot.NewView</code>"]]
+    view["<code>whynot.View</code>"]
+    md --> parse
+    plugins --> parse
+    parse --> doc
+    doc --> newview
+    sheet --> newview
+    fonts --> newview
+    newview --> view
 ```
 
-1. The **backend's Input** reads what the user did through the framework, and turns it
-   into whynot's own input events.
-2. The **Controller** decides what those events do to the View: scrolling it,
-   highlighting the link under the pointer, and so on. It reports anything your program
+Then, every frame, your program runs a loop between its graphics framework and whynot.
+Here it is with Ebitengine; with Gio, the same roles are played by `giobackend.Input` and
+`giobackend.Canvas`:
+
+```mermaid
+flowchart TB
+    fw["Ebitengine<br/>(or another framework, such as Gio)"]
+    subgraph program["Your game, every frame"]
+        input["<code>ebitenbackend.Input</code>"]
+        ctrl["<code>whynot.Controller</code>"]
+        yours["Your code"]
+        view["<code>whynot.View</code>"]
+        canvas["<code>ebitenbackend.Canvas</code>"]
+    end
+    fw -- "mouse, wheel and touch" --> input
+    input -- "<code>input.Event</code> values" --> ctrl
+    ctrl -- "<code>whynot.Event</code> values,<br/>such as <code>whynot.LinkClick</code>" --> yours
+    ctrl -- "scrolls, highlights links" --> view
+    view -- "drawing calls" --> canvas
+    canvas -- "draws on the screen" --> fw
+```
+
+1. `ebitenbackend.Input` reads what the user did, and turns it into whynot's own input
+   events (`input.Event` values).
+2. A `whynot.Controller` decides what those events do to the View: scrolling it,
+   highlighting the link under the pointer, and so on. It returns anything your program
    may want to react to, such as a click on a link, as `whynot.Event` values.
-3. The **View** lays out the part of the document that's on screen, and draws it.
-4. The **backend's Canvas** carries out the View's drawing with the framework.
+3. The `whynot.View` lays out the part of the document that's on screen, and draws it.
+4. An `ebitenbackend.Canvas` carries out the View's drawing on the screen image.
 
 A Panel puts the Controller and the View together. `whynot.Parse` uses
 [goldmark](https://github.com/yuin/goldmark) to read the Markdown.
