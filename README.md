@@ -295,9 +295,11 @@ flowchart TB
     fw["Ebitengine<br/>(or another framework, such as Gio)"]
     subgraph program["Your game, every frame"]
         input["<code>ebitenbackend.Input</code>"]
-        ctrl["<code>whynot.Controller</code>"]
+        subgraph panel["<code>whynot.Panel</code>"]
+            ctrl["<code>whynot.Controller</code>"]
+            view["<code>whynot.View</code>"]
+        end
         yours["Your code"]
-        view["<code>whynot.View</code>"]
         canvas["<code>ebitenbackend.Canvas</code>"]
     end
     fw -- "mouse, wheel and touch" --> input
@@ -316,7 +318,9 @@ flowchart TB
 3. The `whynot.View` lays out the part of the document that's on screen, and draws it.
 4. An `ebitenbackend.Canvas` carries out the View's drawing on the screen image.
 
-A Panel puts the Controller and the View together. `whynot.Parse` uses
+As the diagram shows, a `whynot.Panel` holds a Controller and a View together, so with a
+Panel your program deals with a single object, as in the quick start above. You only need
+the Controller and the View separately for finer control. `whynot.Parse` uses
 [goldmark](https://github.com/yuin/goldmark) to read the Markdown.
 
 The library is split into packages along these lines:
