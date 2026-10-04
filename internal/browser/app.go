@@ -80,8 +80,8 @@ type App struct {
 
 	faceSelector fonts.FaceSelector
 	styleSheet   whynot.StyleSheet
-	// images is what documents' images can be fetched from.
-	images *fetch.Registry
+	// registry is what documents, and their images, can be fetched from.
+	registry *fetch.Registry
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
 	// recovered from styleSheet itself.
@@ -112,11 +112,13 @@ type App struct {
 // NewApp constructs an App with no Panel yet and no current location -
 // call NewView to build the first document's View, construct the real
 // Panel from it, assign it to Panel, then call Open to make it current.
-func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark bool) *App {
+// Documents and their images are fetched through registry (see
+// NewRegistry).
+func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark bool, registry *fetch.Registry) *App {
 	return &App{
 		faceSelector: faceSelector,
 		styleSheet:   styleSheet,
-		images:       newImageRegistry(),
+		registry:     registry,
 		darkTheme:    dark,
 		zoom:         1,
 	}
@@ -243,7 +245,7 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 	doc := whynot.Parse(source,
 		whynot.WithBaseURL(location),
-		whynot.WithImageRegistry(a.images),
+		whynot.WithImageRegistry(a.registry),
 		whynot.WithCodeBlockPlugin(kroki.Plugin{}),
 		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 	)
@@ -312,7 +314,7 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	source, err := LoadDocument(resolved)
+	source, err := LoadDocument(a.registry, resolved)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)
@@ -429,7 +431,7 @@ func (a *App) Reload() {
 	if a.tocDocView != nil {
 		return
 	}
-	source, err := LoadDocument(a.location)
+	source, err := LoadDocument(a.registry, a.location)
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)
@@ -479,7 +481,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 
-	source, err := LoadDocument(resolved)
+	source, err := LoadDocument(a.registry, resolved)
 	if err != nil {
 		if openIfWebPage(err, resolved) {
 			return nil

@@ -97,16 +97,28 @@ func addressBarTip() string {
 	return "- Click the address bar, type a path, URL, or \"welcome\", then press Enter.\n"
 }
 
-// welcomeResolver resolves whynot: URLs to the files bundled in
-// assetsFS, so the welcome page's images are bundled with it: an image
-// next to welcome.md is referenced from it as "screenshot.png", like any
-// other relative image.
+// welcomeResolver resolves whynot: URLs: WelcomeURL to the welcome page,
+// and any other to the files bundled in assetsFS, so the welcome page's
+// images are bundled with it: an image next to welcome.md is referenced
+// from it as "screenshot.png", like any other relative image.
 type welcomeResolver struct{}
 
 func (welcomeResolver) Schemes() []string { return []string{WelcomeURL.Scheme} }
 
 func (welcomeResolver) Resolve(u *url.URL) (fetch.Source, error) {
+	if u.Opaque == WelcomeURL.Opaque {
+		return welcomePage{}, nil
+	}
 	return assetSource(path.Join("assets", strings.TrimPrefix(u.Path, "/"))), nil
+}
+
+// welcomePage is the welcome page, rendered when it's fetched.
+type welcomePage struct{}
+
+func (welcomePage) Key() string { return WelcomeURL.Opaque }
+
+func (welcomePage) Fetch(context.Context) (io.ReadCloser, string, error) {
+	return io.NopCloser(bytes.NewReader(renderWelcome())), "text/markdown", nil
 }
 
 // assetSource is a file in assetsFS, by its path.

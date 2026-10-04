@@ -71,8 +71,9 @@ func NewRegistry(resolvers ...Resolver) *Registry {
 }
 
 // Resolve returns the Source of ref, relative to base. A relative ref
-// takes base's scheme, host and directory, as in a web browser; with no
-// base, a relative ref is a file path relative to the working directory.
+// takes base's scheme, host and directory, as in a web browser, and an
+// empty ref is base itself; with no base, a relative ref is a file path
+// relative to the working directory.
 // A Windows path such as C:\img.png is a file path, not a URL with
 // scheme "c".
 //

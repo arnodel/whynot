@@ -9,6 +9,7 @@ import (
 	"flag"
 	"image"
 	"log"
+	"os"
 	"time"
 
 	"gioui.org/app"
@@ -31,7 +32,17 @@ func main() {
 	browser.AddressBarEditable = true
 
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
+	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	flag.Parse()
+
+	var root *os.Root
+	if *rootDir != "" {
+		var err error
+		if root, err = os.OpenRoot(*rootDir); err != nil {
+			log.Fatal(err)
+		}
+	}
+	registry := browser.NewRegistry(root)
 
 	// No file/URL given: land on the welcome page rather than a
 	// hardcoded local file, matching what a person launching giowhynot
@@ -44,7 +55,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	source, err := browser.LoadDocument(location)
+	source, err := browser.LoadDocument(registry, location)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -54,7 +65,7 @@ func main() {
 		styleSheet = simpletheme.LightStyleSheet
 	}
 
-	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light)
+	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
 	renderer := giobackend.New()
 	view := browserApp.NewView(source, location)
 	panel := whynot.NewPanel(view, image.Rectangle{})

@@ -1,59 +1,67 @@
 package browser
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/arnodel/whynot/fetch"
 )
 
 // httpTimeout bounds every document and image fetch, so a hung server
 // can't leave a document or an image loading forever.
 const httpTimeout = 10 * time.Second
 
-// fetchDocument performs the http(s) GET both LoadDocument variants
-// (load_notjs.go, load_js.go) use for that scheme - only the URL
-// scheme dispatch around this differs between platforms (a local
-// file: scheme on desktop, nothing on the web). An http(s) response
-// whose Content-Type is HTML fails with *webPageError rather than
-// being fed straight into the Markdown parser (whynot has no way to
-// tell HTML apart from Markdown itself); any other clearly-non-Markdown
-// Content-Type is just rejected outright, since it's not a web page
-// either. A missing or unparseable Content-Type is let through - a
-// heuristic, not a guarantee, since some servers omit or misreport it
-// for a perfectly good Markdown file.
-func fetchDocument(location *url.URL) ([]byte, error) {
-	client := http.Client{Timeout: httpTimeout}
-	resp, err := client.Get(location.String())
+// fetchDocument fetches the document at location through registry,
+// checking it's Markdown (see checkMarkdown).
+func fetchDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
+	src, err := registry.Resolve(location, "")
 	if err != nil {
-		return nil, &requestError{err: err}
+		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: %s", location, resp.Status)
+	body, mediaType, err := src.Fetch(context.Background())
+	if err != nil {
+		return nil, err
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		if mediaType, _, err := mime.ParseMediaType(ct); err == nil {
-			switch mediaType {
-			case "text/plain", "text/markdown":
-				// Proceed - read the body below.
-			case "text/html", "application/xhtml+xml":
-				return nil, &webPageError{url: location.String()}
-			default:
-				return nil, fmt.Errorf("%s: not Markdown (Content-Type: %s)", location, mediaType)
-			}
-		}
+	defer body.Close()
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
 	}
-	return io.ReadAll(resp.Body)
+	if err := checkMarkdown(mediaType, data, location); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// checkMarkdown reports whether data, of the given media type ("" if
+// unknown), can be shown as Markdown: a web page is a *webPageError, and
+// any other type that isn't text is an error. An unknown type is sniffed,
+// but only to catch binary content: sniffing can't tell HTML from
+// Markdown, which may itself start with HTML, such as a README's
+// <p align="center">.
+func checkMarkdown(mediaType string, data []byte, location *url.URL) error {
+	switch {
+	case mediaType == "text/html" || mediaType == "application/xhtml+xml":
+		return &webPageError{url: location.String()}
+	case strings.HasPrefix(mediaType, "text/"):
+		return nil
+	case mediaType != "":
+		return fmt.Errorf("%s: not Markdown (%s)", location, mediaType)
+	}
+	if sniffed, _, _ := strings.Cut(http.DetectContentType(data), ";"); !strings.HasPrefix(sniffed, "text/") {
+		return fmt.Errorf("%s: not Markdown (%s)", location, sniffed)
+	}
+	return nil
 }
 
 // webPageError means LoadDocument found a web page rather than a
-// Markdown document - an http(s) response whose Content-Type is HTML, or
-// in the browser build, a page it isn't allowed to fetch (see
-// load_js.go). App.Follow/Reload/Navigate open it in a web browser
+// Markdown document - content whose media type is HTML, or in the
+// browser build, a page it isn't allowed to fetch (see load_js.go). App.Follow/Reload/Navigate open it in a web browser
 // instead of just reporting an error.
 type webPageError struct {
 	url string
@@ -62,15 +70,6 @@ type webPageError struct {
 func (e *webPageError) Error() string {
 	return fmt.Sprintf("%s looks like a web page, not Markdown", e.url)
 }
-
-// requestError means fetchDocument's request itself failed: no response
-// at all, as opposed to an error status or an unsuitable Content-Type.
-type requestError struct {
-	err error
-}
-
-func (e *requestError) Error() string { return e.err.Error() }
-func (e *requestError) Unwrap() error { return e.err }
 
 // resolveAgainst resolves ref against base, the way a relative link or
 // image src in a document is meant to be interpreted - relative to
