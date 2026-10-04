@@ -1,8 +1,3 @@
-// Package images is how whynot gets the images a document shows: a View
-// is given a Source, which turns an image's src into an AsyncImage it
-// can fetch. Loading is the library's job: each image is fetched and
-// decoded at most once, in the background, so a slow fetch never blocks
-// layout or drawing.
 package images
 
 import (

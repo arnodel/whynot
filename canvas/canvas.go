@@ -1,6 +1,3 @@
-// Package canvas is the drawing contract between whynot and a rendering
-// backend: a View draws a document onto a Canvas, which a backend
-// implements on top of its framework (Ebitengine, Gio, ...).
 package canvas
 
 import (
