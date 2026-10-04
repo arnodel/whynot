@@ -154,7 +154,7 @@ program you can run.
 
 ### Another framework
 
-A backend for another framework provides two things: a `canvas.Canvas` that draws text,
+A backend for another framework should provide two things: a `canvas.Canvas` that draws text,
 images and rectangles with the framework, and an input reader that turns the framework's
 input into whynot's input events. Your program then runs the same frame loop as above.
 [backends/README.md](backends/README.md) explains what each part has to do, and the two
