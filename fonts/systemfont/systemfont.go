@@ -8,6 +8,8 @@
 package systemfont
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -55,50 +57,41 @@ func New(opts ...fonts.CustomOption) *Selector {
 	}
 }
 
+// ErrNotInstalled is the error, as reported by [errors.Is], when no
+// installed font matches a query.
+var ErrNotInstalled = errors.New("no installed font matches")
+
 // RegisterSystemFont locates an installed font matching query (e.g.
 // "Arial", "Helvetica Neue") and registers every subfont in its file that
 // AddFontCollection can both classify into a (weight, style) slot and
-// confirm belongs to the matched family. A bad or unmatched query, or one
-// AddFontCollection can't usefully register anything from, is logged and
-// otherwise a no-op - those slots are served by the fallback FaceSelector
-// instead, which is why this has no error return.
-func (s *Selector) RegisterSystemFont(family fonts.Family, query string) {
-	s.registerSystemFont(family, query)
-}
-
-// registerSystemFont is RegisterSystemFont's implementation, returning how
-// many subfonts were registered - RegisterPreferredFont uses this to tell
-// whether a candidate name actually resolved to anything usable, without
-// exposing that as part of RegisterSystemFont's own public, no-return
-// signature.
-func (s *Selector) registerSystemFont(family fonts.Family, query string) int {
+// confirm belongs to the matched family. Slots it doesn't fill are served
+// by the fallback FaceSelector.
+//
+// It returns an error if nothing was registered: no installed font
+// matches query ([ErrNotInstalled]), or its file can't be read or parsed,
+// or none of its subfonts is usable. On success, it logs which font it
+// picked, since a query can resolve to a differently named font.
+func (s *Selector) RegisterSystemFont(family fonts.Family, query string) error {
 	match := s.finder.Match(query)
 	if match == nil || match.Filename == "" {
-		log.Printf(logPrefix+"%v: no installed font found for %q", family, query)
-		return 0
+		return fmt.Errorf("systemfont: %v: %w %q", family, ErrNotInstalled, query)
 	}
-	// match.Family is what sysfont actually resolved query to, which can
-	// genuinely differ from it (fuzzy matching, or its own fallback/
-	// alternative-family logic when nothing close is installed) - logging
-	// both is what makes "what font was found" answerable from this line
-	// alone, without having to separately know sysfont's own matching
-	// quirks.
 	data, err := os.ReadFile(match.Filename)
 	if err != nil {
-		log.Printf(logPrefix+"%v: reading %s (matched %q as %q): %v", family, match.Filename, query, match.Family, err)
-		return 0
+		return fmt.Errorf("systemfont: %v: reading %s (matched %q as %q): %w", family, match.Filename, query, match.Family, err)
 	}
 	registered, err := s.AddFontCollection(family, data, match.Family)
 	if err != nil {
-		log.Printf(logPrefix+"%v: parsing %s (matched %q as %q): %v", family, match.Filename, query, match.Family, err)
-		return 0
+		return fmt.Errorf("systemfont: %v: parsing %s (matched %q as %q): %w", family, match.Filename, query, match.Family, err)
 	}
 	if registered == 0 {
-		log.Printf(logPrefix+"%v: matched %q to %q (%s) but registered no usable subfont from it", family, query, match.Family, match.Filename)
-		return 0
+		return fmt.Errorf("systemfont: %v: matched %q to %q (%s), but none of its subfonts is usable", family, query, match.Family, match.Filename)
 	}
+	// match.Family is what sysfont resolved query to, which can differ
+	// from it (fuzzy matching, or sysfont's own fallbacks), so both are
+	// logged.
 	log.Printf(logPrefix+"%v: registered %d subfont(s) from %q (%s) for %q", family, registered, match.Family, match.Filename, query)
-	return registered
+	return nil
 }
 
 // RegisterPreferredFont registers whatever this platform's most likely
@@ -110,17 +103,19 @@ func (s *Selector) registerSystemFont(family fonts.Family, query string) int {
 // deliberately doesn't take on), so this tries a short, curated,
 // GOOS-aware list of common candidate names instead (see
 // preferredFontCandidates) via RegisterSystemFont, in order, stopping at
-// the first one that actually registers something. If none of the
-// candidates are installed (or family has no curated candidates at all -
-// see preferredFontCandidates), it logs that and leaves every slot to the
-// fallback FaceSelector, the same as an ordinary unmatched
-// RegisterSystemFont query would.
-func (s *Selector) RegisterPreferredFont(family fonts.Family) {
+// the first one that actually registers something. If none does (or
+// family has no curated candidates at all - see preferredFontCandidates),
+// it returns an error, joining each candidate's, and every slot is left
+// to the fallback FaceSelector, as with a failed RegisterSystemFont.
+func (s *Selector) RegisterPreferredFont(family fonts.Family) error {
 	candidates := preferredFontCandidates(runtime.GOOS, family)
+	errs := []error{fmt.Errorf("systemfont: %v: none of the preferred fonts for %s is usable (tried %q)", family, runtime.GOOS, candidates)}
 	for _, query := range candidates {
-		if s.registerSystemFont(family, query) > 0 {
-			return
+		err := s.RegisterSystemFont(family, query)
+		if err == nil {
+			return nil
 		}
+		errs = append(errs, err)
 	}
-	log.Printf(logPrefix+"none of the preferred-font candidates for %v resolved on GOOS=%s (tried %v)", family, runtime.GOOS, candidates)
+	return errors.Join(errs...)
 }

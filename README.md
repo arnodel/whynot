@@ -220,8 +220,15 @@ selector decides which font actually draws it. whynot comes with three:
 
 ```go
 selector := systemfont.New()
-selector.RegisterPreferredFont(fonts.Proportional)    // the platform's usual interface font
-selector.RegisterSystemFont(fonts.Monospace, "Menlo") // a font installed on the system, by name
+// The platform's usual interface font. On an error, such as the font not
+// being installed, the bundled Go fonts are used instead.
+if err := selector.RegisterPreferredFont(fonts.Proportional); err != nil {
+	log.Print(err)
+}
+// A font installed on the system, by name.
+if err := selector.RegisterSystemFont(fonts.Monospace, "Menlo"); err != nil {
+	log.Print(err)
+}
 view := whynot.NewView(doc, selector, simpletheme.DarkStyleSheet)
 ```
 

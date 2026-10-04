@@ -3,6 +3,8 @@
 package browser
 
 import (
+	"log"
+
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/fonts/systemfont"
 )
@@ -23,7 +25,11 @@ import (
 // facesel_js.go's own doc comment for the wasm side.
 func NewDocumentFaceSelector() fonts.FaceSelector {
 	faceSelector := systemfont.New()
-	faceSelector.RegisterPreferredFont(fonts.Proportional)
-	faceSelector.RegisterPreferredFont(fonts.Monospace)
+	for _, family := range []fonts.Family{fonts.Proportional, fonts.Monospace} {
+		// Not fatal: the Go fonts serve the family instead.
+		if err := faceSelector.RegisterPreferredFont(family); err != nil {
+			log.Print(err)
+		}
+	}
 	return faceSelector
 }

@@ -1,6 +1,7 @@
 package systemfont
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,7 +52,9 @@ func TestRegisterSystemFontEndToEnd(t *testing.T) {
 	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: &sysfont.Font{Family: "Go", Filename: path}}
 
-	s.RegisterSystemFont(fonts.Proportional, "Go")
+	if err := s.RegisterSystemFont(fonts.Proportional, "Go"); err != nil {
+		t.Fatalf("RegisterSystemFont: %v", err)
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
@@ -66,7 +69,9 @@ func TestRegisterSystemFontNoMatch(t *testing.T) {
 	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: nil}
 
-	s.RegisterSystemFont(fonts.Proportional, "Nonexistent")
+	if err := s.RegisterSystemFont(fonts.Proportional, "Nonexistent"); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("RegisterSystemFont of an uninstalled font = %v, want ErrNotInstalled", err)
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
@@ -81,7 +86,10 @@ func TestRegisterSystemFontMissingFile(t *testing.T) {
 	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinder{result: &sysfont.Font{Family: "Go", Filename: "/nonexistent/path.ttf"}}
 
-	s.RegisterSystemFont(fonts.Proportional, "Go")
+	err := s.RegisterSystemFont(fonts.Proportional, "Go")
+	if err == nil || errors.Is(err, ErrNotInstalled) {
+		t.Errorf("RegisterSystemFont of an unreadable file = %v, want an error other than ErrNotInstalled", err)
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
@@ -108,7 +116,9 @@ func TestRegisterPreferredFontTriesEachCandidate(t *testing.T) {
 		candidates[len(candidates)-1]: {Family: "Go", Filename: path},
 	}
 
-	s.RegisterPreferredFont(fonts.Proportional)
+	if err := s.RegisterPreferredFont(fonts.Proportional); err != nil {
+		t.Fatalf("RegisterPreferredFont: %v", err)
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
@@ -123,7 +133,9 @@ func TestRegisterPreferredFontNoneResolve(t *testing.T) {
 	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinderByQuery{} // matches nothing, for any candidate
 
-	s.RegisterPreferredFont(fonts.Proportional)
+	if err := s.RegisterPreferredFont(fonts.Proportional); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("RegisterPreferredFont with nothing installed = %v, want it to wrap ErrNotInstalled", err)
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.Proportional}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
@@ -141,7 +153,9 @@ func TestRegisterPreferredFontSmallCapsHasNoCandidates(t *testing.T) {
 	s := New(fonts.WithFallback(spy))
 	s.finder = fakeFinderByQuery{}
 
-	s.RegisterPreferredFont(fonts.SmallCaps)
+	if err := s.RegisterPreferredFont(fonts.SmallCaps); err == nil {
+		t.Error("RegisterPreferredFont(SmallCaps) = nil, want an error (it has no candidates)")
+	}
 
 	if _, err := s.SelectFace(fonts.TextStyle{Size: 16, Family: fonts.SmallCaps}, 72); err != nil {
 		t.Errorf("SelectFace: %v", err)
