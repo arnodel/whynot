@@ -113,7 +113,8 @@ var defaultFaceSelector = fonts.NewGoSelector()
 //
 // Views with the default fonts share one selector, so use them all from
 // one goroutine, as a user interface does, or give the others a selector
-// of their own with [WithFaceSelector].
+// of their own with [WithFaceSelector] (see Concurrency in the package
+// documentation).
 func NewView(doc *Document, opts ...ViewOption) *View {
 	v := &View{
 		doc: doc,

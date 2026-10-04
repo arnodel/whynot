@@ -138,6 +138,21 @@
 // View when needed, such as the link under the pointer
 // ([View.HoveredLink]), which a program may show in a status bar.
 //
+// # Concurrency
+//
+// A View, a Controller and a Panel are not safe for concurrent use: use
+// each from one goroutine, normally the one your framework draws on. Only
+// image fetching happens in the background, on goroutines of its own (see
+// [images.AsyncImage]).
+//
+// Views made without [WithFaceSelector] share one selector of the Go
+// fonts, and so share its font faces. That lets the backends cache what
+// they make from each face once for every View, instead of once per
+// document. But font faces aren't safe for concurrent use either, so if
+// your program uses Views on several goroutines at once, for example to
+// render documents in parallel, give each goroutine's Views a selector of
+// their own.
+//
 // # Related packages
 //
 // The contracts whynot works with each have a package of their own, so
