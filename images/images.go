@@ -41,7 +41,7 @@ func (FileSource) Image(src string) (AsyncImage, error) {
 // capture whatever state a producer needs (a resolved URL, a diagram's
 // type and source text, ...). An ordinary Markdown ![]() image gets one
 // from the View's Source; a code block plugin wanting more control than
-// a GET against a resolved src (e.g. an HTTP POST, as kroki.Renderer
+// a GET against a resolved src (e.g. an HTTP POST, as kroki.Plugin
 // uses) builds one directly.
 type AsyncImage struct {
 	// Key uniquely identifies this image for caching - e.g. a diagram's

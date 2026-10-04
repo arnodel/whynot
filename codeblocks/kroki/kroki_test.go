@@ -12,8 +12,8 @@ import (
 	"github.com/arnodel/whynot/codeblocks"
 )
 
-func TestRendererHandles(t *testing.T) {
-	r := Renderer{}
+func TestPluginHandles(t *testing.T) {
+	r := Plugin{}
 	if !r.Handles("mermaid") {
 		t.Error(`Handles("mermaid") = false, want true`)
 	}
@@ -26,7 +26,7 @@ func TestRendererHandles(t *testing.T) {
 // different source text or diagram type - imagecache.Cache's own caching
 // relies on this to tell distinct diagrams apart.
 func TestDiagramImageKeyDistinguishesCodeAndType(t *testing.T) {
-	r := Renderer{}
+	r := Plugin{}
 	a := r.image("mermaid", "graph TD; A-->B;")
 	b := r.image("mermaid", "graph TD; A-->C;")
 	if a.Key == b.Key {
@@ -58,7 +58,7 @@ func TestDiagramImageFetchPostsExpectedRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := Renderer{BaseURL: server.URL}
+	r := Plugin{BaseURL: server.URL}
 	img := r.image("mermaid", "graph TD; A-->B;")
 	rc, err := img.Fetch(context.Background())
 	if err != nil {
@@ -96,7 +96,7 @@ func TestDiagramImageFetchNonOKStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := Renderer{BaseURL: server.URL}
+	r := Plugin{BaseURL: server.URL}
 	img := r.image("mermaid", "not valid mermaid")
 	if _, err := img.Fetch(context.Background()); err == nil {
 		t.Error("Fetch() with a 400 response = nil error, want one")
@@ -113,15 +113,15 @@ func TestDiagramImageFetchCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	img := Renderer{BaseURL: server.URL}.image("mermaid", "graph TD; A-->B;")
+	img := Plugin{BaseURL: server.URL}.image("mermaid", "graph TD; A-->B;")
 	if _, err := img.Fetch(ctx); !errors.Is(err, context.Canceled) {
 		t.Errorf("Fetch() with a cancelled context = %v, want context.Canceled", err)
 	}
 }
 
-// TestRendererParseIsImage checks Parse wraps the diagram as an Image.
-func TestRendererParseIsImage(t *testing.T) {
-	r := Renderer{}
+// TestPluginParseIsImage checks Parse wraps the diagram as an Image.
+func TestPluginParseIsImage(t *testing.T) {
+	r := Plugin{}
 	content, ok := r.Parse("mermaid", "graph TD; A-->B;").(codeblocks.Image)
 	if !ok {
 		t.Fatalf("Parse = %T, want codeblocks.Image", r.Parse("mermaid", "graph TD; A-->B;"))

@@ -237,7 +237,7 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 // an images.Source that resolves an image's src against location the
 // same way ResolveLink resolves a link's href (so a relative or
 // http(s) image works regardless of where its document came from), and
-// two code-block plugins: kroki.Renderer first, so a ```mermaid fence
+// two code-block plugins: kroki.Plugin first, so a ```mermaid fence
 // renders as an actual diagram, then chromahighlight.Plugin for
 // syntax-colored code (and a diagram's source while it loads).
 // The welcome page is the one exception for images: its own (if any)
@@ -249,7 +249,7 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 		imageSource = welcomeImageSource{}
 	}
 	doc := whynot.Parse(source,
-		whynot.WithCodeBlockPlugin(kroki.Renderer{}),
+		whynot.WithCodeBlockPlugin(kroki.Plugin{}),
 		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 	)
 	return whynot.NewView(

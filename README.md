@@ -237,7 +237,7 @@ next plugin's version of the block is shown, such as the diagram's source, highl
 
 ```go
 doc := whynot.Parse(source,
-	whynot.WithCodeBlockPlugin(kroki.Renderer{}),        // draws Mermaid and other diagrams, using kroki.io
+	whynot.WithCodeBlockPlugin(kroki.Plugin{}),          // draws Mermaid diagrams, using kroki.io
 	whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}), // highlights code, using the chroma library
 )
 ```
