@@ -2,9 +2,11 @@
 // backend reports what the user did as Events, which a whynot.Controller
 // turns into scrolling, hovering, clicking and so on.
 //
-// Positions and wheel deltas are in the coordinate space of the Canvas
-// the View is drawn on (device pixels for whynot's own backends): see
-// Coordinates in package whynot's documentation. A backend reports all
+// Positions are in the coordinate space of the Canvas the View is drawn
+// on (device pixels for whynot's own backends): see Coordinates in
+// package whynot's documentation. A wheel's deltas are an amount to
+// scroll rather than a position, so they're in logical pixels instead,
+// independent of the screen's density (see [Wheel]). A backend reports all
 // the input it sees; a Controller acts on events inside its View's
 // bounds, except that a press inside captures the pointer until it's
 // released.
@@ -36,8 +38,11 @@ type PointerButton struct {
 }
 
 // Wheel is a scroll, e.g. by a mouse wheel or a trackpad, with the
-// pointer at (X, Y). DX and DY are in pixels, positive towards the end
-// of the content: right and down.
+// pointer at (X, Y). DX and DY are how far to scroll, positive towards
+// the end of the content (right and down), in logical pixels: a backend
+// doesn't need to know the screen's density, and a Controller converts
+// them to the View's pixels with its scale, so a wheel scrolls the same
+// distance on any screen.
 type Wheel struct {
 	X, Y   int
 	DX, DY float64

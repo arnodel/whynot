@@ -17,12 +17,6 @@ const wheelPixels = 2
 // from the game's Update. A touch, while there is one, takes over from
 // the mouse; at most one touch is tracked.
 type Input struct {
-	// Scale converts Ebitengine's wheel units to the screen's pixels:
-	// the scale the document is drawn at (whynot.Panel's Scale times
-	// its Zoom) when the game draws at the device's resolution or
-	// zooms. Zero means 1.
-	Scale float64
-
 	cursor    image.Point
 	hasCursor bool
 	mouseDown bool
@@ -52,16 +46,11 @@ func (in *Input) Events() []input.Event {
 	}
 	cx, cy := ebiten.CursorPosition()
 	wx, wy := ebiten.Wheel()
-	scale := in.Scale
-	if scale == 0 {
-		scale = 1
-	}
 	return append(events, in.mouseEvents(mouseInput{
 		x: cx, y: cy,
 		down:   ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft),
 		wheelX: wx, wheelY: wy,
-		scale: scale,
-		mods:  modifiers(),
+		mods: modifiers(),
 	})...)
 }
 
@@ -70,7 +59,6 @@ type mouseInput struct {
 	x, y           int
 	down           bool // the primary button
 	wheelX, wheelY float64
-	scale          float64 // see Input.Scale
 	mods           input.Modifiers
 }
 
@@ -88,8 +76,8 @@ func (in *Input) mouseEvents(st mouseInput) []input.Event {
 	}
 	if st.wheelX != 0 || st.wheelY != 0 {
 		// ebiten.Wheel is positive up and left; Wheel events are
-		// positive towards the end, in pixels.
-		k := -wheelPixels * st.scale
+		// positive towards the end, in logical pixels.
+		k := -float64(wheelPixels)
 		events = append(events, input.Wheel{X: st.x, Y: st.y, DX: st.wheelX * k, DY: st.wheelY * k, Mods: st.mods})
 	}
 	return events

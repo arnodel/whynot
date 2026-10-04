@@ -202,7 +202,8 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 			}
 			c.cancelMomentum()
 			wheeled = true
-			dx, dy := e.DX, e.DY
+			// Wheel deltas are logical pixels: scaled like command steps.
+			dx, dy := e.DX*c.scale, e.DY*c.scale
 			if e.Mods.Contain(input.ModShift) {
 				// Shift+wheel scrolls sideways. Some platforms (macOS)
 				// already report it as horizontal, leaving dy 0.

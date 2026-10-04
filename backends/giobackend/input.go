@@ -53,7 +53,7 @@ func (s frameSource) Events() []input.Event {
 			return events
 		}
 		if pe, ok := e.(pointer.Event); ok {
-			if e := s.in.translate(pe); e != nil {
+			if e := s.in.translate(pe, s.gtx.Metric.PxPerDp); e != nil {
 				events = append(events, e)
 			}
 		}
@@ -62,7 +62,7 @@ func (s frameSource) Events() []input.Event {
 
 // translate translates a Gio pointer event, or returns nil for one with
 // no counterpart.
-func (in *Input) translate(pe pointer.Event) input.Event {
+func (in *Input) translate(pe pointer.Event, pxPerDp float32) input.Event {
 	x, y := int(pe.Position.X), int(pe.Position.Y)
 	if pe.Source == pointer.Touch {
 		id := int(pe.PointerID)
@@ -102,7 +102,11 @@ func (in *Input) translate(pe pointer.Event) input.Event {
 		return input.PointerLeave{}
 	case pointer.Scroll:
 		// Gio's scroll is already in pixels, positive right and down.
-		return input.Wheel{X: x, Y: y, DX: float64(pe.Scroll.X), DY: float64(pe.Scroll.Y), Mods: mods}
+		// Gio scrolls in device pixels; Wheel is in logical ones.
+		if pxPerDp <= 0 {
+			pxPerDp = 1
+		}
+		return input.Wheel{X: x, Y: y, DX: float64(pe.Scroll.X / pxPerDp), DY: float64(pe.Scroll.Y / pxPerDp), Mods: mods}
 	}
 	return nil
 }

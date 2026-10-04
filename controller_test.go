@@ -181,6 +181,21 @@ func TestControllerSetViewClearsHover(t *testing.T) {
 	}
 }
 
+// TestControllerWheelScales checks wheel deltas, in logical pixels, are
+// scaled by the Controller's scale, like command steps.
+func TestControllerWheelScales(t *testing.T) {
+	moved := func(scale float64) int {
+		c, v := newTestController(t, strings.Repeat(longDoc, 20))
+		c.SetScale(scale)
+		before := visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y
+		frame(c, input.Wheel{X: 10, Y: 10, DY: 30})
+		return visibleViewBounds(v, image.Pt(testWidth, testHeight)).Min.Y - before
+	}
+	if at1, at2 := moved(1), moved(2); at1 != 30 || at2 != 60 {
+		t.Errorf("a 30-logical-pixel wheel scrolled %d at scale 1 and %d at scale 2, want 30 and 60", at1, at2)
+	}
+}
+
 func TestControllerWheelGatedByBounds(t *testing.T) {
 	c, v := newTestController(t, strings.Repeat(longDoc, 20))
 	viewport := image.Pt(testWidth, testHeight)

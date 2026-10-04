@@ -14,6 +14,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/fonts"
+	winput "github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -120,5 +121,15 @@ func TestTouchLeavesNoHover(t *testing.T) {
 
 	if dest, ok := panel.View().HoveredLink(); ok {
 		t.Errorf("HoveredLink() = %q after the finger lifted, want none", dest)
+	}
+}
+
+// TestWheelInLogicalPixels checks Gio's scroll distances, in device
+// pixels, become logical pixels.
+func TestWheelInLogicalPixels(t *testing.T) {
+	var in Input
+	e := in.translate(pointer.Event{Kind: pointer.Scroll, Scroll: f32.Pt(10, 40)}, 2)
+	if w, ok := e.(winput.Wheel); !ok || w.DX != 5 || w.DY != 20 {
+		t.Errorf("translate(a 10, 40 device-pixel scroll at 2 pixels per dp) = %#v, want a Wheel of 5, 20", e)
 	}
 }

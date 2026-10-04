@@ -41,7 +41,6 @@
 //		w, h := int(float64(outsideWidth)*scale), int(float64(outsideHeight)*scale)
 //		g.panel.SetBounds(image.Rect(0, 0, w, h))
 //		g.panel.SetScale(scale)
-//		g.input.Scale = scale // wheel units to pixels
 //		return w, h
 //	}
 //

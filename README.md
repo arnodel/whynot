@@ -112,7 +112,6 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	w, h := int(float64(outsideWidth)*scale), int(float64(outsideHeight)*scale)
 	g.panel.SetBounds(image.Rect(0, 0, w, h)) // fill the window, which may have been resized
 	g.panel.SetScale(scale)                   // size text and margins for that resolution
-	g.input.Scale = scale                     // convert wheel movements to pixels at that resolution
 	return w, h
 }
 
