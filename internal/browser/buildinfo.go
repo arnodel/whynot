@@ -16,9 +16,14 @@ type vcsBuild struct {
 
 // readVCSBuild returns the commit this binary was built from, or ok=false
 // if it wasn't built from a git checkout (as with go install pkg@version).
-func readVCSBuild() (b vcsBuild, ok bool) {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
+func readVCSBuild() (vcsBuild, bool) {
+	info, _ := debug.ReadBuildInfo()
+	return vcsBuildFrom(info)
+}
+
+// vcsBuildFrom is readVCSBuild for the given build info, which may be nil.
+func vcsBuildFrom(info *debug.BuildInfo) (b vcsBuild, ok bool) {
+	if info == nil {
 		return vcsBuild{}, false
 	}
 	for _, s := range info.Settings {
@@ -32,6 +37,25 @@ func readVCSBuild() (b vcsBuild, ok bool) {
 		}
 	}
 	return b, b.revision != ""
+}
+
+// versionFrom is the version to show for a binary, from the first source
+// that knows it: stamped, the version a release build is given at link
+// time ("dev" when it isn't); the module version the go command records
+// for go install pkg@version; the commit, for a build from a git
+// checkout; or else "dev". info may be nil.
+func versionFrom(stamped string, info *debug.BuildInfo) string {
+	if stamped != "dev" {
+		return "v" + stamped
+	}
+	// A build from a checkout records "(devel)" here, or nothing.
+	if info != nil && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	if b, ok := vcsBuildFrom(info); ok {
+		return "dev " + b.short()
+	}
+	return "dev"
 }
 
 // short is the commit's abbreviated hash, as git shows it.
