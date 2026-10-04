@@ -1,8 +1,3 @@
-// Package chromahighlight is a codeblocks.Plugin for syntax highlighting,
-// on top of github.com/alecthomas/chroma/v2. Split out from the core
-// whynot package to keep chroma's dependency weight (~200 embedded
-// language lexer definitions) out of the core library's dependency graph
-// - the same reasoning ebitenbackend/systemfont are their own packages.
 package chromahighlight
 
 import (

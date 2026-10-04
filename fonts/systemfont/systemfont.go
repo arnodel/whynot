@@ -1,10 +1,3 @@
-// Package systemfont resolves fonts by name from whatever's installed on
-// the host machine (e.g. "Arial", "Helvetica Neue"), on top of
-// fonts.CustomSelector.AddFontCollection. It's a package of its own to keep
-// its github.com/adrg/sysfont dependency (and that package's, which don't
-// build for the web) out of the fonts package. It does no font
-// classification of its own: locating the right file is its only job;
-// reading what's inside it is AddFontCollection's.
 package systemfont
 
 import (
