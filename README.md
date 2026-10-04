@@ -303,7 +303,7 @@ flowchart TB
     fw -- "mouse, wheel and touch" --> input
     input -- "<code>input.Event</code> values" --> ctrl
     ctrl -- "<code>whynot.Event</code> values,<br/>such as <code>whynot.LinkClick</code>" --> yours
-    ctrl -- "scrolls, highlights links" --> view
+    ctrl -- "calls to scroll it<br/>and highlight links" --> view
     view -- "drawing calls" --> canvas
     canvas -- "draws on the screen" --> fw
 ```
