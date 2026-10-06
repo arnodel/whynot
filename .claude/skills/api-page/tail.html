@@ -1,0 +1,24 @@
+<script>
+(function () {
+  var KEY = "whynot-v1-read";
+  var read = {};
+  try { read = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { read = {}; }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(read)); } catch (e) {}
+  }
+  function mark(pkg) {
+    var link = document.querySelector('[data-nav="' + pkg + '"]');
+    if (link) link.classList.toggle("done", !!read[pkg]);
+  }
+  document.querySelectorAll("input[data-pkg]").forEach(function (box) {
+    var pkg = box.getAttribute("data-pkg");
+    box.checked = !!read[pkg];
+    mark(pkg);
+    box.addEventListener("change", function () {
+      read[pkg] = box.checked;
+      save();
+      mark(pkg);
+    });
+  });
+})();
+</script>
