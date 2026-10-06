@@ -314,7 +314,7 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	source, err := LoadDocument(a.registry, resolved)
+	source, err := a.load(resolved)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)
@@ -330,6 +330,20 @@ func (a *App) follow(resolved *url.URL) {
 	a.Panel.SetView(view)
 	a.location = resolved
 	a.updateWindowTitle()
+}
+
+// load is LoadDocument through a's registry. A claude: page takes a
+// while to generate, so the window title says so meanwhile.
+func (a *App) load(location *url.URL) ([]byte, error) {
+	if location.Scheme != "claude" || a.OnTitleChange == nil {
+		return LoadDocument(a.registry, location)
+	}
+	a.OnTitleChange("Generating…")
+	source, err := LoadDocument(a.registry, location)
+	if err != nil {
+		a.updateWindowTitle()
+	}
+	return source, err
 }
 
 // openIfWebPage opens location in a web browser if err says it's a web
@@ -431,7 +445,7 @@ func (a *App) Reload() {
 	if a.tocDocView != nil {
 		return
 	}
-	source, err := LoadDocument(a.registry, a.location)
+	source, err := a.load(a.location)
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)
@@ -481,7 +495,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 
-	source, err := LoadDocument(a.registry, resolved)
+	source, err := a.load(resolved)
 	if err != nil {
 		if openIfWebPage(err, resolved) {
 			return nil

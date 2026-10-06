@@ -11,6 +11,7 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/browser"
 	"github.com/arnodel/whynot/styles/simpletheme"
@@ -28,6 +29,7 @@ func main() {
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
+	claudeModel := flag.String("claude-model", "claude-sonnet-5", "the model that writes claude: pages, when ANTHROPIC_API_KEY is set")
 	flag.Parse()
 
 	var root *os.Root
@@ -37,7 +39,11 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	registry := browser.NewRegistry(root)
+	var extra []fetch.Resolver
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		extra = append(extra, &browser.ClaudeResolver{APIKey: key, Model: *claudeModel})
+	}
+	registry := browser.NewRegistry(root, extra...)
 
 	// No file/URL given: land on the welcome page rather than a
 	// hardcoded local file, matching what a person launching whynot
@@ -49,6 +55,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	}
+	if location.Scheme == "claude" {
+		log.Printf("generating %s…", location)
 	}
 	source, err := browser.LoadDocument(registry, location)
 	if err != nil {

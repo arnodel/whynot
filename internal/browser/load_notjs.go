@@ -28,7 +28,7 @@ func absFileURL(path string) (*url.URL, error) {
 // ResolveLocationArg turns text - a command-line argument, an edited
 // address bar, or pasted clipboard content (see App.Paste) - into a
 // location to load. It extracts an explicit protocol first (the word
-// "welcome" for the built-in welcome page, http(s) as-is, file: checked
+// "welcome" for the built-in welcome page, http(s) and claude: as-is, file: checked
 // against the local filesystem the same way a bare path is below) -
 // only once text has none does it guess: an existing local file path
 // turned into an absolute file: URL, or - if it instead looks like a
@@ -47,7 +47,7 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 
 	if u, err := url.Parse(text); err == nil && len(u.Scheme) > 1 {
 		switch u.Scheme {
-		case "http", "https":
+		case "http", "https", "claude":
 			return u, nil
 		case "file":
 			path := u.Path
@@ -84,17 +84,17 @@ func LoadDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
 // NewRegistry returns what documents, and the images in them, can be
 // fetched from: http(s), the welcome page and its bundled files, and
 // local files - beneath root, or with a nil root, anywhere on the volume
-// of the file's path.
-func NewRegistry(root *os.Root) *fetch.Registry {
+// of the file's path - and through any extra resolvers.
+func NewRegistry(root *os.Root, extra ...fetch.Resolver) *fetch.Registry {
 	var files fetch.Resolver = &volumeResolver{roots: map[string]*os.Root{}}
 	if root != nil {
 		files = fetch.FileResolver{Root: root}
 	}
-	return fetch.NewRegistry(
+	return fetch.NewRegistry(append([]fetch.Resolver{
 		files,
 		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},
 		welcomeResolver{},
-	)
+	}, extra...)...)
 }
 
 // volumeResolver resolves file: URLs to any file on the volume of its
