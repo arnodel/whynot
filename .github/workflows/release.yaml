@@ -35,6 +35,17 @@ jobs:
       - name: Install Gio's Linux build dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
 
+      # The Gio module's tags (backends/giobackend/vX.Y.Z) version that
+      # module, not this release, but GoReleaser would take the newest
+      # tag of any kind as the current or previous one, which breaks the
+      # version and the changelog. So name both, among the v* tags only.
+      - name: Find the release's tags
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          echo "GORELEASER_CURRENT_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "GORELEASER_PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v*' "$TAG^")" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
