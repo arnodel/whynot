@@ -5,8 +5,8 @@ go 1.25.0
 require (
 	github.com/adrg/sysfont v0.1.2
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/hajimehoshi/ebiten/v2 v2.10.1
-	github.com/yuin/goldmark/v2 v2.0.0
+	github.com/hajimehoshi/ebiten/v2 v2.10.4
+	github.com/yuin/goldmark/v2 v2.1.6
 	golang.org/x/image v0.45.0
 )
 
