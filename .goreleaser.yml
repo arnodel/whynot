@@ -93,7 +93,11 @@ release:
   name_template: "whynot {{.Version}}"
   header: |
     ## whynot {{.Version}}
-
+    {{ if .Prerelease }}
+    This is a pre-release, so Homebrew still installs the latest
+    release. To try it, download the archive for your platform below,
+    unzip it, and run `whynot` (or `whynot some-file.md`).
+    {{ else }}
     On macOS:
     ```bash
     brew install arnodel/tap/whynot
@@ -101,7 +105,7 @@ release:
 
     Otherwise, download the archive for your platform below, unzip it,
     and run `whynot` (or `whynot some-file.md`).
-
+    {{ end }}
     Building from source instead:
     ```bash
     go install github.com/arnodel/whynot/cmd/whynot@{{.Tag}}
