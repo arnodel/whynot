@@ -51,7 +51,7 @@
 // # Writing a Resolver
 //
 // A Resolver handles one or more URL schemes. This one serves images
-// embedded in the program, under an app: scheme:
+// embedded in the program, under an app: scheme, as in ![logo](app:logo.png):
 //
 //	//go:embed images
 //	var embedded embed.FS
@@ -61,7 +61,11 @@
 //	func (appResolver) Schemes() []string { return []string{"app"} }
 //
 //	func (appResolver) Resolve(u *url.URL) (fetch.Source, error) {
-//		return appSource(path.Join("images", u.Path)), nil
+//		name := u.Opaque // app:logo.png
+//		if name == "" {
+//			name = u.Path // app:/logo.png, or a src relative to an app: document
+//		}
+//		return appSource(path.Join("images", name)), nil
 //	}
 //
 //	type appSource string

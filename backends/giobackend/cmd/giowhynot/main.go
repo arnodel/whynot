@@ -27,7 +27,7 @@ import (
 const initialWindowWidth, initialWindowHeight = 1024, 768
 
 func main() {
-	// Before any LoadDocument(WelcomeURL, ...) call - see its own doc
+	// Before the welcome page is first loaded - see its own doc
 	// comment on why this needs setting explicitly.
 	browser.AddressBarEditable = true
 

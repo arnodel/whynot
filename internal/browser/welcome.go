@@ -35,7 +35,7 @@ var Version = "dev"
 // typed into - false by default, since the welcome page is shared
 // between
 // cmd/whynot (read-only address bar) and backends/giobackend/cmd/giowhynot (editable); set
-// this to true before the first call to LoadDocument(WelcomeURL, ...)
+// this to true before the welcome page is first loaded
 // (i.e. at the very start of main) in a host whose address bar
 // actually is editable.
 var AddressBarEditable bool
