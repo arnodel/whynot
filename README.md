@@ -8,7 +8,9 @@ the user scroll through it and click its links. It draws through a small interfa
 than a particular graphics library, and it comes with backends for
 [Ebitengine](https://ebitengine.org/) and [Gio](https://gioui.org/).
 
-![whynot showing this README](assets/whynot-screenshot.png)
+Here is this README, displayed by whynot's own document viewer:
+
+![whynot's viewer displaying this README](assets/whynot-screenshot.png)
 
 - **Broad Markdown coverage.** Headings, emphasis, lists, tables, blockquotes, code
   blocks, images (including animated GIFs) and links are all supported. Anything whynot
