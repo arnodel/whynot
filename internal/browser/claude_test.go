@@ -2,6 +2,7 @@ package browser
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,11 +35,15 @@ func TestClaudeResolverChain(t *testing.T) {
 			t.Fatal(err)
 		}
 		requests = append(requests, body.Messages)
-		page := "# " + body.Messages[len(body.Messages)-1].Content + "\n\nSee [more](<claude:more on it>)."
-		json.NewEncoder(w).Encode(map[string]any{
-			"content":     []map[string]string{{"type": "text", "text": page}},
-			"stop_reason": "end_turn",
-		})
+		// The page in pieces, one splitting a link's destination.
+		for _, text := range []string{"# " + body.Messages[len(body.Messages)-1].Content, "\n\nSee [more](<claude:", "more on it>)."} {
+			delta, _ := json.Marshal(map[string]any{
+				"type":  "content_block_delta",
+				"delta": map[string]string{"type": "text_delta", "text": text},
+			})
+			fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", delta)
+		}
+		io.WriteString(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 	}))
 	defer server.Close()
 

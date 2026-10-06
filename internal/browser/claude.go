@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -91,27 +92,63 @@ type claudeSource struct {
 
 func (s claudeSource) Key() string { return s.request + "?from=" + s.from }
 
+// Fetch starts writing the page, and returns once Claude starts replying:
+// the body is the page's Markdown as it arrives. Closing the body, or
+// cancelling ctx, stops the request; the text so far is kept as the page.
 func (s claudeSource) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
 	r := s.resolver
-	markdown, err := r.generate(ctx, r.messages(s.request, s.from))
+	ctx, cancel := context.WithCancel(ctx)
+	resp, err := r.send(ctx, r.messages(s.request, s.from))
 	if err != nil {
+		cancel()
 		return nil, "", err
 	}
-	id := r.store(claudePage{request: s.request, markdown: markdown, from: s.from})
-	return io.NopCloser(strings.NewReader(rewriteClaudeLinks(markdown, id))), "text/markdown", nil
+	id := r.newID()
+	pr, pw := io.Pipe()
+	go func() {
+		defer resp.Body.Close()
+		var markdown strings.Builder
+		links := linkRewriter{w: pw, id: id}
+		err := readClaudeStream(resp.Body, func(text string) error {
+			markdown.WriteString(text)
+			return links.write(text)
+		})
+		if err == nil {
+			err = links.flush()
+		}
+		r.store(id, claudePage{request: s.request, markdown: markdown.String(), from: s.from})
+		pw.CloseWithError(err)
+	}()
+	return cancelOnClose{ReadCloser: pr, cancel: cancel}, "text/markdown", nil
 }
 
-// store keeps page and returns its new id.
-func (r *ClaudeResolver) store(page claudePage) string {
+// cancelOnClose is a body whose Close also cancels its request.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (c cancelOnClose) Close() error {
+	c.cancel()
+	return c.ReadCloser.Close()
+}
+
+// newID returns the id of a new page.
+func (r *ClaudeResolver) newID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	return fmt.Sprintf("p%d", r.nextID)
+}
+
+// store keeps page under id.
+func (r *ClaudeResolver) store(id string, page claudePage) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.pages == nil {
 		r.pages = map[string]claudePage{}
 	}
-	r.nextID++
-	id := fmt.Sprintf("p%d", r.nextID)
 	r.pages[id] = page
-	return id
 }
 
 type claudeMessage struct {
@@ -144,17 +181,27 @@ func (r *ClaudeResolver) messages(request, from string) []claudeMessage {
 	return append(msgs, claudeMessage{Role: "user", Content: request})
 }
 
-// generate sends msgs to the Messages API and returns the text of the
-// reply.
-func (r *ClaudeResolver) generate(ctx context.Context, msgs []claudeMessage) (string, error) {
+// claudeError is the error object of the Messages API, in an error
+// response or an error event.
+type claudeError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func (e *claudeError) Error() string { return "Messages API: " + e.Type + ": " + e.Message }
+
+// send makes a streaming request for msgs, and returns the response once
+// it starts.
+func (r *ClaudeResolver) send(ctx context.Context, msgs []claudeMessage) (*http.Response, error) {
 	body, err := json.Marshal(map[string]any{
 		"model":      r.Model,
 		"max_tokens": 16000,
 		"system":     claudeSystemPrompt,
 		"messages":   msgs,
+		"stream":     true,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	endpoint := r.Endpoint
 	if endpoint == "" {
@@ -162,7 +209,7 @@ func (r *ClaudeResolver) generate(ctx context.Context, msgs []claudeMessage) (st
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-api-key", r.APIKey)
@@ -173,43 +220,84 @@ func (r *ClaudeResolver) generate(ctx context.Context, msgs []claudeMessage) (st
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var reply struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		StopReason string `json:"stop_reason"`
-		Error      *struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
-		return "", fmt.Errorf("Messages API: %s: %w", resp.Status, err)
-	}
-	if reply.Error != nil {
-		return "", fmt.Errorf("Messages API: %s: %s", reply.Error.Type, reply.Error.Message)
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Messages API: %s", resp.Status)
+		defer resp.Body.Close()
+		var reply struct{ Error *claudeError }
+		if json.NewDecoder(resp.Body).Decode(&reply) == nil && reply.Error != nil {
+			return nil, reply.Error
+		}
+		return nil, fmt.Errorf("Messages API: %s", resp.Status)
 	}
-	if reply.StopReason == "refusal" {
-		return "", fmt.Errorf("Messages API: Claude declined to write this page")
-	}
-	var text strings.Builder
-	for _, block := range reply.Content {
-		if block.Type == "text" {
-			text.WriteString(block.Text)
+	return resp, nil
+}
+
+// readClaudeStream reads the server-sent events of a streaming reply,
+// calling text with each piece of the reply's text.
+func readClaudeStream(stream io.Reader, text func(string) error) error {
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(nil, 1<<20)
+	for scanner.Scan() {
+		data, ok := strings.CutPrefix(scanner.Text(), "data:")
+		if !ok {
+			continue
+		}
+		var event struct {
+			Type  string
+			Delta struct {
+				Type       string
+				Text       string
+				StopReason string `json:"stop_reason"`
+			}
+			Error *claudeError
+		}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			return fmt.Errorf("Messages API: %w", err)
+		}
+		var err error
+		switch {
+		case event.Type == "error" && event.Error != nil:
+			return event.Error
+		case event.Type == "content_block_delta" && event.Delta.Type == "text_delta":
+			err = text(event.Delta.Text)
+		case event.Type == "message_delta" && event.Delta.StopReason == "max_tokens":
+			err = text("\n\n*The page was cut off here.*\n")
+		case event.Type == "message_delta" && event.Delta.StopReason == "refusal":
+			err = text("\n\n*Claude declined to write this page.*\n")
+		}
+		if err != nil {
+			return err
 		}
 	}
-	if reply.StopReason == "max_tokens" {
-		text.WriteString("\n\n*The page was cut off here.*\n")
+	return scanner.Err()
+}
+
+// linkRewriter writes text to w with rewriteClaudeLinks applied, holding
+// back an unfinished link destination until the rest of it arrives.
+type linkRewriter struct {
+	w       io.Writer
+	id      string
+	pending string
+}
+
+func (l *linkRewriter) write(text string) error {
+	l.pending += text
+	cut := len(l.pending)
+	if i := strings.LastIndex(l.pending, "]("); i >= 0 && !strings.ContainsAny(l.pending[i:], ")\n") {
+		cut = i
+	} else if strings.HasSuffix(l.pending, "]") {
+		cut--
 	}
-	return text.String(), nil
+	_, err := io.WriteString(l.w, rewriteClaudeLinks(l.pending[:cut], l.id))
+	l.pending = l.pending[cut:]
+	return err
+}
+
+func (l *linkRewriter) flush() error {
+	_, err := io.WriteString(l.w, rewriteClaudeLinks(l.pending, l.id))
+	l.pending = ""
+	return err
 }
 
 // claudeLink matches the destination of an inline link to a claude: URL,

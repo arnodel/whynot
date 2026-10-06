@@ -55,11 +55,6 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	source, err := browser.LoadDocument(registry, location)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	styleSheet := simpletheme.DarkStyleSheet
 	if *light {
 		styleSheet = simpletheme.LightStyleSheet
@@ -67,7 +62,7 @@ func main() {
 
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
 	renderer := giobackend.New()
-	view := browserApp.NewView(source, location)
+	view := browserApp.NewView(nil, location)
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel
 	panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
@@ -78,7 +73,9 @@ func main() {
 	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
 	browserApp.OnTitleChange = func(title string) { win.Option(app.Title(title)) }
-	browserApp.Open(location)
+	if err := browserApp.Open(location); err != nil {
+		log.Fatal(err)
+	}
 
 	go func() {
 		if err := run(win, browserApp, doc, tb); err != nil {
@@ -103,6 +100,11 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			outsideWidth := int(float64(e.Size.X) / deviceScale)
 			outsideHeight := int(float64(e.Size.Y) / deviceScale)
 			browserApp.Relayout(outsideWidth, outsideHeight, deviceScale, toolbarHeight)
+			browserApp.Update()
+			// Gio only produces frames when something happens.
+			if browserApp.Loading() {
+				gtx.Execute(op.InvalidateCmd{})
+			}
 			tb.dpi = deviceScale * 72
 
 			tb.update(gtx, browserApp)

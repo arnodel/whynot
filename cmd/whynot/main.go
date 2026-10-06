@@ -56,14 +56,6 @@ func main() {
 			panic(err)
 		}
 	}
-	if location.Scheme == "claude" {
-		log.Printf("generating %s…", location)
-	}
-	source, err := browser.LoadDocument(registry, location)
-	if err != nil {
-		panic(err)
-	}
-
 	ebiten.SetWindowSize(initialWindowWidth, initialWindowHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
@@ -88,7 +80,7 @@ func main() {
 	}
 	g.applyDeviceScale()
 
-	view := app.NewView(source, location)
+	view := app.NewView(nil, location)
 	initialHeight := int(float64(initialWindowHeight) * scale)
 	g.panel = whynot.NewPanel(view, image.Rect(0, g.toolbarHeight, g.width, initialHeight))
 	g.panel.SetScrollbar(true)
@@ -98,7 +90,9 @@ func main() {
 	g.relayout()
 	g.panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
 
-	app.Open(location)
+	if err := app.Open(location); err != nil {
+		log.Fatal(err)
+	}
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}

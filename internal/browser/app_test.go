@@ -3,14 +3,18 @@
 package browser
 
 import (
+	"context"
 	"image"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
 	"github.com/arnodel/whynot/styles/simpletheme"
@@ -640,5 +644,62 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 
 	if gotTitle != "Untitled document" {
 		t.Errorf("OnTitleChange title for a heading-less document = %q, want \"Untitled document\"", gotTitle)
+	}
+}
+
+// pipeResolver serves slow: documents from a pipe the test writes to,
+// recording whether the fetch was cancelled.
+type pipeResolver struct {
+	r         *io.PipeReader
+	cancelled chan struct{}
+}
+
+func (*pipeResolver) Schemes() []string { return []string{"slow"} }
+
+func (p *pipeResolver) Resolve(*url.URL) (fetch.Source, error) { return p, nil }
+
+func (p *pipeResolver) Key() string { return "" }
+
+func (p *pipeResolver) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
+	go func() {
+		<-ctx.Done()
+		close(p.cancelled)
+	}()
+	return p.r, "text/markdown", nil
+}
+
+// TestAppShowsDocumentAsItArrives follows a link to a document that
+// arrives in pieces, checks Update shows each piece, then goes Back and
+// checks the load was cancelled.
+func TestAppShowsDocumentAsItArrives(t *testing.T) {
+	dir := t.TempDir()
+	start := writeTempMD(t, dir, "a.md", "# Doc A\n")
+	r, w := io.Pipe()
+	res := &pipeResolver{r: r, cancelled: make(chan struct{})}
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, res))
+	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
+	app.Relayout(testWidth, testHeight, 1, 0)
+	if err := app.Open(start); err != nil {
+		t.Fatal(err)
+	}
+
+	go io.WriteString(w, "# Doc B\n")
+	app.Follow("slow:b")
+	if !app.Loading() {
+		t.Fatal("Loading() = false while the document is still arriving")
+	}
+	for title := ""; title != "Doc B"; title, _ = app.Panel.View().Document().Title() {
+		app.builtAt = time.Time{}
+		app.Update()
+	}
+
+	app.Back()
+	if app.Loading() {
+		t.Error("Loading() = true after going Back")
+	}
+	select {
+	case <-res.cancelled:
+	case <-time.After(time.Second):
+		t.Error("going Back didn't cancel the load")
 	}
 }

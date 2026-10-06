@@ -81,6 +81,9 @@ func LoadDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
 	return fetchDocument(registry, location)
 }
 
+// loadError is err: only the browser build changes it (see load_js.go).
+func loadError(err error, _ *url.URL) error { return err }
+
 // NewRegistry returns what documents, and the images in them, can be
 // fetched from: http(s), the welcome page and its bundled files, and
 // local files - beneath root, or with a nil root, anywhere on the volume

@@ -107,6 +107,13 @@ type App struct {
 	// Every method below that reads or replaces a.Panel.View() checks
 	// this first, since that's the TOC, not the document, while it's set.
 	tocDocView *whynot.View
+
+	// loader is the current document's body while it's still arriving:
+	// Update shows it as it does. loadFragment is the fragment to scroll
+	// to once it's complete, and builtAt when Update last rebuilt it.
+	loader       *loader
+	loadFragment string
+	builtAt      time.Time
 }
 
 // NewApp constructs an App with no Panel yet and no current location -
@@ -124,13 +131,22 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 	}
 }
 
-// Open makes location the current document - for the very first
-// document only, after Panel has been assigned (it reads
-// Panel.View().Document().Title()); every later navigation goes through Follow/
-// Reload/Paste/Back/Forward instead, which also push history.
-func (a *App) Open(location *url.URL) {
+// Open loads location as the current document - for the very first
+// document only, after Panel has been assigned, with any View; every
+// later navigation goes through Follow/Reload/Paste/Back/Forward instead,
+// which also push history.
+func (a *App) Open(location *url.URL) error {
+	view, err := a.load(location)
+	if err != nil {
+		return err
+	}
+	a.Panel.SetView(view)
+	if location.Fragment != "" {
+		scrollToFragment(view, location.Fragment)
+	}
 	a.location = location
 	a.updateWindowTitle()
+	return nil
 }
 
 // Location returns where the current document was loaded from.
@@ -216,7 +232,11 @@ func (a *App) updateWindowTitle() {
 		view = a.tocDocView
 	}
 	title, ok := view.Document().Title()
-	if !ok {
+	switch {
+	case ok:
+	case a.loader != nil:
+		title = "Loading…"
+	default:
 		title = "Untitled document"
 	}
 	if a.tocDocView != nil {
@@ -243,12 +263,21 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 // chromahighlight.Plugin for syntax-colored code (and a diagram's source
 // while it loads).
 func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
-	doc := whynot.Parse(source,
+	return a.newView(source, location, true)
+}
+
+// newView is NewView, with diagrams only if diagrams is set: a
+// document still arriving leaves them out, as each version of an
+// unfinished diagram would be fetched.
+func (a *App) newView(source []byte, location *url.URL, diagrams bool) *whynot.View {
+	opts := []whynot.ParseOption{
 		whynot.WithBaseURL(location),
 		whynot.WithImageRegistry(a.registry),
-		whynot.WithCodeBlockPlugin(kroki.Plugin{}),
-		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
-	)
+	}
+	if diagrams {
+		opts = append(opts, whynot.WithCodeBlockPlugin(kroki.Plugin{}))
+	}
+	doc := whynot.Parse(source, append(opts, whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}))...)
 	return whynot.NewView(
 		doc,
 		whynot.WithFaceSelector(a.faceSelector),
@@ -307,6 +336,7 @@ func (a *App) follow(resolved *url.URL) {
 		}
 		a.pushHistory()
 		scrollToFragment(a.Panel.View(), resolved.Fragment)
+		a.loadFragment = ""
 		// resolved (unlike a.location) carries the fragment, so a
 		// caller's address bar reflects the jump even though the
 		// document itself didn't change.
@@ -314,14 +344,13 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	source, err := a.load(resolved)
+	view, err := a.load(resolved)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)
 		}
 		return
 	}
-	view := a.NewView(source, resolved)
 	a.place(view)
 	if resolved.Fragment != "" {
 		scrollToFragment(view, resolved.Fragment)
@@ -332,19 +361,74 @@ func (a *App) follow(resolved *url.URL) {
 	a.updateWindowTitle()
 }
 
-// load is LoadDocument through a's registry. A claude: page takes a
-// while to generate, so the window title says so meanwhile.
-func (a *App) load(location *url.URL) ([]byte, error) {
-	if location.Scheme != "claude" || a.OnTitleChange == nil {
-		return LoadDocument(a.registry, location)
-	}
-	a.OnTitleChange("Generating…")
-	source, err := LoadDocument(a.registry, location)
+// load starts loading location, stopping the current document's load
+// if it succeeds, and returns a View of what has arrived so far: Update
+// shows the rest as it arrives.
+func (a *App) load(location *url.URL) (*whynot.View, error) {
+	l, err := startLoad(a.registry, location)
 	if err != nil {
-		a.updateWindowTitle()
+		return nil, loadError(err, location)
 	}
-	return source, err
+	a.stopLoading()
+	a.loader = l
+	a.loadFragment = location.Fragment
+	return a.build(), nil
 }
+
+// stopLoading stops the current document's load, if any.
+func (a *App) stopLoading() {
+	if a.loader != nil {
+		a.loader.cancel()
+		a.loader = nil
+	}
+}
+
+// build returns a View of the current load's body so far, or nil if it
+// hasn't changed since the last build. Once the body is complete, the
+// load is over.
+func (a *App) build() *whynot.View {
+	location := a.loader.location
+	data, done, changed, err := a.loader.take()
+	if !changed {
+		return nil
+	}
+	if err != nil {
+		log.Printf("loading %s: %v", location, err)
+	}
+	if done {
+		a.loader = nil
+	}
+	a.builtAt = time.Now()
+	return a.newView(data, location, done)
+}
+
+// rebuildInterval is how often Update rebuilds a document that's still
+// arriving.
+const rebuildInterval = 100 * time.Millisecond
+
+// Update shows more of the current document while it's still arriving.
+// Call it once a frame; Loading reports whether it has anything to do.
+// While the TOC is showing, it waits until it's hidden.
+func (a *App) Update() {
+	if a.loader == nil || a.tocDocView != nil || time.Since(a.builtAt) < rebuildInterval {
+		return
+	}
+	view := a.build()
+	if view == nil {
+		return
+	}
+	a.place(view)
+	view.RestoreScrollPosition(a.Panel.View().ScrollPosition())
+	if a.loader == nil && a.loadFragment != "" {
+		scrollToFragment(view, a.loadFragment)
+		a.loadFragment = ""
+	}
+	a.Panel.SetView(view)
+	a.updateWindowTitle()
+}
+
+// Loading reports whether the current document is still arriving.
+func (a *App) Loading() bool { return a.loader != nil }
 
 // openIfWebPage opens location in a web browser if err says it's a web
 // page rather than Markdown (see webPageError), reporting whether it did.
@@ -425,6 +509,7 @@ func (a *App) Forward() {
 // so each rebuild's ratio-preserving cursor logic works from the right
 // position.
 func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
+	a.stopLoading()
 	current := a.Panel.View()
 	*undoStack = append(*undoStack, historyEntry{
 		document: document{location: a.location, view: current},
@@ -445,7 +530,7 @@ func (a *App) Reload() {
 	if a.tocDocView != nil {
 		return
 	}
-	source, err := a.load(a.location)
+	view, err := a.load(a.location)
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)
@@ -453,7 +538,6 @@ func (a *App) Reload() {
 		return
 	}
 	scroll := a.Panel.View().ScrollPosition()
-	view := a.NewView(source, a.location)
 	a.place(view)
 	view.RestoreScrollPosition(scroll)
 	a.Panel.SetView(view)
@@ -495,7 +579,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 
-	source, err := a.load(resolved)
+	view, err := a.load(resolved)
 	if err != nil {
 		if openIfWebPage(err, resolved) {
 			return nil
@@ -503,7 +587,6 @@ func (a *App) Navigate(text string) error {
 		log.Printf("loading %s: %v", resolved, err)
 		return err
 	}
-	view := a.NewView(source, resolved)
 	a.place(view)
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
