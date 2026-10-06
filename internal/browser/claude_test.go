@@ -26,13 +26,20 @@ func TestRewriteClaudeLinks(t *testing.T) {
 }
 
 // TestClaudeResolverChain follows a link from one generated page to the
-// next, and checks the second request sends the first page as context.
+// next, and checks the second request sends the first page as context,
+// and that every request sends the reader's instructions.
 func TestClaudeResolverChain(t *testing.T) {
 	var requests [][]claudeMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body struct{ Messages []claudeMessage }
+		var body struct {
+			System   string
+			Messages []claudeMessage
+		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
+		}
+		if !strings.HasPrefix(body.System, claudeSystemPrompt) || !strings.HasSuffix(body.System, "Write for a 10-year-old.") {
+			t.Errorf("system prompt = %q, want the built-in one, then the reader's instructions", body.System)
 		}
 		requests = append(requests, body.Messages)
 		// The page in pieces, one splitting a link's destination.
@@ -47,7 +54,7 @@ func TestClaudeResolverChain(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := NewRegistry(nil, &ClaudeResolver{Endpoint: server.URL})
+	registry := NewRegistry(nil, &ClaudeResolver{Endpoint: server.URL, Instructions: "Write for a 10-year-old."})
 	first, err := url.Parse("claude:the 1919 eclipse")
 	if err != nil {
 		t.Fatal(err)

@@ -30,6 +30,7 @@ func main() {
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
 	claudeModel := flag.String("claude-model", "claude-sonnet-5", "the model that writes claude: pages, when ANTHROPIC_API_KEY is set")
+	claudeInstructions := flag.String("claude-instructions", "", "a file of instructions for the claude: pages: their style, audience or subject, for example")
 	flag.Parse()
 
 	var root *os.Root
@@ -41,7 +42,14 @@ func main() {
 	}
 	var extra []fetch.Resolver
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		extra = append(extra, &browser.ClaudeResolver{APIKey: key, Model: *claudeModel})
+		var instructions []byte
+		if *claudeInstructions != "" {
+			var err error
+			if instructions, err = os.ReadFile(*claudeInstructions); err != nil {
+				log.Fatal(err)
+			}
+		}
+		extra = append(extra, &browser.ClaudeResolver{APIKey: key, Model: *claudeModel, Instructions: string(instructions)})
 	}
 	registry := browser.NewRegistry(root, extra...)
 

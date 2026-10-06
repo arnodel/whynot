@@ -30,6 +30,10 @@ type ClaudeResolver struct {
 	APIKey string
 	// Model is the model ID, such as "claude-sonnet-5".
 	Model string
+	// Instructions, if any, are the reader's: about the pages' style,
+	// audience or subject, for example. They come after the built-in
+	// ones, which they can override, except for how to write links.
+	Instructions string
 	// Endpoint is the Messages API URL; empty means Anthropic's.
 	Endpoint string
 	// Client makes the requests; nil means one with claudeTimeout.
@@ -181,6 +185,15 @@ func (r *ClaudeResolver) messages(request, from string) []claudeMessage {
 	return append(msgs, claudeMessage{Role: "user", Content: request})
 }
 
+// systemPrompt returns the built-in instructions, followed by the
+// reader's, if any.
+func (r *ClaudeResolver) systemPrompt() string {
+	if strings.TrimSpace(r.Instructions) == "" {
+		return claudeSystemPrompt
+	}
+	return claudeSystemPrompt + "\n\nThe reader's instructions follow. They take precedence over the ones above, except for how to write links to further pages.\n\n" + r.Instructions
+}
+
 // claudeError is the error object of the Messages API, in an error
 // response or an error event.
 type claudeError struct {
@@ -196,7 +209,7 @@ func (r *ClaudeResolver) send(ctx context.Context, msgs []claudeMessage) (*http.
 	body, err := json.Marshal(map[string]any{
 		"model":      r.Model,
 		"max_tokens": 16000,
-		"system":     claudeSystemPrompt,
+		"system":     r.systemPrompt(),
 		"messages":   msgs,
 		"stream":     true,
 	})
