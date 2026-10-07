@@ -28,7 +28,7 @@ func absFileURL(path string) (*url.URL, error) {
 // ResolveLocationArg turns text - a command-line argument, an edited
 // address bar, or pasted clipboard content (see App.Paste) - into a
 // location to load. It extracts an explicit protocol first (the word
-// "welcome" for the built-in welcome page, http(s) and claude: as-is, file: checked
+// "welcome" for the built-in welcome page, http(s), claude: and lua: as-is, file: checked
 // against the local filesystem the same way a bare path is below) -
 // only once text has none does it guess: an existing local file path
 // turned into an absolute file: URL, or - if it instead looks like a
@@ -47,7 +47,7 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 
 	if u, err := url.Parse(text); err == nil && len(u.Scheme) > 1 {
 		switch u.Scheme {
-		case "http", "https", "claude":
+		case "http", "https", "claude", "lua":
 			return u, nil
 		case "file":
 			path := u.Path

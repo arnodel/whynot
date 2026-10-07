@@ -102,7 +102,7 @@ func (s claudeSource) Key() string { return s.request + "?from=" + s.from }
 func (s claudeSource) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
 	r := s.resolver
 	ctx, cancel := context.WithCancel(ctx)
-	resp, err := r.send(ctx, r.messages(s.request, s.from))
+	resp, err := r.send(ctx, r.systemPrompt(), r.messages(s.request, s.from), 16000)
 	if err != nil {
 		cancel()
 		return nil, "", err
@@ -205,11 +205,11 @@ func (e *claudeError) Error() string { return "Messages API: " + e.Type + ": " +
 
 // send makes a streaming request for msgs, and returns the response once
 // it starts.
-func (r *ClaudeResolver) send(ctx context.Context, msgs []claudeMessage) (*http.Response, error) {
+func (r *ClaudeResolver) send(ctx context.Context, system string, msgs []claudeMessage, maxTokens int) (*http.Response, error) {
 	body, err := json.Marshal(map[string]any{
 		"model":      r.Model,
-		"max_tokens": 16000,
-		"system":     r.systemPrompt(),
+		"max_tokens": maxTokens,
+		"system":     system,
 		"messages":   msgs,
 		"stream":     true,
 	})

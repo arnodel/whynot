@@ -40,7 +40,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	var extra []fetch.Resolver
+	luaResolver := &browser.LuaResolver{}
+	extra := []fetch.Resolver{luaResolver}
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		var instructions []byte
 		if *claudeInstructions != "" {
@@ -49,7 +50,9 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		extra = append(extra, &browser.ClaudeResolver{APIKey: key, Model: *claudeModel, Instructions: string(instructions)})
+		claude := &browser.ClaudeResolver{APIKey: key, Model: *claudeModel, Instructions: string(instructions)}
+		luaResolver.Claude = claude
+		extra = append(extra, claude)
 	}
 	registry := browser.NewRegistry(root, extra...)
 
