@@ -121,6 +121,10 @@ local function choices(state)
 end
 
 function page(request, state)
+  if request.restart then
+    for k in pairs(state) do state[k] = nil end
+    request = {}
+  end
   if not state.scene then
     state.scene, state.stamina, state.items, state.story = "shore", 3, {}, {}
   end
@@ -132,12 +136,12 @@ function page(request, state)
 
   if state.stamina <= 0 then
     out("You sink down against the cold stone, too hurt to go on. Out on the reef, a ship's timbers split.\n\n",
-        "**The End.** ", "[Try again](lua:examples/lua/lighthouse.lua)\n")
+        "**The End.** ", link("Try again", {restart = 1}), "\n")
     return
   end
   if state.won then
     out("The beacon blazes out over the water. The ship's lights turn, slowly, away from the reef.\n\n",
-        "**You've won.** ", "[Play again](lua:examples/lua/lighthouse.lua)\n")
+        "**You've won.** ", link("Play again", {restart = 1}), "\n")
     return
   end
 
