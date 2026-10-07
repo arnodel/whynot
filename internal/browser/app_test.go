@@ -756,3 +756,24 @@ func TestCodeFence(t *testing.T) {
 		t.Errorf("codeFence = %q, want %q", got, want)
 	}
 }
+
+// TestAppShowSourceOfPassages checks that a passage file's source shows
+// as Markdown, and that following one of its links scrolls the source
+// rather than closing it.
+func TestAppShowSourceOfPassages(t *testing.T) {
+	start := writeScriptFile(t, "game.md", "# Start\n\n[Next](#next)\n\n# Next\n\nThe end.\n")
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, &LuaResolver{}))
+	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
+	app.Relayout(testWidth, testHeight, 1, 0)
+	if err := app.Open(start); err != nil {
+		t.Fatal(err)
+	}
+	app.ShowSource()
+	if want := "## Script\n\n# Start\n\n[Next](#next)"; !strings.Contains(app.sourceMarkdown(), want) {
+		t.Errorf("source = %q, want the script as Markdown: %q", app.sourceMarkdown(), want)
+	}
+	app.Follow("#next")
+	if !app.SourceShowing() {
+		t.Error("following a link in the source closed it")
+	}
+}

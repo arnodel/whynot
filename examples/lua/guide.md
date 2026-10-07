@@ -2,15 +2,23 @@
 
 whynot can show pages that a Lua script writes, instead of a Markdown file. Each time the reader follows a link, the script writes the next page. That's enough for gamebooks, quizzes, puzzles, and anything else made of pages and choices. A script can also ask Claude to write some of the text.
 
-This guide is for anyone writing such a script, person or Claude. [lighthouse.lua](lighthouse.lua) is a complete example.
+A game can be written two ways:
+
+- **as a Lua script,** where code writes each page; [lighthouse.lua](lighthouse.lua) is a complete example;
+- **as a passage file:** Markdown, where each heading is a page, with a little code where it's needed; [clockmaker.md](clockmaker.md) is a complete example.
+
+Both work the same way underneath, and this guide starts with scripts, which explain how. [Passage files](#passage-files) are near the end.
+
+This guide is for anyone writing a game, person or Claude.
 
 ## Running a script
 
 ```sh
 whynot lua:path/to/game.lua
+whynot lua:path/to/game.md
 ```
 
-The path is relative to the directory whynot runs in, or absolute. The scripts in this guide need nothing else. To let them use Claude, set `ANTHROPIC_API_KEY` (see [Asking Claude](#asking-claude)).
+A path ending in `.md` is a passage file; anything else is a Lua script. The path is relative to the directory whynot runs in, or absolute. The scripts in this guide need nothing else. To let them use Claude, set `ANTHROPIC_API_KEY` (see [Asking Claude](#asking-claude)).
 
 When you edit the script, press Reload: every page runs the latest version of the file.
 
@@ -43,19 +51,23 @@ out(link("Go north", {go = "north"}))   --> [Go north](?go=north)
 
 You can also write such links by hand, as `[Go north](?go=north)`. A link only carries a request if its destination starts with `?`.
 
-In `page`, the request's values are always **strings**: use `tonumber` for numbers. The first page's request is empty, `{}`. Don't use the key `s`: whynot uses it to carry the state.
+In `page`, the request's values are always **strings**: use `tonumber` for numbers. The first page's request is empty, `{}`. Don't use the key `s`: whynot uses it to carry the state. A link that sets `s` to nothing, `[Play again](?s=)`, starts over: see [State](#state).
 
 A link can also lead elsewhere, but then it carries no state: `[Notes](https://example.com)`, or `[Another game](lua:other.lua)`.
 
 ## State
 
-On the first page, `state` is empty. Set it up there:
+On the first page, `state` is empty. If the script defines `init`, whynot calls it first, and what it returns becomes the state:
 
 ```lua
-if not state.room then
-  state.room, state.stamina, state.items = "shore", 3, {}
+function init()
+  return {room = "shore", stamina = 3, items = {}}
 end
 ```
+
+whynot calls `init` whenever the state is empty, so also after a restart, or when someone types a URL with a request straight into the address bar. If `init` returns nothing, the state is what it left in `state`.
+
+To start over, link with an empty `s`: `[Play again](?s=)`. Such a link carries no state, so `init` runs again.
 
 Change `state` as you like during `page`. When `page` finishes, whynot keeps the page's state, and every link on the page continues from it. In practice:
 
@@ -66,15 +78,7 @@ Change `state` as you like during `page`. When `page` finishes, whynot keeps the
 What `state` can hold:
 
 - Only plain data: `nil`, booleans, numbers, strings, and tables of those, nested up to 100 deep. Table keys can be strings, numbers or booleans. A function in `state` is an error.
-- Change the table you're given; don't replace it. `state = {}` only changes your local variable. To start over, empty it:
-
-  ```lua
-  if request.restart then
-    for k in pairs(state) do state[k] = nil end
-  end
-  ```
-
-  Then `link("Play again", {restart = 1})` restarts the game. This is better than a link to the script's URL, which depends on where whynot was started.
+- In `page`, change the table you're given; don't replace it. `state = {}` only changes your local variable.
 
 **Only `state` lasts.** Each page runs the script from scratch, in a fresh Lua, so global variables set in one page are gone by the next. Use globals for things that never change, such as a table describing the rooms, and `state` for everything that does.
 
@@ -156,10 +160,79 @@ else
 end
 ```
 
+## Passage files
+
+A passage file is a game written as Markdown. It reads well as an ordinary document, on GitHub, say, and whynot plays it. Here's a small one:
+
+````markdown
+```lua
+function init()
+  return {tries = 0}
+end
+```
+
+# The door
+
+An oak door, swollen with salt. You've tried it `= state.tries` times.
+
+- [Force it](#force-it)
+- [Walk away](#the-end)
+
+# Force it
+
+`state.tries = state.tries + 1`
+`if math.random(6) >= 5 then`
+The lock gives way. [Go in](#the-end)
+`else`
+It doesn't move.
+
+`show("the-door")`
+`end`
+
+# The end
+
+That's all. [Play again](?s=)
+````
+
+**Passages.** Each level-1 heading starts a passage, which is a page, up to the next level-1 heading. The heading is the page's title. The first passage is where the game starts. Lower headings are just part of a passage.
+
+**Links.** A link to a passage is a link to its heading, as in any Markdown document: `[Force it](#force-it)`. The heading's id is its text in lower case, with spaces turned into hyphens and punctuation dropped; it's the same id that GitHub, or whynot showing the file as a document, would give it. Links to passages carry the state, like the query links of scripts, and other links work as in scripts.
+
+**Code in backquotes runs.** In a passage:
+
+- `` `= expr` `` writes expr's value; `nil` writes nothing.
+- Any other single-backquote span is Lua statements: `` `state.tries = state.tries + 1` ``, `` `if has("key") then` ``, `` `else` ``, `` `end` ``.
+- A line holding only statements disappears, so control flow around list items or paragraphs leaves no gaps.
+- A span with two or more backquotes, ``` `` like this `` ```, is shown as code and doesn't run. So is anything in a code block other than lua and claude ones.
+- Code spans don't reach across lines. For several lines of code, use a lua block.
+
+**Lua blocks** (```` ```lua ````) run where they are, and aren't shown. Before the first heading, only lua blocks are allowed: they run before every page, with `state` and `request` set, so that's the place for `init`, helper functions, tables that describe the world, and `claude.system`. A `local` there can be used in every passage.
+
+**`show("id")`** writes another passage where it's called, running its code, without its heading. Use it to end an action with the place it leads to, as "Force it" shows the door again.
+
+**Claude blocks** (```` ```claude ````) ask Claude to write their text, the prompt, and show the reply where the block is. Code spans run in the prompt too:
+
+````markdown
+```claude
+Describe the cellar as the hero walks in.
+`if state.lamp then`
+The hero carries a lit lamp.
+`end`
+```
+````
+
+For `context`, `history` or `claude.ask`, call `claude{…}` in Lua as in a script, in a lua block or a code span. `claude{…}` shows its own text, so call it in a statement, `` `claude{…}` ``, not in `` `= …` ``, which would show it twice. To make a claude block optional, put `` `if claude.available then` `` and `` `end` `` around it.
+
+**Inside the passage's code**, `state` and `request` are the page's, and `passage` is the current passage's id. Each passage is a Lua function, so a `return` in a statement span, such as `` `if not ok then show("too-late") return end` ``, ends the passage there.
+
+**Errors** give the file's own line numbers, as in `game.md:42`.
+
+**Cmd-U** (Ctrl-U elsewhere) shows the file next to the page it wrote, rendered as Markdown, with its links to passages working.
+
 ## Writing a game with Claude
 
 Claude can write a whole game: give it this guide, and ask for one. For example:
 
-> Following this guide, write a whynot Lua gamebook: a heist in a Venetian palazzo during Carnival. Ten to fifteen scenes, an inventory, two ways to win and a few ways to lose, dice for risky actions, and claude{} for atmosphere.
+> Following this guide, write a whynot passage file: a heist in a Venetian palazzo during Carnival. Ten to fifteen passages, an inventory, two ways to win and a few ways to lose, dice for risky actions, and claude blocks for atmosphere.
 
-Save its script as a `.lua` file and open it with `whynot lua:heist.lua`. If something breaks, the error at the bottom of the page is usually enough for Claude to fix it.
+Save it as a `.md` file (or a `.lua` one, if you asked for a script) and open it with `whynot lua:heist.md`. If something breaks, the error at the bottom of the page is usually enough for Claude to fix it.

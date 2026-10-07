@@ -326,6 +326,11 @@ func (a *App) FollowAnchor(id string) {
 
 // follow is Follow once dest is resolved.
 func (a *App) follow(resolved *url.URL) {
+	if a.overlay == sourceOverlay && samePage(a.location, resolved) {
+		// A passage file's own links, in its source.
+		scrollToFragment(a.Panel.View(), resolved.Fragment)
+		return
+	}
 	if a.overlaid != nil {
 		docView := a.overlaid
 		a.pushHistoryFor(a.location, docView)

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -94,6 +95,21 @@ local function escape(s)
   end))
 end
 
+function __value(x)
+  if x ~= nil then out(x) end
+end
+
+function __capture(f)
+  local saved, parts = out, {}
+  out = function(...)
+    for i = 1, select("#", ...) do parts[#parts + 1] = tostring((select(i, ...))) end
+  end
+  local ok, err = pcall(f)
+  out = saved
+  if not ok then error(err, 0) end
+  return table.concat(parts)
+end
+
 function link(text, request)
   local keys = {}
   for k in pairs(request or {}) do keys[#keys + 1] = k end
@@ -163,7 +179,17 @@ func (s luaSource) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
 	pr, pw := io.Pipe()
 	go func() {
 		out := &luaLinks{w: pw, id: id}
-		state, err := r.run(ctx, s.script, source, s.request, start, out)
+		var state any
+		code := string(source)
+		if strings.HasSuffix(strings.ToLower(s.script), ".md") {
+			code, out.passages, err = compilePassages(source)
+			if err != nil {
+				err = fmt.Errorf("%s: %w", s.script, err)
+			}
+		}
+		if err == nil {
+			state, err = r.run(ctx, s.script, []byte(code), s.request, start, out)
+		}
 		if err == nil {
 			r.set(id, state)
 		} else if ctx.Err() == nil {
@@ -218,6 +244,14 @@ func (r *LuaResolver) run(ctx context.Context, name string, source []byte, reque
 		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, outFn, claudeFn)
 		lr.SetEnv(env, "__claude_available", rt.BoolValue(r.Claude != nil))
 
+		req := rt.NewTable()
+		for k, v := range request {
+			req.Set(rt.StringValue(k), rt.StringValue(v))
+		}
+		stateValue := toLua(state)
+		lr.SetEnv(env, "request", rt.TableValue(req))
+		lr.SetEnv(env, "state", stateValue)
+
 		thread := lr.MainThread()
 		for _, chunk := range []struct {
 			name   string
@@ -235,11 +269,16 @@ func (r *LuaResolver) run(ctx context.Context, name string, source []byte, reque
 		if page.IsNil() {
 			return errors.New("the script defines no page function")
 		}
-		req := rt.NewTable()
-		for k, v := range request {
-			req.Set(rt.StringValue(k), rt.StringValue(v))
+		if init := env.Get(rt.StringValue("init")); !init.IsNil() && len(state.(*luaTable).keys) == 0 {
+			fresh, err := rt.Call1(thread, init)
+			if err != nil {
+				return err
+			}
+			if !fresh.IsNil() {
+				stateValue = fresh
+				lr.SetEnv(env, "state", stateValue)
+			}
 		}
-		stateValue := toLua(state)
 		result, err := rt.Call1(thread, page, rt.TableValue(req), stateValue)
 		if err != nil {
 			return err
@@ -474,28 +513,55 @@ func toJSON(data any) any {
 	return object
 }
 
-// luaLinks writes a page to w, adding s=<id> to its query-only links, so
-// that they continue from the page's state.
+// luaLinks writes a page to w, adding s=<id> to its query-only links
+// that have no s, so that they continue from the page's state. In a
+// passage file, it first turns links to a passage's heading, #id, into
+// links to the passage, ?p=id.
 type luaLinks struct {
-	w       io.Writer
-	id      string
-	pending string // the end of what was written, which may be the start of "](?"
+	w        io.Writer
+	id       string
+	passages map[string]bool
+	pending  string // the end of what was written, which may be an unfinished link
 }
+
+var (
+	luaQueryLink   = regexp.MustCompile(`\]\(\?[^)\s]*`)
+	luaPassageLink = regexp.MustCompile(`\]\(#[^)\s]*`)
+)
 
 func (l *luaLinks) Write(p []byte) (int, error) {
 	l.pending += string(p)
 	cut := len(l.pending)
-	if strings.HasSuffix(l.pending, "](") {
-		cut -= 2
+	if i := strings.LastIndex(l.pending, "]("); i >= 0 && !strings.ContainsAny(l.pending[i:], ")\n") {
+		cut = i
 	} else if strings.HasSuffix(l.pending, "]") {
 		cut--
 	}
-	_, err := io.WriteString(l.w, strings.ReplaceAll(l.pending[:cut], "](?", "](?s="+l.id+"&"))
+	_, err := io.WriteString(l.w, l.rewrite(l.pending[:cut]))
 	l.pending = l.pending[cut:]
 	return len(p), err
 }
 
 func (l *luaLinks) flush() {
-	io.WriteString(l.w, strings.ReplaceAll(l.pending, "](?", "](?s="+l.id+"&"))
+	io.WriteString(l.w, l.rewrite(l.pending))
 	l.pending = ""
+}
+
+func (l *luaLinks) rewrite(s string) string {
+	s = luaPassageLink.ReplaceAllStringFunc(s, func(m string) string {
+		if id := m[3:]; l.passages[id] {
+			return "](?p=" + id
+		}
+		return m
+	})
+	return luaQueryLink.ReplaceAllStringFunc(s, func(m string) string {
+		query := m[3:]
+		if q, err := url.ParseQuery(query); err == nil && q.Has("s") {
+			return m
+		}
+		if query == "" {
+			return "](?s=" + l.id
+		}
+		return "](?s=" + l.id + "&" + query
+	})
 }

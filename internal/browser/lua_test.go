@@ -18,7 +18,14 @@ import (
 // lua: URL.
 func writeScript(t *testing.T, source string) *url.URL {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "script.lua")
+	return writeScriptFile(t, "script.lua", source)
+}
+
+// writeScriptFile writes source to a temporary file called name and
+// returns its lua: URL.
+func writeScriptFile(t *testing.T, name, source string) *url.URL {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +186,7 @@ func TestLuaLinks(t *testing.T) {
 		l.Write([]byte(s))
 	}
 	l.flush()
-	if want := "[a](?s=7&x=1) [b](?s=7&y=2) [c](https://example.com) [d](?s=7&)"; b.String() != want {
+	if want := "[a](?s=7&x=1) [b](?s=7&y=2) [c](https://example.com) [d](?s=7)"; b.String() != want {
 		t.Errorf("rewritten = %q, want %q", b.String(), want)
 	}
 }

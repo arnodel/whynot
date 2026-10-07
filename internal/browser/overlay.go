@@ -61,7 +61,8 @@ func (a *App) ToggleSource() {
 
 // ShowSource shows the current document's source, as an overlay like
 // the TOC: its Markdown as it was shown, and for a lua: page, its
-// script too. It replaces the TOC, if that's showing.
+// script too, which for a passage file is shown as Markdown, with its
+// links to passages working. It replaces the TOC, if that's showing.
 func (a *App) ShowSource() {
 	if a.overlay == sourceOverlay {
 		return
@@ -75,15 +76,23 @@ func (a *App) ShowSource() {
 func (a *App) sourceMarkdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Source\n\n%s\n\n", codeFence("text", a.location.String()))
+	var script []byte
 	if a.location.Scheme == "lua" {
-		script, err := os.ReadFile(luaScriptPath(a.location))
-		if err != nil {
+		var err error
+		if script, err = os.ReadFile(luaScriptPath(a.location)); err != nil {
 			log.Printf("reading %s's script: %v", a.location, err)
-		} else {
-			fmt.Fprintf(&b, "## Script\n\n%s\n\n## Page\n\n", codeFence("lua", string(script)))
 		}
 	}
+	passages := strings.HasSuffix(strings.ToLower(luaScriptPath(a.location)), ".md")
+	if script != nil && !passages {
+		fmt.Fprintf(&b, "## Script\n\n%s\n\n## Page\n\n", codeFence("lua", string(script)))
+	} else if script != nil {
+		b.WriteString("## Page\n\n")
+	}
 	b.WriteString(codeFence("markdown", string(a.source)))
+	if script != nil && passages {
+		fmt.Fprintf(&b, "\n\n## Script\n\n%s", script)
+	}
 	return b.String()
 }
 

@@ -120,14 +120,11 @@ local function choices(state)
   return list
 end
 
+function init()
+  return {scene = "shore", stamina = 3, items = {}, story = {}}
+end
+
 function page(request, state)
-  if request.restart then
-    for k in pairs(state) do state[k] = nil end
-    request = {}
-  end
-  if not state.scene then
-    state.scene, state.stamina, state.items, state.story = "shore", 3, {}, {}
-  end
   local happened = act(request, state)
   local scene = scenes[state.scene]
 
@@ -136,12 +133,12 @@ function page(request, state)
 
   if state.stamina <= 0 then
     out("You sink down against the cold stone, too hurt to go on. Out on the reef, a ship's timbers split.\n\n",
-        "**The End.** ", link("Try again", {restart = 1}), "\n")
+        "**The End.** [Try again](?s=)\n")
     return
   end
   if state.won then
     out("The beacon blazes out over the water. The ship's lights turn, slowly, away from the reef.\n\n",
-        "**You've won.** ", link("Play again", {restart = 1}), "\n")
+        "**You've won.** [Play again](?s=)\n")
     return
   end
 
