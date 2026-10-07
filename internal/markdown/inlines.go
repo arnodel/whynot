@@ -52,7 +52,22 @@ func (c *compiler) appendInline(items []engine.Inline, node gmast.Node, astNode 
 	case gmast.KindCodeSpan:
 		cs := node.(*gmast.CodeSpan)
 		childNode := astNode.AddChild(ast.TagCodeSpan)
-		return c.appendString(items, cs.Value.Value(c.source), childNode)
+		code := cs.Value.Value(c.source)
+		spans := c.inlineTokens(code)
+		if spans == nil {
+			return c.appendString(items, code, childNode)
+		}
+		for _, span := range spans {
+			// Each token is its own words, glued to its neighbors unless
+			// there's a space between them, like text and emphasis.
+			tokenNode := childNode
+			if span.Class != "" {
+				tokenNode = childNode.AddChild(ast.TagCodeToken)
+				tokenNode.Class = span.Class
+			}
+			items = c.appendString(items, span.Text, tokenNode)
+		}
+		return items
 	case gmast.KindImage:
 		imgNode := node.(*gmast.Image)
 		imageNode := astNode.AddChild(ast.TagImage)

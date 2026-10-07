@@ -222,3 +222,97 @@ func TestCodeBlockImageFallsBackToNextPlugin(t *testing.T) {
 		t.Errorf("fallback class = %q, want the next plugin's %q", node.Class, codeblocks.ClassKeyword)
 	}
 }
+
+// inlineCodeParts compiles source, a one-paragraph document whose inline
+// code is in language, and returns the paragraph's parts.
+func inlineCodeParts(t *testing.T, source, language string, plugins ...codeblocks.Plugin) []engine.Inline {
+	t.Helper()
+	doc := Compile([]byte(source), Options{Plugins: plugins, InlineCodeLanguage: language})
+	para, ok := unwrap(doc.Root.Blocks[0]).(*engine.TextBlock)
+	if !ok {
+		t.Fatalf("block 0 = %T, want a *TextBlock", unwrap(doc.Root.Blocks[0]))
+	}
+	return para.Parts
+}
+
+// TestInlineCodeTokens checks that a code span's tokens become classed
+// words under the code span, glued together where the code has no space.
+func TestInlineCodeTokens(t *testing.T) {
+	p := fakePlugin{parse: func(language, code string) codeblocks.Content {
+		if language != "lua" || code != `has("key") or x` {
+			t.Errorf("Parse(%q, %q), want the span's code as lua", language, code)
+		}
+		return codeblocks.Tokens{Spans: []codeblocks.Span{
+			{Text: "has", Class: codeblocks.ClassFunction},
+			{Text: "("},
+			{Text: `"key"`, Class: codeblocks.ClassString},
+			{Text: ") "},
+			{Text: "or", Class: codeblocks.ClassKeyword},
+			{Text: " x"},
+		}}
+	}}
+	parts := inlineCodeParts(t, "See `has(\"key\") or x`.", "lua", p)
+	if got, want := textOf(t, parts), []string{"See", "has", "(", `"key"`, ")", "or", "x", "."}; !stringsEqual(got, want) {
+		t.Fatalf("words = %v, want %v", got, want)
+	}
+	for i, want := range []struct {
+		glued bool
+		class string
+	}{{false, ""}, {false, codeblocks.ClassFunction}, {true, ""}, {true, codeblocks.ClassString}, {true, ""}, {false, codeblocks.ClassKeyword}, {false, ""}, {true, ""}} {
+		text := parts[i].(*engine.InlineText)
+		if text.Glued != want.glued || text.ASTNode.Class != want.class {
+			t.Errorf("part %d (%q): glued %v, class %q; want %v, %q", i, text.Text, text.Glued, text.ASTNode.Class, want.glued, want.class)
+		}
+	}
+	if node := parts[2].(*engine.InlineText).ASTNode; node.Tag != ast.TagCodeSpan {
+		t.Errorf("an unclassed token's node is a %v, want the code span", node.Tag)
+	}
+	if node := parts[1].(*engine.InlineText).ASTNode; node.Tag != ast.TagCodeToken || node.Parent.Tag != ast.TagCodeSpan {
+		t.Errorf("a classed token's node is a %v under a %v, want a code token under the code span", node.Tag, node.Parent.Tag)
+	}
+}
+
+// TestInlineCodeFallsBack checks that a code span stays plain inline code
+// when nothing makes tokens of it that reproduce it.
+func TestInlineCodeFallsBack(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		language string
+		plugins  []codeblocks.Plugin
+	}{
+		{"no language", "", []codeblocks.Plugin{wholeCode(codeblocks.ClassKeyword)}},
+		{"no plugin", "lua", nil},
+		{"an image", "lua", []codeblocks.Plugin{fakePlugin{parse: func(string, string) codeblocks.Content {
+			return codeblocks.Image{}
+		}}}},
+		{"wrong tokens", "lua", []codeblocks.Plugin{tokensOf(codeblocks.Span{Text: "other", Class: codeblocks.ClassKeyword})}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			parts := inlineCodeParts(t, "`a b`", c.language, c.plugins...)
+			for _, part := range parts {
+				if node := part.(*engine.InlineText).ASTNode; node.Tag != ast.TagCodeSpan {
+					t.Errorf("part %q has a %v node, want plain code span", part.(*engine.InlineText).Text, node.Tag)
+				}
+			}
+		})
+	}
+}
+
+// TestInlineCodeTrailingNewline checks that tokens ending in a newline the
+// span doesn't have, as some lexers add, are accepted without it.
+func TestInlineCodeTrailingNewline(t *testing.T) {
+	parts := inlineCodeParts(t, "`x`", "lua", wholeCodeWithNewline(codeblocks.ClassKeyword))
+	if got := textOf(t, parts); !stringsEqual(got, []string{"x"}) {
+		t.Fatalf("words = %v, want [x]", got)
+	}
+	if node := parts[0].(*engine.InlineText).ASTNode; node.Class != codeblocks.ClassKeyword {
+		t.Errorf("class = %q, want %q", node.Class, codeblocks.ClassKeyword)
+	}
+}
+
+// wholeCodeWithNewline is wholeCode, adding a newline, as some lexers do.
+func wholeCodeWithNewline(class string) fakePlugin {
+	return fakePlugin{parse: func(_, code string) codeblocks.Content {
+		return codeblocks.Tokens{Spans: []codeblocks.Span{{Text: code + "\n", Class: class}}}
+	}}
+}

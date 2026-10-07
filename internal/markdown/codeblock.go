@@ -133,3 +133,42 @@ func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][
 	}
 	return lines
 }
+
+// inlineTokens returns the tokens of a code span's code, made by the
+// first plugin that handles the document's inline code language and
+// makes Tokens that reproduce code, or nil if there are none.
+func (c *compiler) inlineTokens(code string) []codeblocks.Span {
+	if c.inlineCodeLanguage == "" {
+		return nil
+	}
+	for _, p := range c.pluginsFor(c.inlineCodeLanguage) {
+		content, ok := p.Parse(c.inlineCodeLanguage, code).(codeblocks.Tokens)
+		if !ok {
+			continue
+		}
+		var text strings.Builder
+		for _, span := range content.Spans {
+			text.WriteString(span.Text)
+		}
+		switch text.String() {
+		case code:
+			return content.Spans
+		case code + "\n":
+			// Some lexers end their input with a newline.
+			return trimFinalNewline(content.Spans)
+		}
+	}
+	return nil
+}
+
+// trimFinalNewline returns spans without the newline the last of them
+// ends with.
+func trimFinalNewline(spans []codeblocks.Span) []codeblocks.Span {
+	spans = append([]codeblocks.Span(nil), spans...)
+	last := &spans[len(spans)-1]
+	last.Text = strings.TrimSuffix(last.Text, "\n")
+	if last.Text == "" {
+		spans = spans[:len(spans)-1]
+	}
+	return spans
+}
