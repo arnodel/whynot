@@ -58,13 +58,11 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 		case key.NameRightArrow:
 			panel.ScrollRight()
 		case key.NameEscape:
-			if app.TOCShowing() {
-				app.HideTOC()
-			}
+			app.HideOverlay()
 		case "V":
 			app.Paste()
 		case "U":
-			app.ViewSource()
+			app.ToggleSource()
 		case "=":
 			app.ZoomIn()
 		case "-":

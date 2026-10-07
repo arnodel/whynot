@@ -56,8 +56,8 @@ func (g *game) Update() error {
 			g.app.Back()
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.app.TOCShowing() {
-		g.app.HideTOC()
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		g.app.HideOverlay()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
@@ -89,7 +89,7 @@ func (g *game) Update() error {
 		g.app.Paste()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyU) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
-		g.app.ViewSource()
+		g.app.ToggleSource()
 	}
 	switch {
 	case keyRepeat(ebiten.KeyEqual):

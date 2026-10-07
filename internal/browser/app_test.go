@@ -704,10 +704,10 @@ func TestAppShowsDocumentAsItArrives(t *testing.T) {
 	}
 }
 
-// TestAppViewSource checks that ViewSource shows a lua: page's script
-// and the Markdown it wrote, without running it again, and that Back
-// returns to the page.
-func TestAppViewSource(t *testing.T) {
+// TestAppShowSource checks that the source overlay shows a lua: page's
+// script and the Markdown it wrote, without running it again, that it
+// isn't history, and that it swaps with the TOC.
+func TestAppShowSource(t *testing.T) {
 	start := writeScript(t, "function page() out('# Page ', math.random(1000000)) end")
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, &LuaResolver{}))
 	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
@@ -717,19 +717,37 @@ func TestAppViewSource(t *testing.T) {
 	}
 	title, _ := app.Panel.View().Document().Title()
 
-	app.ViewSource()
-	if app.Location().Scheme != "view-source" {
-		t.Errorf("Location() = %s, want a view-source: URL", app.Location())
+	app.ToggleSource()
+	if !app.SourceShowing() || app.CanGoForward() || app.CanReload() {
+		t.Fatalf("after ToggleSource: SourceShowing %v, CanGoForward %v, CanReload %v; want true, false, false",
+			app.SourceShowing(), app.CanGoForward(), app.CanReload())
 	}
+	if *app.Location() != *start {
+		t.Errorf("Location() = %s while the source shows, want the page's, %s", app.Location(), start)
+	}
+	source := app.sourceMarkdown()
 	for _, want := range []string{"```lua\nfunction page()", "```markdown\n# " + title + "\n```"} {
-		if !strings.Contains(string(app.source), want) {
-			t.Errorf("source page = %q, want it to contain %q", app.source, want)
+		if !strings.Contains(source, want) {
+			t.Errorf("source overlay = %q, want it to contain %q", source, want)
 		}
 	}
 
+	app.ShowTOC()
+	if !app.TOCShowing() || app.SourceShowing() {
+		t.Error("ShowTOC while the source shows didn't swap to the TOC")
+	}
+	app.HideOverlay()
+	if app.TOCShowing() || app.SourceShowing() {
+		t.Error("HideOverlay left an overlay showing")
+	}
+
+	app.ToggleSource()
 	app.Back()
-	if got, _ := app.Panel.View().Document().Title(); got != title {
-		t.Errorf("title after Back = %q, want %q", got, title)
+	if got, _ := app.Panel.View().Document().Title(); got != title || app.SourceShowing() {
+		t.Errorf("after Back: title %q, SourceShowing %v; want %q, false: Back dismisses the source", got, app.SourceShowing(), title)
+	}
+	if app.CanGoBack() {
+		t.Error("CanGoBack() = true after dismissing the source: it shouldn't be in history")
 	}
 }
 

@@ -15,11 +15,9 @@ package browser
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"log"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -107,12 +105,13 @@ type App struct {
 	deviceScale                  float64
 	width, height, toolbarHeight int
 
-	// tocDocView is the real document's View, saved here while a
-	// synthetic table-of-contents View is current in Panel instead - nil
-	// whenever the TOC isn't showing (see ShowTOC/HideTOC in toc.go).
-	// Every method below that reads or replaces a.Panel.View() checks
-	// this first, since that's the TOC, not the document, while it's set.
-	tocDocView *whynot.View
+	// overlaid is the real document's View, saved here while an overlay
+	// (the TOC, or the source: see overlay.go) is current in Panel
+	// instead - nil whenever none is showing. Every method below that
+	// reads or replaces a.Panel.View() checks this first, since that's
+	// the overlay, not the document, while it's set.
+	overlaid *whynot.View
+	overlay  overlay
 
 	// loader is the current document's body while it's still arriving:
 	// Update shows it as it does. loadFragment is the fragment to scroll
@@ -192,13 +191,13 @@ func (a *App) HandleEvents(events []whynot.Event) {
 }
 
 // CanGoBack/CanGoForward report whether Back/Forward would do
-// anything. CanGoBack is also true while the TOC is showing, since Back
-// dismisses it (see tocDocView); CanGoForward is false there instead.
-func (a *App) CanGoBack() bool    { return a.tocDocView != nil || len(a.history) > 0 }
-func (a *App) CanGoForward() bool { return a.tocDocView == nil && len(a.future) > 0 }
+// anything. CanGoBack is also true while an overlay is showing, since Back
+// dismisses it (see overlaid); CanGoForward is false there instead.
+func (a *App) CanGoBack() bool    { return a.overlaid != nil || len(a.history) > 0 }
+func (a *App) CanGoForward() bool { return a.overlaid == nil && len(a.future) > 0 }
 
 // CanReload reports whether Reload would do anything.
-func (a *App) CanReload() bool { return a.tocDocView == nil }
+func (a *App) CanReload() bool { return a.overlaid == nil }
 
 // Zoom returns the current zoom multiplier (1.0 = 100%).
 func (a *App) Zoom() float64 { return a.zoom }
@@ -226,16 +225,16 @@ func (a *App) SetTheme(dark bool) {
 // updateWindowTitle fires OnTitleChange with the current document's own
 // title (Document.Title(): its first heading, any level), or a generic
 // fallback if it has none - call whenever Panel's View is replaced with
-// a different document's. While the TOC is showing, its own "Table of
-// contents" heading is skipped in favor of the real document's title
-// (a.tocDocView) plus a " - TOC" suffix.
+// a different document's. While an overlay is showing, its own heading
+// is skipped in favor of the real document's title (a.overlaid) plus a
+// suffix naming the overlay.
 func (a *App) updateWindowTitle() {
 	if a.OnTitleChange == nil {
 		return
 	}
 	view := a.Panel.View()
-	if a.tocDocView != nil {
-		view = a.tocDocView
+	if a.overlaid != nil {
+		view = a.overlaid
 	}
 	title, ok := view.Document().Title()
 	switch {
@@ -245,8 +244,11 @@ func (a *App) updateWindowTitle() {
 	default:
 		title = "Untitled document"
 	}
-	if a.tocDocView != nil {
+	switch a.overlay {
+	case tocOverlay:
 		title += " - TOC"
+	case sourceOverlay:
+		title += " - source"
 	}
 	a.OnTitleChange(title)
 }
@@ -300,9 +302,10 @@ func (a *App) newView(source []byte, location *url.URL, diagrams bool) *whynot.V
 // wherever the jump started from is pushed onto history first, so Back
 // can return to it.
 //
-// While the TOC is showing, dest is always one of its own "#id" links:
-// resolved against a.location as usual, but the jump lands on
-// a.tocDocView, which becomes current again, closing the TOC.
+// While an overlay is showing, dest is one of its links, such as the
+// TOC's "#id" ones: resolved against a.location as usual, but the jump
+// starts from a.overlaid, which becomes current again, closing the
+// overlay.
 func (a *App) Follow(dest string) {
 	resolved, err := a.ResolveLink(dest)
 	if err != nil {
@@ -323,11 +326,11 @@ func (a *App) FollowAnchor(id string) {
 
 // follow is Follow once dest is resolved.
 func (a *App) follow(resolved *url.URL) {
-	if a.tocDocView != nil {
-		docView := a.tocDocView
+	if a.overlaid != nil {
+		docView := a.overlaid
 		a.pushHistoryFor(a.location, docView)
 		a.Panel.SetView(docView)
-		a.tocDocView = nil
+		a.overlaid, a.overlay = nil, noOverlay
 		if resolved.Fragment != "" {
 			scrollToFragment(docView, resolved.Fragment)
 		}
@@ -415,9 +418,9 @@ const rebuildInterval = 100 * time.Millisecond
 
 // Update shows more of the current document while it's still arriving.
 // Call it once a frame; Loading reports whether it has anything to do.
-// While the TOC is showing, it waits until it's hidden.
+// While an overlay is showing, it waits until it's hidden.
 func (a *App) Update() {
-	if a.loader == nil || a.tocDocView != nil || time.Since(a.builtAt) < rebuildInterval {
+	if a.loader == nil || a.overlaid != nil || time.Since(a.builtAt) < rebuildInterval {
 		return
 	}
 	view, source := a.build()
@@ -458,8 +461,8 @@ func (a *App) pushHistory() {
 }
 
 // pushHistoryFor is pushHistory's real implementation, taking the
-// location/view to save explicitly - needed by Follow's TOC branch,
-// which must push a.tocDocView rather than a.Panel.View().
+// location/view to save explicitly - needed by Follow's overlay branch,
+// which must push a.overlaid rather than a.Panel.View().
 func (a *App) pushHistoryFor(loc *url.URL, view *whynot.View) {
 	a.history = append(a.history, historyEntry{
 		document: document{location: loc, view: view, source: a.source},
@@ -479,12 +482,12 @@ func samePage(x, y *url.URL) bool {
 }
 
 // Back pops the most recently visited place, if any - a no-op at the
-// start of history. While the TOC is showing, Back dismisses it instead
+// start of history. While an overlay is showing, Back dismisses it instead
 // - the most recently visited "place" from the user's perspective -
 // without consuming a history entry.
 func (a *App) Back() {
-	if a.tocDocView != nil {
-		a.HideTOC()
+	if a.overlaid != nil {
+		a.HideOverlay()
 		return
 	}
 	if len(a.history) == 0 {
@@ -497,10 +500,10 @@ func (a *App) Back() {
 
 // Forward undoes the last Back, if any - a no-op with nothing to redo,
 // and cleared by any new navigation (see pushHistory), same as a
-// browser's own forward button. Also a no-op while the TOC is showing,
+// browser's own forward button. Also a no-op while an overlay is showing,
 // unlike Back - disabled rather than dismissing it too.
 func (a *App) Forward() {
-	if a.tocDocView != nil || len(a.future) == 0 {
+	if a.overlaid != nil || len(a.future) == 0 {
 		return
 	}
 	entry := a.future[len(a.future)-1]
@@ -533,9 +536,9 @@ func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 // its View in place - not pushed onto history, since it's still the
 // same place, just re-read. Scroll position is carried over to the new
 // View the same way it already is across a resize or theme change. A
-// no-op while the TOC is showing (see CanReload).
+// no-op while an overlay is showing (see CanReload).
 func (a *App) Reload() {
-	if a.tocDocView != nil {
+	if a.overlaid != nil {
 		return
 	}
 	view, source, err := a.load(a.location)
@@ -577,9 +580,9 @@ func (a *App) Paste() {
 // show it (e.g. an editable address bar) can - an HTML response is
 // still handled the same as Follow (opened in a web browser) and
 // reported as no error, since that's not a mistake for the caller to
-// show. A no-op (nil error) while the TOC is showing, same as Reload.
+// show. A no-op (nil error) while an overlay is showing, same as Reload.
 func (a *App) Navigate(text string) error {
-	if a.tocDocView != nil {
+	if a.overlaid != nil {
 		return nil
 	}
 	resolved, err := ResolveLocationArg(text)
@@ -602,52 +605,6 @@ func (a *App) Navigate(text string) error {
 	a.location, a.source = resolved, source
 	a.updateWindowTitle()
 	return nil
-}
-
-// ViewSource shows the current document's source, as a new page that
-// Back returns from: its Markdown as shown, and for a lua: page, its
-// script too. A no-op while the TOC is showing.
-func (a *App) ViewSource() {
-	if a.tocDocView != nil {
-		return
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Source\n\n%s\n\n", codeFence("text", a.location.String()))
-	if a.location.Scheme == "lua" {
-		script, err := os.ReadFile(luaScriptPath(a.location))
-		if err != nil {
-			log.Printf("reading %s's script: %v", a.location, err)
-		} else {
-			fmt.Fprintf(&b, "## Script\n\n%s\n\n## Page\n\n", codeFence("lua", string(script)))
-		}
-	}
-	b.WriteString(codeFence("markdown", string(a.source)))
-
-	location := &url.URL{Scheme: "view-source", Opaque: a.location.String()}
-	source := []byte(b.String())
-	view := a.NewView(source, location)
-	a.stopLoading()
-	a.place(view)
-	a.pushHistory() // must run before SetView - it reads the page being left
-	a.Panel.SetView(view)
-	a.location, a.source = location, source
-	a.updateWindowTitle()
-}
-
-// codeFence returns text as a fenced code block in the given language,
-// with a fence longer than any run of backquotes in text.
-func codeFence(language, text string) string {
-	longest, run := 0, 0
-	for _, r := range text {
-		if r == '`' {
-			run++
-			longest = max(longest, run)
-		} else {
-			run = 0
-		}
-	}
-	fence := strings.Repeat("`", max(3, longest+1))
-	return fence + language + "\n" + strings.TrimSuffix(text, "\n") + "\n" + fence
 }
 
 // zoomStep is a fixed step of the original (100%) size, not of the

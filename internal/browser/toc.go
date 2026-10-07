@@ -8,18 +8,13 @@ import (
 
 // TOCShowing reports whether ShowTOC is currently in effect - see its
 // own doc comment for what that means for Back/Forward/Reload/Navigate.
-func (a *App) TOCShowing() bool { return a.tocDocView != nil }
+func (a *App) TOCShowing() bool { return a.overlay == tocOverlay }
 
 // CanShowTOC reports whether ShowTOC would do anything - false for a
 // document with no headings (see whynot.Document.TOCEntries). Checks
-// whichever View is the real document right now: a.tocDocView while
-// the TOC is already showing, a.Panel.View() otherwise.
+// the real document, even while an overlay is showing.
 func (a *App) CanShowTOC() bool {
-	view := a.Panel.View()
-	if a.tocDocView != nil {
-		view = a.tocDocView
-	}
-	return len(view.Document().TOCEntries()) > 0
+	return len(a.documentView().Document().TOCEntries()) > 0
 }
 
 // ShowTOC replaces the current document in Panel with a synthetic
@@ -30,13 +25,13 @@ func (a *App) CanShowTOC() bool {
 // section currently on screen is rendered in bold and scrolled into
 // view (View.CurrentHeadingID).
 //
-// A no-op if the TOC is already showing, or the document has no
-// headings (see CanShowTOC).
+// It replaces the source, if that's showing. A no-op if the TOC is
+// already showing, or the document has no headings (see CanShowTOC).
 func (a *App) ShowTOC() {
-	if a.tocDocView != nil || !a.CanShowTOC() {
+	if a.overlay == tocOverlay || !a.CanShowTOC() {
 		return
 	}
-	docView := a.Panel.View()
+	docView := a.documentView()
 	entries := docView.Document().TOCEntries()
 	currentID, _ := docView.CurrentHeadingID()
 
@@ -50,21 +45,14 @@ func (a *App) ShowTOC() {
 		tocView.ScrollToAnchor(currentID)
 	}
 
-	a.tocDocView = docView
-	a.Panel.SetView(tocView)
-	a.updateWindowTitle()
+	a.showOverlay(tocOverlay, tocView)
 }
 
-// HideTOC restores the document ShowTOC replaced, exactly where it was
-// left (ShowTOC/HideTOC never touch its scroll position) - a no-op if
-// the TOC isn't showing.
+// HideTOC is HideOverlay, if the TOC is showing.
 func (a *App) HideTOC() {
-	if a.tocDocView == nil {
-		return
+	if a.overlay == tocOverlay {
+		a.HideOverlay()
 	}
-	a.Panel.SetView(a.tocDocView) // re-applies a.styleSheet, then relayouts
-	a.tocDocView = nil
-	a.updateWindowTitle()
 }
 
 // buildTOCSource generates the Markdown source for a table-of-contents
