@@ -22,7 +22,8 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 		opt(&o)
 	}
 	r := markdown.Compile(source, markdown.Options{
-		Plugins: o.plugins,
+		Plugins:            o.plugins,
+		InlineCodeLanguage: o.inlineCodeLanguage,
 		ResolveImage: func(src string) (fetch.Source, error) {
 			return o.images.Resolve(o.base, src)
 		},
@@ -36,9 +37,10 @@ func Parse(source []byte, opts ...ParseOption) *Document {
 
 // parseOptions is what ParseOptions configure.
 type parseOptions struct {
-	plugins []codeblocks.Plugin
-	base    *url.URL
-	images  *fetch.Registry
+	plugins            []codeblocks.Plugin
+	inlineCodeLanguage string
+	base               *url.URL
+	images             *fetch.Registry
 }
 
 // ParseOption customizes Parse.
@@ -51,6 +53,20 @@ type ParseOption func(*parseOptions)
 func WithCodeBlockPlugin(p codeblocks.Plugin) ParseOption {
 	return func(o *parseOptions) {
 		o.plugins = append(o.plugins, p)
+	}
+}
+
+// WithInlineCodeLanguage sets the language of the document's inline
+// code, such as "lua", so that the code-block plugins (see
+// [WithCodeBlockPlugin]) can color it: each code span is offered to them
+// as a fenced block in that language would be. Only [codeblocks.Tokens]
+// are used inline; a span no plugin makes tokens of stays plain.
+//
+// Without it, inline code isn't colored: Markdown has no way to say what
+// language a code span is in.
+func WithInlineCodeLanguage(language string) ParseOption {
+	return func(o *parseOptions) {
+		o.inlineCodeLanguage = language
 	}
 }
 

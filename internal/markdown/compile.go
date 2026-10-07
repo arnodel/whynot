@@ -47,6 +47,10 @@ type Options struct {
 	// Plugins parse fenced code blocks, in priority order.
 	Plugins []codeblocks.Plugin
 
+	// InlineCodeLanguage, if set, is the language of the document's code
+	// spans, which the Plugins that handle it then color.
+	InlineCodeLanguage string
+
 	// ResolveImage returns the Source of an image's src. If nil, no image
 	// is resolved.
 	ResolveImage func(src string) (fetch.Source, error)
@@ -66,7 +70,7 @@ func Compile(source []byte, opts Options) *Result {
 		parser.WithAutoHeadingID(),
 	)
 	node := p.Parse(source)
-	c := compiler{source: source, resolveImage: opts.ResolveImage}
+	c := compiler{source: source, resolveImage: opts.ResolveImage, inlineCodeLanguage: opts.InlineCodeLanguage}
 	for i, p := range opts.Plugins {
 		// "#" can't appear in a URL scheme, so these never clash with the
 		// keys a fetch.Registry makes.
@@ -89,6 +93,10 @@ type compiler struct {
 	// far (see pluginsFor).
 	codeBlockPlugins []plugin
 	pluginCache      map[string][]plugin
+
+	// inlineCodeLanguage is the language code spans are colored as, if
+	// any (see inlineTokens).
+	inlineCodeLanguage string
 
 	resolveImage func(src string) (fetch.Source, error)
 
