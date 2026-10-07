@@ -67,7 +67,12 @@ func (a *App) ShowSource() {
 	if a.overlay == sourceOverlay {
 		return
 	}
-	view := a.NewView([]byte(a.sourceMarkdown()), a.location)
+	var opts []whynot.ParseOption
+	if a.location.Scheme == "lua" && strings.HasSuffix(strings.ToLower(luaScriptPath(a.location)), ".md") {
+		// A passage file's code spans are Lua.
+		opts = append(opts, whynot.WithInlineCodeLanguage("lua"))
+	}
+	view := a.newView([]byte(a.sourceMarkdown()), a.location, true, opts...)
 	a.place(view)
 	a.showOverlay(sourceOverlay, view)
 }

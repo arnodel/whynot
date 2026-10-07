@@ -277,11 +277,11 @@ func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
 // newView is NewView, with diagrams only if diagrams is set: a
 // document still arriving leaves them out, as each version of an
 // unfinished diagram would be fetched.
-func (a *App) newView(source []byte, location *url.URL, diagrams bool) *whynot.View {
-	opts := []whynot.ParseOption{
+func (a *App) newView(source []byte, location *url.URL, diagrams bool, extra ...whynot.ParseOption) *whynot.View {
+	opts := append([]whynot.ParseOption{
 		whynot.WithBaseURL(location),
 		whynot.WithImageRegistry(a.registry),
-	}
+	}, extra...)
 	if diagrams {
 		opts = append(opts, whynot.WithCodeBlockPlugin(kroki.Plugin{}))
 	}
