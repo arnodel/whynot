@@ -88,6 +88,9 @@ func (g *game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
 		g.app.Paste()
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyU) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
+		g.app.ViewSource()
+	}
 	switch {
 	case keyRepeat(ebiten.KeyEqual):
 		g.app.ZoomIn()

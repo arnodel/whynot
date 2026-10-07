@@ -15,9 +15,11 @@ package browser
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"log"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -31,10 +33,11 @@ import (
 
 // document pairs a View with the location it was loaded from, so a
 // relative link found inside it can be resolved to an absolute one
-// before being followed.
+// before being followed, and with its Markdown, for ViewSource.
 type document struct {
 	location *url.URL
 	view     *whynot.View
+	source   []byte
 }
 
 // historyEntry is a place Back can return to: a document plus the
@@ -66,6 +69,9 @@ type App struct {
 	// available (e.g. ebiten.SetWindowTitle).
 	OnTitleChange func(title string)
 
+	// source is the current document's Markdown, as shown: kept rather
+	// than fetched again, since a generated page would differ.
+	source []byte
 	// location is where the current document (Panel.View()) was loaded
 	// from - kept separately from the View itself, which Panel alone
 	// owns; document still pairs the two together for historyEntry,
@@ -136,7 +142,7 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 // later navigation goes through Follow/Reload/Paste/Back/Forward instead,
 // which also push history.
 func (a *App) Open(location *url.URL) error {
-	view, err := a.load(location)
+	view, source, err := a.load(location)
 	if err != nil {
 		return err
 	}
@@ -144,7 +150,7 @@ func (a *App) Open(location *url.URL) error {
 	if location.Fragment != "" {
 		scrollToFragment(view, location.Fragment)
 	}
-	a.location = location
+	a.location, a.source = location, source
 	a.updateWindowTitle()
 	return nil
 }
@@ -344,7 +350,7 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	view, err := a.load(resolved)
+	view, source, err := a.load(resolved)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)
@@ -357,22 +363,23 @@ func (a *App) follow(resolved *url.URL) {
 	}
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
-	a.location = resolved
+	a.location, a.source = resolved, source
 	a.updateWindowTitle()
 }
 
 // load starts loading location, stopping the current document's load
-// if it succeeds, and returns a View of what has arrived so far: Update
-// shows the rest as it arrives.
-func (a *App) load(location *url.URL) (*whynot.View, error) {
+// if it succeeds, and returns a View of what has arrived so far, and
+// its source: Update shows the rest as it arrives.
+func (a *App) load(location *url.URL) (*whynot.View, []byte, error) {
 	l, err := startLoad(a.registry, location)
 	if err != nil {
-		return nil, loadError(err, location)
+		return nil, nil, loadError(err, location)
 	}
 	a.stopLoading()
 	a.loader = l
 	a.loadFragment = location.Fragment
-	return a.build(), nil
+	view, source := a.build()
+	return view, source, nil
 }
 
 // stopLoading stops the current document's load, if any.
@@ -383,14 +390,14 @@ func (a *App) stopLoading() {
 	}
 }
 
-// build returns a View of the current load's body so far, or nil if it
-// hasn't changed since the last build. Once the body is complete, the
-// load is over.
-func (a *App) build() *whynot.View {
+// build returns a View of the current load's body so far, and the body,
+// or nil if it hasn't changed since the last build. Once the body is
+// complete, the load is over.
+func (a *App) build() (*whynot.View, []byte) {
 	location := a.loader.location
 	data, done, changed, err := a.loader.take()
 	if !changed {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
 		log.Printf("loading %s: %v", location, err)
@@ -399,7 +406,7 @@ func (a *App) build() *whynot.View {
 		a.loader = nil
 	}
 	a.builtAt = time.Now()
-	return a.newView(data, location, done)
+	return a.newView(data, location, done), data
 }
 
 // rebuildInterval is how often Update rebuilds a document that's still
@@ -413,10 +420,11 @@ func (a *App) Update() {
 	if a.loader == nil || a.tocDocView != nil || time.Since(a.builtAt) < rebuildInterval {
 		return
 	}
-	view := a.build()
+	view, source := a.build()
 	if view == nil {
 		return
 	}
+	a.source = source
 	a.place(view)
 	view.RestoreScrollPosition(a.Panel.View().ScrollPosition())
 	if a.loader == nil && a.loadFragment != "" {
@@ -454,7 +462,7 @@ func (a *App) pushHistory() {
 // which must push a.tocDocView rather than a.Panel.View().
 func (a *App) pushHistoryFor(loc *url.URL, view *whynot.View) {
 	a.history = append(a.history, historyEntry{
-		document: document{location: loc, view: view},
+		document: document{location: loc, view: view, source: a.source},
 		scroll:   view.ScrollPosition(),
 	})
 	a.future = nil
@@ -512,12 +520,12 @@ func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 	a.stopLoading()
 	current := a.Panel.View()
 	*undoStack = append(*undoStack, historyEntry{
-		document: document{location: a.location, view: current},
+		document: document{location: a.location, view: current, source: a.source},
 		scroll:   current.ScrollPosition(),
 	})
 	entry.view.RestoreScrollPosition(entry.scroll)
 	a.Panel.SetView(entry.view) // re-applies a.styleSheet, then relayouts
-	a.location = entry.location
+	a.location, a.source = entry.location, entry.source
 	a.updateWindowTitle()
 }
 
@@ -530,7 +538,7 @@ func (a *App) Reload() {
 	if a.tocDocView != nil {
 		return
 	}
-	view, err := a.load(a.location)
+	view, source, err := a.load(a.location)
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)
@@ -541,6 +549,7 @@ func (a *App) Reload() {
 	a.place(view)
 	view.RestoreScrollPosition(scroll)
 	a.Panel.SetView(view)
+	a.source = source
 	a.updateWindowTitle()
 }
 
@@ -579,7 +588,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 
-	view, err := a.load(resolved)
+	view, source, err := a.load(resolved)
 	if err != nil {
 		if openIfWebPage(err, resolved) {
 			return nil
@@ -590,9 +599,55 @@ func (a *App) Navigate(text string) error {
 	a.place(view)
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
-	a.location = resolved
+	a.location, a.source = resolved, source
 	a.updateWindowTitle()
 	return nil
+}
+
+// ViewSource shows the current document's source, as a new page that
+// Back returns from: its Markdown as shown, and for a lua: page, its
+// script too. A no-op while the TOC is showing.
+func (a *App) ViewSource() {
+	if a.tocDocView != nil {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Source\n\n%s\n\n", codeFence("text", a.location.String()))
+	if a.location.Scheme == "lua" {
+		script, err := os.ReadFile(luaScriptPath(a.location))
+		if err != nil {
+			log.Printf("reading %s's script: %v", a.location, err)
+		} else {
+			fmt.Fprintf(&b, "## Script\n\n%s\n\n## Page\n\n", codeFence("lua", string(script)))
+		}
+	}
+	b.WriteString(codeFence("markdown", string(a.source)))
+
+	location := &url.URL{Scheme: "view-source", Opaque: a.location.String()}
+	source := []byte(b.String())
+	view := a.NewView(source, location)
+	a.stopLoading()
+	a.place(view)
+	a.pushHistory() // must run before SetView - it reads the page being left
+	a.Panel.SetView(view)
+	a.location, a.source = location, source
+	a.updateWindowTitle()
+}
+
+// codeFence returns text as a fenced code block in the given language,
+// with a fence longer than any run of backquotes in text.
+func codeFence(language, text string) string {
+	longest, run := 0, 0
+	for _, r := range text {
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	return fence + language + "\n" + strings.TrimSuffix(text, "\n") + "\n" + fence
 }
 
 // zoomStep is a fixed step of the original (100%) size, not of the

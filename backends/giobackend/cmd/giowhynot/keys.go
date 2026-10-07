@@ -25,6 +25,7 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 			key.Filter{Name: key.NameRightArrow},
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: "V", Required: key.ModShortcut},
+			key.Filter{Name: "U", Required: key.ModShortcut},
 			key.Filter{Name: "="},
 			key.Filter{Name: "-"},
 		)
@@ -62,6 +63,8 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 			}
 		case "V":
 			app.Paste()
+		case "U":
+			app.ViewSource()
 		case "=":
 			app.ZoomIn()
 		case "-":

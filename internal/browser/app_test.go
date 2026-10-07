@@ -703,3 +703,38 @@ func TestAppShowsDocumentAsItArrives(t *testing.T) {
 		t.Error("going Back didn't cancel the load")
 	}
 }
+
+// TestAppViewSource checks that ViewSource shows a lua: page's script
+// and the Markdown it wrote, without running it again, and that Back
+// returns to the page.
+func TestAppViewSource(t *testing.T) {
+	start := writeScript(t, "function page() out('# Page ', math.random(1000000)) end")
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, &LuaResolver{}))
+	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
+	app.Relayout(testWidth, testHeight, 1, 0)
+	if err := app.Open(start); err != nil {
+		t.Fatal(err)
+	}
+	title, _ := app.Panel.View().Document().Title()
+
+	app.ViewSource()
+	if app.Location().Scheme != "view-source" {
+		t.Errorf("Location() = %s, want a view-source: URL", app.Location())
+	}
+	for _, want := range []string{"```lua\nfunction page()", "```markdown\n# " + title + "\n```"} {
+		if !strings.Contains(string(app.source), want) {
+			t.Errorf("source page = %q, want it to contain %q", app.source, want)
+		}
+	}
+
+	app.Back()
+	if got, _ := app.Panel.View().Document().Title(); got != title {
+		t.Errorf("title after Back = %q, want %q", got, title)
+	}
+}
+
+func TestCodeFence(t *testing.T) {
+	if got, want := codeFence("md", "a ``` b\n"), "````md\na ``` b\n````"; got != want {
+		t.Errorf("codeFence = %q, want %q", got, want)
+	}
+}

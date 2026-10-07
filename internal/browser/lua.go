@@ -109,13 +109,19 @@ end
 
 func (*LuaResolver) Schemes() []string { return []string{"lua"} }
 
-func (r *LuaResolver) Resolve(u *url.URL) (fetch.Source, error) {
-	script := u.Opaque
-	if script == "" {
-		script = u.Host + u.Path
-	} else if unescaped, err := url.PathUnescape(script); err == nil {
-		script = unescaped
+// luaScriptPath returns the path of the script a lua: URL runs.
+func luaScriptPath(u *url.URL) string {
+	if u.Opaque == "" {
+		return u.Host + u.Path
 	}
+	if unescaped, err := url.PathUnescape(u.Opaque); err == nil {
+		return unescaped
+	}
+	return u.Opaque
+}
+
+func (r *LuaResolver) Resolve(u *url.URL) (fetch.Source, error) {
+	script := luaScriptPath(u)
 	if script == "" {
 		return nil, fmt.Errorf("%s: no script", u)
 	}
