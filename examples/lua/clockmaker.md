@@ -43,14 +43,15 @@ Every clock in the shop has stopped, at ten to midnight. Your master is
 nowhere to be found, and the great clock upstairs must be wound before
 midnight strikes.
 
-`if claude.available then`
 ```claude
 Describe the shop as the reader stands in it, among the stopped clocks.
 `if has("oil") then`
 They hold a can of clock oil.
 `end`
 ```
-`end`
+```noclaude
+The pendulums hang still. Somewhere, a spring creaks as it cools.
+```
 
 - [Search the workbench](#the-workbench)
 - [Open the cabinet](#the-cabinet)

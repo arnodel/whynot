@@ -20,7 +20,10 @@ import (
 //   - a line holding only a statement span disappears, newline and all;
 //   - a code span with two or more backquotes is shown, as code;
 //   - a claude fenced block asks Claude to write its text, which is the
-//     prompt, with spans run, and shows Claude's text where it is;
+//     prompt, with spans run, and shows Claude's text where it is, or
+//     nothing without Claude;
+//   - a noclaude fenced block is ordinary lines, shown only without
+//     Claude;
 //   - a link to a passage's heading, such as [Go](#the-hall), goes to the
 //     passage.
 //
@@ -34,15 +37,17 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 	// What each line is, besides an ordinary line of a passage.
 	type lineKind int
 	const (
-		ordinary    lineKind = iota
-		literal              // a line of code to show: spans don't run
-		heading              // a passage's heading
-		hidden               // a setext heading's underline: not shown
-		luaFence             // the fence of a lua block
-		luaLine              // a line of Lua
-		claudeOpen           // the opening fence of a claude block
-		claudeClose          // its closing fence
-		claudeLine           // a line of its prompt
+		ordinary      lineKind = iota
+		literal                // a line of code to show: spans don't run
+		heading                // a passage's heading
+		hidden                 // a setext heading's underline: not shown
+		luaFence               // the fence of a lua block
+		luaLine                // a line of Lua
+		claudeOpen             // the opening fence of a claude block
+		claudeClose            // its closing fence
+		claudeLine             // a line of its prompt
+		noclaudeOpen           // the opening fence of a noclaude block
+		noclaudeClose          // its closing fence
 	)
 	kinds := make([]lineKind, len(lines))
 	titles := map[int]string{}
@@ -86,7 +91,7 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 				close = last + 1
 			}
 			language, _ := n.Language(source)
-			if n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || (language != "lua" && language != "claude") {
+			if n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || (language != "lua" && language != "claude" && language != "noclaude") {
 				for i := open; i <= max(last, close); i++ {
 					kinds[i] = literal
 				}
@@ -95,12 +100,16 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 			if close < 0 {
 				return gmast.WalkStop, fmt.Errorf("line %d: a %s block needs its closing fence", open+1, language)
 			}
-			if language == "lua" {
+			switch language {
+			case "lua":
 				kinds[open], kinds[close] = luaFence, luaFence
 				for i := open + 1; i < close; i++ {
 					kinds[i] = luaLine
 				}
-			} else {
+			case "noclaude":
+				// Its lines are ordinary ones.
+				kinds[open], kinds[close] = noclaudeOpen, noclaudeClose
+			default:
 				kinds[open], kinds[close] = claudeOpen, claudeClose
 				for i := open + 1; i < close; i++ {
 					kinds[i] = claudeLine
@@ -128,9 +137,13 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 		case luaLine:
 			out[i] = line
 		case claudeOpen:
-			out[i] = "claude{prompt = __capture(function() "
+			out[i] = "if claude.available then claude{prompt = __capture(function() "
 		case claudeClose:
-			out[i] = `end)} out("\n") `
+			out[i] = `end)} out("\n") end `
+		case noclaudeOpen:
+			out[i] = "if not claude.available then "
+		case noclaudeClose:
+			out[i] = "end "
 		default:
 			if first == "" {
 				if strings.TrimSpace(line) != "" {

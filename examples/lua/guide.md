@@ -150,15 +150,13 @@ if verdict:lower():find("yes") then state.gate_open = true end
 
 **Claude's texts are remembered.** Two calls that send exactly the same things get the same text, without asking Claude again, until whynot quits. "The same things" means all of it: the instructions, `prompt`, `context` and `history`. That makes revisits consistent, instant and free. It's also your way to choose when a text changes. Put `state.lamp` in `context`, and the cellar has a lit version and a dark one. Leave it out, and the cellar always reads the same. A `history` makes texts depend on the path, so they're remembered less often.
 
-`claude.available` is `false` when there's no key, and calling `claude` then is an error. A game that should work either way can check it:
+Without a key, `claude{…}` and `claude.ask{…}` write nothing and return `nil`, so a game still runs, minus Claude's text. Lua's `or` gives a fallback, when the script uses the text:
 
 ```lua
-if claude.available then
-  claude{prompt = "Describe the storm."}
-else
-  out("The storm howls.")
-end
+local verdict = claude.ask{prompt = "…"} or "no"
 ```
+
+For anything else, `claude.available` is `true` when there's a key.
 
 ## Passage files
 
@@ -221,7 +219,20 @@ The hero carries a lit lamp.
 ```
 ````
 
-For `context`, `history` or `claude.ask`, call `claude{…}` in Lua as in a script, in a lua block or a code span. `claude{…}` shows its own text, so call it in a statement, `` `claude{…}` ``, not in `` `= …` ``, which would show it twice. To make a claude block optional, put `` `if claude.available then` `` and `` `end` `` around it.
+Code spans in the prompt run first, and Claude only sees what they write: in that example, the lamp's line is in the prompt only when `state.lamp` is set.
+
+Without a key, a claude block shows nothing, and its code doesn't run. A **noclaude block** (```` ```noclaude ````) is the opposite: ordinary passage text, code spans and all, shown only when there's no key. Put one after a claude block for a game that reads well either way:
+
+````markdown
+```claude
+Describe the cellar as the hero walks in.
+```
+```noclaude
+It smells of tar and paraffin.
+```
+````
+
+For `context`, `history` or `claude.ask`, call `claude{…}` in Lua as in a script, in a lua block or a code span. `claude{…}` shows its own text, so call it in a statement, `` `claude{…}` ``, not in `` `= …` ``, which would show it twice.
 
 **Inside the passage's code**, `state` and `request` are the page's, and `passage` is the current passage's id. Each passage is a Lua function, so a `return` in a statement span, such as `` `if not ok then show("too-late") return end` ``, ends the passage there.
 

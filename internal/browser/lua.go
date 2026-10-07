@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -50,6 +51,8 @@ type LuaResolver struct {
 
 	// cpuLimit, if set, replaces luaCPULimit.
 	cpuLimit uint64
+
+	noClaude sync.Once // logs that claude{...} calls write nothing
 
 	mu     sync.Mutex
 	states map[string]any    // by page id: the page's state, as plain data (see fromLua)
@@ -233,6 +236,12 @@ func (r *LuaResolver) run(ctx context.Context, name string, source []byte, reque
 			return c.Next(), nil
 		}, 0, true)
 		claudeFn := lr.SetEnvGoFunc(env, "__claude", func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+			if r.Claude == nil {
+				r.noClaude.Do(func() {
+					log.Print("lua: without ANTHROPIC_API_KEY, claude{...} writes nothing and returns nil")
+				})
+				return c.Next(), nil
+			}
 			text, err := r.claude(ctx, c, out)
 			if err != nil {
 				return nil, err
@@ -355,9 +364,6 @@ func (r *LuaResolver) claude(ctx context.Context, c *rt.GoCont, out io.Writer) (
 			_, err = io.WriteString(out, text)
 		}
 		return text, err
-	}
-	if r.Claude == nil {
-		return "", errors.New("claude: no Claude here: set ANTHROPIC_API_KEY")
 	}
 	resp, err := r.Claude.send(ctx, system, msgs, 4000)
 	if err != nil {

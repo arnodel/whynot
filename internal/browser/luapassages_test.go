@@ -134,12 +134,27 @@ func TestPassageClaude(t *testing.T) {
 	}))
 	defer server.Close()
 
-	source := "# The cellar\n\nYou go down.\n\n```claude\nDescribe the cellar.\n`if state.lamp then`\nThe hero has a lamp.\n`end`\nStamina: `= 3`.\n```\n\n- [Back up](#the-cellar)\n"
-	_, page := loadPage(t, &LuaResolver{Claude: &ClaudeResolver{Endpoint: server.URL}}, writeScriptFile(t, "game.md", source), "")
+	script := writeScriptFile(t, "game.md", claudeCellar)
+	_, page := loadPage(t, &LuaResolver{Claude: &ClaudeResolver{Endpoint: server.URL}}, script, "")
 	if want := "Describe the cellar.\nStamina: 3.\n"; len(prompts) != 1 || prompts[0] != want {
 		t.Errorf("prompts = %q, want [%q]", prompts, want)
 	}
-	if want := "You go down.\n\nIt is dark.\n\n- [Back up]"; !strings.Contains(page, want) {
+	if want := "You go down.\n\nIt is dark.\n\n- [Back up]"; !strings.Contains(page, want) || strings.Contains(page, "Without") {
+		t.Errorf("page = %q, want it to contain %q, and not the noclaude block", page, want)
+	}
+}
+
+const claudeCellar = "# The cellar\n\nYou go down.\n\n```claude\nDescribe the cellar.\n`if state.lamp then`\nThe hero has a lamp.\n`end`\nStamina: `= 3`.\n```\n```noclaude\nWithout Claude, `= 2 + 2`.\n```\n\n- [Back up](#the-cellar)\n"
+
+// TestPassageWithoutClaude checks that without Claude, a claude block
+// shows nothing, a noclaude block shows, and claude{} returns nil.
+func TestPassageWithoutClaude(t *testing.T) {
+	_, page := loadPage(t, &LuaResolver{}, writeScriptFile(t, "game.md", claudeCellar), "")
+	if want := "You go down.\n\nWithout Claude, 4.\n\n- [Back up]"; !strings.Contains(page, want) {
 		t.Errorf("page = %q, want it to contain %q", page, want)
+	}
+	_, page = loadPage(t, &LuaResolver{}, writeScript(t, "function page() out(claude{prompt = 'Hi'} or 'fallback') end"), "")
+	if page != "fallback" {
+		t.Errorf("page = %q, want %q: claude{} returns nil without Claude", page, "fallback")
 	}
 }
