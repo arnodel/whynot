@@ -129,21 +129,21 @@ end`)
 	}
 }
 
-// TestLuaClaude checks that claude{...} writes its text into the page and
-// returns it, that claude.ask{...} only returns it, and that a second
+// TestLuaAI checks that ai.write{...} writes its text into the page and
+// returns it, that ai{...} only returns it, and that a second
 // call with the same inputs uses the first's text.
-func TestLuaClaude(t *testing.T) {
+func TestLuaAI(t *testing.T) {
 	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			System   string
-			Messages []claudeMessage
+			Messages []AIMessage
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
 		requests = append(requests, body.Messages[0].Content)
-		if !strings.HasPrefix(body.System, luaClaudeSystemPrompt) || !strings.HasSuffix(body.System, "Be gothic.") {
+		if !(strings.HasPrefix(body.System, luaAIWritePrompt) || strings.HasPrefix(body.System, luaAIAskPrompt)) || !strings.HasSuffix(body.System, "Be gothic.") {
 			t.Errorf("system prompt = %q, want the built-in one, then the script's", body.System)
 		}
 		for _, text := range []string{"The cellar ", "is dark."} {
@@ -157,13 +157,13 @@ func TestLuaClaude(t *testing.T) {
 	}))
 	defer server.Close()
 
-	res := &LuaResolver{Claude: &ClaudeResolver{Endpoint: server.URL}}
+	res := &LuaResolver{AI: &Anthropic{Endpoint: server.URL}}
 	start := writeScript(t, `
-claude.system = "Be gothic."
+ai.system = "Be gothic."
 function page(request, state)
-  local text = claude{prompt = "Describe the cellar.", context = {lamp = false, items = {"rope"}}}
+  local text = ai.write{prompt = "Describe the cellar.", context = {lamp = false, items = {"rope"}}}
   out("\n\n[", #text, "]")
-  local verdict = claude.ask{prompt = "Judge."}
+  local verdict = ai{prompt = "Judge."}
   out("\n\nverdict: ", verdict:upper())
 end`)
 	_, page := loadPage(t, res, start, "")

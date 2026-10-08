@@ -19,11 +19,10 @@ import (
 //     anything else is Lua statements, such as `if state.lamp then`;
 //   - a line holding only a statement span disappears, newline and all;
 //   - a code span with two or more backquotes is shown, as code;
-//   - a claude fenced block asks Claude to write its text, which is the
-//     prompt, with spans run, and shows Claude's text where it is, or
-//     nothing without Claude;
-//   - a noclaude fenced block is ordinary lines, shown only without
-//     Claude;
+//   - an ai fenced block asks the AI to write its text, which is the
+//     prompt, with spans run, and shows the reply where it is, or
+//     nothing without an AI;
+//   - a noai fenced block is ordinary lines, shown only without an AI;
 //   - a link to a passage's heading, such as [Go](#the-hall), goes to the
 //     passage.
 //
@@ -37,17 +36,17 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 	// What each line is, besides an ordinary line of a passage.
 	type lineKind int
 	const (
-		ordinary      lineKind = iota
-		literal                // a line of code to show: spans don't run
-		heading                // a passage's heading
-		hidden                 // a setext heading's underline: not shown
-		luaFence               // the fence of a lua block
-		luaLine                // a line of Lua
-		claudeOpen             // the opening fence of a claude block
-		claudeClose            // its closing fence
-		claudeLine             // a line of its prompt
-		noclaudeOpen           // the opening fence of a noclaude block
-		noclaudeClose          // its closing fence
+		ordinary  lineKind = iota
+		literal            // a line of code to show: spans don't run
+		heading            // a passage's heading
+		hidden             // a setext heading's underline: not shown
+		luaFence           // the fence of a lua block
+		luaLine            // a line of Lua
+		aiOpen             // the opening fence of an ai block
+		aiClose            // its closing fence
+		aiLine             // a line of its prompt
+		noaiOpen           // the opening fence of a noai block
+		noaiClose          // its closing fence
 	)
 	kinds := make([]lineKind, len(lines))
 	titles := map[int]string{}
@@ -91,7 +90,7 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 				close = last + 1
 			}
 			language, _ := n.Language(source)
-			if n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || (language != "lua" && language != "claude" && language != "noclaude") {
+			if n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || (language != "lua" && language != "ai" && language != "noai") {
 				for i := open; i <= max(last, close); i++ {
 					kinds[i] = literal
 				}
@@ -106,13 +105,13 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 				for i := open + 1; i < close; i++ {
 					kinds[i] = luaLine
 				}
-			case "noclaude":
+			case "noai":
 				// Its lines are ordinary ones.
-				kinds[open], kinds[close] = noclaudeOpen, noclaudeClose
+				kinds[open], kinds[close] = noaiOpen, noaiClose
 			default:
-				kinds[open], kinds[close] = claudeOpen, claudeClose
+				kinds[open], kinds[close] = aiOpen, aiClose
 				for i := open + 1; i < close; i++ {
-					kinds[i] = claudeLine
+					kinds[i] = aiLine
 				}
 			}
 		}
@@ -136,13 +135,13 @@ func compilePassages(source []byte) (code string, passages map[string]bool, err 
 		case hidden, luaFence:
 		case luaLine:
 			out[i] = line
-		case claudeOpen:
-			out[i] = "if claude.available then claude{prompt = __capture(function() "
-		case claudeClose:
+		case aiOpen:
+			out[i] = "if ai.available then ai.write{prompt = __capture(function() "
+		case aiClose:
 			out[i] = `end)} out("\n") end `
-		case noclaudeOpen:
-			out[i] = "if not claude.available then "
-		case noclaudeClose:
+		case noaiOpen:
+			out[i] = "if not ai.available then "
+		case noaiClose:
 			out[i] = "end "
 		default:
 			if first == "" {

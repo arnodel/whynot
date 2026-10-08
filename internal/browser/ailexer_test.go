@@ -8,14 +8,14 @@ import (
 	"github.com/arnodel/whynot/codeblocks/chromahighlight"
 )
 
-// TestClaudeBlockHighlighting checks that a claude block's prose is a
+// TestAIBlockHighlighting checks that an ai block's prose is a
 // comment and its code spans are Lua, and that its spans still add up to
 // the block's source.
-func TestClaudeBlockHighlighting(t *testing.T) {
+func TestAIBlockHighlighting(t *testing.T) {
 	code := "Describe the shop.\n`if has(\"oil\") then`\nThey hold ``oil``.\n`end`\n"
-	content, ok := chromahighlight.Plugin{}.Parse("claude", code).(codeblocks.Tokens)
+	content, ok := chromahighlight.Plugin{}.Parse("ai", code).(codeblocks.Tokens)
 	if !ok {
-		t.Fatal("no tokens for a claude block")
+		t.Fatal("no tokens for an ai block")
 	}
 	classes := map[string]string{}
 	var all strings.Builder
@@ -35,7 +35,7 @@ func TestClaudeBlockHighlighting(t *testing.T) {
 			t.Errorf("class of %q = %q, want %q", text, classes[text], want)
 		}
 	}
-	if !(chromahighlight.Plugin{}).Handles("noclaude") {
-		t.Error("no lexer for noclaude blocks")
+	if !(chromahighlight.Plugin{}).Handles("noai") {
+		t.Error("no lexer for noai blocks")
 	}
 }

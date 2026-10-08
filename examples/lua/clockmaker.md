@@ -7,7 +7,7 @@
 -- Read as Markdown, it's also the game's script: each level-1 heading is
 -- a page, and the code in backquotes runs. See guide.md.
 
-claude.system = [[
+ai.system = [[
 You narrate a short, eerie game set in a clockmaker's shop at night, in
 the second person and the present tense. Write two or three sentences:
 sounds, light and texture. Don't make the reader act, and don't add
@@ -43,13 +43,13 @@ Every clock in the shop has stopped, at ten to midnight. Your master is
 nowhere to be found, and the great clock upstairs must be wound before
 midnight strikes.
 
-```claude
+```ai
 Describe the shop as the reader stands in it, among the stopped clocks.
 `if has("oil") then`
 They hold a can of clock oil.
 `end`
 ```
-```noclaude
+```noai
 The pendulums hang still. Somewhere, a spring creaks as it cools.
 ```
 

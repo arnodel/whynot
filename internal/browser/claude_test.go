@@ -29,11 +29,11 @@ func TestRewriteClaudeLinks(t *testing.T) {
 // next, and checks the second request sends the first page as context,
 // and that every request sends the reader's instructions.
 func TestClaudeResolverChain(t *testing.T) {
-	var requests [][]claudeMessage
+	var requests [][]AIMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			System   string
-			Messages []claudeMessage
+			Messages []AIMessage
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
@@ -54,7 +54,7 @@ func TestClaudeResolverChain(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := NewRegistry(nil, &ClaudeResolver{Endpoint: server.URL, Instructions: "Write for a 10-year-old."})
+	registry := NewRegistry(nil, &ClaudeResolver{AI: &Anthropic{Endpoint: server.URL}, Instructions: "Write for a 10-year-old."})
 	first, err := url.Parse("claude:the 1919 eclipse")
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestClaudeResolverAPIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	registry := NewRegistry(nil, &ClaudeResolver{Endpoint: server.URL})
+	registry := NewRegistry(nil, &ClaudeResolver{AI: &Anthropic{Endpoint: server.URL}})
 	_, err := LoadDocument(registry, &url.URL{Scheme: "claude", Opaque: "anything"})
 	if err == nil || !strings.Contains(err.Error(), "invalid x-api-key") {
 		t.Errorf("error = %v, want the API's message", err)

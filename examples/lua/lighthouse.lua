@@ -2,11 +2,11 @@
 --
 --   whynot lua:examples/lua/lighthouse.lua
 --
--- The rules and the dice are Lua. With ANTHROPIC_API_KEY set, Claude adds
+-- The rules and the dice are Lua. With an AI (ANTHROPIC_API_KEY set), it adds
 -- a paragraph of atmosphere to each scene, written once per situation and
 -- then remembered.
 
-claude.system = [[
+ai.system = [[
 You narrate a short gothic gamebook, in the second person and the present
 tense. The hero has rowed out to a lighthouse on a rock off the Cornish
 coast, on a stormy night, to light its beacon before a ship strikes the
@@ -143,8 +143,8 @@ function page(request, state)
   end
 
   out(scene.text, "\n\n")
-  if claude.available then
-    local text = claude{
+  if ai.available then
+    local text = ai.write{
       prompt = "Describe this moment, in the scene: " .. scene.title .. ". " .. scene.text,
       context = {items = state.items, stamina = state.stamina, lamp_lit = has(state, "lamp")},
       history = state.story,

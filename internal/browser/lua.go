@@ -2,9 +2,6 @@ package browser
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,19 +41,20 @@ import (
 // Links in a page are usually query-only, such as [Go north](?go=north),
 // or made by link("Go north", {go = "north"}). The script runs in a
 // sandbox: no files or network, and limited CPU and memory. It can ask
-// Claude to write text with claude{...} (see luaClaudeSystemPrompt).
+// an AI for text or decisions with ai{...}, and to write part of the page
+// with ai.write{...} (see luaai.go).
 type LuaResolver struct {
-	// Claude, if set, makes the script's claude{...} calls.
-	Claude *ClaudeResolver
+	// AI, if set, answers the script's ai{...} calls.
+	AI AI
 
 	// cpuLimit, if set, replaces luaCPULimit.
 	cpuLimit uint64
 
-	noClaude sync.Once // logs that claude{...} calls write nothing
+	noAI sync.Once // logs that ai{...} calls return nil
 
 	mu     sync.Mutex
 	states map[string]any    // by page id: the page's state, as plain data (see fromLua)
-	texts  map[string]string // claude{...} results, by luaClaudeKey
+	texts  map[string]string // ai{...} replies, by aiKey
 	nextID int
 }
 
@@ -65,32 +63,21 @@ const (
 	// golua's units: about half a second of CPU, and 200MB.
 	luaCPULimit = 100_000_000
 	luaMemLimit = 200 << 20
-	// luaMaxDepth bounds how deeply tables nest in a state or a claude{}
+	// luaMaxDepth bounds how deeply tables nest in a state or an ai{}
 	// context, which also catches tables that contain themselves.
 	luaMaxDepth = 100
 )
 
-// luaClaudeSystemPrompt comes first in the system prompt of every
-// claude{...} call, before the script's own (claude.system) and the
-// call's (its system field).
-const luaClaudeSystemPrompt = `You write a piece of text for a page of an interactive document: a program inserts your reply into the page, where it asked for it. Reply with that text only, in Markdown: paragraphs, emphasis and lists are fine, but no headings unless asked, and no preamble or closing remarks.
-
-Never write links: the program gives the reader their choices itself.
-
-If facts are given, treat them as true and stay consistent with them, without reciting them. If the story so far is given, follow on from it without repeating it.
-
-The instructions that follow, if any, come from the document's author. They take precedence over these, except for the rule on links.`
-
 // luaPrelude runs before the script, to define what it can use besides
 // the standard libraries.
 const luaPrelude = `
-local call, available = __claude, __claude_available
-__claude, __claude_available = nil, nil
+local call, available = __ai, __ai_available
+__ai, __ai_available = nil, nil
 
-claude = setmetatable({system = "", available = available}, {
-  __call = function(self, spec) return call(self.system, spec, true) end,
+ai = setmetatable({system = "", available = available}, {
+  __call = function(self, spec) return call(self, spec, false) end,
 })
-function claude.ask(spec) return call(claude.system, spec, false) end
+function ai.write(spec) return call(ai, spec, true) end
 
 local function escape(s)
   return (tostring(s):gsub("[^%w%-_%.~]", function(c)
@@ -235,23 +222,23 @@ func (r *LuaResolver) run(ctx context.Context, name string, source []byte, reque
 			}
 			return c.Next(), nil
 		}, 0, true)
-		claudeFn := lr.SetEnvGoFunc(env, "__claude", func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
-			if r.Claude == nil {
-				r.noClaude.Do(func() {
-					log.Print("lua: without ANTHROPIC_API_KEY, claude{...} writes nothing and returns nil")
+		aiFn := lr.SetEnvGoFunc(env, "__ai", func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+			if r.AI == nil {
+				r.noAI.Do(func() {
+					log.Print("lua: with no AI, ai{...} and ai.write{...} return nil")
 				})
 				return c.Next(), nil
 			}
-			text, err := r.claude(ctx, c, out)
+			reply, err := r.ai(ctx, c, out)
 			if err != nil {
 				return nil, err
 			}
-			return c.PushingNext1(t.Runtime, rt.StringValue(text)), nil
+			return c.PushingNext1(t.Runtime, reply), nil
 		}, 3, false)
-		// Both only reach what the host gives them: the page, and Claude
+		// Both only reach what the host gives them: the page, and the AI
 		// through the host's key.
-		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, outFn, claudeFn)
-		lr.SetEnv(env, "__claude_available", rt.BoolValue(r.Claude != nil))
+		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, outFn, aiFn)
+		lr.SetEnv(env, "__ai_available", rt.BoolValue(r.AI != nil))
 
 		req := rt.NewTable()
 		for k, v := range request {
@@ -304,102 +291,6 @@ func (r *LuaResolver) run(ctx context.Context, name string, source []byte, reque
 		return nil
 	}, def, out)
 	return newState, err
-}
-
-// claude makes the claude{...} call whose arguments are c's: the
-// script's system prompt, the call's spec table, and whether its text
-// shows in the page, as it arrives, written to out.
-func (r *LuaResolver) claude(ctx context.Context, c *rt.GoCont, out io.Writer) (string, error) {
-	scriptSystem, _ := c.Arg(0).TryString()
-	spec, err := c.TableArg(1)
-	if err != nil {
-		return "", err
-	}
-	show := rt.Truth(c.Arg(2))
-	field := func(name string) rt.Value { return spec.Get(rt.StringValue(name)) }
-
-	prompt, ok := field("prompt").TryString()
-	if !ok || prompt == "" {
-		return "", errors.New("claude: no prompt")
-	}
-	system := luaClaudeSystemPrompt
-	for _, extra := range []rt.Value{rt.StringValue(scriptSystem), field("system")} {
-		if s, _ := extra.TryString(); strings.TrimSpace(s) != "" {
-			system += "\n\n" + s
-		}
-	}
-	var message strings.Builder
-	if !field("history").IsNil() {
-		history, ok := field("history").TryTable()
-		if !ok {
-			return "", errors.New("claude: history isn't a list")
-		}
-		message.WriteString("The story so far:\n\n")
-		for i := int64(1); i <= history.Len(); i++ {
-			s, _ := history.Get(rt.IntValue(i)).ToString()
-			message.WriteString(s + "\n\n")
-		}
-		message.WriteString("---\n\n")
-	}
-	message.WriteString(prompt)
-	if !field("context").IsNil() {
-		data, err := fromLua(field("context"), 0)
-		if err != nil {
-			return "", fmt.Errorf("claude: context: %w", err)
-		}
-		facts, err := json.MarshalIndent(toJSON(data), "", "  ")
-		if err != nil {
-			return "", fmt.Errorf("claude: context: %w", err)
-		}
-		fmt.Fprintf(&message, "\n\nFacts:\n\n```json\n%s\n```", facts)
-	}
-	msgs := []claudeMessage{{Role: "user", Content: message.String()}}
-
-	key := luaClaudeKey(system, msgs)
-	r.mu.Lock()
-	text, cached := r.texts[key]
-	r.mu.Unlock()
-	if cached {
-		if show {
-			_, err = io.WriteString(out, text)
-		}
-		return text, err
-	}
-	resp, err := r.Claude.send(ctx, system, msgs, 4000)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	var b strings.Builder
-	err = readClaudeStream(resp.Body, func(s string) error {
-		b.WriteString(s)
-		if show {
-			_, err := io.WriteString(out, s)
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	text = b.String()
-	r.mu.Lock()
-	if r.texts == nil {
-		r.texts = map[string]string{}
-	}
-	r.texts[key] = text
-	r.mu.Unlock()
-	return text, nil
-}
-
-// luaClaudeKey identifies a claude{...} call by everything it sends.
-func luaClaudeKey(system string, msgs []claudeMessage) string {
-	data, _ := json.Marshal(struct {
-		System   string
-		Messages []claudeMessage
-	}{system, msgs})
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
 }
 
 // state returns the state of the page with the given id, or an empty

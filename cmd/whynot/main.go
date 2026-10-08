@@ -29,7 +29,7 @@ func main() {
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
-	claudeModel := flag.String("claude-model", "claude-sonnet-5", "the model that writes claude: pages, when ANTHROPIC_API_KEY is set")
+	claudeModel := flag.String("claude-model", "claude-sonnet-5", "with ANTHROPIC_API_KEY set, the model of the balanced tier: it writes claude: pages, and answers lua: pages' ai{...} calls unless they ask for another tier")
 	claudeInstructions := flag.String("claude-instructions", "", "a file of instructions for the claude: pages: their style, audience or subject, for example")
 	flag.Parse()
 
@@ -50,9 +50,9 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		claude := &browser.ClaudeResolver{APIKey: key, Model: *claudeModel, Instructions: string(instructions)}
-		luaResolver.Claude = claude
-		extra = append(extra, claude)
+		ai := &browser.Anthropic{APIKey: key, Balanced: *claudeModel}
+		luaResolver.AI = ai
+		extra = append(extra, &browser.ClaudeResolver{AI: ai, Instructions: string(instructions)})
 	}
 	registry := browser.NewRegistry(root, extra...)
 

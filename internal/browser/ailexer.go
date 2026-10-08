@@ -5,13 +5,13 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// Syntax highlighting for a passage file's claude and noclaude blocks,
-// wherever whynot shows one, such as in a passage file's source: their
-// code spans as Lua, and a claude block's prose, the prompt, which the
-// reader never sees, as a comment.
+// Syntax highlighting for a passage file's ai and noai blocks, wherever
+// whynot shows one, such as in a passage file's source: their code spans
+// as Lua, and an ai block's prose, the prompt, which the reader never
+// sees, as a comment.
 func init() {
-	lexers.Register(passageBlockLexer("Claude prompt", "claude", chroma.Comment))
-	lexers.Register(passageBlockLexer("Claude fallback", "noclaude", chroma.Text))
+	lexers.Register(passageBlockLexer("AI prompt", "ai", chroma.Comment))
+	lexers.Register(passageBlockLexer("AI fallback", "noai", chroma.Text))
 }
 
 // passageBlockLexer returns a lexer for passage text: prose, of the given

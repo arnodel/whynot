@@ -122,39 +122,39 @@ func TestCompileLine(t *testing.T) {
 	}
 }
 
-// TestPassageClaude checks that a claude block sends its text as the
-// prompt, with its spans run, and shows Claude's reply where it is.
-func TestPassageClaude(t *testing.T) {
+// TestPassageAI checks that an ai block sends its text as the prompt,
+// with its spans run, and shows the reply where it is.
+func TestPassageAI(t *testing.T) {
 	var prompts []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body struct{ Messages []claudeMessage }
+		var body struct{ Messages []AIMessage }
 		json.NewDecoder(r.Body).Decode(&body)
 		prompts = append(prompts, body.Messages[0].Content)
 		io.WriteString(w, `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"It is dark."}}`+"\n\n")
 	}))
 	defer server.Close()
 
-	script := writeScriptFile(t, "game.md", claudeCellar)
-	_, page := loadPage(t, &LuaResolver{Claude: &ClaudeResolver{Endpoint: server.URL}}, script, "")
+	script := writeScriptFile(t, "game.md", aiCellar)
+	_, page := loadPage(t, &LuaResolver{AI: &Anthropic{Endpoint: server.URL}}, script, "")
 	if want := "Describe the cellar.\nStamina: 3.\n"; len(prompts) != 1 || prompts[0] != want {
 		t.Errorf("prompts = %q, want [%q]", prompts, want)
 	}
 	if want := "You go down.\n\nIt is dark.\n\n- [Back up]"; !strings.Contains(page, want) || strings.Contains(page, "Without") {
-		t.Errorf("page = %q, want it to contain %q, and not the noclaude block", page, want)
+		t.Errorf("page = %q, want it to contain %q, and not the noai block", page, want)
 	}
 }
 
-const claudeCellar = "# The cellar\n\nYou go down.\n\n```claude\nDescribe the cellar.\n`if state.lamp then`\nThe hero has a lamp.\n`end`\nStamina: `= 3`.\n```\n```noclaude\nWithout Claude, `= 2 + 2`.\n```\n\n- [Back up](#the-cellar)\n"
+const aiCellar = "# The cellar\n\nYou go down.\n\n```ai\nDescribe the cellar.\n`if state.lamp then`\nThe hero has a lamp.\n`end`\nStamina: `= 3`.\n```\n```noai\nWithout an AI, `= 2 + 2`.\n```\n\n- [Back up](#the-cellar)\n"
 
-// TestPassageWithoutClaude checks that without Claude, a claude block
-// shows nothing, a noclaude block shows, and claude{} returns nil.
-func TestPassageWithoutClaude(t *testing.T) {
-	_, page := loadPage(t, &LuaResolver{}, writeScriptFile(t, "game.md", claudeCellar), "")
-	if want := "You go down.\n\nWithout Claude, 4.\n\n- [Back up]"; !strings.Contains(page, want) {
+// TestPassageWithoutAI checks that without an AI, an ai block shows
+// nothing, a noai block shows, and ai{} returns nil.
+func TestPassageWithoutAI(t *testing.T) {
+	_, page := loadPage(t, &LuaResolver{}, writeScriptFile(t, "game.md", aiCellar), "")
+	if want := "You go down.\n\nWithout an AI, 4.\n\n- [Back up]"; !strings.Contains(page, want) {
 		t.Errorf("page = %q, want it to contain %q", page, want)
 	}
-	_, page = loadPage(t, &LuaResolver{}, writeScript(t, "function page() out(claude{prompt = 'Hi'} or 'fallback') end"), "")
+	_, page = loadPage(t, &LuaResolver{}, writeScript(t, "function page() out(ai{prompt = 'Hi'} or 'fallback') end"), "")
 	if page != "fallback" {
-		t.Errorf("page = %q, want %q: claude{} returns nil without Claude", page, "fallback")
+		t.Errorf("page = %q, want %q: ai{} returns nil without an AI", page, "fallback")
 	}
 }

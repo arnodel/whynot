@@ -1,43 +1,32 @@
 package browser
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/arnodel/whynot/fetch"
 )
 
 // ClaudeResolver resolves claude: URLs, such as claude:the 1919 eclipse,
-// to Markdown pages that Claude writes on request, through the Messages
-// API.
+// to Markdown pages that an AI writes on request.
 //
 // Every claude: link in a page it generates gets a from=<page id> query,
-// so that following it sends Claude the chain of pages that led there:
+// so that following it sends the AI the chain of pages that led there:
 // each page follows on from the previous ones, and going Back and taking
 // another link starts a new branch.
 type ClaudeResolver struct {
-	// APIKey authenticates to the Messages API.
-	APIKey string
-	// Model is the model ID, such as "claude-sonnet-5".
-	Model string
+	// AI writes the pages.
+	AI AI
 	// Instructions, if any, are the reader's: about the pages' style,
 	// audience or subject, for example. They come after the built-in
 	// ones, which they can override, except for how to write links.
 	Instructions string
-	// Endpoint is the Messages API URL; empty means Anthropic's.
-	Endpoint string
-	// Client makes the requests; nil means one with claudeTimeout.
-	Client *http.Client
 
 	mu     sync.Mutex
 	pages  map[string]claudePage
@@ -48,19 +37,13 @@ type ClaudeResolver struct {
 // links can send it as context.
 type claudePage struct {
 	request  string
-	markdown string // as Claude wrote it, before rewriteClaudeLinks
+	markdown string // as the AI wrote it, before rewriteClaudeLinks
 	from     string // the id of the page whose link requested it, or ""
 }
 
-const (
-	claudeEndpoint = "https://api.anthropic.com/v1/messages"
-	// claudeTimeout is longer than httpTimeout because writing a page
-	// takes tens of seconds.
-	claudeTimeout = 5 * time.Minute
-	// claudeMaxChain bounds how many earlier pages a request sends, to
-	// bound its cost.
-	claudeMaxChain = 8
-)
+// claudeMaxChain bounds how many earlier pages a request sends, to bound
+// its cost.
+const claudeMaxChain = 8
 
 const claudeSystemPrompt = `You write the pages of a Markdown browser. Each user message is a request for a page: a topic, a question, or the text of a link the reader followed. Reply with the page itself, in Markdown, with no preamble or closing remarks.
 
@@ -96,45 +79,38 @@ type claudeSource struct {
 
 func (s claudeSource) Key() string { return s.request + "?from=" + s.from }
 
-// Fetch starts writing the page, and returns once Claude starts replying:
+// Fetch starts writing the page, and returns once the AI starts replying:
 // the body is the page's Markdown as it arrives. Closing the body, or
 // cancelling ctx, stops the request; the text so far is kept as the page.
 func (s claudeSource) Fetch(ctx context.Context) (io.ReadCloser, string, error) {
 	r := s.resolver
-	ctx, cancel := context.WithCancel(ctx)
-	resp, err := r.send(ctx, r.systemPrompt(), r.messages(s.request, s.from), 16000)
+	reply, err := r.AI.Start(ctx, AIRequest{System: r.systemPrompt(), Messages: r.messages(s.request, s.from)})
 	if err != nil {
-		cancel()
 		return nil, "", err
 	}
 	id := r.newID()
 	pr, pw := io.Pipe()
 	go func() {
-		defer resp.Body.Close()
+		defer reply.Close()
 		var markdown strings.Builder
 		links := linkRewriter{w: pw, id: id}
-		err := readClaudeStream(resp.Body, func(text string) error {
+		err := readText(reply, func(text string) error {
 			markdown.WriteString(text)
 			return links.write(text)
 		})
+		switch {
+		case errors.Is(err, ErrAICutOff):
+			err = links.write("\n\n*The page was cut off here.*\n")
+		case errors.Is(err, ErrAIDeclined):
+			err = links.write("\n\n*The AI declined to write this page.*\n")
+		}
 		if err == nil {
 			err = links.flush()
 		}
 		r.store(id, claudePage{request: s.request, markdown: markdown.String(), from: s.from})
 		pw.CloseWithError(err)
 	}()
-	return cancelOnClose{ReadCloser: pr, cancel: cancel}, "text/markdown", nil
-}
-
-// cancelOnClose is a body whose Close also cancels its request.
-type cancelOnClose struct {
-	io.ReadCloser
-	cancel context.CancelFunc
-}
-
-func (c cancelOnClose) Close() error {
-	c.cancel()
-	return c.ReadCloser.Close()
+	return cancelOnClose{ReadCloser: pr, cancel: func() { reply.Close() }}, "text/markdown", nil
 }
 
 // newID returns the id of a new page.
@@ -155,15 +131,10 @@ func (r *ClaudeResolver) store(id string, page claudePage) {
 	r.pages[id] = page
 }
 
-type claudeMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 // messages returns the conversation for request: the chain of pages
 // ending with the page from, as alternating requests and pages, then
 // request.
-func (r *ClaudeResolver) messages(request, from string) []claudeMessage {
+func (r *ClaudeResolver) messages(request, from string) []AIMessage {
 	r.mu.Lock()
 	var chain []claudePage
 	for id := from; id != "" && len(chain) < claudeMaxChain; {
@@ -176,13 +147,13 @@ func (r *ClaudeResolver) messages(request, from string) []claudeMessage {
 	}
 	r.mu.Unlock()
 
-	var msgs []claudeMessage
+	var msgs []AIMessage
 	for i := len(chain) - 1; i >= 0; i-- {
 		msgs = append(msgs,
-			claudeMessage{Role: "user", Content: chain[i].request},
-			claudeMessage{Role: "assistant", Content: chain[i].markdown})
+			AIMessage{Role: "user", Content: chain[i].request},
+			AIMessage{Role: "assistant", Content: chain[i].markdown})
 	}
-	return append(msgs, claudeMessage{Role: "user", Content: request})
+	return append(msgs, AIMessage{Role: "user", Content: request})
 }
 
 // systemPrompt returns the built-in instructions, followed by the
@@ -192,98 +163,6 @@ func (r *ClaudeResolver) systemPrompt() string {
 		return claudeSystemPrompt
 	}
 	return claudeSystemPrompt + "\n\nThe reader's instructions follow. They take precedence over the ones above, except for how to write links to further pages.\n\n" + r.Instructions
-}
-
-// claudeError is the error object of the Messages API, in an error
-// response or an error event.
-type claudeError struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
-
-func (e *claudeError) Error() string { return "Messages API: " + e.Type + ": " + e.Message }
-
-// send makes a streaming request for msgs, and returns the response once
-// it starts.
-func (r *ClaudeResolver) send(ctx context.Context, system string, msgs []claudeMessage, maxTokens int) (*http.Response, error) {
-	body, err := json.Marshal(map[string]any{
-		"model":      r.Model,
-		"max_tokens": maxTokens,
-		"system":     system,
-		"messages":   msgs,
-		"stream":     true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	endpoint := r.Endpoint
-	if endpoint == "" {
-		endpoint = claudeEndpoint
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", r.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	client := r.Client
-	if client == nil {
-		client = &http.Client{Timeout: claudeTimeout}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		var reply struct{ Error *claudeError }
-		if json.NewDecoder(resp.Body).Decode(&reply) == nil && reply.Error != nil {
-			return nil, reply.Error
-		}
-		return nil, fmt.Errorf("Messages API: %s", resp.Status)
-	}
-	return resp, nil
-}
-
-// readClaudeStream reads the server-sent events of a streaming reply,
-// calling text with each piece of the reply's text.
-func readClaudeStream(stream io.Reader, text func(string) error) error {
-	scanner := bufio.NewScanner(stream)
-	scanner.Buffer(nil, 1<<20)
-	for scanner.Scan() {
-		data, ok := strings.CutPrefix(scanner.Text(), "data:")
-		if !ok {
-			continue
-		}
-		var event struct {
-			Type  string
-			Delta struct {
-				Type       string
-				Text       string
-				StopReason string `json:"stop_reason"`
-			}
-			Error *claudeError
-		}
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return fmt.Errorf("Messages API: %w", err)
-		}
-		var err error
-		switch {
-		case event.Type == "error" && event.Error != nil:
-			return event.Error
-		case event.Type == "content_block_delta" && event.Delta.Type == "text_delta":
-			err = text(event.Delta.Text)
-		case event.Type == "message_delta" && event.Delta.StopReason == "max_tokens":
-			err = text("\n\n*The page was cut off here.*\n")
-		case event.Type == "message_delta" && event.Delta.StopReason == "refusal":
-			err = text("\n\n*Claude declined to write this page.*\n")
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return scanner.Err()
 }
 
 // linkRewriter writes text to w with rewriteClaudeLinks applied, holding
