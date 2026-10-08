@@ -1,5 +1,6 @@
 // Package codeblocks is the contract between whynot's Markdown compiler
-// and code-block plugins, which change how fenced code blocks are shown.
+// and code-block plugins, which change how fenced code blocks, and
+// optionally inline code, are shown.
 // A [Plugin] says which languages it handles, and parses each such
 // block's source into [Content]: [Tokens], spans of the source classified
 // for syntax coloring, or an [Image], such as a rendered diagram.
@@ -12,6 +13,17 @@
 // Ready-made plugins are in subpackages: chromahighlight highlights code
 // in every language the chroma library knows, and kroki turns Mermaid
 // diagrams into images.
+//
+// # Inline code
+//
+// Markdown doesn't say what language inline code is in, but a program can,
+// for a whole document, with the whynot.WithInlineCodeLanguage option.
+// Each code span is then offered to the plugins as a code block in that
+// language would be, so a plugin's Parse can also be given a code span's
+// text: a single line, with no newline at the end. Only Tokens are used
+// inline: a span the first plugin makes an Image of, or nothing of,
+// stays plain inline code. Tokens ending in a newline the span doesn't
+// have, as some lexers add, are accepted without it.
 //
 // # Writing a plugin
 //

@@ -14,7 +14,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | Path | What it is |
 |---|---|
 | repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Controller`, `StyleSheet`; no rendering backend dependency |
-| `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks; `whynot.Parse` wraps it |
+| `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks, and for code spans when the document's inline code language is set; `whynot.Parse` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `backends/ebitenbackend/` | the Ebitengine backend: `canvas.Canvas` on top of `ebiten`, and an `input.Source` reading Ebitengine's input |
 | `backends/giobackend/` | the Gio backend: `canvas.Canvas` on top of Gio, an `input.Source` for Gio's pointer events, and `NativeScrollbar` (Gio's own scrollbar). It also holds the Gio-only programs: `cmd/giowhynot` and `examples/gio`. **Its own Go module** (v0 while Gio is), so the core module doesn't depend on Gio; `go.work` at the root puts both modules in one workspace for development |
@@ -24,7 +24,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `backends/ebitenbackend/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
-| `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`; implementations in subpackages |
+| `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`, and code spans into `Tokens`; implementations in subpackages |
 | `codeblocks/chromahighlight/` | a `codeblocks.Plugin` producing `Tokens` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `backends/ebitenbackend/` |
 | `codeblocks/kroki/` | a `codeblocks.Plugin` producing an `Image`: renders Mermaid fences as images through a Kroki server |
 | `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
