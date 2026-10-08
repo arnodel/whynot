@@ -62,7 +62,7 @@ func newPromptField() *promptField {
 }
 
 func (p *promptField) insert(s string) {
-	s = strings.Join(strings.Fields(s), " ") // one line
+	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace(s) // one line
 	p.text = p.text[:p.caret] + s + p.text[p.caret:]
 	p.caret += len(s)
 }

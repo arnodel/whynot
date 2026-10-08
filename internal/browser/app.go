@@ -17,6 +17,7 @@ import (
 	"errors"
 	"image"
 	"log"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -653,7 +654,11 @@ func scrollToFragment(v *whynot.View, id string) {
 	case id == "" || strings.EqualFold(id, "top"):
 		v.ScrollToRatio(0)
 	case strings.EqualFold(id, "end"):
+		// The bottom of the document at the bottom of the View: the cursor
+		// clamps at the document's end, then backs up a View's height.
 		v.ScrollToRatio(1)
+		v.ScrollBy(math.MaxInt32)
+		v.ScrollBy(-float64(v.Bounds().Dy()))
 	}
 }
 

@@ -821,7 +821,7 @@ func TestAppFollowEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.Follow("?s=1&again=1#end")
-	if first, _ := app.Panel.View().VisibleRange(); first == 0 {
-		t.Error("the page opened at its top, want its end")
+	if first, last := app.Panel.View().VisibleRange(); first == 0 || last < 0.999 || last-first < 0.01 {
+		t.Errorf("visible range is %v to %v, want the page's last screenful", first, last)
 	}
 }
