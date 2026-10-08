@@ -34,17 +34,23 @@ func NewLineBox(parts []InlineLayout, glue bool) *LineBox {
 }
 
 // wrapLines breaks parts into lines no wider than width. A part Glued() to
-// the one before it is never a break point: like a single oversized word,
-// a glued run stays on one line even if it overflows width.
+// the one before it is never a break point, so a glued run, such as a
+// highlighted code span's tokens, moves to the next line as a whole when
+// it doesn't fit; like a single oversized word, a run wider than width
+// overflows its line.
 func wrapLines(parts []InlineLayout, width int) []BlockLayout {
 	var lines []BlockLayout
 	var l lineBuilder
-	for _, part := range parts {
+	for i, part := range parts {
 		if len(l.parts) > 0 && !part.Glued() {
+			end := i + 1
+			for end < len(parts) && parts[end].Glued() {
+				end++
+			}
 			// Dx(), not Max.X: a part's own bounds can pull the line's
 			// Min.X away from 0 (e.g. its left bearing), and Max.X alone
 			// would then overstate the line's width.
-			if _, bounds := l.fit(part); bounds.Dx() > width {
+			if l.fitRun(parts[i:end]).Dx() > width {
 				lines = append(lines, l.line())
 				l = lineBuilder{}
 			}
@@ -95,6 +101,24 @@ func (l *lineBuilder) gap(part InlineLayout) int {
 		return 0
 	}
 	return max(l.prevSpace, part.SpaceWidth())
+}
+
+// fitRun returns the line's bounds with run added next, without adding
+// it.
+func (l *lineBuilder) fitRun(run []InlineLayout) image.Rectangle {
+	if len(run) == 1 {
+		_, bounds := l.fit(run[0])
+		return bounds
+	}
+	// Full slice expressions, so that adding to the trial never writes to
+	// l's arrays.
+	trial := *l
+	trial.parts = l.parts[:len(l.parts):len(l.parts)]
+	trial.xs = l.xs[:len(l.xs):len(l.xs)]
+	for _, part := range run {
+		trial.add(part)
+	}
+	return trial.bounds
 }
 
 func (l *lineBuilder) add(part InlineLayout) {
