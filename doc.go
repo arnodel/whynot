@@ -30,7 +30,9 @@
 //     ([WithFaceSelector]; see package [fonts]): by default, the Go fonts.
 //
 // [Parse] can be given code-block plugins ([WithCodeBlockPlugin]; see
-// package [codeblocks]), for syntax highlighting or diagrams, and what
+// package [codeblocks]), for syntax highlighting or diagrams, and the
+// language of the document's inline code, so that they highlight that
+// too ([WithInlineCodeLanguage]), and what
 // the document's images can be fetched from ([WithImageRegistry] and
 // [WithBaseURL]; see package [fetch]). Nothing is fetched by default: a
 // document parsed without a registry shows no images.

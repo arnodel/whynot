@@ -6,6 +6,9 @@
 //
 //	doc := whynot.Parse(source, whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}))
 //
+// With whynot.WithInlineCodeLanguage, it highlights a document's inline
+// code too.
+//
 // It's a package of its own so that programs that don't highlight code
 // don't depend on chroma, which bundles lexers for some 200 languages.
 package chromahighlight

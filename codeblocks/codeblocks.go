@@ -16,7 +16,9 @@ type Plugin interface {
 
 	// Parse makes Content of a code block's source, in a language Handles
 	// approved. A nil Content means the plugin declines this block, and
-	// the next plugin handling the language is asked instead.
+	// the next plugin handling the language is asked instead. code can
+	// also be a code span's, a single line, when the document's inline
+	// code is in language (see the package's Inline code section).
 	Parse(language, code string) Content
 }
 
