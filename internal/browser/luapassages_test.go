@@ -136,7 +136,7 @@ func TestPassageAI(t *testing.T) {
 
 	script := writeScriptFile(t, "game.md", aiCellar)
 	_, page := loadPage(t, &LuaResolver{AI: &Anthropic{Endpoint: server.URL}}, script, "")
-	if want := "Describe the cellar.\nStamina: 3.\n"; len(prompts) != 1 || prompts[0] != want {
+	if want := "Describe the cellar.\nStamina: 3."; len(prompts) != 1 || prompts[0] != want {
 		t.Errorf("prompts = %q, want [%q]", prompts, want)
 	}
 	if want := "You go down.\n\nIt is dark.\n\n- [Back up]"; !strings.Contains(page, want) || strings.Contains(page, "Without") {
