@@ -780,3 +780,28 @@ func TestLineBoxListMarkerBoundsMatchDrawing(t *testing.T) {
 		t.Errorf("line Bounds().Max.X = %d, want %d (the word's ink, drawn at x=%d)", got, want, wordX)
 	}
 }
+
+// TestWrapLinesMovesGluedRun checks that a glued run that doesn't fit at
+// the end of a line moves to the next line as a whole, rather than its
+// first part fitting and the rest overflowing.
+func TestWrapLinesMovesGluedRun(t *testing.T) {
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := &TextBox{Text: "xxxxxxxxxx", Face: face}
+	a := &TextBox{Text: "aaaa", Face: face}
+	b := &TextBox{Text: "bbbbbbbbbb", Face: face, glued: true}
+
+	// Wide enough for x and a, but not for x, a and b.
+	width := NewLineBox([]InlineLayout{x, a}, false).Bounds().Dx() + 1
+	if NewLineBox([]InlineLayout{x, a, b}, false).Bounds().Dx() <= width {
+		t.Fatal("test setup: x, a and b fit")
+	}
+
+	lines := wrapLines([]InlineLayout{x, a, b}, width)
+	if len(lines) != 2 || len(lines[0].(*LineBox).parts) != 1 || len(lines[1].(*LineBox).parts) != 2 {
+		t.Fatalf("wrapLines = %d lines, want 2: x, then a and b together", len(lines))
+	}
+}
