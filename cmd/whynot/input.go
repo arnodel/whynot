@@ -13,6 +13,12 @@ func (g *game) Update() error {
 	defer func() { g.updateDuration = time.Since(start) }()
 
 	g.app.Update()
+	if g.app.Prompting() {
+		// The prompt takes all input, so the page beneath it can't be
+		// clicked.
+		g.updatePrompt()
+		return nil
+	}
 	g.app.HandleEvents(g.panel.Frame(g.input.Events(), time.Since(g.start)))
 
 	// pointerState so these buttons work with a touch too, not just a mouse.

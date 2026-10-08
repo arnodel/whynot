@@ -21,6 +21,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.panel.Draw(canvas, time.Since(g.start))
 
 	g.drawToolbar(screen, canvas)
+	if g.app.Prompting() {
+		g.drawPrompt(canvas)
+	}
 	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
 		g.app.DrawZoomIndicator(canvas, face)
 		if g.debugStats {

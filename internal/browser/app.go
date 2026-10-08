@@ -119,6 +119,10 @@ type App struct {
 	loader       *loader
 	loadFragment string
 	builtAt      time.Time
+
+	// prompt is the destination of the link waiting for the reader's
+	// text, if any (see Prompting).
+	prompt string
 }
 
 // NewApp constructs an App with no Panel yet and no current location -
@@ -306,7 +310,14 @@ func (a *App) newView(source []byte, location *url.URL, diagrams bool, extra ...
 // TOC's "#id" ones: resolved against a.location as usual, but the jump
 // starts from a.overlaid, which becomes current again, closing the
 // overlay.
+//
+// A destination holding the placeholder {} asks the reader for text
+// instead: see Prompting.
 func (a *App) Follow(dest string) {
+	if hasPlaceholder(dest) {
+		a.prompt = dest
+		return
+	}
 	resolved, err := a.ResolveLink(dest)
 	if err != nil {
 		log.Printf("link destination %q: %v", dest, err)

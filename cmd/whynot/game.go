@@ -38,6 +38,10 @@ type game struct {
 
 	hoverX, hoverY int
 
+	// prompt is the text field shown while a link waits for the reader's
+	// text.
+	prompt *promptField
+
 	// outsideWidth, outsideHeight are the logical (device-independent)
 	// window dimensions ebiten's own Layout callback last reported -
 	// relayout recomputes app's own width/height/scale from these

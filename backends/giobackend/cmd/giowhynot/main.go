@@ -68,7 +68,20 @@ func main() {
 	panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
 
 	tb := newToolbar(fonts.NewGoSelector(), renderer)
-	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit, onEvents: browserApp.HandleEvents}
+	pr := newPrompt(fonts.NewGoSelector(), renderer)
+	doc := &document{panel: panel, renderer: renderer, start: time.Now(),
+		onPress: func() {
+			tb.cancelEdit()
+			// A press in the document, outside the prompt, cancels it.
+			browserApp.CancelPrompt()
+		},
+		onEvents: func(events []whynot.Event) {
+			// The document can't be used while the prompt shows.
+			if !browserApp.Prompting() {
+				browserApp.HandleEvents(events)
+			}
+		},
+	}
 
 	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
@@ -78,14 +91,14 @@ func main() {
 	}
 
 	go func() {
-		if err := run(win, browserApp, doc, tb); err != nil {
+		if err := run(win, browserApp, doc, tb, pr); err != nil {
 			log.Fatal(err)
 		}
 	}()
 	app.Main()
 }
 
-func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) error {
+func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar, pr *prompt) error {
 	var ops op.Ops
 	for {
 		e := win.Event()
@@ -108,14 +121,22 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			tb.dpi = deviceScale * 72
 
 			tb.update(gtx, browserApp)
-			// Suspended while editing the address bar - pollKeys's
-			// filters match regardless of focus, so e.g. typing "-" or
-			// space into it would otherwise also fire ZoomOut/PageDown.
-			if !tb.editing {
+			pr.update(gtx, browserApp)
+			// Suspended while editing the address bar or the prompt -
+			// pollKeys's filters match regardless of focus, so e.g.
+			// typing "-" or space into it would otherwise also fire
+			// ZoomOut/PageDown.
+			if !tb.editing && !pr.open {
 				pollKeys(gtx, browserApp, doc.panel)
 			}
 			doc.layout(gtx)
 			tb.layout(gtx, browserApp)
+			pr.layout(gtx, toolbarHeight)
+			// A link clicked this frame may be waiting for text: the
+			// prompt opens next frame.
+			if browserApp.Prompting() && !pr.open {
+				gtx.Execute(op.InvalidateCmd{})
+			}
 
 			e.Frame(gtx.Ops)
 		}

@@ -777,3 +777,35 @@ func TestAppShowSourceOfPassages(t *testing.T) {
 		t.Error("following a link in the source closed it")
 	}
 }
+
+// TestAppPrompt checks that a link with a placeholder waits for the
+// reader's text, which then fills the placeholder, escaped, and that a
+// cancelled prompt goes nowhere.
+func TestAppPrompt(t *testing.T) {
+	start := writeScript(t, "function page(request) out('# Said ', request.say or 'nothing', '\\n\\n[Say](?say={})') end")
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, &LuaResolver{}))
+	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
+	app.Relayout(testWidth, testHeight, 1, 0)
+	if err := app.Open(start); err != nil {
+		t.Fatal(err)
+	}
+	title := func() string {
+		got, _ := app.Panel.View().Document().Title()
+		return got
+	}
+
+	app.Follow("?s=1&say={}")
+	if !app.Prompting() || title() != "Said nothing" {
+		t.Fatalf("after following a placeholder link: Prompting %v, title %q; want true, unchanged", app.Prompting(), title())
+	}
+	app.CancelPrompt()
+	if app.Prompting() || app.CanGoBack() {
+		t.Fatal("CancelPrompt left a prompt, or went somewhere")
+	}
+
+	app.Follow("?s=1&say={}")
+	app.SubmitPrompt("hello & {}")
+	if app.Prompting() || title() != "Said hello & {}" {
+		t.Errorf("after SubmitPrompt: Prompting %v, title %q; want false, %q", app.Prompting(), title(), "Said hello & {}")
+	}
+}

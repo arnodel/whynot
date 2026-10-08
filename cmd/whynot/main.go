@@ -88,6 +88,7 @@ func main() {
 		outsideWidth:        initialWindowWidth,
 		outsideHeight:       initialWindowHeight,
 		start:               time.Now(),
+		prompt:              newPromptField(),
 	}
 	g.applyDeviceScale()
 
