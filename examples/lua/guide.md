@@ -55,6 +55,10 @@ In `page`, the request's values are always **strings**: use `tonumber` for numbe
 
 A link can also lead elsewhere, but then it carries no state: `[Notes](https://example.com)`, or `[Another game](lua:other.lua)`.
 
+**Asking the reader for text.** A link with `{}` in it asks the reader to type something first: `[Say something…](?say={})` opens a text field, and what the reader types replaces `{}`, so `page` gets it as `request.say`. Escape cancels.
+
+**Opening a page at its end.** A link ending in `#end`, as in `[Say something…](?say={}#end)`, opens the page at its bottom, and keeps it there while the page is still being written. That's what a chat wants: the newest reply, as it arrives.
+
 ## State
 
 On the first page, `state` is empty. If the script defines `init`, whynot calls it first, and what it returns becomes the state:
@@ -138,6 +142,7 @@ The script waits until the text is complete, so the code after it can use it. Th
   ```
 
   Since it's in `state`, the history follows the reader's path. After Back, the AI only remembers the path the reader is on.
+- **`messages`**, optional, is a conversation so far: a list of `{role = "user", content = …}` and `{role = "ai", content = …}`, sent as the turns of a conversation. `prompt`, `context` and `history`, if given, make one more turn, the reader's, and the conversation must end with one. With `messages`, `prompt` is optional. [chat.md](chat.md) keeps a conversation in `state` this way.
 - **`system`**, optional, is extra instructions for this call only, such as a character's voice.
 - **`model`** and **`effort`**, optional: see [Models](#models).
 
@@ -188,7 +193,7 @@ whynot maps each to a model of the AI it uses: today, Claude Haiku, Sonnet and O
 
 ### Remembered answers
 
-**Answers are remembered.** Two calls that send exactly the same things get the same answer, without asking the AI again, until whynot quits. "The same things" means all of it: the instructions, `prompt`, `context`, `history`, `model`, `effort` and `returns`. That makes revisits consistent, instant and free, and going Back and choosing the same way again gives the same move. It's also your way to choose when a text changes. Put `state.lamp` in `context`, and the cellar has a lit version and a dark one. Leave it out, and the cellar always reads the same. A `history` makes texts depend on the path, so they're remembered less often.
+**Answers are remembered.** Two calls that send exactly the same things get the same answer, without asking the AI again, until whynot quits. "The same things" means all of it: the instructions, `messages`, `prompt`, `context`, `history`, `model`, `effort` and `returns`. That makes revisits consistent, instant and free, and going Back and choosing the same way again gives the same move. It's also your way to choose when a text changes. Put `state.lamp` in `context`, and the cellar has a lit version and a dark one. Leave it out, and the cellar always reads the same. A `history` makes texts depend on the path, so they're remembered less often.
 
 ### Without an AI
 

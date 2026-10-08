@@ -17,12 +17,15 @@ import (
 
 // A lua: script asks its AI with
 //
-//	ai{prompt = ..., context = ..., history = ..., system = ...,
-//	   model = ..., effort = ..., returns = ...}
+//	ai{prompt = ..., messages = ..., context = ..., history = ...,
+//	   system = ..., model = ..., effort = ..., returns = ...}
 //
 // which returns the reply, and ai.write{...}, which also writes it into
 // the page as it arrives. ai.system and ai.model are the script's
-// defaults. Without returns the reply is text; with it, the reply follows
+// defaults. messages is a conversation so far, a list of {role = "user"
+// or "ai", content = ...}, sent as turns: prompt, context and history,
+// if any, make one more turn, the reader's, and the conversation must
+// end with one. Without returns the reply is text; with it, the reply follows
 // its shape and is a Lua value: "string", "number", "integer" or
 // "boolean" for a value of that type, {shape} for a list of shape, and a
 // table of shapes for an object with those fields.
@@ -66,8 +69,12 @@ func (r *LuaResolver) ai(ctx context.Context, c *rt.GoCont, out io.Writer) (rt.V
 	get := func(name string) rt.Value { return spec.Get(rt.StringValue(name)) }
 
 	prompt := field(spec, "prompt")
-	if prompt == "" {
-		return rt.NilValue, errors.New("ai: no prompt")
+	turns, err := luaTurns(get("messages"))
+	if err != nil {
+		return rt.NilValue, err
+	}
+	if prompt == "" && len(turns) == 0 {
+		return rt.NilValue, errors.New("ai: no prompt, and no messages")
 	}
 	req := AIRequest{Model: field(spec, "model"), Effort: field(spec, "effort")}
 	if req.Model == "" {
@@ -108,7 +115,13 @@ func (r *LuaResolver) ai(ctx context.Context, c *rt.GoCont, out io.Writer) (rt.V
 		}
 		fmt.Fprintf(&message, "\n\nFacts:\n\n```json\n%s\n```", encoded)
 	}
-	req.Messages = []AIMessage{{Role: "user", Content: message.String()}}
+	req.Messages = turns
+	if last := strings.TrimSpace(message.String()); last != "" {
+		req.Messages = append(req.Messages, AIMessage{Role: "user", Content: last})
+	}
+	if req.Messages[len(req.Messages)-1].Role != "user" {
+		return rt.NilValue, errors.New("ai: the conversation must end with the user's turn")
+	}
 
 	// A shape that isn't an object is wrapped in one, which the API
 	// requires.
@@ -188,6 +201,35 @@ func (r *LuaResolver) reply(ctx context.Context, req AIRequest, write bool, out 
 	r.texts[key] = text
 	r.mu.Unlock()
 	return text, nil
+}
+
+// luaTurns turns an ai{...} call's messages into turns: a list of
+// {role = "user" or "ai", content = ...}.
+func luaTurns(messages rt.Value) ([]AIMessage, error) {
+	if messages.IsNil() {
+		return nil, nil
+	}
+	list, ok := messages.TryTable()
+	if !ok {
+		return nil, errors.New("ai: messages isn't a list")
+	}
+	var turns []AIMessage
+	for i := int64(1); i <= list.Len(); i++ {
+		turn, ok := list.Get(rt.IntValue(i)).TryTable()
+		if !ok {
+			return nil, fmt.Errorf("ai: message %d isn't a table", i)
+		}
+		content, _ := turn.Get(rt.StringValue("content")).ToString()
+		switch role, _ := turn.Get(rt.StringValue("role")).TryString(); role {
+		case "user":
+			turns = append(turns, AIMessage{Role: "user", Content: content})
+		case "ai":
+			turns = append(turns, AIMessage{Role: "assistant", Content: content})
+		default:
+			return nil, fmt.Errorf("ai: message %d's role is %q: want user or ai", i, role)
+		}
+	}
+	return turns, nil
 }
 
 // aiKey identifies a request by everything it sends.

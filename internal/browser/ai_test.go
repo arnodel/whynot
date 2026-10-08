@@ -130,3 +130,32 @@ func TestLuaAIErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestLuaAIMessages checks that messages are sent as turns, the AI's as
+// the assistant's, with the prompt as a last turn, and that a
+// conversation not ending with the user's turn is refused.
+func TestLuaAIMessages(t *testing.T) {
+	api := newFakeMessagesAPI(t, "Fine, thanks.")
+	_, page := loadPage(t, &LuaResolver{AI: &Anthropic{Endpoint: api.URL}}, writeScript(t, `
+function page()
+  out(ai{messages = {{role = "user", content = "Hi"}, {role = "ai", content = "Hello!"}}, prompt = "How are you?"})
+end`), "")
+	if page != "Fine, thanks." {
+		t.Fatalf("page = %q", page)
+	}
+	got, _ := json.Marshal(api.bodies[0]["messages"])
+	if want := `[{"content":"Hi","role":"user"},{"content":"Hello!","role":"assistant"},{"content":"How are you?","role":"user"}]`; string(got) != want {
+		t.Errorf("messages = %s, want %s", got, want)
+	}
+
+	for _, c := range []struct{ call, want string }{
+		{`ai{messages = {{role = "user", content = "Hi"}, {role = "ai", content = "Hello!"}}}`, "must end with the user's turn"},
+		{`ai{messages = {{role = "bot", content = "Hi"}}}`, `role is "bot"`},
+		{`ai{}`, "no prompt, and no messages"},
+	} {
+		_, page := loadPage(t, &LuaResolver{AI: &Anthropic{Endpoint: api.URL}}, writeScript(t, "function page() "+c.call+" end"), "")
+		if !strings.Contains(page, c.want) {
+			t.Errorf("%s: page = %q, want it to mention %q", c.call, page, c.want)
+		}
+	}
+}

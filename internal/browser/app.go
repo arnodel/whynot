@@ -446,6 +446,9 @@ func (a *App) Update() {
 	a.source = source
 	a.place(view)
 	view.RestoreScrollPosition(a.Panel.View().ScrollPosition())
+	if strings.EqualFold(a.loadFragment, "end") {
+		scrollToFragment(view, a.loadFragment)
+	}
 	if a.loader == nil && a.loadFragment != "" {
 		scrollToFragment(view, a.loadFragment)
 		a.loadFragment = ""
@@ -639,10 +642,18 @@ func (a *App) place(view *whynot.View) {
 
 // scrollToFragment scrolls v to the anchor a URL fragment names, the way
 // browsers do: the heading with that id, else the top of the document
-// for an empty fragment or "top".
+// for an empty fragment or "top". Unlike browsers, "end" names the
+// bottom: a document still arriving stays scrolled to its end (see
+// Update), as a chat's newest reply arrives.
 func scrollToFragment(v *whynot.View, id string) {
-	if !v.ScrollToAnchor(id) && (id == "" || strings.EqualFold(id, "top")) {
+	if v.ScrollToAnchor(id) {
+		return
+	}
+	switch {
+	case id == "" || strings.EqualFold(id, "top"):
 		v.ScrollToRatio(0)
+	case strings.EqualFold(id, "end"):
+		v.ScrollToRatio(1)
 	}
 }
 

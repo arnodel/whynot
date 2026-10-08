@@ -809,3 +809,19 @@ func TestAppPrompt(t *testing.T) {
 		t.Errorf("after SubmitPrompt: Prompting %v, title %q; want false, %q", app.Prompting(), title(), "Said hello & {}")
 	}
 }
+
+// TestAppFollowEnd checks that a link to #end opens its page at the
+// bottom.
+func TestAppFollowEnd(t *testing.T) {
+	start := writeScript(t, "function page() out('# Long\\n\\n') for i = 1, 200 do out('Line ', i, '\\n\\n') end end")
+	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil, &LuaResolver{}))
+	app.Panel = whynot.NewPanel(app.NewView(nil, start), image.Rectangle{})
+	app.Relayout(testWidth, testHeight, 1, 0)
+	if err := app.Open(start); err != nil {
+		t.Fatal(err)
+	}
+	app.Follow("?s=1&again=1#end")
+	if first, _ := app.Panel.View().VisibleRange(); first == 0 {
+		t.Error("the page opened at its top, want its end")
+	}
+}
