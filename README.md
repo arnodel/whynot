@@ -22,8 +22,8 @@ Here is this README, displayed by whynot's own document viewer:
 - **Styled your way.** Colors, text styles, margins and scrollbars come from a stylesheet;
   light and dark ones are ready-made. Text can use the bundled Go fonts, your own font
   files, or the fonts installed on the system.
-- **Extensible code blocks.** Plugins can add syntax highlighting to code blocks, or turn
-  them into pictures, such as Mermaid diagrams.
+- **Extensible code blocks.** Plugins can add syntax highlighting to code blocks, and to
+  inline code, or turn code blocks into pictures, such as Mermaid diagrams.
 - **Independent of any graphics library.** whynot draws through a small `canvas`
   interface and receives input as plain values, so supporting another framework only
   takes a thin adapter.
@@ -250,6 +250,17 @@ doc := whynot.Parse(source,
 )
 ```
 
+Markdown doesn't say what language inline code is in, so it's shown plain. If you know a
+document's inline code is all in one language, say so, and the plugins highlight it as
+they would a code block in that language:
+
+```go
+doc := whynot.Parse(source,
+	whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
+	whynot.WithInlineCodeLanguage("lua"), // inline code is Lua
+)
+```
+
 The [`codeblocks`](codeblocks) package defines what a plugin is, so you can write your
 own. [`examples/chromahighlight`](examples/chromahighlight) shows syntax highlighting.
 
@@ -377,7 +388,8 @@ loading.
 **Blocks**
 - [x] Fenced and indented code blocks, which scroll sideways when they're wider than the
       view
-- [x] Syntax highlighting and diagrams in code blocks, through plugins
+- [x] Syntax highlighting and diagrams in code blocks, through plugins, and highlighting
+      of inline code in a language the program gives
 - [x] Blockquotes, including nested ones
 - [x] Ordered and unordered lists, tight or loose, nested to any depth, and task lists
 - [x] Tables (GitHub style), with column alignment and column widths fitted to their
