@@ -141,12 +141,47 @@
 // View when needed, such as the link under the pointer
 // ([View.HoveredLink]), which a program may show in a status bar.
 //
+// # Documents that arrive a piece at a time
+//
+// A Document can grow as its Markdown arrives: a download over a slow
+// network, a reply being generated, or a game's narration revealed a word
+// at a time. [Parser.Stream] returns a Document and a writer for it:
+//
+//	doc, w := whynot.NewParser().Stream()
+//	view := whynot.NewView(doc)
+//	go func() {
+//		io.Copy(w, response.Body)
+//		w.Close() // the Document is complete
+//	}()
+//
+// Writing only stores the text. Each time a View draws, it takes what was
+// written since it last drew: the text is parsed then, at most once a
+// frame, and only from the start of the blocks still unfinished, and the
+// View lays out only what's new, keeping its scroll position. A program
+// whose framework draws every frame, as Ebitengine's does, needs nothing
+// more. One whose framework draws only when something happens, as Gio's
+// does, asks for a frame whenever the Document changes:
+//
+//	go func() {
+//		for range doc.Updates() {
+//			window.Invalidate()
+//		}
+//	}()
+//
+// A Document that grows shows what [Parse] would make of the text so far,
+// with one difference: a reference definition ("[x]: https://...") that
+// arrives after a View has shown the paragraph using it doesn't make that
+// paragraph a link. A Document written in one go, before any View draws
+// it, is parsed as a whole.
+//
 // # Concurrency
 //
 // A View, a Controller and a Panel are not safe for concurrent use: use
 // each from one goroutine, normally the one your framework draws on. Only
 // image fetching happens in the background, on goroutines of its own (see
-// [fetch.Source]).
+// [fetch.Source]). A Document and the writer of one made by
+// [Parser.Stream] are the exception: write it on any goroutine, typically
+// one reading from the network, while Views of it draw on another.
 //
 // Views made without [WithFaceSelector] share one selector of the Go
 // fonts, and so share its font faces. That lets the backends cache what

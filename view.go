@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
+	"github.com/arnodel/whynot/fetch"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/markdown"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
@@ -28,6 +30,15 @@ import (
 type View struct {
 	doc *Document
 	ctx engine.Context
+
+	// reader is where the View is in doc, which may grow (see follow).
+	// blocks are the top-level blocks it has taken from it, the last
+	// tailBlocks of which are unfinished, and soleImages their sole images
+	// (see prefetchImageSources).
+	reader     reader
+	blocks     []engine.Block
+	tailBlocks int
+	soleImages map[engine.Block]fetch.Source
 
 	// hscroll is the sideways scrolling state of the View's code blocks
 	// and tables, and draws their scrollbars: ctx's ScrollOffset and
@@ -327,13 +338,15 @@ func (v *View) Draw(dst canvas.Canvas, now time.Duration) {
 	v.drawScrollbar(dst)
 }
 
-// update does a frame's work before drawing at now: picking up images
-// that have loaded, and laying out and loading ahead of the viewport.
+// update does a frame's work before drawing at now: picking up what the
+// Document gained and images that have loaded, and laying out and loading
+// ahead of the viewport.
 func (v *View) update(now time.Duration) {
 	v.ctx.Time = now
 	if !v.stack.laidOut() {
 		return
 	}
+	v.follow()
 	v.invalidateChangedImages()
 	v.stack.preLayout(v.bounds.Dy())
 	v.prefetchImageSources(v.bounds.Dy())
@@ -502,7 +515,7 @@ func (v *View) prefetchImageSources(viewportHeight int) {
 		return
 	}
 	v.stack.forEachNearby(viewportHeight, prefetchImageSourceHeightRadius, func(block engine.Block) {
-		if img, ok := v.doc.soleImages[block]; ok {
+		if img, ok := v.soleImages[block]; ok {
 			v.ctx.ImageCache.Load(img)
 		}
 	})
@@ -527,9 +540,53 @@ func (v *View) SetStyleSheet(s StyleSheet) {
 // Left/Right instead narrow the laid-out width; Draw/HitTest shift by Left
 // to compensate.
 func (v *View) rebuild() {
+	v.take()
+	v.stack.setBox(v.layout())
+}
+
+// layout returns a new layout of the View's blocks, at the current width.
+func (v *View) layout() *engine.StackBox {
 	margin := v.ctx.ScaledViewMargins()
 	contentWidth := max(0, v.width-int(margin.Left)-int(margin.Right))
-	box := v.doc.root.StackLayout(&v.ctx, contentWidth)
+	box := (&engine.StackBlock{Blocks: v.blocks}).StackLayout(&v.ctx, contentWidth)
 	box.AddSpacers(int(margin.Top), int(margin.Bottom))
-	v.stack.setBox(box)
+	return box
+}
+
+// follow takes what the View's Document has gained since it last looked,
+// and lays it out, keeping the layout of what it had: blocks are only
+// ever added at the end, or the unfinished ones there replaced.
+func (v *View) follow() {
+	if v.take() && v.stack.laidOut() {
+		v.stack.extend(v.layout())
+	}
+}
+
+// take takes what the View's Document has gained since it last looked
+// into its blocks, reporting whether there was anything.
+func (v *View) take() bool {
+	if v.doc == nil {
+		return false
+	}
+	if v.reader.doc == nil {
+		v.reader.doc = v.doc
+	}
+	added, tail, ok := v.reader.next()
+	if !ok {
+		return false
+	}
+	v.blocks = v.blocks[:len(v.blocks)-v.tailBlocks]
+	for _, pieces := range [][]markdown.Piece{added, tail} {
+		for _, p := range pieces {
+			v.blocks = append(v.blocks, p.Block)
+			if p.SoleImage != nil {
+				if v.soleImages == nil {
+					v.soleImages = map[engine.Block]fetch.Source{}
+				}
+				v.soleImages[p.Block] = p.SoleImage
+			}
+		}
+	}
+	v.tailBlocks = len(tail)
+	return true
 }

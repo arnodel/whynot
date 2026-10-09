@@ -14,7 +14,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | Path | What it is |
 |---|---|
 | repo root | the library's public API (package `whynot`): `Parse`, `Document`, `View`, `Controller`, `StyleSheet`; no rendering backend dependency |
-| `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks, and for code spans when the document's inline code language is set; `whynot.Parse` wraps it |
+| `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks, and for code spans when the document's inline code language is set; `Stream` compiles a document that arrives a piece at a time, a finished block at a time; `whynot.Parser` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `backends/ebitenbackend/` | the Ebitengine backend: `canvas.Canvas` on top of `ebiten`, and an `input.Source` reading Ebitengine's input |
 | `backends/giobackend/` | the Gio backend: `canvas.Canvas` on top of Gio, an `input.Source` for Gio's pointer events, and `NativeScrollbar` (Gio's own scrollbar). It also holds the Gio-only programs: `cmd/giowhynot` and `examples/gio`. **Its own Go module** (v0 while Gio is), so the core module doesn't depend on Gio; `go.work` at the root puts both modules in one workspace for development |
@@ -136,14 +136,26 @@ adjacent-margin collapsing `GetBlockLayout` applies between siblings, extended t
 its own edges - so a `MarginBlock` wrapping a `StackBlock` collapses
 correctly with the outermost child instead of stacking on top of it.
 
-Built once per document, by `Parse` (`markdown.Compile`), and never
-rebuilt — `Block`s are immutable for the life of the program. `Parse`
-returns a `Document` ([document.go](document.go)): the root `StackBlock`
-plus what the compiler recorded about top-level blocks while building it
-- the headings (`Title`, `TOCEntries`) and which paragraphs are a single
-image (for prefetching, see below) - so nothing downstream has to
-rediscover them by inspecting the `Block` tree's shape. Any number of
-`View`s can render the same `Document`.
+Built once per block and never rebuilt: `Block`s are immutable for the
+life of the program. A `Document` ([document.go](document.go)) is a list of
+top-level blocks, each with what the compiler recorded about it while
+building it - whether it's a heading (`Title`, `TOCEntries`) and whether
+it's a paragraph that's a single image (for prefetching, see below) - so
+nothing downstream has to rediscover them by inspecting the `Block`
+tree's shape. Any number of `View`s can render the same `Document`.
+
+A `Document` can grow: `Parser.Stream` gives it a writer, and its text is
+compiled by a `markdown.Stream`, which compiles a top-level block once it's
+finished and only the unfinished end again as more arrives. A block is
+finished once complete lines hold the start of another top-level block
+after it: CommonMark never reopens a closed block. Finished blocks go into
+an append-only list; the unfinished ones at the end, the tail, are
+replaced at each update. Compiling happens when someone looks, not on each
+write: each `View` holds a `reader`, a position in the `Document`, and
+takes what's new at the start of each draw (`View.follow`). It appends the
+new blocks and replaces the tail's, and `documentStack.extend` keeps the
+layout of the slots the old and new stacks share. `Parse` is the case of a
+stream written in one go, then closed.
 
 ### Layer 2 — Layout tree (`BlockLayout` / `InlineLayout`)
 
