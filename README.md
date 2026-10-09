@@ -284,6 +284,26 @@ doc := whynot.Parse(markdown, whynot.WithBaseURL(location), whynot.WithImageRegi
 `fetch.HTTPResolver` fetches `https` images only, unless you set its `AllowHTTP` field.
 You can also write a resolver of your own for another URL scheme.
 
+### Documents that arrive a piece at a time
+
+A Document can grow as its Markdown arrives: a download over a slow network, a reply being
+generated, or a game's narration revealed a word at a time. A `whynot.Parser` makes such a
+Document with a writer for it:
+
+```go
+doc, w := whynot.NewParser().Stream()
+view := whynot.NewView(doc)
+go func() {
+	io.Copy(w, response.Body) // the view shows the document as it arrives
+	w.Close()
+}()
+```
+
+Each time the View draws, it takes what was written since, laying out only what's new and
+keeping its scroll position. With a framework that draws only when something happens, such
+as Gio, ask for a frame each time the Document changes, with `doc.Updates()`.
+[`examples/typewriter`](examples/typewriter) reveals a story a character at a time.
+
 ### Examples
 
 Each of these is a small program you can run, for example with `go run ./examples/panel`:
@@ -295,6 +315,7 @@ Each of these is a small program you can run, for example with `go run ./example
 | [`examples/chromahighlight`](examples/chromahighlight) | Syntax highlighting in code blocks |
 | [`examples/customfont`](examples/customfont) | Text in a font file of your choice |
 | [`examples/systemfont`](examples/systemfont) | Text in the fonts installed on the system |
+| [`examples/typewriter`](examples/typewriter) | A document revealed a character at a time, as it's written |
 | [`examples/wasm`](examples/wasm) | whynot running in a web page, compiled to WebAssembly |
 | [`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) | A Panel in a Gio window |
 
@@ -410,6 +431,8 @@ loading.
 **Viewing and interaction**
 - [x] Layout and drawing whose cost depends on what's on screen, not on the document's
       length
+- [x] Documents shown as they arrive, from a slow source or written a piece at a time,
+      laying out only what's new
 - [x] Smooth scrolling, with the scroll position kept when the window is resized or the
       style changes
 - [x] Scrolling with the mouse wheel, by touch (with flings), or by keyboard commands

@@ -57,10 +57,16 @@ func TestDocumentTOCEntriesNoHeadings(t *testing.T) {
 // text, and not one nested inside a blockquote.
 func TestDocumentSoleImages(t *testing.T) {
 	doc := Parse([]byte("![a](a.png)\n\ntext ![b](b.png)\n\n> ![c](c.png)\n"), WithImageRegistry(fetch.NewRegistry(testResolver{})))
-	if len(doc.soleImages) != 1 {
-		t.Fatalf("soleImages = %v, want exactly one entry", doc.soleImages)
+	var images []fetch.Source
+	for _, p := range doc.finished {
+		if p.SoleImage != nil {
+			images = append(images, p.SoleImage)
+		}
 	}
-	if img, ok := doc.soleImages[doc.root.Blocks[0]]; !ok || img.Key() != "file:a.png" {
-		t.Errorf("soleImages[first block] = %v, %v, want the image keyed file:a.png", img, ok)
+	if len(images) != 1 {
+		t.Fatalf("sole images = %v, want exactly one", images)
+	}
+	if img := doc.finished[0].SoleImage; img == nil || img.Key() != "file:a.png" {
+		t.Errorf("the first block's sole image = %v, want the image keyed file:a.png", img)
 	}
 }

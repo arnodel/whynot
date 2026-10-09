@@ -16,6 +16,7 @@ import (
 	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/imagecache"
+	"github.com/arnodel/whynot/internal/markdown"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 	"github.com/arnodel/whynot/styles/simpletheme"
@@ -66,9 +67,13 @@ func hitAt(v *View, x, y int) (engine.Hit, image.Point) {
 	return hit, offset
 }
 
-// testDocument wraps blocks as a Document, bypassing Parse.
+// testDocument wraps blocks as a complete Document, bypassing Parse.
 func testDocument(blocks ...engine.Block) *Document {
-	return &Document{root: &engine.StackBlock{Blocks: blocks}}
+	pieces := make([]markdown.Piece, len(blocks))
+	for i, b := range blocks {
+		pieces[i] = markdown.Piece{Block: b}
+	}
+	return &Document{finished: pieces, version: 1, complete: true}
 }
 
 func newTestView(blocks ...engine.Block) *View {
@@ -1485,7 +1490,7 @@ func TestViewPrefetchImageSourcesStartsLoadWithoutLayout(t *testing.T) {
 	}
 
 	v := newTestView(blocks...)
-	v.doc.soleImages = map[engine.Block]fetch.Source{imageBlock: source}
+	v.soleImages = map[engine.Block]fetch.Source{imageBlock: source}
 	v.ctx.ImageCache = cache
 	layoutView(v, 300, 0, 1, 0)
 
@@ -1593,7 +1598,7 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 
 	imgSlot := -1
 	for i := range v.stack.box.Slots {
-		if _, ok := v.doc.soleImages[v.stack.box.Slots[i].Block]; ok {
+		if _, ok := v.soleImages[v.stack.box.Slots[i].Block]; ok {
 			imgSlot = i
 			break
 		}
@@ -1606,7 +1611,7 @@ func TestViewScrollingReachesImageAlreadyResolved(t *testing.T) {
 	// Layout call above) to settle before scrolling starts - same as
 	// real usage gets for free while the reader is still reading
 	// earlier content, just deterministic here instead of a fixed sleep.
-	waitForSettled(t, v.ctx.ImageCache, v.doc.soleImages[v.stack.box.Slots[imgSlot].Block])
+	waitForSettled(t, v.ctx.ImageCache, v.soleImages[v.stack.box.Slots[imgSlot].Block])
 
 	for v.stack.cursor.Index < imgSlot {
 		v.ScrollBy(50)

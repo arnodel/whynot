@@ -1,8 +1,9 @@
 // Package markdown is whynot's Markdown compiler: it parses source with
 // goldmark and builds the engine's block and inline tree, alongside the
-// semantic ast.Node tree they refer to (Compile). Fenced code blocks go
-// through the codeblocks.Plugin given for them, and images are resolved
-// to their fetch.Source.
+// semantic ast.Node tree they refer to (Compile), or a block at a time,
+// for a document that arrives a piece at a time (Stream). Fenced code
+// blocks go through the codeblocks.Plugin given for them, and images are
+// resolved to their fetch.Source.
 //
 // It only builds structure: appearance comes later, from a View's
 // StyleSheet, and layout and drawing are the engine's job.
@@ -58,7 +59,19 @@ type Options struct {
 
 // Compile compiles Markdown source into its block tree.
 func Compile(source []byte, opts Options) *Result {
-	p := parser.New(
+	node := newParser().Parse(source)
+	c := newCompiler(source, opts)
+	// A nil parent ast.Node is what marks a block as top-level.
+	return &Result{
+		Root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
+		Headings:   c.headings,
+		SoleImages: c.soleImages,
+	}
+}
+
+// newParser returns a goldmark parser with the extensions whynot uses.
+func newParser() parser.Parser {
+	return parser.New(
 		parser.WithExtensions(
 			extension.TaskListItemParser,
 			extension.StrikethroughParser,
@@ -69,19 +82,17 @@ func Compile(source []byte, opts Options) *Result {
 		),
 		parser.WithAutoHeadingID(),
 	)
-	node := p.Parse(source)
-	c := compiler{source: source, resolveImage: opts.ResolveImage, inlineCodeLanguage: opts.InlineCodeLanguage}
+}
+
+// newCompiler returns a compiler of source, a parse's.
+func newCompiler(source []byte, opts Options) *compiler {
+	c := &compiler{source: source, resolveImage: opts.ResolveImage, inlineCodeLanguage: opts.InlineCodeLanguage}
 	for i, p := range opts.Plugins {
 		// "#" can't appear in a URL scheme, so these never clash with the
 		// keys a fetch.Registry makes.
 		c.codeBlockPlugins = append(c.codeBlockPlugins, plugin{Plugin: p, namespace: fmt.Sprintf("#%d:", i+1)})
 	}
-	// A nil parent ast.Node is what marks a block as top-level.
-	return &Result{
-		Root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
-		Headings:   c.headings,
-		SoleImages: c.soleImages,
-	}
+	return c
 }
 
 // compiler is the state of one Compile call.

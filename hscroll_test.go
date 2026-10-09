@@ -47,7 +47,7 @@ func drawnTextX(t *testing.T, v *View, prefix string) int {
 func TestCodeBlockScrollsOnlyWhenWider(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	doc := Parse([]byte("```\n" + strings.Repeat("wide ", 100) + "\n```\n"))
-	code := unwrap(doc.root.Blocks[0])
+	code := unwrap(doc.finished[0].Block)
 
 	if _, ok := code.GetBlockLayout(ctx, 300).(*engine.ScrollBox); !ok {
 		t.Errorf("code block laid out narrower than its lines: got %T, want *ScrollBox", code.GetBlockLayout(ctx, 300))
@@ -222,7 +222,7 @@ func TestScrollbarStaysOnScreenForTallBlock(t *testing.T) {
 func TestTableScrollsWhenTooWide(t *testing.T) {
 	ctx := engine.Context{Scale: 1, FaceSelector: fonts.NewGoSelector(), Styles: stylingtest.Basic()}
 	table := func(cell string) engine.Block {
-		return unwrap(Parse([]byte("| A | B |\n|---|---|\n| " + cell + " | x |\n")).root.Blocks[0])
+		return unwrap(Parse([]byte("| A | B |\n|---|---|\n| " + cell + " | x |\n")).finished[0].Block)
 	}
 	if _, ok := table(strings.Repeat("unbreakable", 20)).GetBlockLayout(ctx, 300).(*engine.ScrollBox); !ok {
 		t.Error("table with an unbreakable word wider than the page: not a *ScrollBox")

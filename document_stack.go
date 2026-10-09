@@ -45,6 +45,26 @@ func (s *documentStack) setBox(box *engine.StackBox) {
 	s.reanchor(oldHeight)
 }
 
+// extend replaces the laid-out document with box, the same document with
+// more at its end, or its last blocks replaced: the slots the two share at
+// their start keep their layout, and the cursor stays where it is.
+func (s *documentStack) extend(box *engine.StackBox) {
+	if s.box != nil {
+		old := s.box.Slots
+		for i := range min(len(old), len(box.Slots)) {
+			o, n := &old[i], &box.Slots[i]
+			if o.Block == nil && n.Block == nil {
+				continue // spacers, which are cheap to make again
+			}
+			if o.Block != n.Block || o.Width != n.Width {
+				break
+			}
+			n.Box = o.Box
+		}
+	}
+	s.setBox(box)
+}
+
 // reanchor rescales the cursor's offset to the same proportion through its
 // slot's current height as oldHeight represented, so the scroll position
 // survives a change to that slot's height. oldHeight <= 0 means no ratio is
