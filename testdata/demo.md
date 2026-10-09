@@ -157,6 +157,11 @@ Punctuation stays glued to the word next to it even when it's a
 separate node under the hood, so it can't come apart at a line break:
 Alice's book, the '90s, doin' fine, and don't stop.
 
+A backslash or two spaces at the end of a line break it there, as a
+poem wants:\
+the next line starts here,  
+and so does this one.
+
 ## Tables
 
 A basic table, with a header row:

@@ -1181,3 +1181,22 @@ func TestParseTypographerEllipsis(t *testing.T) {
 		t.Errorf("parts[1] (%q) glued = false, want true (no source space before it)", got[1])
 	}
 }
+
+// TestParseHardLineBreak checks that a hard line break, a backslash or two
+// spaces at the end of a line, becomes a LineBreak between the words
+// around it, and that a soft one doesn't.
+func TestParseHardLineBreak(t *testing.T) {
+	for _, source := range []string{"one\\\ntwo", "one  \ntwo"} {
+		para := unwrap(parse([]byte(source)).Root.Blocks[0]).(*engine.TextBlock)
+		if len(para.Parts) != 3 {
+			t.Fatalf("%q: %d parts, want 3: one, a line break, two", source, len(para.Parts))
+		}
+		if _, ok := para.Parts[1].(*engine.LineBreak); !ok {
+			t.Errorf("%q: the middle part is a %T, want a *LineBreak", source, para.Parts[1])
+		}
+	}
+	para := unwrap(parse([]byte("one\ntwo")).Root.Blocks[0]).(*engine.TextBlock)
+	if got := textOf(t, para.Parts); !stringsEqual(got, []string{"one", "two"}) {
+		t.Errorf("a soft break gives %v, want just the words", got)
+	}
+}

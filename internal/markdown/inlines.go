@@ -42,10 +42,14 @@ func (c *compiler) appendInline(items []engine.Inline, node gmast.Node, astNode 
 	case gmast.KindText:
 		t := node.(*gmast.Text)
 		items = c.appendString(items, t.Value.Value(c.source), astNode)
-		// goldmark marks a line break with this flag, not a newline in
-		// Value: without it, "laid\nout" would become "laidout". Both
-		// kinds of break show as a space for now.
-		if t.SoftLineBreak() || t.HardLineBreak() {
+		// goldmark marks a line break with these flags, not a newline in
+		// Value: without them, "laid\nout" would become "laidout". A soft
+		// break shows as a space.
+		switch {
+		case t.HardLineBreak():
+			items = append(items, &engine.LineBreak{ASTNode: astNode})
+			c.pendingSpace = true
+		case t.SoftLineBreak():
 			c.pendingSpace = true
 		}
 		return items

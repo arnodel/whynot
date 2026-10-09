@@ -805,3 +805,19 @@ func TestWrapLinesMovesGluedRun(t *testing.T) {
 		t.Fatalf("wrapLines = %d lines, want 2: x, then a and b together", len(lines))
 	}
 }
+
+// TestWrapLinesBreaksAtLineBreak checks that a LineBreak ends its line
+// even when what follows would fit, and takes no part in either line.
+func TestWrapLinesBreaksAtLineBreak(t *testing.T) {
+	ctx := Context{Scale: 1, FaceSelector: fonts.NewGoSelector()}
+	face, err := ctx.FaceSelector.SelectFace(fonts.TextStyle{Size: 16}, 72)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &TextBox{Text: "a", Face: face}
+	b := &TextBox{Text: "b", Face: face}
+	lines := wrapLines([]InlineLayout{a, (&LineBreak{}).GetInlineLayout(ctx, 1000), b}, 1000)
+	if len(lines) != 2 || len(lines[0].(*LineBox).parts) != 1 || len(lines[1].(*LineBox).parts) != 1 {
+		t.Fatalf("wrapLines = %d lines, want 2: a, then b", len(lines))
+	}
+}

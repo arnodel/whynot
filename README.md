@@ -384,6 +384,7 @@ loading.
 **Text**
 - [x] Headings, paragraphs, emphasis, strong text, strikethrough and inline code
 - [x] Typographic punctuation: smart quotes, dashes and ellipses
+- [x] Hard line breaks, a backslash or two spaces at the end of a line, as in poems
 
 **Blocks**
 - [x] Fenced and indented code blocks, which scroll sideways when they're wider than the
