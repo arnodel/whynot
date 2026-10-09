@@ -80,7 +80,8 @@
 // A Panel covers what most programs need. Use a View and a Controller
 // directly for more control: you can then drive a View with input of your
 // own, fit it into a structure of your own, or move it by code alone
-// ([View.ScrollBy], [View.ScrollToAnchor], [View.ScrollToRatio]). A View
+// ([View.ScrollBy], [View.ScrollToAnchor], [View.ScrollToRatio],
+// [View.ScrollToEnd]). A View
 // also answers questions about what it shows: the link under the pointer
 // ([View.HoveredLink]), the part of the document in view
 // ([View.VisibleRange]), the heading currently on screen

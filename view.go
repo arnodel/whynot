@@ -228,6 +228,19 @@ func (v *View) ScrollToRatio(ratio float64) {
 	}
 }
 
+// ScrollToEnd scrolls to show the end of the document: its bottom at the
+// bottom of the View, or, for a document shorter than the View, its top at
+// the top. Unlike ScrollToRatio(1), which puts the top of the View at the
+// end, it's exact: it lays out the last block, and the blocks above it
+// that fit in the View, but nothing else.
+func (v *View) ScrollToEnd() {
+	if v.stack.laidOut() {
+		v.stack.scrollToEnd(v.bounds.Dy())
+		v.moves++
+		v.revealScrollbar()
+	}
+}
+
 // HighlightColor is the color the View's StyleSheet shows a hovered link
 // in - e.g. for an app echoing the link's destination elsewhere, in the
 // same color.

@@ -1639,3 +1639,41 @@ func TestViewScrollToAnchorNoFragmentRules(t *testing.T) {
 		t.Error("ScrollToAnchor moved the View to the top")
 	}
 }
+
+// TestViewScrollToEnd checks that ScrollToEnd puts the bottom of a long
+// document exactly at the bottom of the View, counting as a move, leaves
+// a document shorter than the View at its top, and does nothing to an
+// empty one.
+func TestViewScrollToEnd(t *testing.T) {
+	// bottom returns where the end of v's document is, from the top of v.
+	bottom := func(v *View) float64 {
+		s := &v.stack
+		y := -s.cursor.Offset
+		for i := s.cursor.Index; i < s.len(); i++ {
+			y += float64(s.box.BoxAt(i).Bounds().Dy())
+		}
+		return y
+	}
+
+	long := NewView(Parse([]byte(strings.Repeat("Some text, quite a bit of it actually.\n\n", 30))))
+	long.SetBounds(image.Rect(0, 0, 300, 200))
+	moves := long.moves
+	long.ScrollToEnd()
+	if got := bottom(long); got != 200 {
+		t.Errorf("after ScrollToEnd, the document ends %v below the View's top, want 200", got)
+	}
+	if long.moves == moves {
+		t.Error("ScrollToEnd didn't count as a move")
+	}
+
+	short := NewView(Parse([]byte("Just a line.\n")))
+	short.SetBounds(image.Rect(0, 0, 300, 200))
+	short.ScrollToEnd()
+	if short.stack.cursor != (engine.StackCursor{}) {
+		t.Errorf("a short document scrolled to %+v, want its top", short.stack.cursor)
+	}
+
+	empty := NewView(Parse(nil))
+	empty.SetBounds(image.Rect(0, 0, 300, 200))
+	empty.ScrollToEnd()
+}
