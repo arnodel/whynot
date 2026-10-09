@@ -106,16 +106,23 @@ func (c *compiler) compileTextBlock(node gmast.Node, astNode *ast.Node, topLevel
 	return block
 }
 
-// plainText joins items' words with single spaces; anything but an
+// plainText joins items' words as the source spaced them: with a single
+// space where it had whitespace, and none where a word is Glued to the
+// one before, as "1" and ".2" are in "1.2". Anything but an
 // *InlineText (e.g. an image) contributes nothing.
 func plainText(items []engine.Inline) string {
-	var words []string
+	var b strings.Builder
 	for _, item := range items {
-		if it, ok := item.(*engine.InlineText); ok {
-			words = append(words, it.Text)
+		it, ok := item.(*engine.InlineText)
+		if !ok {
+			continue
 		}
+		if b.Len() > 0 && !it.Glued {
+			b.WriteByte(' ')
+		}
+		b.WriteString(it.Text)
 	}
-	return strings.Join(words, " ")
+	return b.String()
 }
 
 // compileUnsupportedBlock shows a block construct the compiler has no
