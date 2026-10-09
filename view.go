@@ -272,6 +272,37 @@ func (v *View) VisibleRange() (start, end float64) {
 	return top / total, bottom / total
 }
 
+// ContentAbove returns the height of the document above the top of the
+// View, the part scrolled past, exactly, measuring no further than limit:
+// it returns a value of at least limit if there's that much. It lays out
+// only what it measures.
+func (v *View) ContentAbove(limit float64) float64 {
+	if !v.stack.laidOut() {
+		return 0
+	}
+	return v.stack.above(limit)
+}
+
+// ContentBelow returns the height of the document from the top of the
+// View to its end, exactly, measuring no further than limit: it returns a
+// value greater than limit if there's more. It lays out only what it
+// measures.
+func (v *View) ContentBelow(limit float64) float64 {
+	if !v.stack.laidOut() {
+		return 0
+	}
+	return v.stack.below(limit)
+}
+
+// ContentHeight returns the document's height: estimated for the parts
+// not laid out yet, exact once all of it is, as for a scrollbar.
+func (v *View) ContentHeight() float64 {
+	if !v.stack.laidOut() {
+		return 0
+	}
+	return v.stack.totalHeight()
+}
+
 // Bounds returns where the View is drawn on the canvas.
 func (v *View) Bounds() image.Rectangle {
 	return v.bounds
@@ -279,7 +310,9 @@ func (v *View) Bounds() image.Rectangle {
 
 // SetBounds sets where the View is drawn on the canvas, which is also
 // where its HitTest and LinkAt apply. A change of width lays the document
-// out again, keeping the scroll position.
+// out again, keeping the scroll position. A change of height alone is
+// cheap, since nothing is laid out again: a program can give a View a
+// different height each frame, to show part of it, say.
 func (v *View) SetBounds(r image.Rectangle) {
 	v.bounds = r
 	v.relayout()

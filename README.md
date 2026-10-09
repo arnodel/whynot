@@ -183,7 +183,9 @@ Your own code can also move a View directly, without any input: `ScrollBy` scrol
 distance, `ScrollToAnchor` jumps to a heading, `ScrollToRatio` jumps to a point in the
 document, and `ScrollToEnd` shows its end, as a chat or a log wants. To draw a scrollbar of your own, `VisibleRange` tells you which part of the
 document is on screen, and `HoveredLink` tells you which link is under the pointer, for a
-status bar. [`examples/view`](examples/view) shows a View on its own, scrolled with the
+status bar. To arrange Views yourself, stacked one above the other say, `ContentAbove` and
+`ContentBelow` measure exactly how much of a document is above and below a View's top, and
+`ContentHeight` its whole height. [`examples/view`](examples/view) shows a View on its own, scrolled with the
 mouse wheel. All positions are measured in the canvas's pixels; the
 [Coordinates](https://pkg.go.dev/github.com/arnodel/whynot#hdr-Coordinates) section of
 the documentation explains this in detail.

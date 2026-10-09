@@ -85,7 +85,9 @@
 // also answers questions about what it shows: the link under the pointer
 // ([View.HoveredLink]), the part of the document in view
 // ([View.VisibleRange]), the heading currently on screen
-// ([View.CurrentHeadingID]).
+// ([View.CurrentHeadingID]), and exactly how much of the document is
+// above and below its top ([View.ContentAbove], [View.ContentBelow]), for
+// a program arranging Views itself.
 //
 // # Coordinates
 //

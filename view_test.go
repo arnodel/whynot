@@ -1677,3 +1677,65 @@ func TestViewScrollToEnd(t *testing.T) {
 	empty.SetBounds(image.Rect(0, 0, 300, 200))
 	empty.ScrollToEnd()
 }
+
+// TestViewContentMeasures checks that ContentAbove and ContentBelow are
+// exact, that their limits keep them from laying out more than needed,
+// and that ContentHeight becomes exact once everything is laid out.
+func TestViewContentMeasures(t *testing.T) {
+	v := NewView(Parse([]byte(strings.Repeat("Some text, quite a bit of it actually.\n\n", 200))))
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	resolved := func() int {
+		n := 0
+		for _, slot := range v.stack.box.Slots {
+			if slot.Box != nil && slot.Block != nil {
+				n++
+			}
+		}
+		return n
+	}
+
+	// With a small limit, only a few blocks are laid out.
+	before := resolved()
+	if got := v.ContentBelow(50); got <= 50 {
+		t.Errorf("ContentBelow(50) = %v, want more than 50: the document is long", got)
+	}
+	if resolved()-before > 3 {
+		t.Errorf("ContentBelow(50) laid out %d more blocks, want a few", resolved()-before)
+	}
+
+	// Exact, against the slots' heights.
+	total := 0.0
+	for i := range v.stack.box.Slots {
+		total += float64(v.stack.box.BoxAt(i).Bounds().Dy())
+	}
+	v.ScrollBy(1234)
+	if got := v.ContentAbove(math.Inf(1)); got != 1234 {
+		t.Errorf("ContentAbove = %v, want 1234, as scrolled", got)
+	}
+	if got := v.ContentBelow(math.Inf(1)); got != total-1234 {
+		t.Errorf("ContentBelow = %v, want %v", got, total-1234)
+	}
+	if got := v.ContentAbove(100); got < 100 || got > 1234 {
+		t.Errorf("ContentAbove(100) = %v, want at least 100, and no more than all of it", got)
+	}
+	if got := v.ContentHeight(); got != total {
+		t.Errorf("ContentHeight = %v, want %v once all is laid out", got, total)
+	}
+}
+
+// TestViewHeightChangeIsCheap checks the promise SetBounds makes: a change
+// of height alone doesn't lay the document out again, and a change of
+// width does.
+func TestViewHeightChangeIsCheap(t *testing.T) {
+	v := NewView(Parse([]byte("# Title\n\nSome text.\n")))
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	box := v.stack.box
+	v.SetBounds(image.Rect(0, 50, 300, 90))
+	if v.stack.box != box {
+		t.Error("a change of height laid the document out again")
+	}
+	v.SetBounds(image.Rect(0, 50, 250, 90))
+	if v.stack.box == box {
+		t.Error("a change of width didn't lay the document out again")
+	}
+}
