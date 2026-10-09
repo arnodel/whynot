@@ -37,11 +37,16 @@ func NewLineBox(parts []InlineLayout, glue bool) *LineBox {
 // the one before it is never a break point, so a glued run, such as a
 // highlighted code span's tokens, moves to the next line as a whole when
 // it doesn't fit; like a single oversized word, a run wider than width
-// overflows its line.
+// overflows its line. A LineBreak's part ends its line.
 func wrapLines(parts []InlineLayout, width int) []BlockLayout {
 	var lines []BlockLayout
 	var l lineBuilder
 	for i, part := range parts {
+		if _, ok := part.(*lineBreakBox); ok {
+			lines = append(lines, l.line())
+			l = lineBuilder{}
+			continue
+		}
 		if len(l.parts) > 0 && !part.Glued() {
 			end := i + 1
 			for end < len(parts) && parts[end].Glued() {

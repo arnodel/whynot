@@ -50,6 +50,22 @@ func (t *InlineText) GetInlineLayout(ctx Context, width int) InlineLayout {
 	}
 }
 
+// LineBreak is a hard line break: the inline content after it starts a
+// new line.
+type LineBreak struct {
+	ASTNode *ast.Node
+}
+
+var _ Inline = (*LineBreak)(nil)
+
+func (b *LineBreak) Node() *ast.Node {
+	return b.ASTNode
+}
+
+func (b *LineBreak) GetInlineLayout(ctx Context, width int) InlineLayout {
+	return &lineBreakBox{source: b}
+}
+
 // checkboxUnchecked/checkboxChecked are the semantically-correct ballot-box
 // glyphs for a task list item's marker (☐/☑) - used when the active face
 // actually has them (see TaskCheckbox.GetInlineLayout). Most fonts that

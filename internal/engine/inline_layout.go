@@ -386,6 +386,21 @@ func (b *ImageBox) PendingImages() []string {
 	return b.Pending
 }
 
+// lineBreakBox is a LineBreak's layout: wrapLines ends the line at it, and
+// it's never part of a line.
+type lineBreakBox struct {
+	source Inline
+}
+
+func (b *lineBreakBox) Source() Source                                            { return b.source }
+func (b *lineBreakBox) BoundsAndAdvance() (image.Rectangle, int)                  { return image.Rectangle{}, 0 }
+func (b *lineBreakBox) Bounds() image.Rectangle                                   { return image.Rectangle{} }
+func (b *lineBreakBox) SpaceWidth() int                                           { return 0 }
+func (b *lineBreakBox) Glued() bool                                               { return false }
+func (b *lineBreakBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {}
+func (b *lineBreakBox) HitTest(p image.Point, x, y int) (Hit, image.Point)        { return nil, image.Point{} }
+func (b *lineBreakBox) PendingImages() []string                                   { return nil }
+
 // hitIfInside is the HitTest of a leaf InlineLayout: a hit on the box
 // itself if p falls within its bounds at pen position (x, y).
 func hitIfInside(b InlineLayout, p image.Point, x, y int) (Hit, image.Point) {
