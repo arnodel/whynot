@@ -1200,3 +1200,22 @@ func TestParseHardLineBreak(t *testing.T) {
 		t.Errorf("a soft break gives %v, want just the words", got)
 	}
 }
+
+// TestHeadingTextKeepsGluedWords is a regression test: a heading's text
+// (its Heading.Text, what Title and the TOC show) put a space between
+// every two words, even where the source had none, as between "1" and
+// ".2", which the typographer and code spans split into separate items.
+func TestHeadingTextKeepsGluedWords(t *testing.T) {
+	for _, c := range []struct{ source, want string }{
+		{"# Version 1.2", "Version 1.2"},
+		{"# Alice's book", "Alice’s book"},
+		{"# **Bold**face and `code`, here", "Boldface and code, here"},
+		{"# Spaced   out", "Spaced out"},
+		{"# Logo ![x](logo.png) text", "Logo text"},
+	} {
+		r := parse([]byte(c.source))
+		if len(r.Headings) != 1 || r.Headings[0].Text != c.want {
+			t.Errorf("%q: headings %+v, want the text %q", c.source, r.Headings, c.want)
+		}
+	}
+}
