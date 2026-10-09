@@ -271,7 +271,8 @@ document is.
 
 `View` reads no input: its scrolling methods are position primitives
 (`ScrollBy(dy)`, positive towards the end; `ScrollToRatio`;
-`ScrollToAnchor`), with no coordinates and no policy. Input goes through a
+`ScrollToAnchor`; `ScrollToEnd`, exact where `ScrollToRatio(1)` is
+estimated), with no coordinates and no policy. Input goes through a
 `Controller` (below). A View is a window onto the canvas's coordinate
 space: `SetBounds` places it, and `HitTest`/`LinkAt` take canvas
 coordinates, the same as input events (the package doc's "Coordinates"

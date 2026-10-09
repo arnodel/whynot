@@ -180,8 +180,8 @@ view.Draw(canvas, now)               // draw the view within its rectangle
 ```
 
 Your own code can also move a View directly, without any input: `ScrollBy` scrolls by a
-distance, `ScrollToAnchor` jumps to a heading, and `ScrollToRatio` jumps to a point in the
-document. To draw a scrollbar of your own, `VisibleRange` tells you which part of the
+distance, `ScrollToAnchor` jumps to a heading, `ScrollToRatio` jumps to a point in the
+document, and `ScrollToEnd` shows its end, as a chat or a log wants. To draw a scrollbar of your own, `VisibleRange` tells you which part of the
 document is on screen, and `HoveredLink` tells you which link is under the pointer, for a
 status bar. [`examples/view`](examples/view) shows a View on its own, scrolled with the
 mouse wheel. All positions are measured in the canvas's pixels; the

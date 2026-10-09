@@ -92,6 +92,19 @@ func (s *documentStack) scrollToSlot(i int) {
 	s.cursor = s.box.NormalizeCursor(engine.StackCursor{Index: i})
 }
 
+// scrollToEnd puts the end of the document at the bottom of a viewport of
+// viewportHeight, or its start at the top if it's shorter: the cursor at
+// the very end, moved back by the viewport's height, which clamps at the
+// start.
+func (s *documentStack) scrollToEnd(viewportHeight int) {
+	last := len(s.box.Slots) - 1
+	if last < 0 {
+		return
+	}
+	end := s.box.NormalizeCursor(engine.StackCursor{Index: last, Offset: float64(s.box.BoxAt(last).Bounds().Dy())})
+	s.cursor = s.box.MoveCursor(end, -float64(viewportHeight))
+}
+
 // scrollToRatio puts the cursor at ratio (clamped to [0, 1]) of the
 // document's estimated total height.
 func (s *documentStack) scrollToRatio(ratio float64) {
