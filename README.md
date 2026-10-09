@@ -284,6 +284,20 @@ doc := whynot.Parse(markdown, whynot.WithBaseURL(location), whynot.WithImageRegi
 `fetch.HTTPResolver` fetches `https` images only, unless you set its `AllowHTTP` field.
 You can also write a resolver of your own for another URL scheme.
 
+### Front matter
+
+A document may start with front matter, YAML between two `---` lines, as used by Jekyll,
+Hugo and many READMEs. whynot doesn't show it, and doesn't read it: `doc.RawFrontMatter()`
+returns it as written, for your program to decode with the YAML library of its choice:
+
+```go
+var meta struct {
+	Title string
+	Tags  []string
+}
+err := yaml.Unmarshal([]byte(doc.RawFrontMatter()), &meta)
+```
+
 ### Documents that arrive a piece at a time
 
 A Document can grow as its Markdown arrives: a download over a slow network, a reply being
@@ -405,6 +419,7 @@ loading.
 **Text**
 - [x] Headings, paragraphs, emphasis, strong text, strikethrough and inline code
 - [x] Typographic punctuation: smart quotes, dashes and ellipses
+- [x] Front matter, which isn't shown, and is available to your program as written
 - [x] Hard line breaks, a backslash or two spaces at the end of a line, as in poems
 
 **Blocks**

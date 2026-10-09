@@ -41,7 +41,7 @@ func (p *Parser) Parse(source []byte, opts ...ParseOption) *Document {
 	s.Write(source)
 	s.Close()
 	finished, _ := s.Update()
-	return &Document{finished: finished, version: 1, complete: true}
+	return &Document{finished: finished, frontMatter: s.FrontMatter(), version: 1, complete: true}
 }
 
 // Stream returns a Document that grows as Markdown is written to w, until

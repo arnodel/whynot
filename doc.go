@@ -142,6 +142,13 @@
 // View when needed, such as the link under the pointer
 // ([View.HoveredLink]), which a program may show in a status bar.
 //
+// # Front matter
+//
+// A document may start with front matter, YAML between two "---" lines,
+// as used by Jekyll and Hugo. It isn't shown, and whynot doesn't read it:
+// [Document.RawFrontMatter] returns it as written, for the program to
+// decode with the YAML library of its choice.
+//
 // # Documents that arrive a piece at a time
 //
 // A Document can grow as its Markdown arrives: a download over a slow

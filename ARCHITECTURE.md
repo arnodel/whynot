@@ -144,6 +144,11 @@ it's a paragraph that's a single image (for prefetching, see below) - so
 nothing downstream has to rediscover them by inspecting the `Block`
 tree's shape. Any number of `View`s can render the same `Document`.
 
+A document's front matter, YAML between `---` lines at its start, is
+recognized by `markdown.Stream` before anything is compiled, and kept as
+text (`Document.RawFrontMatter`): whynot doesn't read it, and takes no
+YAML dependency.
+
 A `Document` can grow: `Parser.Stream` gives it a writer, and its text is
 compiled by a `markdown.Stream`, which compiles a top-level block once it's
 finished and only the unfinished end again as more arrives. A block is

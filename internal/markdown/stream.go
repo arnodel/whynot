@@ -32,6 +32,10 @@ type Piece struct {
 // parses as a list item, but completed as "---" it makes the paragraph
 // above a heading.
 //
+// A document may start with front matter (see FrontMatter), which isn't
+// compiled. Until the start of the text is known to be front matter or
+// not, nothing is.
+//
 // Each parse of the unfinished end is seeded with the finished part's
 // heading ids and reference definitions, so the result is that of a
 // parse of the whole text, but for one difference: a reference
@@ -50,6 +54,70 @@ type Stream struct {
 	// definitions, which each parse is seeded with.
 	ids  []string
 	defs []parser.LinkDefinition
+	// frontMatter is the text's front matter, once decided (see
+	// decideFrontMatter).
+	frontMatter        string
+	frontMatterDecided bool
+}
+
+// frontMatterLines bounds how far front matter's closing fence is looked
+// for.
+const frontMatterLines = 100
+
+// FrontMatter returns the YAML of the text's front matter, without its
+// fences, or "" if it has none or it isn't known yet. Front matter is
+// recognized as other tools do: a first line of "---", then lines of
+// YAML, the first not blank, closed by a line of "---" or "..." within
+// frontMatterLines lines.
+func (s *Stream) FrontMatter() string {
+	return s.frontMatter
+}
+
+// decideFrontMatter reports whether it's known yet whether the text starts
+// with front matter, and if it does, takes it out of what's compiled:
+// start moves past it.
+func (s *Stream) decideFrontMatter() bool {
+	if s.frontMatterDecided {
+		return true
+	}
+	none := func() bool {
+		s.frontMatterDecided = true
+		return true
+	}
+	if !bytes.HasPrefix(s.text, []byte("---")) {
+		if len(s.text) >= 3 || s.closed || !bytes.HasPrefix([]byte("---"), s.text) {
+			return none()
+		}
+		return false // it may still start with "---"
+	}
+	offset := 0
+	for i := 0; i < frontMatterLines; i++ {
+		end := bytes.IndexByte(s.text[offset:], '\n')
+		if end < 0 && !s.closed {
+			return false // the line isn't complete yet
+		}
+		next := len(s.text)
+		if end >= 0 {
+			next = offset + end + 1
+		}
+		line := string(bytes.TrimRight(s.text[offset:next], " \t\r\n"))
+		switch {
+		case i == 0 && line != "---":
+			return none()
+		case i == 1 && line == "":
+			return none() // a thematic break, then a blank line
+		case i > 0 && (line == "---" || line == "..."):
+			first := bytes.IndexByte(s.text, '\n') + 1
+			s.frontMatter = string(s.text[first:offset])
+			s.start = next
+			return none()
+		}
+		if end < 0 {
+			return none() // the last line of a closed text: no closing fence
+		}
+		offset = next
+	}
+	return none()
 }
 
 // NewStream returns an empty Stream, which compiles with opts.
@@ -79,6 +147,9 @@ func (s *Stream) Changed() bool {
 // finished, and tail is empty.
 func (s *Stream) Update() (finished, tail []Piece) {
 	s.parsed = len(s.text)
+	if !s.decideFrontMatter() {
+		return nil, nil
+	}
 	if s.closed {
 		s.done = true
 		src := s.text[s.start:]

@@ -33,6 +33,9 @@ type Document struct {
 	tail     []markdown.Piece
 	version  int
 
+	// frontMatter is the document's front matter, so far.
+	frontMatter string
+
 	complete  bool
 	listeners []chan struct{}
 	// partial is the start of a UTF-8 character at the end of what was
@@ -59,6 +62,33 @@ func (d *Document) Title() (string, bool) {
 		return "", false
 	}
 	return entries[0].Text, true
+}
+
+// RawFrontMatter returns the YAML of the document's front matter, as
+// written, without its fences, or "" if it has none (or none so far, for a
+// Document still being written). Front matter starts a document as in
+// Jekyll or Hugo:
+//
+//	---
+//	title: Release notes
+//	tags: [go, markdown]
+//	---
+//
+// It isn't shown, and whynot doesn't read it: it's for the program to
+// decode, with the YAML library of its choice, as in
+//
+//	var meta struct{ Title string }
+//	err := yaml.Unmarshal([]byte(doc.RawFrontMatter()), &meta)
+//
+// It's recognized as other tools do: a first line of "---", then lines of YAML, the first not
+// blank, closed by a line of "---" or "..." within the first 100 lines. A
+// document starting with a thematic break, "---" followed by a blank
+// line, has no front matter.
+func (d *Document) RawFrontMatter() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.update()
+	return d.frontMatter
 }
 
 // TOCEntries returns every top-level heading in the document, in document
@@ -123,6 +153,7 @@ func (d *Document) update() {
 	finished, tail := d.stream.Update()
 	d.finished = append(d.finished, finished...)
 	d.tail = tail
+	d.frontMatter = d.stream.FrontMatter()
 	d.version++
 }
 
