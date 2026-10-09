@@ -146,9 +146,8 @@ tree's shape. Any number of `View`s can render the same `Document`.
 
 A document's front matter, YAML between `---` lines at its start, is
 recognized by `markdown.Stream` before anything is compiled, and kept as
-text: whynot takes no YAML dependency. A program that gives a decoder
-(`WithFrontMatterDecoder`, a YAML library's `Unmarshal`) gets the front
-matter's title as the document's, and decodes the rest itself.
+text (`Document.RawFrontMatter`): whynot doesn't read it, and takes no
+YAML dependency.
 
 A `Document` can grow: `Parser.Stream` gives it a writer, and its text is
 compiled by a `markdown.Stream`, which compiles a top-level block once it's

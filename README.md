@@ -287,21 +287,16 @@ You can also write a resolver of your own for another URL scheme.
 ### Front matter
 
 A document may start with front matter, YAML between two `---` lines, as used by Jekyll,
-Hugo and many READMEs. whynot doesn't show it. To use what's in it, give the parser the
-`Unmarshal` function of the YAML library of your choice: whynot depends on none. The front
-matter's `title` is then the document's title, and the rest is yours to decode:
+Hugo and many READMEs. whynot doesn't show it, and doesn't read it: `doc.RawFrontMatter()`
+returns it as written, for your program to decode with the YAML library of its choice:
 
 ```go
-import "go.yaml.in/yaml/v3"
-
-doc := whynot.Parse(source, whynot.WithFrontMatterDecoder(yaml.Unmarshal))
-title, _ := doc.Title() // the front matter's title, or else the first heading
-
-var meta struct{ Tags []string }
-err := doc.DecodeFrontMatter(&meta)
+var meta struct {
+	Title string
+	Tags  []string
+}
+err := yaml.Unmarshal([]byte(doc.RawFrontMatter()), &meta)
 ```
-
-`doc.FrontMatter()` returns it as written, decoder or not.
 
 ### Documents that arrive a piece at a time
 
@@ -424,8 +419,7 @@ loading.
 **Text**
 - [x] Headings, paragraphs, emphasis, strong text, strikethrough and inline code
 - [x] Typographic punctuation: smart quotes, dashes and ellipses
-- [x] Front matter, which isn't shown, and whose title, with a YAML decoder of your
-      choice, is the document's
+- [x] Front matter, which isn't shown, and is available to your program as written
 - [x] Hard line breaks, a backslash or two spaces at the end of a line, as in poems
 
 **Blocks**

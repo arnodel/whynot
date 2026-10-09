@@ -1,7 +1,6 @@
 package whynot
 
 import (
-	"encoding/json"
 	"io"
 	"testing"
 )
@@ -23,8 +22,8 @@ func TestFrontMatter(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			doc := Parse([]byte(c.source))
-			if got := doc.FrontMatter(); got != c.frontMatter {
-				t.Errorf("FrontMatter() = %q, want %q", got, c.frontMatter)
+			if got := doc.RawFrontMatter(); got != c.frontMatter {
+				t.Errorf("RawFrontMatter() = %q, want %q", got, c.frontMatter)
 			}
 			if got, want := rendering(blocksOf(doc.finished)), rendering(blocksOf(Parse([]byte(c.rest)).finished)); got != want {
 				t.Errorf("shows %s, want %q as shown on its own", got, c.rest)
@@ -33,50 +32,12 @@ func TestFrontMatter(t *testing.T) {
 	}
 }
 
-// TestFrontMatterTitle checks that, with a decoder, the front matter's
-// title is the document's, numbers included, and that without one, or
-// without a title, the first heading is.
-func TestFrontMatterTitle(t *testing.T) {
-	decoder := WithFrontMatterDecoder(json.Unmarshal) // JSON is YAML too
-	for _, c := range []struct {
-		name, source string
-		opts         []ParseOption
-		want         string
-	}{
-		{"decoded", "---\n{\"title\": \"Release notes\"}\n---\n# Version two\n", []ParseOption{decoder}, "Release notes"},
-		{"a number", "---\n{\"title\": 2024}\n---\n# Version two\n", []ParseOption{decoder}, "2024"},
-		{"no title", "---\n{\"tags\": [\"a\"]}\n---\n# Version two\n", []ParseOption{decoder}, "Version two"},
-		{"not a mapping", "---\n[\"a\"]\n---\n# Version two\n", []ParseOption{decoder}, "Version two"},
-		{"no decoder", "---\n{\"title\": \"Release notes\"}\n---\n# Version two\n", nil, "Version two"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			if got, _ := Parse([]byte(c.source), c.opts...).Title(); got != c.want {
-				t.Errorf("Title() = %q, want %q", got, c.want)
-			}
-		})
-	}
-}
-
-// TestDecodeFrontMatter checks that DecodeFrontMatter fills the program's
-// struct through the decoder, leaves it alone for a document without
-// front matter, and fails without a decoder.
-func TestDecodeFrontMatter(t *testing.T) {
-	source := []byte("---\n{\"tags\": [\"go\", \"markdown\"], \"draft\": true}\n---\nText\n")
-	var meta struct {
-		Tags  []string
-		Draft bool
-	}
-	if err := Parse(source, WithFrontMatterDecoder(json.Unmarshal)).DecodeFrontMatter(&meta); err != nil {
-		t.Fatal(err)
-	}
-	if len(meta.Tags) != 2 || meta.Tags[1] != "markdown" || !meta.Draft {
-		t.Errorf("decoded %+v", meta)
-	}
-	if err := Parse([]byte("Text\n"), WithFrontMatterDecoder(json.Unmarshal)).DecodeFrontMatter(&meta); err != nil {
-		t.Errorf("a document without front matter: %v", err)
-	}
-	if err := Parse(source).DecodeFrontMatter(&meta); err == nil {
-		t.Error("decoding without a decoder succeeded")
+// TestFrontMatterNotRead checks that whynot doesn't read front matter: a
+// title in it isn't the document's, which is still its first heading.
+func TestFrontMatterNotRead(t *testing.T) {
+	doc := Parse([]byte("---\ntitle: Release notes\n---\n# Version two\n"))
+	if title, _ := doc.Title(); title != "Version two" {
+		t.Errorf("Title() = %q, want the first heading's", title)
 	}
 }
 
@@ -93,8 +54,8 @@ func TestStreamFrontMatter(t *testing.T) {
 	if got, want := rendering(current(doc)), rendering(blocksOf(Parse([]byte("# Heading\n")).finished)); got != want {
 		t.Errorf("once the front matter is closed, the document shows %s, want only the heading", got)
 	}
-	if got := doc.FrontMatter(); got != "title: Notes\n" {
-		t.Errorf("FrontMatter() = %q", got)
+	if got := doc.RawFrontMatter(); got != "title: Notes\n" {
+		t.Errorf("RawFrontMatter() = %q", got)
 	}
 
 	doc, w = NewParser().Stream()

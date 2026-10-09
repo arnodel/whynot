@@ -2,7 +2,6 @@ package whynot
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"unicode/utf8"
 
@@ -34,10 +33,8 @@ type Document struct {
 	tail     []markdown.Piece
 	version  int
 
-	// frontMatter is the document's front matter, so far, and decode the
-	// decoder it was given to read it with, if any.
+	// frontMatter is the document's front matter, so far.
 	frontMatter string
-	decode      func([]byte, any) error
 
 	complete  bool
 	listeners []chan struct{}
@@ -54,18 +51,12 @@ type TOCEntry struct {
 	Text  string
 }
 
-// Title returns the document's title: the top-level title in its front
-// matter, if it was parsed with [WithFrontMatterDecoder], as static site
-// generators use it, or else the text of its first heading, at any level,
-// or ok=false if it has neither: so far, for a Document still being
-// written.
+// Title returns the text of the document's first heading, at any level,
+// or ok=false if it has none: so far, for a Document still being written.
 //
 // Only a top-level heading is found: one nested inside a blockquote or
 // list isn't. The same holds for TOCEntries and [View.ScrollToAnchor].
 func (d *Document) Title() (string, bool) {
-	if title := d.frontMatterTitle(); title != "" {
-		return title, true
-	}
 	entries := d.TOCEntries()
 	if len(entries) == 0 {
 		return "", false
@@ -73,70 +64,31 @@ func (d *Document) Title() (string, bool) {
 	return entries[0].Text, true
 }
 
-// FrontMatter returns the YAML of the document's front matter, without its
-// fences, or "" if it has none (or none so far, for a Document still being
-// written). Front matter starts a document as in Jekyll or Hugo:
+// RawFrontMatter returns the YAML of the document's front matter, as
+// written, without its fences, or "" if it has none (or none so far, for a
+// Document still being written). Front matter starts a document as in
+// Jekyll or Hugo:
 //
 //	---
 //	title: Release notes
 //	tags: [go, markdown]
 //	---
 //
-// It isn't shown. With a decoder (see [WithFrontMatterDecoder]), its
-// top-level title is the document's (see Title), and DecodeFrontMatter
-// decodes it for the program, whose conventions the rest is. It's
-// recognized as other tools do: a first line of "---", then lines of YAML, the first not
+// It isn't shown, and whynot doesn't read it: it's for the program to
+// decode, with the YAML library of its choice, as in
+//
+//	var meta struct{ Title string }
+//	err := yaml.Unmarshal([]byte(doc.RawFrontMatter()), &meta)
+//
+// It's recognized as other tools do: a first line of "---", then lines of YAML, the first not
 // blank, closed by a line of "---" or "..." within the first 100 lines. A
 // document starting with a thematic break, "---" followed by a blank
 // line, has no front matter.
-func (d *Document) FrontMatter() string {
+func (d *Document) RawFrontMatter() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.update()
 	return d.frontMatter
-}
-
-// DecodeFrontMatter decodes the document's front matter into v, with the
-// decoder given to [WithFrontMatterDecoder], as in
-//
-//	var meta struct {
-//		Tags []string
-//	}
-//	err := doc.DecodeFrontMatter(&meta)
-//
-// A document without front matter leaves v as it is. It's an error to
-// call it on a document parsed without a decoder.
-func (d *Document) DecodeFrontMatter(v any) error {
-	if d.decode == nil {
-		return errNoFrontMatterDecoder
-	}
-	frontMatter := d.FrontMatter()
-	if frontMatter == "" {
-		return nil
-	}
-	return d.decode([]byte(frontMatter), v)
-}
-
-var errNoFrontMatterDecoder = errors.New("whynot: the document was parsed without a front matter decoder (see WithFrontMatterDecoder)")
-
-// frontMatterTitle returns the top-level title in the document's front
-// matter, decoded: a string, or a number or a boolean as text. It's "" if
-// there's none, no decoder, or the front matter isn't a mapping.
-func (d *Document) frontMatterTitle() string {
-	if d.decode == nil {
-		return ""
-	}
-	var fields map[string]any
-	if err := d.DecodeFrontMatter(&fields); err != nil {
-		return ""
-	}
-	switch title := fields["title"].(type) {
-	case string:
-		return title
-	case int, int64, uint64, float64, bool:
-		return fmt.Sprint(title)
-	}
-	return ""
 }
 
 // TOCEntries returns every top-level heading in the document, in document

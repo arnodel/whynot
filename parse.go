@@ -37,12 +37,11 @@ func NewParser(opts ...ParseOption) *Parser {
 // Document only, after the Parser's: a [WithBaseURL] overrides the
 // Parser's, and a [WithCodeBlockPlugin] adds to its plugins.
 func (p *Parser) Parse(source []byte, opts ...ParseOption) *Document {
-	o := p.options(opts)
-	s := markdown.NewStream(o.markdown())
+	s := markdown.NewStream(p.options(opts))
 	s.Write(source)
 	s.Close()
 	finished, _ := s.Update()
-	return &Document{finished: finished, frontMatter: s.FrontMatter(), decode: o.frontMatterDecoder, version: 1, complete: true}
+	return &Document{finished: finished, frontMatter: s.FrontMatter(), version: 1, complete: true}
 }
 
 // Stream returns a Document that grows as Markdown is written to w, until
@@ -55,13 +54,12 @@ func (p *Parser) Parse(source []byte, opts ...ParseOption) *Document {
 // used on any goroutine, while Views of the Document are used on another.
 // Writing after Close is an error.
 func (p *Parser) Stream(opts ...ParseOption) (doc *Document, w io.WriteCloser) {
-	o := p.options(opts)
-	doc = &Document{stream: markdown.NewStream(o.markdown()), decode: o.frontMatterDecoder}
+	doc = &Document{stream: markdown.NewStream(p.options(opts))}
 	return doc, streamWriter{doc}
 }
 
-// options returns the Parser's options, then extra.
-func (p *Parser) options(extra []ParseOption) parseOptions {
+// options returns the compiler's options: the Parser's, then extra.
+func (p *Parser) options(extra []ParseOption) markdown.Options {
 	var o parseOptions
 	for _, opt := range p.opts {
 		opt(&o)
@@ -69,11 +67,6 @@ func (p *Parser) options(extra []ParseOption) parseOptions {
 	for _, opt := range extra {
 		opt(&o)
 	}
-	return o
-}
-
-// markdown returns the compiler's options.
-func (o parseOptions) markdown() markdown.Options {
 	return markdown.Options{
 		Plugins:            o.plugins,
 		InlineCodeLanguage: o.inlineCodeLanguage,
@@ -89,7 +82,6 @@ type parseOptions struct {
 	inlineCodeLanguage string
 	base               *url.URL
 	images             *fetch.Registry
-	frontMatterDecoder func([]byte, any) error
 }
 
 // ParseOption customizes Parse.
@@ -135,22 +127,5 @@ func WithBaseURL(u *url.URL) ParseOption {
 func WithImageRegistry(r *fetch.Registry) ParseOption {
 	return func(o *parseOptions) {
 		o.images = r
-	}
-}
-
-// WithFrontMatterDecoder sets how the document's front matter is decoded
-// (see [Document.FrontMatter]): a YAML library's Unmarshal function, such
-// as that of go.yaml.in/yaml/v3:
-//
-//	doc := whynot.Parse(source, whynot.WithFrontMatterDecoder(yaml.Unmarshal))
-//
-// With it, the front matter's title is the document's (see
-// [Document.Title]), and [Document.DecodeFrontMatter] decodes it for the
-// program. Without it, front matter is still recognized and not shown,
-// but whynot doesn't read it: YAML is the program's choice, as whynot
-// depends on no YAML library.
-func WithFrontMatterDecoder(unmarshal func(data []byte, v any) error) ParseOption {
-	return func(o *parseOptions) {
-		o.frontMatterDecoder = unmarshal
 	}
 }
