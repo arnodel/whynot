@@ -142,6 +142,18 @@
 // View when needed, such as the link under the pointer
 // ([View.HoveredLink]), which a program may show in a status bar.
 //
+// # Front matter
+//
+// A document may start with front matter, YAML between two "---" lines,
+// as used by Jekyll and Hugo. It isn't shown, and [Document.FrontMatter]
+// returns it as written. whynot depends on no YAML library: give the
+// parser the Unmarshal function of yours, and the front matter's title is
+// the document's (see [Document.Title]), and the rest yours to decode:
+//
+//	doc := whynot.Parse(source, whynot.WithFrontMatterDecoder(yaml.Unmarshal))
+//	var meta struct{ Tags []string }
+//	err := doc.DecodeFrontMatter(&meta)
+//
 // # Documents that arrive a piece at a time
 //
 // A Document can grow as its Markdown arrives: a download over a slow
