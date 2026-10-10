@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arnodel/whynot/canvas/canvastest"
 	"github.com/arnodel/whynot/input"
-	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
 

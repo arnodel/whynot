@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arnodel/whynot/canvas/canvastest"
 	"github.com/arnodel/whynot/fetch"
-	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
@@ -184,7 +184,8 @@ func TestDiagramBlockReadyDrawsImageAndClearsPending(t *testing.T) {
 	// own.
 	wantInset := int(ctx.scaledThematicBreakThickness(nil)) + int(ctx.Styles.DiagramPadding(nil)*ctx.Scale)
 	wantImageRect := image.Rect(wantInset, wantInset, box.Bounds().Dx()-wantInset, box.Bounds().Dy()-wantInset)
-	if canvas.ImageRects[0] != wantImageRect {
-		t.Errorf("image drawn at %v, want %v (inset %d on every side)", canvas.ImageRects[0], wantImageRect, wantInset)
+	drawn := canvas.Images[0]
+	if got := image.Rect(drawn.X, drawn.Y, drawn.X+drawn.W, drawn.Y+drawn.H); got != wantImageRect {
+		t.Errorf("image drawn at %v, want %v (inset %d on every side)", got, wantImageRect, wantInset)
 	}
 }

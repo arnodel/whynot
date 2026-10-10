@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arnodel/whynot/canvas/canvastest"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/input"
-	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
 )
