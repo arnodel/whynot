@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -272,35 +273,48 @@ func (v *View) VisibleRange() (start, end float64) {
 	return top / total, bottom / total
 }
 
-// ContentAbove returns the height of the document above the top of the
-// View, the part scrolled past, exactly, measuring no further than limit:
-// it returns a value of at least limit if there's that much. It lays out
-// only what it measures.
-func (v *View) ContentAbove(limit float64) float64 {
+// DocumentBounds returns where the View's document is on the canvas, as if
+// all of it were drawn: starting above the View's top by what's scrolled
+// past, and ending below its bottom by what's left, or above it, for a
+// document that ends there. It's exact, to the pixel, up to limit beyond
+// the View's top and bottom; beyond that, it only reaches past the limit.
+// It lays out only what it measures, so a small limit keeps it cheap
+// however long the document is. VisibleRange gives the same picture,
+// estimated, as fractions of the whole.
+func (v *View) DocumentBounds(limit int) image.Rectangle {
 	if !v.stack.laidOut() {
-		return 0
+		return v.bounds
 	}
-	return v.stack.above(limit)
+	height := v.bounds.Dy()
+	above := v.stack.above(float64(limit))
+	below := v.stack.below(float64(height)+float64(limit)) - float64(height)
+	return image.Rect(v.bounds.Min.X, v.bounds.Min.Y-int(math.Round(above)),
+		v.bounds.Max.X, v.bounds.Max.Y+int(math.Round(below)))
 }
 
-// ContentBelow returns the height of the document from the top of the
-// View to its end, exactly, measuring no further than limit: it returns a
-// value greater than limit if there's more. It lays out only what it
-// measures.
-func (v *View) ContentBelow(limit float64) float64 {
-	if !v.stack.laidOut() {
-		return 0
+// ScrollWithin moves the scroll position dy pixels towards the end of the
+// document (towards its start if dy is negative), as ScrollBy does, but
+// no further than the document goes: up to its start, or down to its very
+// end, at the top of the View. It returns rest, what was left of dy when
+// it stopped: 0 if it moved all of it. A program scrolling several Views
+// as one carries rest on to the next. It lays out only what it scrolls
+// over.
+func (v *View) ScrollWithin(dy float64) (rest float64) {
+	if !v.stack.laidOut() || dy == 0 {
+		return dy
 	}
-	return v.stack.below(limit)
-}
-
-// ContentHeight returns the document's height: estimated for the parts
-// not laid out yet, exact once all of it is, as for a scrollbar.
-func (v *View) ContentHeight() float64 {
-	if !v.stack.laidOut() {
-		return 0
+	if dy > 0 {
+		moved := min(dy, v.stack.below(dy))
+		if moved != 0 {
+			v.ScrollBy(moved)
+		}
+		return dy - moved
 	}
-	return v.stack.totalHeight()
+	moved := max(dy, -v.stack.above(-dy))
+	if moved != 0 {
+		v.ScrollBy(moved)
+	}
+	return dy - moved
 }
 
 // Bounds returns where the View is drawn on the canvas.

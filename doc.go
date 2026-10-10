@@ -85,9 +85,10 @@
 // also answers questions about what it shows: the link under the pointer
 // ([View.HoveredLink]), the part of the document in view
 // ([View.VisibleRange]), the heading currently on screen
-// ([View.CurrentHeadingID]), and exactly how much of the document is
-// above and below its top ([View.ContentAbove], [View.ContentBelow]), for
-// a program arranging Views itself.
+// ([View.CurrentHeadingID]), and exactly where its whole document lies
+// ([View.DocumentBounds]). With [View.ScrollWithin], which reports what's
+// left when it stops at an end, that's what a program arranging Views
+// itself needs, stacking them to scroll as one, say.
 //
 // # Coordinates
 //
