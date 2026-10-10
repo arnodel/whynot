@@ -310,3 +310,21 @@ func TestViewScrollToEndTakesWhatArrived(t *testing.T) {
 		t.Errorf("after ScrollToEnd, DocumentBounds = %v, want it to end at the View's bottom, 200, and start above it", r)
 	}
 }
+
+// TestViewScrollToAnchorFindsWhatArrived checks that ScrollToAnchor finds
+// a heading that has been written, not only one the View last drew.
+func TestViewScrollToAnchorFindsWhatArrived(t *testing.T) {
+	doc, w := NewParser().Stream()
+	v := NewView(doc)
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	io.WriteString(w, "First.\n\n")
+	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 200)}, 0)
+
+	for i := range 30 {
+		fmt.Fprintf(w, "Paragraph %d.\n\n", i)
+	}
+	io.WriteString(w, "# Later\n\nMore.\n")
+	if !v.ScrollToAnchor("later") {
+		t.Error("ScrollToAnchor didn't find a heading written since the View drew")
+	}
+}
