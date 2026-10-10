@@ -40,6 +40,15 @@ const (
 // Journal reports whether journal mode is on (see ToggleJournal).
 func (a *App) Journal() bool { return a.journal != nil }
 
+// stacked returns journal mode's state while its stack is what's shown:
+// in journal mode, unless the TOC is showing instead. It's nil otherwise.
+func (a *App) stacked() *journal {
+	if a.tocDocView != nil {
+		return nil
+	}
+	return a.journal
+}
+
 // ToggleJournal turns journal mode on or off. In journal mode, the pages
 // history went through are shown above the current one, oldest first, as
 // one scrollable column: each page in its own View, the same one it has
@@ -138,7 +147,7 @@ func (a *App) stackScrollbar() *simpletheme.Scrollbar {
 // outside it: for a program drawing its own scrollbar for it (see its
 // VisibleRange and ScrollToRatio).
 func (a *App) JournalStack() *ViewStack {
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		return j.stack
 	}
 	return nil
@@ -167,7 +176,7 @@ func (a *App) stackColors() (background, separator color.Color) {
 // page, or in journal mode the stack, and follows the links clicked (see
 // HandleEvents).
 func (a *App) Frame(events []input.Event, now time.Duration) {
-	j := a.journal
+	j := a.stacked()
 	if j == nil {
 		a.HandleEvents(a.Panel.Frame(events, now))
 		return
@@ -223,7 +232,7 @@ func (a *App) followFrom(i int, dest string) {
 // Draw draws what's shown, at now: the current page, or in journal mode
 // the stack.
 func (a *App) Draw(dst canvas.Canvas, now time.Duration) {
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		j.stack.Draw(dst, now)
 		return
 	}
@@ -233,7 +242,7 @@ func (a *App) Draw(dst canvas.Canvas, now time.Duration) {
 // Animating reports whether frames must keep coming even without input,
 // as for a fling or a scrollbar fading out.
 func (a *App) Animating() bool {
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		return j.controller.Animating()
 	}
 	return a.Panel.Animating()
@@ -242,7 +251,7 @@ func (a *App) Animating() bool {
 // ViewAt returns the View shown at (x, y): the current page's, or in
 // journal mode, the page's there, if any.
 func (a *App) ViewAt(x, y int) (*whynot.View, bool) {
-	j := a.journal
+	j := a.stacked()
 	if j == nil {
 		return a.Panel.View(), image.Pt(x, y).In(a.Panel.Bounds())
 	}
@@ -269,7 +278,7 @@ func (a *App) page() float64 {
 // journal mode.
 func (a *App) scrollBy(dy float64, alone func()) {
 	a.arrival = arrival{}
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		j.stack.ScrollBy(dy)
 		return
 	}
@@ -279,7 +288,7 @@ func (a *App) scrollBy(dy float64, alone func()) {
 // ScrollLeft and ScrollRight scroll a block wider than the page, such as
 // a code block, as a Panel's do.
 func (a *App) ScrollLeft() {
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		j.controller.ScrollLeft()
 		return
 	}
@@ -287,7 +296,7 @@ func (a *App) ScrollLeft() {
 }
 
 func (a *App) ScrollRight() {
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		j.controller.ScrollRight()
 		return
 	}

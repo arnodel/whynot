@@ -80,9 +80,6 @@ func TestJournalToggle(t *testing.T) {
 	if views := app.journal.stack.views; views[len(views)-1] != current {
 		t.Error("the journal's last page isn't the current page's View")
 	}
-	if app.CanShowTOC() {
-		t.Error("the TOC can be shown in journal mode")
-	}
 	app.ToggleJournal()
 	if app.Journal() || app.Panel.View() != current {
 		t.Error("turning journal mode off doesn't show the current page alone")
@@ -200,5 +197,53 @@ func TestJournalKeepsAnchorInPage(t *testing.T) {
 	}
 	if id, _ := app.journal.stack.views[0].CurrentHeadingID(); id != "below" {
 		t.Errorf("page 0's current heading is %q, want below", id)
+	}
+}
+
+// TestJournalTOC checks journal mode's table of contents: an entry for
+// each page, with its other headings below it, where the reader is in
+// bold, and that following an entry closes it and scrolls the stack to
+// that page or heading, still in journal mode.
+func TestJournalTOC(t *testing.T) {
+	dir := t.TempDir()
+	source := "# A\n\n" + paragraphs(20) + "## Below\n\n[next](b.md)\n"
+	a := writeTempMD(t, dir, "a.md", source)
+	writeTempMD(t, dir, "b.md", "# B\n\n"+paragraphs(20))
+	app := newTestApp(t, dir, a, source)
+	app.Follow("b.md")
+	app.ToggleJournal()
+
+	if !app.CanShowTOC() {
+		t.Fatal("the TOC can't be shown in journal mode")
+	}
+	app.ShowTOC()
+	if !app.TOCShowing() || app.stacked() != nil {
+		t.Fatal("the TOC isn't what's shown")
+	}
+	toc := string(app.journalTOCSource())
+	for _, want := range []string{"[A](#0/)", "  - [Below](#0/below)", "**[B](#1/)**"} {
+		if !strings.Contains(toc, want) {
+			t.Errorf("the journal's TOC doesn't have %q:\n%s", want, toc)
+		}
+	}
+	if strings.Contains(toc, "(#0/a)") {
+		t.Errorf("the journal's TOC lists page A's title twice:\n%s", toc)
+	}
+
+	app.Follow("#0/below")
+	if app.TOCShowing() || !app.Journal() {
+		t.Fatal("following an entry didn't close the TOC, back to journal mode")
+	}
+	if child, _ := app.journal.stack.Position(); child != 0 {
+		t.Errorf("the stack shows page %d at its top, want page 0", child)
+	}
+	if id, _ := app.journal.stack.views[0].CurrentHeadingID(); id != "below" {
+		t.Errorf("page 0's current heading is %q, want below", id)
+	}
+
+	app.ShowTOC()
+	app.Follow("#1/")
+	if child, offset := app.journal.stack.Position(); child != 1 || offset != 0 {
+		t.Errorf("following page B's entry left the stack at page %d, %v in, want page 1's start", child, offset)
 	}
 }
