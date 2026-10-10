@@ -23,6 +23,7 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `fetch/` | where content comes from: `Source` (a key and a fetch), `Resolver` (a URL scheme's Sources), `Registry` (resolves a reference against a base URL, by scheme), and the `file` and `http(s)` resolvers |
 | `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, from its `fetch.Source`) and animated GIF decoding |
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
+| `canvas/canvastest/` | a `Canvas` for tests, `Recorder`, which records what's drawn on it instead of drawing |
 | `fonts/` | the `FaceSelector` contract and `TextStyle`, plus two selectors: `GoSelector` (bundled Go fonts) and `CustomSelector` (caller-registered fonts) |
 | `fonts/systemfont/` | a third `fonts.FaceSelector` resolving fonts by name from the host's installed fonts (`adrg/sysfont`) - split out to keep that dependency out of the core library, same rationale as `backends/ebitenbackend/`; does no classification itself, delegates to `fonts.CustomSelector.AddFontCollection` |
 | `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`, and code spans into `Tokens`; implementations in subpackages |

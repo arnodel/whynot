@@ -9,9 +9,9 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/arnodel/whynot/canvas/canvastest"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/internal/ast"
-	"github.com/arnodel/whynot/internal/canvastest"
 	"github.com/arnodel/whynot/internal/imagecache"
 	"github.com/arnodel/whynot/internal/styling"
 	"github.com/arnodel/whynot/internal/styling/stylingtest"
@@ -609,11 +609,11 @@ func TestImageBoxDrawInlineAnimated(t *testing.T) {
 	if len(dst.Images) != 2 {
 		t.Fatalf("got %d DrawImage calls, want 2", len(dst.Images))
 	}
-	if dst.Images[0] != f0 {
-		t.Errorf("frame at now=0 = %v, want f0", dst.Images[0])
+	if dst.Images[0].Img != f0 {
+		t.Errorf("frame at now=0 = %v, want f0", dst.Images[0].Img)
 	}
-	if dst.Images[1] != f1 {
-		t.Errorf("frame at now=15ms = %v, want f1", dst.Images[1])
+	if dst.Images[1].Img != f1 {
+		t.Errorf("frame at now=15ms = %v, want f1", dst.Images[1].Img)
 	}
 }
 
