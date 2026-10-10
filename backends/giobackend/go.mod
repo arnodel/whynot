@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	gioui.org v0.10.3
-	github.com/arnodel/whynot v1.0.0-rc.1
+	github.com/arnodel/whynot v1.0.0-rc.3
 	golang.org/x/image v0.45.0
 )
 

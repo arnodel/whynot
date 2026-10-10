@@ -75,15 +75,16 @@ changelog:
       - '^ci:'
   groups:
     # Any type marked breaking with "!" (feat!:, refactor!:, ...), first:
-    # a commit goes in the first group it matches.
+    # a commit goes in the first group it matches. A scope, such as
+    # (giobackend), is allowed.
     - title: "Breaking Changes"
-      regexp: '^[a-z]+!:'
+      regexp: '^[a-z]+(\([a-z]+\))?!:'
       order: 0
     - title: "Features"
-      regexp: '^feat:'
+      regexp: '^feat(\([a-z]+\))?:'
       order: 1
     - title: "Bug Fixes"
-      regexp: '^fix:'
+      regexp: '^fix(\([a-z]+\))?:'
       order: 2
     - title: "Other Changes"
       order: 999
