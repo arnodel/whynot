@@ -10,6 +10,8 @@ before:
 
 builds:
   - id: whynot
+    # The app is in the browser module (see go.work).
+    dir: browser
     main: ./cmd/whynot
     binary: whynot
     env:
@@ -32,7 +34,7 @@ builds:
       # on Windows (ebitengine/hideconsole, already a dependency, also
       # hides it at runtime - this avoids the flash in the first place).
       - -s -w
-      - -X github.com/arnodel/whynot/internal/browser.Version={{ .Version }}
+      - -X github.com/arnodel/whynot/browser/internal/browser.Version={{ .Version }}
       - '{{ if eq .Os "windows" }}-H=windowsgui{{ end }}'
 
 archives:
@@ -108,7 +110,7 @@ release:
     {{ end }}
     Building from source instead:
     ```bash
-    go install github.com/arnodel/whynot/cmd/whynot@{{.Tag}}
+    go install github.com/arnodel/whynot/browser/cmd/whynot@latest
     ```
   footer: |
     **Full Changelog**: https://github.com/arnodel/whynot/compare/{{ .PreviousTag }}...{{ .Tag }}

@@ -10,11 +10,6 @@ require (
 
 require (
 	gioui.org/shader v1.0.9 // indirect
-	github.com/adrg/strutil v0.2.2 // indirect
-	github.com/adrg/sysfont v0.1.2 // indirect
-	github.com/adrg/xdg v0.3.0 // indirect
-	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
-	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/yuin/goldmark/v2 v2.1.6 // indirect

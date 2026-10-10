@@ -23,7 +23,7 @@ import (
 // a link.
 var WelcomeURL = &url.URL{Scheme: "whynot", Opaque: "welcome"}
 
-// Version is set via -X github.com/arnodel/whynot/internal/browser.Version=...
+// Version is set via -X github.com/arnodel/whynot/browser/internal/browser.Version=...
 // at build time (see .goreleaser.yml) - "dev" for an ordinary local
 // build. Shown on the welcome page (see renderWelcome's {{VERSION}}
 // substitution), which puts it in the window title too, since that's
@@ -34,7 +34,7 @@ var Version = "dev"
 // document" section mentioning the address bar can be clicked and
 // typed into - false by default, since the welcome page is shared
 // between
-// cmd/whynot (read-only address bar) and backends/giobackend/cmd/giowhynot (editable); set
+// cmd/whynot (read-only address bar) and cmd/giowhynot (editable); set
 // this to true before the welcome page is first loaded
 // (i.e. at the very start of main) in a host whose address bar
 // actually is editable.

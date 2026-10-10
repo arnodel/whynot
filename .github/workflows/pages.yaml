@@ -28,30 +28,28 @@ jobs:
         with:
           go-version: 1.25
 
+      # Both apps are in the browser module, built from its directory.
       # cmd/whynot/web is the site root: index.html and wasm_exec.js
       # already live there (see that directory's README); this adds the
       # compiled binary alongside them.
-      - name: Build whynot.wasm
-        run: GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
-
+      #
       # giowhynot is served at a subpath of the same site
-      # (cmd/whynot/web/giowhynot/). Its page,
-      # backends/giobackend/cmd/giowhynot/web/index.html, is copied in
-      # with the fresh binary and the same wasm_exec.js (Go's wasm
-      # runtime glue, the same for both apps - see
-      # backends/giobackend/cmd/giowhynot/web/README.md). It's built from
-      # its own module's directory.
-      - name: Build giowhynot.wasm
-        working-directory: backends/giobackend
+      # (cmd/whynot/web/giowhynot/). Its page, cmd/giowhynot/web/index.html,
+      # is copied in with the fresh binary and the same wasm_exec.js (Go's
+      # wasm runtime glue, the same for both apps - see
+      # cmd/giowhynot/web/README.md).
+      - name: Build whynot.wasm and giowhynot.wasm
+        working-directory: browser
         run: |
-          mkdir -p ../../cmd/whynot/web/giowhynot
-          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ../../cmd/whynot/web/giowhynot/giowhynot.wasm ./cmd/giowhynot
-          cp cmd/giowhynot/web/index.html ../../cmd/whynot/web/wasm_exec.js ../../cmd/whynot/web/giowhynot/
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/whynot.wasm ./cmd/whynot
+          mkdir -p cmd/whynot/web/giowhynot
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o cmd/whynot/web/giowhynot/giowhynot.wasm ./cmd/giowhynot
+          cp cmd/giowhynot/web/index.html cmd/whynot/web/wasm_exec.js cmd/whynot/web/giowhynot/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: cmd/whynot/web
+          path: browser/cmd/whynot/web
 
   deploy:
     needs: build

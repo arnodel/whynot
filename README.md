@@ -37,8 +37,8 @@ whynot can do, and both also run in a web browser.
 
 | Viewer | Install | In your browser |
 |---|---|---|
-| [`whynot`](cmd/whynot) (Ebitengine) | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
-| [`giowhynot`](backends/giobackend/cmd/giowhynot) (Gio) | `go install github.com/arnodel/whynot/backends/giobackend/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
+| [`whynot`](browser/cmd/whynot) (Ebitengine) | `brew install arnodel/tap/whynot`, a [release binary](https://github.com/arnodel/whynot/releases/latest), or `go install github.com/arnodel/whynot/browser/cmd/whynot@latest` | **[Try it](https://arnodel.github.io/whynot/)** |
+| [`giowhynot`](browser/cmd/giowhynot) (Gio) | `go install github.com/arnodel/whynot/browser/cmd/giowhynot@latest` | **[Try it](https://arnodel.github.io/whynot/giowhynot/)** |
 
 Start a viewer with the path or URL of a Markdown document to open it, or with nothing to
 see its welcome page. For example, the screenshot above was taken with:
@@ -335,7 +335,7 @@ Each of these is a small program you can run, for example with `go run ./example
 | [`examples/wasm`](examples/wasm) | whynot running in a web page, compiled to WebAssembly |
 | [`backends/giobackend/examples/gio`](backends/giobackend/examples/gio) | A Panel in a Gio window |
 
-The two viewers, [`whynot`](cmd/whynot) and [`giowhynot`](backends/giobackend/cmd/giowhynot),
+The two viewers, [`whynot`](browser/cmd/whynot) and [`giowhynot`](browser/cmd/giowhynot),
 are complete applications built the same way.
 
 ## How it works

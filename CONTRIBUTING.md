@@ -5,21 +5,22 @@ Thank you for your interest in whynot! This page explains how the project is wor
 
 ## Building and testing
 
-whynot needs Go 1.25 or later. The repository holds two Go modules: the core, at the
-root, and the Gio backend, in [`backends/giobackend`](backends/giobackend) together with
-its programs. The `go.work` file at the root puts both in one workspace, so the Gio module
-builds against your local copy of the core.
+whynot needs Go 1.25 or later. The repository holds three Go modules: the core, at the
+root; the Gio backend, in [`backends/giobackend`](backends/giobackend); and the viewers,
+in [`browser`](browser). The `go.work` file at the root puts them in one workspace, so
+each builds against your local copy of the others.
 
-Run the checks that CI runs, for both modules:
+Run the checks that CI runs, for all three modules:
 
 ```bash
 gofmt -l .                              # lists any file that needs formatting
 go vet ./... && go test ./...           # the core
-cd backends/giobackend && go vet ./... && go test ./...
+(cd backends/giobackend && go vet ./... && go test ./...)
+(cd browser && go vet ./... && go test ./...)
 ```
 
-`./...` from the root covers the core only, which is why the Gio module needs its own
-run. On Linux, Gio needs a few system libraries: see
+`./...` from the root covers the core only, which is why the other modules need their own
+runs. On Linux, Gio needs a few system libraries: see
 [Gio's installation guide](https://gioui.org/doc/install/linux), or the list in
 [`.github/workflows/tests.yaml`](.github/workflows/tests.yaml).
 
@@ -79,8 +80,14 @@ A backend added to this repository goes under `backends/`. If its framework hasn
 reached version 1, it gets its own module, as `giobackend` has, so that the framework's
 breaking changes can't force breaking changes on the core.
 
+The `browser` module holds the viewers, which change faster than the library and aren't
+covered by its compatibility promise. It uses only the library's public API, so it can
+move to a repository of its own when it needs releases of its own. Until then, a release
+of the library also builds and ships the `whynot` viewer.
+
 `go.work` only applies inside this repository: `go install` and users ignore it. So the
-Gio module's `go.mod` must require a version of the core that has everything it uses.
+Gio module's `go.mod` must require a version of the core that has everything it uses, and
+the same goes for the browser module's `go.mod`, which `go install` of a viewer reads.
 Before tagging the Gio module (`backends/giobackend/vX.Y.Z`):
 
 1. Tag the core, if the Gio module needs changes that aren't in a tagged version yet.

@@ -2,7 +2,7 @@
 
 {{BUILD}}
 **whynot** is a Markdown file renderer for [ebiten](https://ebitengine.org/) games. This app,
-`cmd/whynot`, is a small standalone viewer built on top of the library - point it at a file or a
+`whynot`, is a small standalone viewer built on top of the library - point it at a file or a
 URL and it lays out and draws the document on screen. Only what's actually on screen is ever laid
 out, so even a very large document scrolls and resizes just as smoothly as a short one.
 

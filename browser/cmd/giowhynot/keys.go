@@ -5,7 +5,7 @@ import (
 	"gioui.org/layout"
 
 	"github.com/arnodel/whynot"
-	"github.com/arnodel/whynot/internal/browser"
+	"github.com/arnodel/whynot/browser/internal/browser"
 )
 
 // pollKeys handles global keyboard shortcuts - back/forward, page/line
