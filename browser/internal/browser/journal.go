@@ -106,7 +106,42 @@ func (a *App) restack() {
 		j.stack.top = i
 	}
 	j.stack.SetBounds(a.bounds)
+	j.stack.SetScrollbar(a.stackScrollbar())
 	j.controller = NewStackController(j.stack)
+}
+
+// SetScrollbar sets whether what's shown draws its own scrollbar: the
+// current page's View, or in journal mode the stack of pages. A program
+// drawing a scrollbar of its own leaves it off (see JournalStack).
+func (a *App) SetScrollbar(on bool) {
+	a.scrollbar = on
+	a.Panel.SetScrollbar(on)
+	if j := a.journal; j != nil {
+		j.stack.SetScrollbar(a.stackScrollbar())
+	}
+}
+
+// stackScrollbar returns the style of the journal stack's own scrollbar:
+// the current theme's, or nil if it's off.
+func (a *App) stackScrollbar() *simpletheme.Scrollbar {
+	if !a.scrollbar {
+		return nil
+	}
+	theme := simpletheme.Light()
+	if a.darkTheme {
+		theme = simpletheme.Dark()
+	}
+	return &theme.Scrollbar
+}
+
+// JournalStack returns the stack of pages shown in journal mode, or nil
+// outside it: for a program drawing its own scrollbar for it (see its
+// VisibleRange and ScrollToRatio).
+func (a *App) JournalStack() *ViewStack {
+	if j := a.journal; j != nil {
+		return j.stack
+	}
+	return nil
 }
 
 // prepare gives v, a page of the journal, the current scale, zoom and

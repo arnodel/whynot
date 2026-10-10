@@ -40,8 +40,9 @@ func (d *document) layout(gtx layout.Context) {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	d.app.Draw(d.renderer.NewCanvas(gtx.Ops, bounds), now)
-	if !d.app.Journal() {
-		// Journal mode has no scrollbar yet.
+	if stack := d.app.JournalStack(); stack != nil {
+		d.scrollbar.Layout(gtx, stack)
+	} else {
 		d.scrollbar.Layout(gtx, d.app.Panel.View())
 	}
 }

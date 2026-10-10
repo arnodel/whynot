@@ -99,6 +99,9 @@ type App struct {
 	arrival arrival
 	// journal is journal mode's state, nil outside it (see ToggleJournal).
 	journal *journal
+	// scrollbar is whether the documents shown draw their own scrollbar
+	// (see SetScrollbar).
+	scrollbar bool
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
 	// recovered from styleSheet itself.
@@ -318,6 +321,7 @@ func (a *App) SetTheme(dark bool) {
 			v.SetStyleSheet(a.styleSheet)
 		}
 		j.stack.SetColors(a.stackColors())
+		j.stack.SetScrollbar(a.stackScrollbar())
 	}
 }
 
