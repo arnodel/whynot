@@ -246,7 +246,7 @@ func (a *App) HoverDest() string {
 		return ""
 	}
 	view, location := a.Panel.View(), a.location
-	if j := a.journal; j != nil {
+	if j := a.stacked(); j != nil {
 		view = nil
 		for i, v := range j.stack.views {
 			if _, ok := v.HoveredLink(); ok {
@@ -436,6 +436,12 @@ func (a *App) FollowAnchor(id string) {
 
 // follow is Follow once dest is resolved.
 func (a *App) follow(resolved *url.URL) {
+	if a.tocDocView != nil && a.journal != nil {
+		if !a.followJournalTOC(resolved.Fragment) {
+			log.Printf("not a journal entry: %s", resolved)
+		}
+		return
+	}
 	if a.tocDocView != nil {
 		docView := a.tocDocView
 		a.pushHistoryFor(a.location, docView)
@@ -710,7 +716,7 @@ func (a *App) Relayout(outsideWidth, outsideHeight int, deviceScale float64, too
 	a.height = int(float64(outsideHeight) * deviceScale)
 	a.toolbarHeight = toolbarHeight
 	a.bounds = image.Rect(0, toolbarHeight, a.width, a.height)
-	j := a.journal
+	j := a.stacked()
 	if j == nil {
 		a.Panel.SetBounds(a.bounds)
 		a.Panel.SetScale(deviceScale)

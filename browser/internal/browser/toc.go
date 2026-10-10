@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/arnodel/whynot"
@@ -16,7 +17,7 @@ func (a *App) TOCShowing() bool { return a.tocDocView != nil }
 // the TOC is already showing, a.Panel.View() otherwise.
 func (a *App) CanShowTOC() bool {
 	if a.journal != nil {
-		return false
+		return true // the journal's pages are entries themselves
 	}
 	view := a.Panel.View()
 	if a.tocDocView != nil {
@@ -40,18 +41,24 @@ func (a *App) ShowTOC() {
 		return
 	}
 	docView := a.Panel.View()
-	entries := docView.Document().TOCEntries()
-	currentID, _ := docView.CurrentHeadingID()
+	var source []byte
+	if j := a.journal; j != nil {
+		source = a.journalTOCSource()
+		// The Panel shows the TOC, as it would without the journal.
+		a.Panel.SetBounds(a.bounds)
+		a.Panel.SetScale(a.deviceScale)
+		a.Panel.SetZoom(a.zoom)
+	} else {
+		currentID, _ := docView.CurrentHeadingID()
+		source = buildTOCSource(docView.Document().TOCEntries(), currentID)
+	}
 
 	tocView := whynot.NewView(
-		whynot.Parse(buildTOCSource(entries, currentID)),
+		whynot.Parse(source),
 		whynot.WithFaceSelector(a.faceSelector),
 		whynot.WithStyleSheet(a.styleSheet),
 	)
 	a.place(tocView)
-	if currentID != "" {
-		tocView.ScrollToAnchor(currentID)
-	}
 
 	a.tocDocView = docView
 	a.arrival = arrival{}
@@ -66,9 +73,71 @@ func (a *App) HideTOC() {
 	if a.tocDocView == nil {
 		return
 	}
-	a.Panel.SetView(a.tocDocView) // re-applies a.styleSheet, then relayouts
+	docView := a.tocDocView
+	a.Panel.SetView(docView) // re-applies a.styleSheet, then relayouts
 	a.tocDocView = nil
+	if a.journal != nil {
+		a.prepare(docView) // a page of the stack again
+	}
 	a.updateWindowTitle()
+}
+
+// journalTOCSource generates the Markdown source for journal mode's table
+// of contents: an entry for each page of the trail, its title, with its
+// headings nested below it. A page's link is "#i/", and a heading's
+// "#i/id", for page i (see followJournalTOC). The entry for where the
+// reader is, the heading or page at the top of the stack, is in bold.
+func (a *App) journalTOCSource() []byte {
+	j := a.journal
+	top, _ := j.stack.Position()
+	topID, _ := j.stack.views[top].CurrentHeadingID()
+	var b strings.Builder
+	b.WriteString("# Journal\n\n")
+	for i, v := range j.stack.views {
+		doc := v.Document()
+		title, ok := a.documentTitle(doc)
+		if !ok {
+			title = "Untitled document"
+		}
+		entries := doc.TOCEntries()
+		// A page titled by its first heading would list it twice.
+		if len(entries) > 0 && entries[0].Text == title {
+			if i == top && topID == entries[0].ID {
+				topID = ""
+			}
+			entries = entries[1:]
+		}
+		link := "[" + escapeMarkdown(title) + "](#" + strconv.Itoa(i) + "/)"
+		if i == top && topID == "" {
+			link = "**" + link + "**"
+		}
+		b.WriteString("- " + link + "\n")
+		for _, e := range entries {
+			b.WriteString(strings.Repeat("  ", e.Level))
+			link := "[" + escapeMarkdown(e.Text) + "](#" + strconv.Itoa(i) + "/" + e.ID + ")"
+			if i == top && e.ID == topID {
+				link = "**" + link + "**"
+			}
+			b.WriteString("- " + link + "\n")
+		}
+	}
+	return []byte(b.String())
+}
+
+// followJournalTOC follows a link of journal mode's table of contents,
+// whose fragment is "i/id" (see journalTOCSource): it closes the TOC, and
+// scrolls the stack to the heading with that id in page i, or to the
+// page's start for an empty id. It reports whether fragment was one.
+func (a *App) followJournalTOC(fragment string) bool {
+	page, id, ok := strings.Cut(fragment, "/")
+	i, err := strconv.Atoi(page)
+	if !ok || err != nil || i < 0 || i >= len(a.journal.stack.views) {
+		return false
+	}
+	a.HideTOC()
+	a.arrival = arrival{}
+	a.journal.stack.scrollToFragment(i, id)
+	return true
 }
 
 // buildTOCSource generates the Markdown source for a table-of-contents
