@@ -59,16 +59,14 @@ type game struct {
 	// below toolbarHeight (relayout passes it to app.Relayout, which
 	// sets panel's own Bounds to start there, so panel's own input
 	// handling and debug-hit's HitTest both offset by it via
-	// panel.Bounds() rather than this field directly). zoomIn/zoomOut
-	// sit on the toolbar's right edge, apart from back/forward/reload
-	// on the left - they're not navigation.
+	// panel.Bounds() rather than this field directly). The actions
+	// button sits on the toolbar's right edge, apart from
+	// back/forward/reload on the left - it's not navigation.
 	toolbarHeight                                      int
 	backButton, forwardButton, reloadButton, tocButton image.Rectangle
 	backState, forwardState, reloadState, tocState     buttonState
-	zoomInButton, zoomOutButton                        image.Rectangle
-	zoomInState, zoomOutState                          buttonState
-	themeButton                                        image.Rectangle
-	themeState                                         buttonState
+	actionsButton                                      image.Rectangle
+	actionsState                                       buttonState
 }
 
 // buttonState is a toolbar button's per-frame input state, driving its

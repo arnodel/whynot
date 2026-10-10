@@ -14,10 +14,13 @@ out, so even a very large document scrolls and resizes just as smoothly as a sho
 
 ## Getting around
 
+The three-dot button at the right end of the toolbar, or **{{ACTIONS_SHORTCUT}}**, shows everything
+whynot can do, with its keys. Some of it:
+
 - **Mouse wheel** scrolls; resize the window any time to see the document reflow.
 - **↓** / **↑** scroll a bit at a time; **Space** / **Shift+Space** page down / up.
-- **+** / **-**, or the toolbar buttons, zoom in / out.
-- The toolbar button switches between the light / dark theme.
+- **{{ZOOM_IN_SHORTCUT}}** / **{{ZOOM_OUT_SHORTCUT}}** zoom in / out, and the actions page also
+  switches between the light / dark theme.
 - Drag the scrollbar, on the right edge, to jump to a position.
 - Click a link to follow it: a link to a webpage opens in your browser, while one to a Markdown
   document opens right here - like

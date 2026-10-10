@@ -15,12 +15,9 @@ func toEbitenIcon(img image.Image) *ebiten.Image {
 }
 
 var (
-	backIcon      = toEbitenIcon(browser.BackIcon)
-	forwardIcon   = toEbitenIcon(browser.ForwardIcon)
-	reloadIcon    = toEbitenIcon(browser.ReloadIcon)
-	zoomInIcon    = toEbitenIcon(browser.ZoomInIcon)
-	zoomOutIcon   = toEbitenIcon(browser.ZoomOutIcon)
-	darkModeIcon  = toEbitenIcon(browser.DarkModeIcon)
-	lightModeIcon = toEbitenIcon(browser.LightModeIcon)
-	tocIcon       = toEbitenIcon(browser.TOCIcon)
+	backIcon    = toEbitenIcon(browser.BackIcon)
+	forwardIcon = toEbitenIcon(browser.ForwardIcon)
+	reloadIcon  = toEbitenIcon(browser.ReloadIcon)
+	tocIcon     = toEbitenIcon(browser.TOCIcon)
+	actionsIcon = toEbitenIcon(browser.ActionsIcon)
 )

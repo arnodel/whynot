@@ -30,23 +30,10 @@ func (g *game) layoutToolbar() {
 	g.reloadButton = nextButton()
 	g.tocButton = nextButton()
 
-	// zoomOut/zoomIn/theme sit on the toolbar's right edge instead,
-	// grouped apart from back/forward/reload since they're not
-	// navigation. nextButtonFromRight fills from the right edge inward,
-	// so calling it for theme first puts the theme toggle at the very
-	// corner, then + then - just to its left, reading left-to-right as
-	// "- + [theme]" (the zoom pair matching e.g. Chrome's own
-	// "- 100% +" zoom control, with the theme toggle as the outermost,
-	// app-level setting next to it).
-	right := g.width - pad
-	nextButtonFromRight := func() image.Rectangle {
-		r := image.Rect(right-btn, pad, right, pad+btn)
-		right = r.Min.X - pad
-		return r
-	}
-	g.themeButton = nextButtonFromRight()
-	g.zoomInButton = nextButtonFromRight()
-	g.zoomOutButton = nextButtonFromRight()
+	// The actions button (zoom, the theme and everything else) sits at
+	// the toolbar's right corner, as a "more" menu usually does, apart
+	// from back/forward/reload since it's not navigation.
+	g.actionsButton = image.Rect(g.width-pad-btn, pad, g.width-pad, pad+btn)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

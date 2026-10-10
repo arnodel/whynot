@@ -9,19 +9,19 @@ import (
 
 // TOCShowing reports whether ShowTOC is currently in effect - see its
 // own doc comment for what that means for Back/Forward/Reload/Navigate.
-func (a *App) TOCShowing() bool { return a.tocDocView != nil }
+func (a *App) TOCShowing() bool { return a.overlay == tocOverlay }
 
 // CanShowTOC reports whether ShowTOC would do anything - false for a
 // document with no headings (see whynot.Document.TOCEntries). Checks
-// whichever View is the real document right now: a.tocDocView while
+// whichever View is the real document right now: a.overlaid while
 // the TOC is already showing, a.Panel.View() otherwise.
 func (a *App) CanShowTOC() bool {
 	if a.journal != nil {
 		return true // the journal's pages are entries themselves
 	}
 	view := a.Panel.View()
-	if a.tocDocView != nil {
-		view = a.tocDocView
+	if a.overlaid != nil {
+		view = a.overlaid
 	}
 	return len(view.Document().TOCEntries()) > 0
 }
@@ -37,49 +37,39 @@ func (a *App) CanShowTOC() bool {
 // A no-op if the TOC is already showing, or the document has no
 // headings (see CanShowTOC).
 func (a *App) ShowTOC() {
-	if a.tocDocView != nil || !a.CanShowTOC() {
+	if a.overlay == tocOverlay || !a.CanShowTOC() {
 		return
 	}
-	docView := a.Panel.View()
 	var source []byte
-	if j := a.journal; j != nil {
+	if a.journal != nil {
 		source = a.journalTOCSource()
-		// The Panel shows the TOC, as it would without the journal.
-		a.Panel.SetBounds(a.bounds)
-		a.Panel.SetScale(a.deviceScale)
-		a.Panel.SetZoom(a.zoom)
 	} else {
+		docView := a.Panel.View()
+		if a.overlaid != nil {
+			docView = a.overlaid
+		}
 		currentID, _ := docView.CurrentHeadingID()
 		source = buildTOCSource(docView.Document().TOCEntries(), currentID)
 	}
+	a.showOverlay(tocOverlay, source)
+}
 
-	tocView := whynot.NewView(
-		whynot.Parse(source),
-		whynot.WithFaceSelector(a.faceSelector),
-		whynot.WithStyleSheet(a.styleSheet),
-	)
-	a.place(tocView)
-
-	a.tocDocView = docView
-	a.arrival = arrival{}
-	a.Panel.SetView(tocView)
-	a.updateWindowTitle()
+// ToggleTOC shows the TOC, or hides it if it's showing.
+func (a *App) ToggleTOC() {
+	if a.overlay == tocOverlay {
+		a.HideTOC()
+		return
+	}
+	a.ShowTOC()
 }
 
 // HideTOC restores the document ShowTOC replaced, exactly where it was
 // left (ShowTOC/HideTOC never touch its scroll position) - a no-op if
 // the TOC isn't showing.
 func (a *App) HideTOC() {
-	if a.tocDocView == nil {
-		return
+	if a.overlay == tocOverlay {
+		a.hideOverlay()
 	}
-	docView := a.tocDocView
-	a.Panel.SetView(docView) // re-applies a.styleSheet, then relayouts
-	a.tocDocView = nil
-	if a.journal != nil {
-		a.prepare(docView) // a page of the stack again
-	}
-	a.updateWindowTitle()
 }
 
 // journalTOCSource generates the Markdown source for journal mode's table

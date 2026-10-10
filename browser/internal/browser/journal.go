@@ -43,7 +43,7 @@ func (a *App) Journal() bool { return a.journal != nil }
 // stacked returns journal mode's state while its stack is what's shown:
 // in journal mode, unless the TOC is showing instead. It's nil otherwise.
 func (a *App) stacked() *journal {
-	if a.tocDocView != nil {
+	if a.overlaid != nil {
 		return nil
 	}
 	return a.journal
@@ -59,7 +59,7 @@ func (a *App) stacked() *journal {
 // that came after it are dropped from history. A no-op while the TOC is
 // showing.
 func (a *App) ToggleJournal() {
-	if a.tocDocView != nil {
+	if a.overlaid != nil {
 		return
 	}
 	a.arrival = arrival{}
@@ -176,6 +176,7 @@ func (a *App) stackColors() (background, separator color.Color) {
 // page, or in journal mode the stack, and follows the links clicked (see
 // HandleEvents).
 func (a *App) Frame(events []input.Event, now time.Duration) {
+	a.noteInput(events, now)
 	j := a.stacked()
 	if j == nil {
 		a.HandleEvents(a.Panel.Frame(events, now))

@@ -1,33 +1,50 @@
 package main
 
 import (
+	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 
 	"github.com/arnodel/whynot/browser/internal/browser"
 )
 
-// pollKeys handles global keyboard shortcuts - back/forward, page/line
-// scroll, paste-to-navigate, zoom. key.Filter with no Focus requirement
-// matches regardless of what's focused (Gio's own router special-cases
-// a nil Focus - confirmed against io/input/key.go), so unlike
-// pointer.Filter these need no prior area/event.Op registration: call
-// once per frame, from anywhere.
+// gioKeyNames are the Gio key names of browser.Key names that differ.
+var gioKeyNames = map[string]key.Name{
+	"Space":     key.NameSpace,
+	"Backspace": key.NameDeleteBackward,
+	"Escape":    key.NameEscape,
+	"Up":        key.NameUpArrow,
+	"Down":      key.NameDownArrow,
+	"Left":      key.NameLeftArrow,
+	"Right":     key.NameRightArrow,
+}
+
+// pollKeys runs the commands of the keys pressed (see browser.App.Keys).
+// key.Filter with no Focus requirement matches regardless of what's
+// focused (Gio's own router special-cases a nil Focus - confirmed
+// against io/input/key.go), so unlike pointer.Filter these need no prior
+// area/event.Op registration: call once per frame, from anywhere. A held
+// key's repeated presses come as more Press events.
 func pollKeys(gtx layout.Context, app *browser.App) {
+	names := map[key.Name]string{}
+	var filters []event.Filter
+	for _, k := range app.Keys() {
+		name, ok := gioKeyNames[k.Name]
+		if !ok {
+			name = key.Name(k.Name)
+		}
+		if _, seen := names[name]; seen {
+			continue
+		}
+		names[name] = k.Name
+		// The modifiers are matched exactly by PressKey.
+		filters = append(filters, key.Filter{Name: name, Optional: key.ModShortcut | key.ModShift | key.ModAlt})
+	}
+	// "?" may come as itself rather than as Shift+"/".
+	names["?"] = "/"
+	filters = append(filters, key.Filter{Name: "?", Optional: key.ModShift})
 	for {
-		e, ok := gtx.Event(
-			key.Filter{Name: key.NameDeleteBackward},
-			key.Filter{Name: key.NameSpace},
-			key.Filter{Name: key.NameUpArrow},
-			key.Filter{Name: key.NameDownArrow},
-			key.Filter{Name: key.NameLeftArrow},
-			key.Filter{Name: key.NameRightArrow},
-			key.Filter{Name: key.NameEscape},
-			key.Filter{Name: "V", Required: key.ModShortcut},
-			key.Filter{Name: "J", Required: key.ModShortcut},
-			key.Filter{Name: "="},
-			key.Filter{Name: "-"},
-		)
+		e, ok := gtx.Event(filters...)
 		if !ok {
 			break
 		}
@@ -35,39 +52,12 @@ func pollKeys(gtx layout.Context, app *browser.App) {
 		if !ok || ke.State != key.Press {
 			continue
 		}
-		switch ke.Name {
-		case key.NameDeleteBackward:
-			if ke.Modifiers.Contain(key.ModShift) {
-				app.Forward()
-			} else {
-				app.Back()
-			}
-		case key.NameSpace:
-			if ke.Modifiers.Contain(key.ModShift) {
-				app.PageUp()
-			} else {
-				app.PageDown()
-			}
-		case key.NameUpArrow:
-			app.ScrollUp()
-		case key.NameDownArrow:
-			app.ScrollDown()
-		case key.NameLeftArrow:
-			app.ScrollLeft()
-		case key.NameRightArrow:
-			app.ScrollRight()
-		case key.NameEscape:
-			if app.TOCShowing() {
-				app.HideTOC()
-			}
-		case "V":
-			app.Paste()
-		case "J":
-			app.ToggleJournal()
-		case "=":
-			app.ZoomIn()
-		case "-":
-			app.ZoomOut()
+		k := browser.Key{
+			Name:     names[ke.Name],
+			Shortcut: ke.Modifiers.Contain(key.ModShortcut),
+			Shift:    ke.Modifiers.Contain(key.ModShift) || ke.Name == "?",
+			Alt:      ke.Modifiers.Contain(key.ModAlt),
 		}
+		app.PressKey(k)
 	}
 }

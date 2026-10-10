@@ -81,6 +81,9 @@ func renderWelcome() []byte {
 	}
 	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut("V")))
 	md = bytes.ReplaceAll(md, []byte("{{JOURNAL_SHORTCUT}}"), []byte(welcomeShortcut("J")))
+	md = bytes.ReplaceAll(md, []byte("{{ACTIONS_SHORTCUT}}"), []byte(welcomeShortcut("/")))
+	md = bytes.ReplaceAll(md, []byte("{{ZOOM_IN_SHORTCUT}}"), []byte(welcomeShortcut("=")))
+	md = bytes.ReplaceAll(md, []byte("{{ZOOM_OUT_SHORTCUT}}"), []byte(welcomeShortcut("-")))
 	md = bytes.ReplaceAll(md, []byte("{{VERSION}}"), []byte(versionSuffix()))
 	// Like {{ADDRESS_BAR_TIP}}, replaces the whole line.
 	md = bytes.ReplaceAll(md, []byte("{{BUILD}}\n"), []byte(buildLine()))
