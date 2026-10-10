@@ -105,6 +105,29 @@ func (s *documentStack) scrollToEnd(viewportHeight int) {
 	s.cursor = s.box.MoveCursor(end, -float64(viewportHeight))
 }
 
+// below returns the height from the cursor to the end of the document,
+// walking slots no further than needed to know it's more than limit.
+func (s *documentStack) below(limit float64) float64 {
+	y := -s.cursor.Offset
+	for i := s.cursor.Index; i < len(s.box.Slots); i++ {
+		y += float64(s.box.BoxAt(i).Bounds().Dy())
+		if y > limit {
+			return y
+		}
+	}
+	return y
+}
+
+// above returns the height from the start of the document to the cursor,
+// walking slots no further than needed to know it's at least limit.
+func (s *documentStack) above(limit float64) float64 {
+	y := s.cursor.Offset
+	for i := s.cursor.Index - 1; i >= 0 && y < limit; i-- {
+		y += float64(s.box.BoxAt(i).Bounds().Dy())
+	}
+	return y
+}
+
 // scrollToRatio puts the cursor at ratio (clamped to [0, 1]) of the
 // document's estimated total height.
 func (s *documentStack) scrollToRatio(ratio float64) {

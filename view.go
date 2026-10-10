@@ -3,6 +3,7 @@ package whynot
 import (
 	"image"
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -272,6 +273,50 @@ func (v *View) VisibleRange() (start, end float64) {
 	return top / total, bottom / total
 }
 
+// DocumentBounds returns where the View's document is on the canvas, as if
+// all of it were drawn: starting above the View's top by what's scrolled
+// past, and ending below its bottom by what's left, or above it, for a
+// document that ends there. It's exact, to the pixel, up to limit beyond
+// the View's top and bottom; beyond that, it only reaches past the limit.
+// It lays out only what it measures, so a small limit keeps it cheap
+// however long the document is. VisibleRange gives the same picture,
+// estimated, as fractions of the whole.
+func (v *View) DocumentBounds(limit int) image.Rectangle {
+	if !v.stack.laidOut() {
+		return v.bounds
+	}
+	height := v.bounds.Dy()
+	above := v.stack.above(float64(limit))
+	below := v.stack.below(float64(height)+float64(limit)) - float64(height)
+	return image.Rect(v.bounds.Min.X, v.bounds.Min.Y-int(math.Round(above)),
+		v.bounds.Max.X, v.bounds.Max.Y+int(math.Round(below)))
+}
+
+// ScrollWithin moves the scroll position dy pixels towards the end of the
+// document (towards its start if dy is negative), as ScrollBy does, but
+// no further than the document goes: up to its start, or down to its very
+// end, at the top of the View. It returns rest, what was left of dy when
+// it stopped: 0 if it moved all of it. A program scrolling several Views
+// as one carries rest on to the next. It lays out only what it scrolls
+// over.
+func (v *View) ScrollWithin(dy float64) (rest float64) {
+	if !v.stack.laidOut() || dy == 0 {
+		return dy
+	}
+	if dy > 0 {
+		moved := min(dy, v.stack.below(dy))
+		if moved != 0 {
+			v.ScrollBy(moved)
+		}
+		return dy - moved
+	}
+	moved := max(dy, -v.stack.above(-dy))
+	if moved != 0 {
+		v.ScrollBy(moved)
+	}
+	return dy - moved
+}
+
 // Bounds returns where the View is drawn on the canvas.
 func (v *View) Bounds() image.Rectangle {
 	return v.bounds
@@ -279,7 +324,9 @@ func (v *View) Bounds() image.Rectangle {
 
 // SetBounds sets where the View is drawn on the canvas, which is also
 // where its HitTest and LinkAt apply. A change of width lays the document
-// out again, keeping the scroll position.
+// out again, keeping the scroll position. A change of height alone is
+// cheap, since nothing is laid out again: a program can give a View a
+// different height each frame, to show part of it, say.
 func (v *View) SetBounds(r image.Rectangle) {
 	v.bounds = r
 	v.relayout()

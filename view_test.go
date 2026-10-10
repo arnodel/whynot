@@ -1677,3 +1677,89 @@ func TestViewScrollToEnd(t *testing.T) {
 	empty.SetBounds(image.Rect(0, 0, 300, 200))
 	empty.ScrollToEnd()
 }
+
+// TestViewDocumentBounds checks that DocumentBounds is exact, starting
+// above the View by what's scrolled past and ending below it by what's
+// left, that its limit keeps it from laying out more than needed, and
+// that a document ending above the View's bottom ends there.
+func TestViewDocumentBounds(t *testing.T) {
+	v := NewView(Parse([]byte(strings.Repeat("Some text, quite a bit of it actually.\n\n", 200))))
+	v.SetBounds(image.Rect(10, 20, 310, 220))
+	resolved := func() int {
+		n := 0
+		for _, slot := range v.stack.box.Slots {
+			if slot.Box != nil && slot.Block != nil {
+				n++
+			}
+		}
+		return n
+	}
+
+	before := resolved()
+	if r := v.DocumentBounds(50); r.Min != image.Pt(10, 20) || r.Max.Y <= 220+50 || r.Dx() != 300 {
+		t.Errorf("at the start, DocumentBounds(50) = %v, want it to start at the View's top, and reach more than 50 below it", r)
+	}
+	// What's in view, and 50 pixels more: not the 200 paragraphs.
+	if resolved()-before > 10 {
+		t.Errorf("DocumentBounds(50) laid out %d more blocks, want only those near the View", resolved()-before)
+	}
+
+	total := 0
+	for i := range v.stack.box.Slots {
+		total += v.stack.box.BoxAt(i).Bounds().Dy()
+	}
+	v.ScrollBy(1234)
+	if r, want := v.DocumentBounds(math.MaxInt), image.Rect(10, 20-1234, 310, 20-1234+total); r != want {
+		t.Errorf("DocumentBounds = %v, want %v", r, want)
+	}
+	if r := v.DocumentBounds(100); 20-r.Min.Y < 100 || 20-r.Min.Y > 1234 {
+		t.Errorf("DocumentBounds(100) starts %d above the View, want at least 100, and no more than all of it", 20-r.Min.Y)
+	}
+
+	short := NewView(Parse([]byte("Just a line.\n")))
+	short.SetBounds(image.Rect(0, 0, 300, 200))
+	if r := short.DocumentBounds(math.MaxInt); r.Min.Y != 0 || r.Max.Y >= 200 {
+		t.Errorf("a short document: DocumentBounds = %v, want it to end above the View's bottom", r)
+	}
+}
+
+// TestViewScrollWithin checks that ScrollWithin moves exactly by dy when it
+// can, and otherwise stops at the document's start or very end, returning
+// what's left, without counting as a move when it can't move at all.
+func TestViewScrollWithin(t *testing.T) {
+	v := NewView(Parse([]byte(strings.Repeat("Some text, quite a bit of it actually.\n\n", 30))))
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	above := func() int { return v.Bounds().Min.Y - v.DocumentBounds(math.MaxInt).Min.Y }
+	total := v.DocumentBounds(math.MaxInt).Dy()
+
+	if rest := v.ScrollWithin(300); rest != 0 || above() != 300 {
+		t.Errorf("ScrollWithin(300) left %v, at %v, want all of it moved", rest, above())
+	}
+	if rest := v.ScrollWithin(-500); rest != -200 || above() != 0 {
+		t.Errorf("ScrollWithin(-500) from 300 left %v, want -200, at the start", rest)
+	}
+	moves := v.moves
+	if rest := v.ScrollWithin(-10); rest != -10 || v.moves != moves {
+		t.Errorf("at the start, ScrollWithin(-10) left %v and moved %v, want -10 left, no move", rest, v.moves != moves)
+	}
+	if rest := v.ScrollWithin(float64(total) + 50); rest != 50 || above() != total {
+		t.Errorf("ScrollWithin past the end left %v, at %v, want 50 left, at the very end, %v", rest, above(), total)
+	}
+}
+
+// TestViewHeightChangeIsCheap checks the promise SetBounds makes: a change
+// of height alone doesn't lay the document out again, and a change of
+// width does.
+func TestViewHeightChangeIsCheap(t *testing.T) {
+	v := NewView(Parse([]byte("# Title\n\nSome text.\n")))
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	box := v.stack.box
+	v.SetBounds(image.Rect(0, 50, 300, 90))
+	if v.stack.box != box {
+		t.Error("a change of height laid the document out again")
+	}
+	v.SetBounds(image.Rect(0, 50, 250, 90))
+	if v.stack.box == box {
+		t.Error("a change of width didn't lay the document out again")
+	}
+}
