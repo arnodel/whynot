@@ -536,3 +536,25 @@ func TestStackControllerScrollbarDrag(t *testing.T) {
 		t.Errorf("a click on the track three quarters down left the stack at %.2f-%.2f, want its middle about there", start, end)
 	}
 }
+
+// TestViewStackVisibleRangeInSecondChild checks the range is right once
+// the top of the stack is in a later child, with the earlier one above
+// it, scrolled past.
+func TestViewStackVisibleRangeInSecondChild(t *testing.T) {
+	s := stackOf(8, 40)
+	first := fullHeight(s.views[0])
+	total := first + fullHeight(s.views[1])
+	s.ScrollBy(first + 100)
+	drawStack(s)
+	if child, _ := s.Position(); child != 1 {
+		t.Fatalf("at child %d, want 1", child)
+	}
+	start, end := s.VisibleRange()
+	if want := (first + 100) / total; math.IsNaN(start) || math.Abs(start-want) > 0.05 || end <= start {
+		t.Errorf("in the second child, VisibleRange = %v, %v, want a start of about %v", start, end, want)
+	}
+	s.ScrollToRatio(0.8)
+	if start, _ := s.VisibleRange(); math.Abs(start-0.8) > 0.05 {
+		t.Errorf("after ScrollToRatio(0.8) from the second child, VisibleRange's start = %v", start)
+	}
+}

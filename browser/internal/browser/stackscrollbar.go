@@ -45,16 +45,21 @@ func (s *ViewStack) SetScrollbar(style *simpletheme.Scrollbar) {
 func (s *ViewStack) Bounds() image.Rectangle { return s.bounds }
 
 // height returns an estimate of the height of v's document, from its
-// VisibleRange: exact when its end is in view.
+// VisibleRange: exact when its end is in view. It's best measured at v's
+// start, where nothing of it is above.
 func height(v *whynot.View) float64 {
 	start, end := v.VisibleRange()
 	b := v.Bounds()
 	if end >= 1 {
 		below := float64(v.DocumentBounds(0).Max.Y - b.Min.Y)
-		if start <= 0 {
+		switch {
+		case start <= 0:
 			return below
+		case start < 0.99:
+			return below / (1 - start)
 		}
-		return below / (1 - start)
+		// At its very end, there's nothing below to measure from.
+		return float64(b.Min.Y-v.DocumentBounds(math.MaxInt32).Min.Y) + below
 	}
 	if end <= start || b.Dy() <= 0 {
 		return 0
@@ -63,10 +68,17 @@ func height(v *whynot.View) float64 {
 }
 
 // heights returns an estimate of the height of each child's document,
-// and their total.
+// and their total. The children other than the top one are measured at
+// their start, where they're left: those above the top aren't drawn, and
+// those below are drawn from their start.
 func (s *ViewStack) heights() (hs []float64, total float64) {
 	hs = make([]float64, len(s.views))
 	for i, v := range s.views {
+		if i != s.top {
+			if start, _ := v.VisibleRange(); start > 0 {
+				toStart(v)
+			}
+		}
 		hs[i] = height(v)
 		total += hs[i]
 	}
