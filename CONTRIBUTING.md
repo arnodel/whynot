@@ -36,6 +36,9 @@ runs. On Linux, Gio needs a few system libraries: see
   `refactor:`, `docs:`, `test:`, `chore:` or `ci:`, with `!` for a breaking change
   (`feat!:`). Pull requests are squash-merged, so the title becomes the commit message,
   and the release notes group commits by these types.
+- **A change to the `browser` module only** takes the `browser` scope:
+  `feat(browser):`, `fix(browser):`. The library's release notes leave these out, since
+  they're for users of the library.
 
 ## Writing comments
 

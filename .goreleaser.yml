@@ -67,6 +67,8 @@ changelog:
   sort: asc
   filters:
     exclude:
+      # The browser module's own changes (see CONTRIBUTING).
+      - '^[a-z]+\(browser\)!?:'
       - '^docs:'
       - '^test:'
       - '^chore:'
