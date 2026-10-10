@@ -132,6 +132,8 @@
 //			// follow e.Destination: load another document, say
 //		case whynot.AnchorClick:
 //			// already scrolled to e.ID, unless turned off
+//		case whynot.Scroll:
+//			// the reader scrolled
 //		}
 //	}
 //
@@ -184,6 +186,19 @@
 // arrives after a View has shown the paragraph using it doesn't make that
 // paragraph a link. A Document written in one go, before any View draws
 // it, is parsed as a whole.
+//
+// To keep the end of a growing Document in view, as a terminal does,
+// call [View.ScrollToEnd] each frame until the reader scrolls away, which
+// a [Scroll] event reports:
+//
+//	for _, e := range panel.Frame(source.Events(), now) {
+//		if _, ok := e.(whynot.Scroll); ok {
+//			following = false
+//		}
+//	}
+//	if following {
+//		panel.View().ScrollToEnd()
+//	}
 //
 // # Concurrency
 //

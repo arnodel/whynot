@@ -133,7 +133,7 @@ func (c *Controller) SetScale(s float64) {
 // per frame, with no events if there were none, so flings keep coasting.
 //
 // It returns what happened that the app may want to react to, such as a
-// LinkClick, in order; nil if nothing did. The Controller doesn't act on
+// LinkClick, in order; nil if nothing did. A Scroll comes last. The Controller doesn't act on
 // them itself.
 //
 // A fling stops if the app moves the View itself (with [View.ScrollBy],
@@ -144,6 +144,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 	}
 	c.events = nil
 	defer func() { c.viewMoves = c.view.moves }()
+	// Nothing in a Frame re-anchors the View, so any change of its cursor
+	// is the input's doing.
+	startCursor := c.view.stack.cursor
 	var (
 		pressed      bool        // a primary press inside the bounds, for a click
 		pressedAt    image.Point // where
@@ -281,6 +284,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 
 	if touchEnded {
 		c.touchEnd()
+	}
+	if c.view.stack.cursor != startCursor {
+		c.events = append(c.events, Scroll{})
 	}
 	return c.events
 }
