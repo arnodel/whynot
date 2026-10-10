@@ -1,4 +1,4 @@
-// Command driver launches cmd/whynot as a headless exp/vmhost guest, optionally scrolls it by
+// Command driver launches browser/cmd/whynot as a headless exp/vmhost guest, optionally scrolls it by
 // injecting mouse-wheel input, and dumps the rendered frame as a PNG. It is the agent-facing way to
 // run and screenshot whynot without a visible window - see SKILL.md in this directory.
 //
@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	pkg         = flag.String("pkg", "./cmd/whynot", "package path of the guest app (repo-root-relative)")
+	pkg         = flag.String("pkg", "./browser/cmd/whynot", "package path of the guest app (repo-root-relative)")
 	source      = flag.String("source", "testdata/demo.md", "markdown file to render, passed to the guest as its file argument")
 	out         = flag.String("out", "frame.png", "PNG output path for the final frame")
 	logicalW    = flag.Int("w", 1024, "logical screen width in device-independent pixels")
@@ -88,7 +88,7 @@ func (d *driver) Update() error {
 	}
 
 	// Press and release each span at least one tick apart - inpututil's
-	// IsMouseButtonJustPressed/IsKeyJustPressed (what cmd/whynot's own
+	// IsMouseButtonJustPressed/IsKeyJustPressed (what browser/cmd/whynot's own
 	// input handling uses) only fire on the tick a press is first seen,
 	// so a same-tick press+release could be missed entirely.
 	if *click {
@@ -218,7 +218,7 @@ func xmain() error {
 	}
 
 	// Build the guest with the ebitenginevmguest tag so its RunGame connects to this host instead
-	// of opening a window. cmd/whynot's own source is unchanged. The tag was renamed from
+	// of opening a window. browser/cmd/whynot's own source is unchanged. The tag was renamed from
 	// ebitenginevm to ebitenginevmguest between the alpha this driver was first written against
 	// and the stable v2.10.1 release.
 	guestBin := filepath.Join(dir, "guest")
@@ -230,7 +230,7 @@ func xmain() error {
 
 	var guestArgs []string
 	if *debugHit {
-		// Flags must precede the positional source path - cmd/whynot's
+		// Flags must precede the positional source path - browser/cmd/whynot's
 		// own flag.Parse() stops parsing flags at the first non-flag
 		// argument.
 		guestArgs = append(guestArgs, "-debug-hit")

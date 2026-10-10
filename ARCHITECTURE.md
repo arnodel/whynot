@@ -5,7 +5,7 @@ an interface, not a specific rendering backend - plus two packages
 implementing that interface, `ebitenbackend` (on top of `ebiten`) and
 `giobackend` (on top of [Gio](https://gioui.org/)), and a standalone CLI
 built on each. The library lives at the repo root (package `whynot`,
-`github.com/arnodel/whynot`); `cmd/whynot`/`backends/giobackend/cmd/giowhynot` are thin
+`github.com/arnodel/whynot`); the viewers, in the `browser` module, are thin
 window-and-input wrappers around it, sharing their navigation/history/
 theme/zoom/loading logic via `browser.App` rather than duplicating it.
 
@@ -17,8 +17,9 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `internal/markdown/` | the Markdown compiler: goldmark's tree into engine blocks plus the `ast.Node` tree, with code-block plugins for fenced blocks, and for code spans when the document's inline code language is set; `Stream` compiles a document that arrives a piece at a time, a finished block at a time; `whynot.Parser` wraps it |
 | `internal/engine/` | the pipeline from blocks to pixels: block and inline types with their layouts, line layout, `Context`, the lazily laid-out top level (`StackBox`), sideways-scrolling blocks, diagram blocks. No state: the scroll position, sideways offsets and scrollbars belong to `View` (`document_stack.go`, `hscroll_state.go`), reached through `Context`'s `ScrollOffset` and `Scrollbar` hooks |
 | `backends/ebitenbackend/` | the Ebitengine backend: `canvas.Canvas` on top of `ebiten`, and an `input.Source` reading Ebitengine's input |
-| `backends/giobackend/` | the Gio backend: `canvas.Canvas` on top of Gio, an `input.Source` for Gio's pointer events, and `NativeScrollbar` (Gio's own scrollbar). It also holds the Gio-only programs: `cmd/giowhynot` and `examples/gio`. **Its own Go module** (v0 while Gio is), so the core module doesn't depend on Gio; `go.work` at the root puts both modules in one workspace for development |
-| `internal/browser/` | the backend-agnostic "browser app" layer `cmd/whynot` and `backends/giobackend/cmd/giowhynot` are both built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
+| `backends/giobackend/` | the Gio backend: `canvas.Canvas` on top of Gio, an `input.Source` for Gio's pointer events, and `NativeScrollbar` (Gio's own scrollbar). It also holds `examples/gio`. **Its own Go module** (v0 while Gio is), so the core module doesn't depend on Gio; `go.work` at the root puts the modules in one workspace for development |
+| `browser/` | **its own Go module**: the two viewers, which aren't versioned with the library and may grow faster than it. It uses only the library's public API |
+| `browser/internal/browser/` | the backend-agnostic "browser app" layer both viewers are built on - navigation history, theme, zoom, document/image loading, the embedded welcome page, toolbar icons |
 | `fetch/` | where content comes from: `Source` (a key and a fetch), `Resolver` (a URL scheme's Sources), `Registry` (resolves a reference against a base URL, by scheme), and the `file` and `http(s)` resolvers |
 | `internal/imagecache/` | the image cache (fetches and decodes each image once, in the background, from its `fetch.Source`) and animated GIF decoding |
 | `canvas/` | the drawing contract: `Canvas`, which backends implement and a `View` draws onto |
@@ -27,12 +28,12 @@ theme/zoom/loading logic via `browser.App` rather than duplicating it.
 | `codeblocks/` | the contract between the compiler and code-block plugins: a `Plugin` parses fenced blocks in the languages it handles into `Content`, either `Tokens` (classified spans) or an `Image`, and code spans into `Tokens`; implementations in subpackages |
 | `codeblocks/chromahighlight/` | a `codeblocks.Plugin` producing `Tokens` on top of `alecthomas/chroma/v2` for syntax-highlighted code blocks - split out to keep chroma's ~200 embedded lexers out of the core library, same rationale as `backends/ebitenbackend/` |
 | `codeblocks/kroki/` | a `codeblocks.Plugin` producing an `Image`: renders Mermaid fences as images through a Kroki server |
-| `cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
-| `backends/giobackend/cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `cmd/whynot`'s hand-rolled one, plus one feature `cmd/whynot` doesn't have: an editable address bar |
+| `browser/cmd/whynot/` | standalone viewer on Ebitengine - window setup, toolbar, and input plumbing only; navigation/loading behavior lives in `browser`, everything else in the library |
+| `browser/cmd/giowhynot/` | the same viewer on Gio - same `browser.App`, a Gio-native toolbar instead of `whynot`'s hand-rolled one, plus one feature `whynot` doesn't have: an editable address bar |
 | `examples/panel/` | runnable example of a `whynot.Panel` embedded alongside other game content (`go run ./examples/panel`) |
 | `examples/view/` | runnable example of `whynot.View` wired up by hand (`go run ./examples/view`) |
 | `backends/giobackend/examples/gio/` | runnable example of a `whynot.Panel` in a Gio window (`go run ./backends/giobackend/examples/gio`) |
-| `examples/wasm/` | minimal browser demo via Ebitengine's own `js`/`wasm` backend, independent of `cmd/whynot`'s own (larger) browser build |
+| `examples/wasm/` | minimal browser demo via Ebitengine's own `js`/`wasm` backend, independent of the `whynot` viewer's own (larger) browser build |
 | `examples/chromahighlight/`, `examples/customfont/`, `examples/systemfont/` | runnable examples of syntax highlighting and custom/system font selection |
 | `testdata/` | fixture Markdown/images used by the library's own tests (`go test` ignores this directory as a package) |
 
@@ -473,9 +474,9 @@ that block actually extends; a single short line (e.g. a heading with no
 longer sibling line) has nothing to widen it. Not worth resolving given
 callers only query points already within their own rendered viewport.
 
-`cmd/whynot` can outline whatever's under the mouse each frame, via
+The `whynot` viewer can outline whatever's under the mouse each frame, via
 `HitTest`, gated behind the `-debug-hit` flag (off by default) - see
-`game.Draw` in [cmd/whynot/draw.go](cmd/whynot/draw.go).
+`game.Draw` in [browser/cmd/whynot/draw.go](browser/cmd/whynot/draw.go).
 
 ## Graceful degradation for unsupported Markdown
 

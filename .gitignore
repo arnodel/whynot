@@ -1,11 +1,11 @@
 /whynot
 /gio
 /giowhynot
-/cmd/whynot/whynot
-/backends/giobackend/cmd/giowhynot/giowhynot
+/browser/cmd/whynot/whynot
+/browser/cmd/giowhynot/giowhynot
 /dist
 /examples/wasm/whynot.wasm
-/cmd/whynot/web/whynot.wasm
-/cmd/whynot/web/giowhynot
-/backends/giobackend/cmd/giowhynot/web/giowhynot.wasm
-/backends/giobackend/cmd/giowhynot/web/wasm_exec.js
+/browser/cmd/whynot/web/whynot.wasm
+/browser/cmd/whynot/web/giowhynot
+/browser/cmd/giowhynot/web/giowhynot.wasm
+/browser/cmd/giowhynot/web/wasm_exec.js

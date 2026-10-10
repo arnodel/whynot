@@ -6,8 +6,8 @@ import (
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
+	"github.com/arnodel/whynot/browser/internal/browser"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/internal/browser"
 )
 
 // game adapts a browser.App (navigation/history/theme/zoom) and a

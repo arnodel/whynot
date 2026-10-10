@@ -1,12 +1,12 @@
 ---
 name: run-whynot
-description: Build, run, and screenshot whynot (the Markdown-renderer-for-ebiten app in cmd/whynot). Use when asked to run whynot, launch cmd/whynot, take a screenshot of the rendered document, scroll to a section, or otherwise exercise the ebiten app end-to-end without a human at the keyboard.
+description: Build, run, and screenshot whynot (the Markdown-renderer-for-ebiten app in browser/cmd/whynot). Use when asked to run whynot, launch browser/cmd/whynot, take a screenshot of the rendered document, scroll to a section, or otherwise exercise the ebiten app end-to-end without a human at the keyboard.
 ---
 
-whynot's only runnable binary is `cmd/whynot`, an ebiten.Game that renders a Markdown file and lets
+whynot's only runnable binary is `browser/cmd/whynot`, an ebiten.Game that renders a Markdown file and lets
 a human scroll it with the mouse wheel. Drive it headlessly with
-`.claude/skills/run-whynot/driver.go`, which launches `cmd/whynot` as an `exp/vmhost` guest (no
-visible window, no changes to `cmd/whynot`'s source), optionally scrolls it by injecting wheel
+`.claude/skills/run-whynot/driver.go`, which launches `browser/cmd/whynot` as an `exp/vmhost` guest (no
+visible window, no changes to `browser/cmd/whynot`'s source), optionally scrolls it by injecting wheel
 input, and dumps the final frame as a PNG. All paths below are relative to the repo root.
 
 ## Prerequisites
@@ -38,7 +38,7 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 
 | flag | default | what it does |
 |---|---|---|
-| `-pkg` | `./cmd/whynot` | guest package to build and run |
+| `-pkg` | `./browser/cmd/whynot` | guest package to build and run |
 | `-source` | `testdata/demo.md` | markdown file rendered; resolved to an absolute path and passed to the guest as its file argument, so it works regardless of the guest's cwd |
 | `-out` | `frame.png` | PNG output path |
 | `-w`, `-h` | `1024`, `768` | logical window size |
@@ -47,9 +47,9 @@ logical pixels (physical size is that times your display's `DeviceScaleFactor`, 
 | `-ticks` | `5` | settle ticks run after scrolling, immediately before the frame is captured - each one also draws a frame, as a real app would, since some input handling (hovering a sideways-scrolling block) works from the last drawn frame |
 | `-cursor-x`, `-cursor-y` | `-1`, `-1` | cursor position (device-independent pixels, same space as `-w`/`-h`) to move to before the settle ticks; negative (either one) skips moving the cursor |
 | `-click` | `false` | press and release the left mouse button (at `-cursor-x`/`-cursor-y`) after scrolling, before the settle ticks - e.g. to follow a link under the cursor |
-| `-key` | `""` | name of an `ebiten.Key` (e.g. `Backspace`) to press and release after scrolling, before the settle ticks - e.g. to trigger cmd/whynot's back action |
+| `-key` | `""` | name of an `ebiten.Key` (e.g. `Backspace`) to press and release after scrolling, before the settle ticks - e.g. to trigger browser/cmd/whynot's back action |
 | `-modifier` | `""` | name of an `ebiten.Key` (e.g. `Meta`) to hold down for the duration of `-key`'s press+release - e.g. `-modifier Meta -key V` for Cmd+V |
-| `-hold-ticks` | `1` | number of ticks to hold `-key` down before releasing it - `>1` to test key-repeat behavior (`inpututil.KeyPressDuration`), e.g. cmd/whynot's zoom +/- |
+| `-hold-ticks` | `1` | number of ticks to hold `-key` down before releasing it - `>1` to test key-repeat behavior (`inpututil.KeyPressDuration`), e.g. browser/cmd/whynot's zoom +/- |
 | `-debug-hit` | `false` | pass `-debug-hit` through to the guest, so the captured frame shows the red `HitTest` outline at the cursor - useful for confirming exact click coordinates before using `-click` |
 | `-settle-delay` | `0` | real wall-clock `time.Sleep` before the settle ticks - see the Gotchas entry on background goroutines below before reaching for this |
 
@@ -82,7 +82,7 @@ Then view `/tmp/frame.png` with your image-viewing tool.
 ## Run (human path)
 
 ```bash
-cd cmd/whynot && go run .
+cd browser/cmd/whynot && go run .
 ```
 
 Opens a real, visible window titled "Why Not?" showing the built-in welcome page (pass a path or

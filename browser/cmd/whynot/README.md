@@ -1,9 +1,9 @@
 # whynot, the viewer
 
-A Markdown document viewer built on the [whynot](../../README.md) library and
+A Markdown document viewer built on the [whynot](../../../README.md) library and
 [Ebitengine](https://ebitengine.org/): open a file or a URL, follow links between
 documents, go back and forward, zoom, switch themes. Its Gio twin,
-[`giowhynot`](../../backends/giobackend/cmd/giowhynot), behaves the same.
+[`giowhynot`](../giowhynot), behaves the same.
 
 ## Install
 
@@ -14,7 +14,7 @@ brew install arnodel/tap/whynot
 or download a [release binary](https://github.com/arnodel/whynot/releases/latest), or
 
 ```bash
-go install github.com/arnodel/whynot/cmd/whynot@latest
+go install github.com/arnodel/whynot/browser/cmd/whynot@latest
 ```
 
 It also runs in a web browser: **[try it](https://arnodel.github.io/whynot/)**, and see
@@ -63,4 +63,4 @@ document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to c
 
 The viewer is a thin program around the library: a `whynot.Panel` for the document,
 Ebitengine for the window and toolbar. Navigation, history, loading and theming live in
-`internal/browser`, which `giowhynot` shares, so the two behave the same.
+`browser/internal/browser`, which `giowhynot` shares, so the two behave the same.

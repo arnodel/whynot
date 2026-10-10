@@ -17,8 +17,8 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/arnodel/whynot/backends/giobackend"
+	"github.com/arnodel/whynot/browser/internal/browser"
 	"github.com/arnodel/whynot/fonts"
-	"github.com/arnodel/whynot/internal/browser"
 )
 
 // toolbarLogicalHeight is the address bar / button row's height, in dp
@@ -26,7 +26,7 @@ import (
 const toolbarLogicalHeight = 36
 
 // toolbar is the back/forward/reload/zoom/theme button row and address
-// bar - backends/giobackend/cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
+// bar - cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
 // hand-rolled draw.go/layout.go/input.go. Unlike the document panel's
 // scroll/hover/click (shared via whynot.Controller), this input layer
 // isn't shared with ebitenbackend: these are plain momentary buttons,
