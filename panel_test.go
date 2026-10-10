@@ -39,8 +39,8 @@ func TestPanelHoverAndClick(t *testing.T) {
 }
 
 // TestPanelAnchorScrolling checks a Panel scrolls to a "#id" link's
-// heading by default, still reporting the AnchorClick, and that
-// SetAnchorScrolling(false) leaves it to the app.
+// heading by default, reporting only the AnchorClick (the jump isn't a
+// Scroll), and that SetAnchorScrolling(false) leaves it to the app.
 func TestPanelAnchorScrolling(t *testing.T) {
 	// The link is at the top and its heading far below.
 	doc := "[jump](#target)\n\n" + strings.Repeat(longDoc, 10) + "# Target"

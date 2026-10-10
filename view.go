@@ -234,8 +234,13 @@ func (v *View) ScrollToRatio(ratio float64) {
 // the top. Unlike ScrollToRatio(1), which puts the top of the View at the
 // end, it's exact: it lays out the last block, and the blocks above it
 // that fit in the View, but nothing else.
+//
+// For a document still arriving, it's the end of what has arrived so
+// far, including what hasn't been drawn yet. To follow the end as more
+// arrives, call it each frame until the reader scrolls (see [Scroll]).
 func (v *View) ScrollToEnd() {
 	if v.stack.laidOut() {
+		v.follow()
 		v.stack.scrollToEnd(v.bounds.Dy())
 		v.moves++
 		v.revealScrollbar()

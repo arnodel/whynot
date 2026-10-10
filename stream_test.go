@@ -292,3 +292,21 @@ func TestViewFollowsKeepingLayout(t *testing.T) {
 		t.Errorf("growing moved the scroll position from %v to %v", scroll, v.ScrollPosition())
 	}
 }
+
+// TestViewScrollToEndTakesWhatArrived checks that ScrollToEnd shows the
+// end of what has been written, not only of what the View last drew.
+func TestViewScrollToEndTakesWhatArrived(t *testing.T) {
+	doc, w := NewParser().Stream()
+	v := NewView(doc)
+	v.SetBounds(image.Rect(0, 0, 300, 200))
+	io.WriteString(w, "First.\n\n")
+	v.Draw(&canvastest.Recorder{Area: image.Rect(0, 0, 300, 200)}, 0)
+
+	for i := range 30 {
+		fmt.Fprintf(w, "Paragraph %d.\n\n", i)
+	}
+	v.ScrollToEnd()
+	if r := v.DocumentBounds(0); r.Max.Y != 200 || r.Min.Y >= 0 {
+		t.Errorf("after ScrollToEnd, DocumentBounds = %v, want it to end at the View's bottom, 200, and start above it", r)
+	}
+}

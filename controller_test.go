@@ -218,6 +218,52 @@ func TestControllerWheelGatedByBounds(t *testing.T) {
 	}
 }
 
+// TestControllerReportsScroll checks a Frame reports a Scroll, once and
+// last, when its input moved the View, and not for input that didn't move
+// it, nor for the app's own scrolling.
+func TestControllerReportsScroll(t *testing.T) {
+	c, v := newTestController(t, strings.Repeat(longDoc, 20))
+	scrolls := func(events []Event) int {
+		n := 0
+		for _, e := range events {
+			if e == (Scroll{}) {
+				n++
+			}
+		}
+		return n
+	}
+
+	if events := frame(c, input.Wheel{X: 10, Y: 10, DY: 30}, input.Wheel{X: 10, Y: 10, DY: 30}); len(events) != 1 || scrolls(events) != 1 {
+		t.Errorf("events for two wheel moves in a frame = %v, want [Scroll{}]", events)
+	}
+	if events := frame(c, input.PointerMove{X: 10, Y: 10}); scrolls(events) != 0 {
+		t.Errorf("events for a pointer move = %v, want no Scroll", events)
+	}
+	if events := frame(c, input.Wheel{X: 10, Y: 10, DX: 30}); scrolls(events) != 0 {
+		t.Errorf("events for a sideways wheel = %v, want no Scroll", events)
+	}
+
+	// The app's scrolling, between frames.
+	v.ScrollBy(100)
+	c.PageDown()
+	if events := frame(c); scrolls(events) != 0 {
+		t.Errorf("events after the app scrolled = %v, want no Scroll", events)
+	}
+
+	// A wheel up at the top doesn't move the View.
+	v.ScrollToRatio(0)
+	frame(c)
+	if events := frame(c, input.Wheel{X: 10, Y: 10, DY: -30}); scrolls(events) != 0 {
+		t.Errorf("events for a wheel up at the top = %v, want no Scroll", events)
+	}
+
+	// A fling keeps scrolling after the finger lifts.
+	now := fling(c, -300, 100*time.Millisecond)
+	if events := c.Frame(nil, now+16*time.Millisecond); scrolls(events) != 1 {
+		t.Errorf("events for a frame of a fling = %v, want [Scroll{}]", events)
+	}
+}
+
 // fling runs a vertical touch drag of dy over d, then lifts the finger,
 // returning the time it lifted.
 func fling(c *Controller, dy int, d time.Duration) time.Duration {

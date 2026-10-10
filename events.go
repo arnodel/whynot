@@ -27,5 +27,17 @@ type AnchorClick struct {
 	ID string
 }
 
+// Scroll is the reader scrolling the View: input moving it up or down,
+// such as the mouse wheel, a touch drag or its fling, or dragging the
+// scrollbar. It's reported at most once a frame. Scrolling the app asks
+// for (with [View.ScrollBy], [Controller.PageDown] and so on) isn't
+// reported, and neither is sideways scrolling of a wide block, which
+// doesn't move the document.
+//
+// An app following the end of a growing document (see [View.ScrollToEnd])
+// can stop when the reader scrolls away.
+type Scroll struct{}
+
 func (LinkClick) isEvent()   {}
 func (AnchorClick) isEvent() {}
+func (Scroll) isEvent()      {}
