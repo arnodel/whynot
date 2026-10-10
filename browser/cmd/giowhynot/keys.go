@@ -4,7 +4,6 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/layout"
 
-	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser/internal/browser"
 )
 
@@ -14,7 +13,7 @@ import (
 // a nil Focus - confirmed against io/input/key.go), so unlike
 // pointer.Filter these need no prior area/event.Op registration: call
 // once per frame, from anywhere.
-func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
+func pollKeys(gtx layout.Context, app *browser.App) {
 	for {
 		e, ok := gtx.Event(
 			key.Filter{Name: key.NameDeleteBackward},
@@ -25,6 +24,7 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 			key.Filter{Name: key.NameRightArrow},
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: "V", Required: key.ModShortcut},
+			key.Filter{Name: "J", Required: key.ModShortcut},
 			key.Filter{Name: "="},
 			key.Filter{Name: "-"},
 		)
@@ -53,15 +53,17 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 		case key.NameDownArrow:
 			app.ScrollDown()
 		case key.NameLeftArrow:
-			panel.ScrollLeft()
+			app.ScrollLeft()
 		case key.NameRightArrow:
-			panel.ScrollRight()
+			app.ScrollRight()
 		case key.NameEscape:
 			if app.TOCShowing() {
 				app.HideTOC()
 			}
 		case "V":
 			app.Paste()
+		case "J":
+			app.ToggleJournal()
 		case "=":
 			app.ZoomIn()
 		case "-":

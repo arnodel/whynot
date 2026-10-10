@@ -39,6 +39,7 @@ document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to c
 | Back / forward | **Backspace** / **Shift+Backspace**, or the toolbar |
 | Zoom | **+** / **-**, or the toolbar |
 | Table of contents | the toolbar; **Esc** closes it |
+| Journal mode: the pages visited, above the current one | **Cmd+J**, or **Ctrl+J** |
 | Light / dark theme | the toolbar, or start with `-light` |
 | Only open local files beneath a directory | start with `-root dir` |
 | Reload | the toolbar |

@@ -40,16 +40,16 @@ var Version = "dev"
 // actually is editable.
 var AddressBarEditable bool
 
-// welcomeShortcut is the platform's own paste shortcut, written the way
+// welcomeShortcut is the platform's own shortcut for key, written the way
 // a person would actually type it - the embedded page can't know at
 // build time which OS it'll run on. Spelled out as "Cmd+V" rather than
 // the ⌘ glyph: whynot only ships golang.org/x/image/font/gofont, which
 // doesn't cover that symbol - it would silently render as a tofu box.
-func welcomeShortcut() string {
+func welcomeShortcut(key string) string {
 	if runtime.GOOS == "darwin" {
-		return "Cmd+V"
+		return "Cmd+" + key
 	}
-	return "Ctrl+V"
+	return "Ctrl+" + key
 }
 
 // versionSuffix is what {{VERSION}} in the welcome page's heading, and so
@@ -79,7 +79,8 @@ func renderWelcome() []byte {
 	if err != nil {
 		panic(err)
 	}
-	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut()))
+	md = bytes.ReplaceAll(md, []byte("{{PASTE_SHORTCUT}}"), []byte(welcomeShortcut("V")))
+	md = bytes.ReplaceAll(md, []byte("{{JOURNAL_SHORTCUT}}"), []byte(welcomeShortcut("J")))
 	md = bytes.ReplaceAll(md, []byte("{{VERSION}}"), []byte(versionSuffix()))
 	// Like {{ADDRESS_BAR_TIP}}, replaces the whole line.
 	md = bytes.ReplaceAll(md, []byte("{{BUILD}}\n"), []byte(buildLine()))

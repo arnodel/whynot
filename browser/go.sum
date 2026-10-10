@@ -19,8 +19,8 @@ github.com/alecthomas/repr v0.5.2 h1:SU73FTI9D1P5UNtvseffFSGmdNci/O6RsqzeXJtP0Qs
 github.com/alecthomas/repr v0.5.2/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
 github.com/arnodel/whynot v1.0.0-rc.3 h1:yvlAxoTd2Aehx42kbXvx/qW+9pzxhZ6mhlS0w4zA9oo=
 github.com/arnodel/whynot v1.0.0-rc.3/go.mod h1:VKC0wK9FJUYVdaPCnsdMcreNea2qfYd+c/nf+1Q/pmc=
-github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.1 h1:PFJmk+n7pDF96sLqDSNeTzvTuN7HYBf5omWER4kflGs=
-github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.1/go.mod h1:BaOn6SutQwbVGcZQc17EHWAdznEomz/phJTue8ZdKmc=
+github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.2 h1:VZBXcOPkhOA7AW0uHUukVit7mjtF1cWAzcwynI5y0tA=
+github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.2/go.mod h1:7hDOReLczv+yQ5Z86JaEha1J8jR8Np+l1+5+76mVeYE=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dlclark/regexp2/v2 v2.2.1 h1:mf4KkFUj0gJuarK8P+LgiS+Lit7m9N1yAwEfPbee7R0=
