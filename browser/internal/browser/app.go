@@ -97,6 +97,8 @@ type App struct {
 	parser *whynot.Parser
 	// arrival is what's left to do as the current document arrives.
 	arrival arrival
+	// journal is journal mode's state, nil outside it (see ToggleJournal).
+	journal *journal
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
 	// recovered from styleSheet itself.
@@ -112,9 +114,12 @@ type App struct {
 	zoomIndicatorUntil time.Time
 
 	// deviceScale, width, height, toolbarHeight are Relayout's most
-	// recent inputs/outputs - see its own doc comment.
+	// recent inputs/outputs - see its own doc comment. bounds is where
+	// documents are shown: Panel's bounds, except in journal mode, where
+	// Panel isn't shown and its bounds aren't kept up to date.
 	deviceScale                  float64
 	width, height, toolbarHeight int
+	bounds                       image.Rectangle
 
 	// tocDocView is the real document's View, saved here while a
 	// synthetic table-of-contents View is current in Panel instead - nil
@@ -148,10 +153,13 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 
 // arrival is what's left to do as a document arrives, until the reader
 // scrolls: jump to the heading its URL's fragment names, once it has
-// arrived, or for "#end", keep its end in view.
+// arrived, or for "#end", keep its end in view. In journal mode, a page
+// without a fragment is revealed below the trail as it arrives (see
+// ViewStack.Reveal).
 type arrival struct {
 	fragment string
 	end      bool
+	reveal   bool
 }
 
 // Open makes location the current document - for the very first
@@ -177,9 +185,12 @@ func (a *App) Update() {
 
 // arrive starts the current document's arrival at fragment (see arrival).
 func (a *App) arrive(fragment string) {
-	if strings.EqualFold(fragment, "end") {
+	switch {
+	case strings.EqualFold(fragment, "end"):
 		a.arrival = arrival{end: true}
-	} else {
+	case fragment == "" && a.journal != nil:
+		a.arrival = arrival{reveal: true}
+	default:
 		a.arrival = arrival{fragment: fragment}
 	}
 	a.continueArrival()
@@ -191,6 +202,22 @@ func (a *App) arrive(fragment string) {
 func (a *App) continueArrival() {
 	view := a.Panel.View()
 	complete := view.Document().Complete()
+	if j := a.journal; j != nil {
+		last := len(j.stack.views) - 1
+		switch {
+		case a.arrival.end:
+			j.stack.ScrollToEnd()
+			a.arrival.end = !complete
+		case a.arrival.fragment != "":
+			if j.stack.scrollToFragment(last, a.arrival.fragment) || complete {
+				a.arrival.fragment = ""
+			}
+		case a.arrival.reveal:
+			j.stack.Reveal(last)
+			a.arrival.reveal = !complete
+		}
+		return
+	}
 	switch {
 	case a.arrival.end:
 		view.ScrollToEnd()
@@ -202,13 +229,8 @@ func (a *App) continueArrival() {
 	}
 }
 
-// ScrollUp, ScrollDown, PageUp and PageDown scroll the current document
-// as Panel's methods do, as the reader asked: the end of a document still
-// arriving stops being kept in view.
-func (a *App) ScrollUp()   { a.arrival = arrival{}; a.Panel.ScrollUp() }
-func (a *App) ScrollDown() { a.arrival = arrival{}; a.Panel.ScrollDown() }
-func (a *App) PageUp()     { a.arrival = arrival{}; a.Panel.PageUp() }
-func (a *App) PageDown()   { a.arrival = arrival{}; a.Panel.PageDown() }
+// Bounds returns where documents are shown, as Relayout last set it.
+func (a *App) Bounds() image.Rectangle { return a.bounds }
 
 // Location returns where the current document was loaded from.
 func (a *App) Location() *url.URL { return a.location }
@@ -220,11 +242,23 @@ func (a *App) HoverDest() string {
 	if a.Panel == nil {
 		return ""
 	}
-	dest, ok := a.Panel.View().HoveredLink()
+	view, location := a.Panel.View(), a.location
+	if j := a.journal; j != nil {
+		view = nil
+		for i, v := range j.stack.views {
+			if _, ok := v.HoveredLink(); ok {
+				view, location = v, j.pages[i].location
+			}
+		}
+		if view == nil {
+			return ""
+		}
+	}
+	dest, ok := view.HoveredLink()
 	if !ok {
 		return ""
 	}
-	resolved, err := a.ResolveLink(dest)
+	resolved, err := resolveAgainst(location, dest)
 	if err != nil {
 		return ""
 	}
@@ -279,6 +313,12 @@ func (a *App) SetTheme(dark bool) {
 	}
 	a.darkTheme = dark
 	a.Panel.SetStyleSheet(a.styleSheet)
+	if j := a.journal; j != nil {
+		for _, v := range j.stack.views {
+			v.SetStyleSheet(a.styleSheet)
+		}
+		j.stack.SetColors(a.stackColors())
+	}
 }
 
 // updateWindowTitle fires OnTitleChange with the current document's own
@@ -436,6 +476,7 @@ func (a *App) show(doc *whynot.Document, location *url.URL) {
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
 	a.location = location
+	a.restack()
 	a.arrive(location.Fragment)
 	a.updateWindowTitle()
 }
@@ -528,6 +569,7 @@ func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 	a.Panel.SetView(entry.view) // re-applies a.styleSheet, then relayouts
 	a.location = entry.location
 	a.arrival = arrival{}
+	a.restack()
 	a.updateWindowTitle()
 }
 
@@ -553,6 +595,7 @@ func (a *App) Reload() {
 	view.RestoreScrollPosition(scroll)
 	a.Panel.SetView(view)
 	a.arrival = arrival{}
+	a.restack()
 	a.updateWindowTitle()
 }
 
@@ -614,7 +657,7 @@ const zoomStep = 0.1
 func (a *App) place(view *whynot.View) {
 	view.SetScale(a.deviceScale)
 	view.SetZoom(a.zoom)
-	view.SetBounds(a.Panel.Bounds())
+	view.SetBounds(a.bounds)
 }
 
 // scrollToFragment scrolls v to the anchor a URL fragment names, the way
@@ -652,7 +695,8 @@ func (a *App) SetZoom(zoom float64) {
 // deviceScale (the display's own scale, with no zoom applied), and
 // toolbarHeight (physical pixels already reserved above the document,
 // laid out by the caller - toolbar layout stays backend-specific, see
-// this package's own doc comment), then applies them to Panel. Cheap
+// this package's own doc comment), then applies them to Panel, or in
+// journal mode to the stack of pages (see ToggleJournal). Cheap
 // when nothing changed; call once a frame, the same "called
 // unconditionally" pattern Panel.Draw itself already uses (so e.g. an
 // animated GIF gets fresh timing every rendered frame).
@@ -661,7 +705,25 @@ func (a *App) Relayout(outsideWidth, outsideHeight int, deviceScale float64, too
 	a.width = int(float64(outsideWidth) * deviceScale)
 	a.height = int(float64(outsideHeight) * deviceScale)
 	a.toolbarHeight = toolbarHeight
-	a.Panel.SetBounds(image.Rect(0, toolbarHeight, a.width, a.height))
-	a.Panel.SetScale(deviceScale)
-	a.Panel.SetZoom(a.zoom)
+	a.bounds = image.Rect(0, toolbarHeight, a.width, a.height)
+	j := a.journal
+	if j == nil {
+		a.Panel.SetBounds(a.bounds)
+		a.Panel.SetScale(deviceScale)
+		a.Panel.SetZoom(a.zoom)
+		return
+	}
+	// The current page is in the stack, which gives it its bounds: Panel
+	// would give it its own.
+	changed := j.stack.bounds != a.bounds
+	for _, v := range j.stack.views {
+		if v.Scale() != deviceScale || v.Zoom() != a.zoom {
+			v.SetScale(deviceScale)
+			v.SetZoom(a.zoom)
+			changed = true
+		}
+	}
+	if changed {
+		j.stack.SetBounds(a.bounds)
+	}
 }

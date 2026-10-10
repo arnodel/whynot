@@ -76,7 +76,7 @@ func main() {
 	panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
 
 	tb := newToolbar(fonts.NewGoSelector(), renderer)
-	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit, onEvents: browserApp.HandleEvents}
+	doc := &document{app: browserApp, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit}
 
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
 	browserApp.OnTitleChange = func(title string) { win.Option(app.Title(title)) }
@@ -112,7 +112,7 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			// filters match regardless of focus, so e.g. typing "-" or
 			// space into it would otherwise also fire ZoomOut/PageDown.
 			if !tb.editing {
-				pollKeys(gtx, browserApp, doc.panel)
+				pollKeys(gtx, browserApp)
 			}
 			browserApp.Update()
 			doc.layout(gtx)

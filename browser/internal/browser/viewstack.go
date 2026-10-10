@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/arnodel/whynot"
@@ -217,6 +218,26 @@ func (s *ViewStack) Reveal(i int) {
 	if bottom := top + below(s.views[i], h); bottom > h {
 		s.ScrollBy(min(bottom-h, top))
 	}
+}
+
+// scrollToFragment scrolls to the anchor a URL fragment names in child i,
+// the way browsers do: the heading with that id at the top of the stack,
+// else the child's start for an empty fragment or "top". It reports
+// whether it scrolled.
+func (s *ViewStack) scrollToFragment(i int, id string) bool {
+	if i < 0 || i >= len(s.views) {
+		return false
+	}
+	v := s.views[i]
+	if !v.ScrollToAnchor(id) {
+		if id != "" && !strings.EqualFold(id, "top") {
+			return false
+		}
+		toStart(v)
+	}
+	s.top = i
+	s.clampEnd()
+	return true
 }
 
 // Draw draws the stack: the top child from its scroll position, then the
@@ -474,6 +495,29 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 		out = append(out, StackEvent{Child: -1, Event: whynot.Scroll{}})
 	}
 	return out
+}
+
+// ScrollLeft and ScrollRight scroll a block wider than the stack (a code
+// block or table, say) a step sideways, as a whynot.Controller's do: in
+// the first child on screen with such a block under the pointer, or last
+// scrolled. They report whether there was one.
+func (c *StackController) ScrollLeft() bool {
+	return c.anyChild((*whynot.Controller).ScrollLeft)
+}
+
+func (c *StackController) ScrollRight() bool {
+	return c.anyChild((*whynot.Controller).ScrollRight)
+}
+
+// anyChild calls scroll on the controllers of the children on screen, in
+// order, until one reports it scrolled.
+func (c *StackController) anyChild(scroll func(*whynot.Controller) bool) bool {
+	for i, r := range c.stack.regions {
+		if !r.Empty() && scroll(c.controllers[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 // childAt returns the index of the child drawn at p by the last Draw, or

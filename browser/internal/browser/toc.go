@@ -15,6 +15,9 @@ func (a *App) TOCShowing() bool { return a.tocDocView != nil }
 // whichever View is the real document right now: a.tocDocView while
 // the TOC is already showing, a.Panel.View() otherwise.
 func (a *App) CanShowTOC() bool {
+	if a.journal != nil {
+		return false
+	}
 	view := a.Panel.View()
 	if a.tocDocView != nil {
 		view = a.tocDocView
