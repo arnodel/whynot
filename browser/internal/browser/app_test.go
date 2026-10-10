@@ -32,7 +32,7 @@ func usesStyleSheet(v *whynot.View, s whynot.StyleSheet) bool {
 
 // writeTempMD writes content to dir/name and returns its file: URL, via
 // the same absFileURL this package uses for a real command-line path -
-// so App.Follow/Reload exercise the exact same LoadDocument("file", ...)
+// so App.Follow/Reload exercise the exact same loading
 // path a real local document would.
 func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 	t.Helper()
@@ -54,7 +54,7 @@ func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 func newTestApp(t *testing.T, dir string, location *url.URL, source string) *App {
 	t.Helper()
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
-	view := app.NewView([]byte(source), location)
+	view := app.NewView(app.parser.Parse([]byte(source), whynot.WithBaseURL(location)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
 	app.Open(location)
@@ -456,7 +456,7 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 	loc := writeTempMD(t, dir, "a.md", "# My Title")
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
-	view := app.NewView([]byte("# My Title"), loc)
+	view := app.NewView(app.parser.Parse([]byte("# My Title"), whynot.WithBaseURL(loc)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
 
@@ -630,7 +630,7 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 	loc := writeTempMD(t, dir, "a.md", "no heading here")
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
-	view := app.NewView([]byte("no heading here"), loc)
+	view := app.NewView(app.parser.Parse([]byte("no heading here"), whynot.WithBaseURL(loc)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
 

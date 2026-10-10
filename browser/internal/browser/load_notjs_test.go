@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/arnodel/whynot"
 )
 
 // TestNewRegistryRoot checks that with a root, local documents are only
@@ -24,13 +26,13 @@ func TestNewRegistryRoot(t *testing.T) {
 	defer root.Close()
 
 	confined := NewRegistry(root)
-	if _, err := LoadDocument(confined, inside); err != nil {
+	if _, err := loadDocument(whynot.NewParser(), confined, inside); err != nil {
 		t.Errorf("document beneath the root: err = %v, want nil", err)
 	}
-	if _, err := LoadDocument(confined, outside); err == nil {
+	if _, err := loadDocument(whynot.NewParser(), confined, outside); err == nil {
 		t.Error("document outside the root: err = nil, want an error")
 	}
-	if _, err := LoadDocument(NewRegistry(nil), outside); err != nil {
+	if _, err := loadDocument(whynot.NewParser(), NewRegistry(nil), outside); err != nil {
 		t.Errorf("without a root: err = %v, want nil", err)
 	}
 }

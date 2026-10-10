@@ -60,9 +60,9 @@ func (g *game) Update() error {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.panel.PageUp()
+			g.app.PageUp()
 		} else {
-			g.panel.PageDown()
+			g.app.PageDown()
 		}
 	}
 	// A step at a time, repeating while held (see keyRepeat) -
@@ -70,9 +70,9 @@ func (g *game) Update() error {
 	// without overshooting.
 	switch {
 	case keyRepeat(ebiten.KeyDown):
-		g.panel.ScrollDown()
+		g.app.ScrollDown()
 	case keyRepeat(ebiten.KeyUp):
-		g.panel.ScrollUp()
+		g.app.ScrollUp()
 	}
 	switch {
 	case keyRepeat(ebiten.KeyLeft):
@@ -93,6 +93,7 @@ func (g *game) Update() error {
 	case keyRepeat(ebiten.KeyMinus):
 		g.app.ZoomOut()
 	}
+	g.app.Update()
 	return nil
 }
 

@@ -17,8 +17,8 @@ github.com/alecthomas/chroma/v2 v2.27.0 h1:FodwmyOBgJULFYmDqibcp9pvfDLWdtPRh9v/r
 github.com/alecthomas/chroma/v2 v2.27.0/go.mod h1:NjJ3ciIgrqBNeIkWZ4e46nseoLDslxU1LmfCoL+wcY8=
 github.com/alecthomas/repr v0.5.2 h1:SU73FTI9D1P5UNtvseffFSGmdNci/O6RsqzeXJtP0Qs=
 github.com/alecthomas/repr v0.5.2/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
-github.com/arnodel/whynot v1.0.0-rc.2 h1:JBqqPzY2uL2RAPe8TXkzUNaB2zeuFi8vzQdXNuTnd34=
-github.com/arnodel/whynot v1.0.0-rc.2/go.mod h1:VKC0wK9FJUYVdaPCnsdMcreNea2qfYd+c/nf+1Q/pmc=
+github.com/arnodel/whynot v1.0.0-rc.3 h1:yvlAxoTd2Aehx42kbXvx/qW+9pzxhZ6mhlS0w4zA9oo=
+github.com/arnodel/whynot v1.0.0-rc.3/go.mod h1:VKC0wK9FJUYVdaPCnsdMcreNea2qfYd+c/nf+1Q/pmc=
 github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.1 h1:PFJmk+n7pDF96sLqDSNeTzvTuN7HYBf5omWER4kflGs=
 github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.1/go.mod h1:BaOn6SutQwbVGcZQc17EHWAdznEomz/phJTue8ZdKmc=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
@@ -54,6 +54,8 @@ github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/yuin/goldmark/v2 v2.1.6 h1:igy0q9JcqovoFXFx/XjtU8sHVhcUHavPj2sA3EoKJUE=
 github.com/yuin/goldmark/v2 v2.1.6/go.mod h1:G6M4/qOFtfn01/o14BU1UR2Lo5N3S9Qo7xCuz/sHjGQ=
+go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
+go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0/go.mod h1:S9Xr4PYopiDyqSyp5NjCrhFrqg6A5zA2E/iPHPhqnS8=
 golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 h1:tMSqXTK+AQdW3LpCbfatHSRPHeW6+2WuxaVQuHftn80=

@@ -4,21 +4,32 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/fetch"
 )
 
-// httpTimeout bounds every document and image fetch, so a hung server
-// can't leave a document or an image loading forever.
+// httpTimeout bounds how long a document or image fetch waits for a
+// server's response, so a hung server can't leave it loading forever.
 const httpTimeout = 10 * time.Second
 
-// fetchDocument fetches the document at location through registry,
-// checking it's Markdown (see checkMarkdown).
-func fetchDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
+// loadWait is how long loadDocument waits for a document to arrive in
+// full, so that one arriving quickly is shown whole, and a link to one of
+// its headings lands there at once.
+const loadWait = 100 * time.Millisecond
+
+// loadDocument fetches the document at location through registry, and
+// returns it parsed by parser: complete if it arrives within loadWait,
+// otherwise growing as the rest arrives in the background (see
+// whynot.Parser.Stream). It's checked to be Markdown first (see
+// checkMarkdown): a body of unknown media type is read in full, to sniff
+// it.
+func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url.URL) (*whynot.Document, error) {
 	src, err := registry.Resolve(location, "")
 	if err != nil {
 		return nil, err
@@ -27,15 +38,37 @@ func fetchDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer body.Close()
-	data, err := io.ReadAll(body)
-	if err != nil {
+	base := whynot.WithBaseURL(location)
+	if mediaType == "" {
+		defer body.Close()
+		data, err := io.ReadAll(body)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkMarkdown(mediaType, data, location); err != nil {
+			return nil, err
+		}
+		return parser.Parse(data, base), nil
+	}
+	if err := checkMarkdown(mediaType, nil, location); err != nil {
+		body.Close()
 		return nil, err
 	}
-	if err := checkMarkdown(mediaType, data, location); err != nil {
-		return nil, err
+	doc, w := parser.Stream(base)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := io.Copy(w, body); err != nil {
+			log.Printf("loading %s: %v", location, err)
+		}
+		body.Close()
+		w.Close()
+	}()
+	select {
+	case <-done:
+	case <-time.After(loadWait):
 	}
-	return data, nil
+	return doc, nil
 }
 
 // checkMarkdown reports whether data, of the given media type ("" if
@@ -59,7 +92,7 @@ func checkMarkdown(mediaType string, data []byte, location *url.URL) error {
 	return nil
 }
 
-// webPageError means LoadDocument found a web page rather than a
+// webPageError means loadDocument found a web page rather than a
 // Markdown document - content whose media type is HTML, or in the
 // browser build, a page it isn't allowed to fetch (see load_js.go). App.Follow/Reload/Navigate open it in a web browser
 // instead of just reporting an error.
