@@ -28,7 +28,8 @@ whynot https://raw.githubusercontent.com/arnodel/whynot/refs/heads/main/README.m
 ```
 
 With no argument it opens its welcome page, which explains all this too. To open another
-document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to come back.
+document, paste its path or URL (**Cmd+V**); paste "welcome" to come back. On Windows and
+Linux, **Ctrl** takes the place of **Cmd**.
 
 | Action | How |
 |---|---|
@@ -36,13 +37,14 @@ document, paste its path or URL (**Cmd+V**, or **Ctrl+V**); paste "welcome" to c
 | Scroll a step / a page | **↓** **↑** / **Space** **Shift+Space** |
 | Scroll a wide code block or table sideways | **←** **→** (the one under the pointer, else the one last scrolled), or **Shift+wheel** |
 | Follow a link | click it |
-| Back / forward | **Backspace** / **Shift+Backspace**, or the toolbar |
-| Zoom | **+** / **-**, or the toolbar |
-| Table of contents | the toolbar; **Esc** closes it |
-| Journal mode: the pages visited, above the current one | **Cmd+J**, or **Ctrl+J** |
-| Light / dark theme | the toolbar, or start with `-light` |
+| Everything below, as links, with its keys | **Cmd+/** or **?**, or the toolbar's **⋮** |
+| Back / forward | **Cmd+[** / **Cmd+]** or **Cmd+←** / **Cmd+→** (**Alt+←** / **Alt+→** on Windows and Linux), **Backspace** / **Shift+Backspace**, or the toolbar |
+| Zoom | **Cmd+=** / **Cmd+-** / **Cmd+0**, or the actions page |
+| Table of contents | **Cmd+T**, or the toolbar; **Esc** closes it |
+| Journal mode: the pages visited, above the current one | **Cmd+J** |
+| Light / dark theme | **Cmd+Shift+L**, the actions page, or start with `-light` |
 | Only open local files beneath a directory | start with `-root dir` |
-| Reload | the toolbar |
+| Reload | **Cmd+R**, or the toolbar |
 | Show FPS and frame timings | **F**, or start with `-debug-stats` |
 | Outline what's under the pointer | start with `-debug-hit` |
 

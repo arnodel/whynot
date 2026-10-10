@@ -24,25 +24,15 @@ func decodeIcon(name string) image.Image {
 	return img
 }
 
-// BackIcon/ForwardIcon/ReloadIcon/ZoomInIcon/ZoomOutIcon/DarkModeIcon/
-// LightModeIcon/TOCIcon are the toolbar buttons' icons - light, mostly-white
-// silhouettes on a transparent background, so a backend can tint them
-// to match a button's current state. Zoom uses plain +/- (add.png/
-// remove.png), not the magnifying-glass-with-+/- alternative also on
-// hand: two of those side by side read as busier than two plain marks,
-// for no extra clarity - a plain +/- pair is already the established
-// convention for zoom controls elsewhere (e.g. Google Maps). The theme
-// icon shows only the current theme's, not the one switching would
-// produce - since DarkModeIcon/LightModeIcon read as a day/night state
-// indicator (like a physical light switch) rather than an action to
-// perform, unlike e.g. a play/pause button.
+// BackIcon/ForwardIcon/ReloadIcon/TOCIcon/ActionsIcon are the toolbar
+// buttons' icons - light, mostly-white silhouettes on a transparent
+// background, so a backend can tint them to match a button's current
+// state. ActionsIcon, a vertical ellipsis, reads as "more things to do":
+// it opens the actions page, where zoom and the theme are too.
 var (
-	BackIcon      = decodeIcon("arrow_back.png")
-	ForwardIcon   = decodeIcon("arrow_forward.png")
-	ReloadIcon    = decodeIcon("refresh.png")
-	ZoomInIcon    = decodeIcon("add.png")
-	ZoomOutIcon   = decodeIcon("remove.png")
-	DarkModeIcon  = decodeIcon("dark_mode.png")
-	LightModeIcon = decodeIcon("light_mode.png")
-	TOCIcon       = decodeIcon("toc.png")
+	BackIcon    = decodeIcon("arrow_back.png")
+	ForwardIcon = decodeIcon("arrow_forward.png")
+	ReloadIcon  = decodeIcon("refresh.png")
+	TOCIcon     = decodeIcon("toc.png")
+	ActionsIcon = decodeIcon("more_vert.png")
 )

@@ -40,7 +40,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 // drawToolbar paints the address bar (the current document's location,
 // or - while hovering a link - that link's destination instead, in
 // StyleSheet.HighlightColor to match the hovered link's own color in
-// the document) and the back/forward/reload/zoom/theme buttons. Icon
+// the document) and the back/forward/reload/TOC/actions buttons. Icon
 // drawing needs dst directly - canvas.Canvas has no primitive for a
 // scaled, tinted image - so this is the one part of cmd/whynot's own
 // UI that goes around the library's rendering abstraction rather than
@@ -52,13 +52,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, cv canvas.Canvas) {
 	drawButton(dst, cv, forwardIcon, g.forwardButton, g.app.CanGoForward(), g.forwardState)
 	drawButton(dst, cv, reloadIcon, g.reloadButton, g.app.CanReload(), g.reloadState)
 	drawButton(dst, cv, tocIcon, g.tocButton, g.app.CanShowTOC(), g.tocState)
-	drawButton(dst, cv, zoomOutIcon, g.zoomOutButton, true, g.zoomOutState)
-	drawButton(dst, cv, zoomInIcon, g.zoomInButton, true, g.zoomInState)
-	themeIcon := lightModeIcon
-	if g.app.DarkTheme() {
-		themeIcon = darkModeIcon
-	}
-	drawButton(dst, cv, themeIcon, g.themeButton, true, g.themeState)
+	drawButton(dst, cv, actionsIcon, g.actionsButton, true, g.actionsState)
 
 	face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72)
 	if err != nil {
@@ -69,7 +63,7 @@ func (g *game) drawToolbar(dst *ebiten.Image, cv canvas.Canvas) {
 		text, textColor = hoverDest, g.panel.View().HighlightColor()
 	}
 	x := g.tocButton.Max.X + int(16*g.deviceScale)
-	maxWidth := g.zoomOutButton.Min.X - int(16*g.deviceScale) - x
+	maxWidth := g.actionsButton.Min.X - int(16*g.deviceScale) - x
 	text = truncateMiddle(face, text, maxWidth)
 	cv.DrawText(text, face, x, baselineIn(face, image.Rect(x, 0, g.width, g.toolbarHeight)), textColor)
 }

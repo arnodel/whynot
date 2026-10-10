@@ -25,7 +25,7 @@ import (
 // - matches cmd/whynot's own toolbarLogicalHeight.
 const toolbarLogicalHeight = 36
 
-// toolbar is the back/forward/reload/zoom/theme button row and address
+// toolbar is the back/forward/reload/TOC/actions button row and address
 // bar - cmd/giowhynot's own native-Gio counterpart to cmd/whynot's
 // hand-rolled draw.go/layout.go/input.go. Unlike the document panel's
 // scroll/hover/click (shared via whynot.Controller), this input layer
@@ -35,7 +35,7 @@ const toolbarLogicalHeight = 36
 // own doc comment.
 type toolbar struct {
 	back, forward, reload, toc widget.Clickable
-	zoomOut, zoomIn, theme     widget.Clickable
+	actions                    widget.Clickable
 
 	// addressClick wraps the read-only address bar display (only laid
 	// out while !editing) purely to detect a click-to-edit, the same
@@ -87,15 +87,13 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 	forwardClicked := tb.forward.Clicked(gtx)
 	reloadClicked := tb.reload.Clicked(gtx)
 	tocClicked := tb.toc.Clicked(gtx)
-	zoomOutClicked := tb.zoomOut.Clicked(gtx)
-	zoomInClicked := tb.zoomIn.Clicked(gtx)
-	themeClicked := tb.theme.Clicked(gtx)
+	actionsClicked := tb.actions.Clicked(gtx)
 
 	// Gio's key-focus model is independent of pointer clicks (clicking
 	// a widget that doesn't itself claim key focus never blurs whatever
 	// does) - so clicking any of these while editing the address bar
 	// needs an explicit cancel, same reason as document.onPress.
-	if backClicked || forwardClicked || reloadClicked || tocClicked || zoomOutClicked || zoomInClicked || themeClicked {
+	if backClicked || forwardClicked || reloadClicked || tocClicked || actionsClicked {
 		tb.cancelEdit()
 	}
 
@@ -109,20 +107,10 @@ func (tb *toolbar) update(gtx layout.Context, app *browser.App) {
 		app.Reload()
 	}
 	if tocClicked {
-		if app.TOCShowing() {
-			app.HideTOC()
-		} else {
-			app.ShowTOC()
-		}
+		app.ToggleTOC()
 	}
-	if zoomOutClicked {
-		app.ZoomOut()
-	}
-	if zoomInClicked {
-		app.ZoomIn()
-	}
-	if themeClicked {
-		app.SetTheme(!app.DarkTheme())
+	if actionsClicked {
+		app.ToggleActions()
 	}
 	tb.updateAddressBar(gtx, app)
 }
@@ -199,11 +187,6 @@ func (tb *toolbar) layout(gtx layout.Context, app *browser.App) layout.Dimension
 	canvas := tb.renderer.NewCanvas(gtx.Ops, image.Rect(0, 0, width, height))
 	canvas.DrawRect(0, 0, width, height, color.RGBA{0x20, 0x20, 0x20, 0xFF})
 
-	themeIcon := browser.LightModeIcon
-	if app.DarkTheme() {
-		themeIcon = browser.DarkModeIcon
-	}
-
 	gtx.Constraints = layout.Exact(image.Pt(width, height))
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(hspace(pad)),
@@ -215,11 +198,7 @@ func (tb *toolbar) layout(gtx layout.Context, app *browser.App) layout.Dimension
 		layout.Rigid(hspace(pad)),
 		layout.Rigid(iconButton(&tb.toc, browser.TOCIcon, btn, app.CanShowTOC(), app.TOCShowing())),
 		layout.Flexed(1, tb.addressBar(app)),
-		layout.Rigid(iconButton(&tb.zoomOut, browser.ZoomOutIcon, btn, true, false)),
-		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.zoomIn, browser.ZoomInIcon, btn, true, false)),
-		layout.Rigid(hspace(pad)),
-		layout.Rigid(iconButton(&tb.theme, themeIcon, btn, true, false)),
+		layout.Rigid(iconButton(&tb.actions, browser.ActionsIcon, btn, true, app.ActionsShowing())),
 		layout.Rigid(hspace(pad)),
 	)
 }

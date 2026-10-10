@@ -24,9 +24,7 @@ func (g *game) Update() error {
 	// pressed also stays true while the TOC is showing, so the button
 	// reads as "ON" the whole time, not just while physically held down.
 	g.tocState = buttonState{hover: cursor.In(g.tocButton), pressed: (pointerDown && cursor.In(g.tocButton)) || g.app.TOCShowing()}
-	g.zoomInState = buttonState{hover: cursor.In(g.zoomInButton), pressed: pointerDown && cursor.In(g.zoomInButton)}
-	g.zoomOutState = buttonState{hover: cursor.In(g.zoomOutButton), pressed: pointerDown && cursor.In(g.zoomOutButton)}
-	g.themeState = buttonState{hover: cursor.In(g.themeButton), pressed: pointerDown && cursor.In(g.themeButton)}
+	g.actionsState = buttonState{hover: cursor.In(g.actionsButton), pressed: (pointerDown && cursor.In(g.actionsButton)) || g.app.ActionsShowing()}
 
 	switch {
 	case clicked && g.backState.hover:
@@ -36,69 +34,37 @@ func (g *game) Update() error {
 	case clicked && g.reloadState.hover:
 		g.app.Reload()
 	case clicked && g.tocState.hover:
-		if g.app.TOCShowing() {
-			g.app.HideTOC()
-		} else {
-			g.app.ShowTOC()
-		}
-	case clicked && g.zoomInState.hover:
-		g.app.ZoomIn()
-	case clicked && g.zoomOutState.hover:
-		g.app.ZoomOut()
-	case clicked && g.themeState.hover:
-		g.app.SetTheme(!g.app.DarkTheme())
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.app.Forward()
-		} else {
-			g.app.Back()
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.app.TOCShowing() {
-		g.app.HideTOC()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.app.PageUp()
-		} else {
-			g.app.PageDown()
-		}
-	}
-	// A step at a time, repeating while held (see keyRepeat) -
-	// finer-grained than Space's page jump, for nudging a short way
-	// without overshooting.
-	switch {
-	case keyRepeat(ebiten.KeyDown):
-		g.app.ScrollDown()
-	case keyRepeat(ebiten.KeyUp):
-		g.app.ScrollUp()
-	}
-	switch {
-	case keyRepeat(ebiten.KeyLeft):
-		g.app.ScrollLeft()
-	case keyRepeat(ebiten.KeyRight):
-		g.app.ScrollRight()
-	}
-
-	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
-		g.debugStats = !g.debugStats
+		g.app.ToggleTOC()
+	case clicked && g.actionsState.hover:
+		g.app.ToggleActions()
 	}
 	shortcut := ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)
-	if inpututil.IsKeyJustPressed(ebiten.KeyV) && shortcut {
-		g.app.Paste()
+	shift := ebiten.IsKeyPressed(ebiten.KeyShift)
+	alt := ebiten.IsKeyPressed(ebiten.KeyAlt)
+	for _, k := range g.app.Keys() {
+		key, ok := ebitenKeys[k.Name]
+		if !ok || k.Shortcut != shortcut || k.Shift != shift || k.Alt != alt {
+			continue
+		}
+		// A key that repeats fires again while held (see keyRepeat).
+		if k.Repeats && keyRepeat(key) || !k.Repeats && inpututil.IsKeyJustPressed(key) {
+			g.app.PressKey(k)
+		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyJ) && shortcut {
-		g.app.ToggleJournal()
-	}
-	switch {
-	case keyRepeat(ebiten.KeyEqual):
-		g.app.ZoomIn()
-	case keyRepeat(ebiten.KeyMinus):
-		g.app.ZoomOut()
+	if inpututil.IsKeyJustPressed(ebiten.KeyF) && !shortcut {
+		g.debugStats = !g.debugStats
 	}
 	g.app.Update()
 	return nil
+}
+
+// ebitenKeys are the ebiten keys of browser.Key names.
+var ebitenKeys = map[string]ebiten.Key{
+	"J": ebiten.KeyJ, "L": ebiten.KeyL, "R": ebiten.KeyR, "T": ebiten.KeyT, "V": ebiten.KeyV,
+	"0": ebiten.KeyDigit0, "[": ebiten.KeyBracketLeft, "]": ebiten.KeyBracketRight,
+	"=": ebiten.KeyEqual, "-": ebiten.KeyMinus, "/": ebiten.KeySlash,
+	"Space": ebiten.KeySpace, "Backspace": ebiten.KeyBackspace, "Escape": ebiten.KeyEscape,
+	"Up": ebiten.KeyArrowUp, "Down": ebiten.KeyArrowDown, "Left": ebiten.KeyArrowLeft, "Right": ebiten.KeyArrowRight,
 }
 
 // keyRepeat reports whether a held key should fire again this tick -
