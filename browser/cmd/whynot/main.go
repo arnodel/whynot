@@ -50,11 +50,6 @@ func main() {
 			panic(err)
 		}
 	}
-	source, err := browser.LoadDocument(registry, location)
-	if err != nil {
-		panic(err)
-	}
-
 	ebiten.SetWindowSize(initialWindowWidth, initialWindowHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
@@ -66,6 +61,10 @@ func main() {
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := browser.NewDocumentFaceSelector()
 	app := browser.NewApp(faceSelector, styleSheet, !*light, registry)
+	doc, err := app.Load(location)
+	if err != nil {
+		panic(err)
+	}
 
 	g := &game{
 		app:                 app,
@@ -79,7 +78,7 @@ func main() {
 	}
 	g.applyDeviceScale()
 
-	view := app.NewView(source, location)
+	view := app.NewView(doc)
 	initialHeight := int(float64(initialWindowHeight) * scale)
 	g.panel = whynot.NewPanel(view, image.Rect(0, g.toolbarHeight, g.width, initialHeight))
 	g.panel.SetScrollbar(true)

@@ -38,22 +38,23 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 	return nil, fmt.Errorf("%q isn't \"welcome\", a URL, or a domain", text)
 }
 
-// LoadDocument is load_notjs.go's counterpart. A request that gets no
+// loadError is load_notjs.go's counterpart. A request that gets no
 // response at all is a *webPageError: most sites don't allow other sites'
 // pages to fetch them (CORS), and in a browser that failure is
 // indistinguishable from an unreachable server. Either way, a real
 // browser tab is the right place for it: it shows the page, or why not.
-func LoadDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
-	source, err := fetchDocument(registry, location)
+func loadError(err error, location *url.URL) error {
 	var reqErr *url.Error
 	if errors.As(err, &reqErr) {
-		return nil, &webPageError{url: location.String()}
+		return &webPageError{url: location.String()}
 	}
-	return source, err
+	return err
 }
 
 // NewRegistry is load_notjs.go's counterpart, without local files: root
-// is ignored.
+// is ignored. Its timeout bounds the whole of a request, body included,
+// since the fetch-based transport of a browser can't bound only the wait
+// for a response.
 func NewRegistry(root *os.Root) *fetch.Registry {
 	return fetch.NewRegistry(
 		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},

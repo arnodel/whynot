@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/arnodel/whynot"
 )
 
-// TestLoadDocumentChecksMediaType checks what LoadDocument does with
+// TestLoadDocumentChecksMediaType checks what loadDocument does with
 // what it fetches: Markdown or other text is a document, an HTML page is
 // a webPageError (App opens it in a web browser), and anything else is
 // an error.
@@ -32,7 +34,7 @@ func TestLoadDocumentChecksMediaType(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = LoadDocument(registry, u)
+		_, err = loadDocument(whynot.NewParser(), registry, u)
 		return err
 	}
 
@@ -79,11 +81,11 @@ func TestCheckMarkdown(t *testing.T) {
 // TestLoadDocumentWelcome checks the welcome page is served by the
 // registry, like any other document.
 func TestLoadDocumentWelcome(t *testing.T) {
-	md, err := LoadDocument(NewRegistry(nil), WelcomeURL)
+	doc, err := loadDocument(whynot.NewParser(), NewRegistry(nil), WelcomeURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(md) == 0 {
-		t.Error("welcome page is empty")
+	if _, ok := doc.Title(); !ok {
+		t.Error("welcome page has no title")
 	}
 }

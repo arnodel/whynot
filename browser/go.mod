@@ -4,9 +4,10 @@ go 1.25.0
 
 require (
 	gioui.org v0.10.3
-	github.com/arnodel/whynot v1.0.0-rc.2
+	github.com/arnodel/whynot v1.0.0-rc.3
 	github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.45.0
 )
 

@@ -51,6 +51,7 @@ func (a *App) ShowTOC() {
 	}
 
 	a.tocDocView = docView
+	a.arrival = arrival{}
 	a.Panel.SetView(tocView)
 	a.updateWindowTitle()
 }

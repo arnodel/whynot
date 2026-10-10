@@ -44,14 +44,14 @@ func pollKeys(gtx layout.Context, app *browser.App, panel *whynot.Panel) {
 			}
 		case key.NameSpace:
 			if ke.Modifiers.Contain(key.ModShift) {
-				panel.PageUp()
+				app.PageUp()
 			} else {
-				panel.PageDown()
+				app.PageDown()
 			}
 		case key.NameUpArrow:
-			panel.ScrollUp()
+			app.ScrollUp()
 		case key.NameDownArrow:
-			panel.ScrollDown()
+			app.ScrollDown()
 		case key.NameLeftArrow:
 			panel.ScrollLeft()
 		case key.NameRightArrow:

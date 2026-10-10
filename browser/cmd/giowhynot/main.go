@@ -55,19 +55,22 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	source, err := browser.LoadDocument(registry, location)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	styleSheet := simpletheme.DarkStyleSheet
 	if *light {
 		styleSheet = simpletheme.LightStyleSheet
 	}
 
+	win := new(app.Window)
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
+	// Gio draws only when asked: a frame each time more of a document
+	// arrives.
+	browserApp.OnDocumentChange = win.Invalidate
+	first, err := browserApp.Load(location)
+	if err != nil {
+		log.Fatal(err)
+	}
 	renderer := giobackend.New()
-	view := browserApp.NewView(source, location)
+	view := browserApp.NewView(first)
 	panel := whynot.NewPanel(view, image.Rectangle{})
 	browserApp.Panel = panel
 	panel.SetAnchorScrolling(false) // the app follows anchors itself (HandleEvents)
@@ -75,7 +78,6 @@ func main() {
 	tb := newToolbar(fonts.NewGoSelector(), renderer)
 	doc := &document{panel: panel, renderer: renderer, start: time.Now(), onPress: tb.cancelEdit, onEvents: browserApp.HandleEvents}
 
-	win := new(app.Window)
 	win.Option(app.Title("Why Not?"), app.Size(initialWindowWidth, initialWindowHeight))
 	browserApp.OnTitleChange = func(title string) { win.Option(app.Title(title)) }
 	browserApp.Open(location)
@@ -112,6 +114,7 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			if !tb.editing {
 				pollKeys(gtx, browserApp, doc.panel)
 			}
+			browserApp.Update()
 			doc.layout(gtx)
 			tb.layout(gtx, browserApp)
 

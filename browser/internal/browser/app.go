@@ -61,10 +61,21 @@ type App struct {
 	Panel *whynot.Panel
 
 	// OnTitleChange is called with the current document's own title
-	// (Document.Title(), or a generic fallback) whenever it changes -
+	// (see documentTitle, or a generic fallback) whenever it changes -
 	// wired to whichever backend-specific window-title API is
 	// available (e.g. ebiten.SetWindowTitle).
 	OnTitleChange func(title string)
+
+	// OnDocumentChange, if set before documents are loaded, is called
+	// whenever more of a document still arriving has come in, on a
+	// goroutine of its own: for a program that draws only when asked, as
+	// Gio does, to ask for a frame.
+	OnDocumentChange func()
+	// title is the title last given to OnTitleChange.
+	title string
+	// frontMatter is the raw front matter frontMatterTitle last read, and
+	// frontMatterTitle its title.
+	frontMatter, frontMatterTitle string
 
 	// location is where the current document (Panel.View()) was loaded
 	// from - kept separately from the View itself, which Panel alone
@@ -82,6 +93,10 @@ type App struct {
 	styleSheet   whynot.StyleSheet
 	// registry is what documents, and their images, can be fetched from.
 	registry *fetch.Registry
+	// parser parses every document, with the code-block plugins.
+	parser *whynot.Parser
+	// arrival is what's left to do as the current document arrives.
+	arrival arrival
 	// darkTheme tracks which of the two built-in stylesheets is current,
 	// for a theme-toggle UI - a StyleSheet is opaque, so it can't be
 	// recovered from styleSheet itself.
@@ -119,9 +134,24 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 		faceSelector: faceSelector,
 		styleSheet:   styleSheet,
 		registry:     registry,
-		darkTheme:    dark,
-		zoom:         1,
+		// kroki first, so a mermaid fence is a diagram, then chroma for
+		// syntax-colored code (and a diagram's source while it loads).
+		parser: whynot.NewParser(
+			whynot.WithImageRegistry(registry),
+			whynot.WithCodeBlockPlugin(kroki.Plugin{}),
+			whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
+		),
+		darkTheme: dark,
+		zoom:      1,
 	}
+}
+
+// arrival is what's left to do as a document arrives, until the reader
+// scrolls: jump to the heading its URL's fragment names, once it has
+// arrived, or for "#end", keep its end in view.
+type arrival struct {
+	fragment string
+	end      bool
 }
 
 // Open makes location the current document - for the very first
@@ -130,8 +160,55 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 // Reload/Paste/Back/Forward instead, which also push history.
 func (a *App) Open(location *url.URL) {
 	a.location = location
+	a.arrive(location.Fragment)
 	a.updateWindowTitle()
 }
+
+// Update carries on with what showing the current document needs as it
+// arrives: the jump to its URL's fragment once that heading has arrived,
+// keeping its end in view for "#end", and its title. Call it once a
+// frame, before drawing.
+func (a *App) Update() {
+	if a.tocDocView == nil {
+		a.continueArrival()
+	}
+	a.updateWindowTitle()
+}
+
+// arrive starts the current document's arrival at fragment (see arrival).
+func (a *App) arrive(fragment string) {
+	if strings.EqualFold(fragment, "end") {
+		a.arrival = arrival{end: true}
+	} else {
+		a.arrival = arrival{fragment: fragment}
+	}
+	a.continueArrival()
+}
+
+// continueArrival does what it can of the current document's arrival.
+// Whether the document is complete is read first: once it is, the jump
+// either happens or never will.
+func (a *App) continueArrival() {
+	view := a.Panel.View()
+	complete := view.Document().Complete()
+	switch {
+	case a.arrival.end:
+		view.ScrollToEnd()
+		a.arrival.end = !complete
+	case a.arrival.fragment != "":
+		if scrollToFragment(view, a.arrival.fragment) || complete {
+			a.arrival.fragment = ""
+		}
+	}
+}
+
+// ScrollUp, ScrollDown, PageUp and PageDown scroll the current document
+// as Panel's methods do, as the reader asked: the end of a document still
+// arriving stops being kept in view.
+func (a *App) ScrollUp()   { a.arrival = arrival{}; a.Panel.ScrollUp() }
+func (a *App) ScrollDown() { a.arrival = arrival{}; a.Panel.ScrollDown() }
+func (a *App) PageUp()     { a.arrival = arrival{}; a.Panel.PageUp() }
+func (a *App) PageDown()   { a.arrival = arrival{}; a.Panel.PageDown() }
 
 // Location returns where the current document was loaded from.
 func (a *App) Location() *url.URL { return a.location }
@@ -155,9 +232,10 @@ func (a *App) HoverDest() string {
 }
 
 // HandleEvents follows the links clicked in Panel, as reported by
-// Panel.Frame. Panel's own anchor scrolling must be off (see
-// Panel.SetAnchorScrolling), since FollowAnchor scrolls, after
-// recording history.
+// Panel.Frame, and stops what's left of the current document's arrival
+// (see Update) when the reader scrolls. Panel's own anchor scrolling must
+// be off (see Panel.SetAnchorScrolling), since FollowAnchor scrolls,
+// after recording history.
 func (a *App) HandleEvents(events []whynot.Event) {
 	for _, e := range events {
 		switch e := e.(type) {
@@ -165,6 +243,8 @@ func (a *App) HandleEvents(events []whynot.Event) {
 			a.Follow(e.Destination)
 		case whynot.AnchorClick:
 			a.FollowAnchor(e.ID)
+		case whynot.Scroll:
+			a.arrival = arrival{}
 		}
 	}
 }
@@ -202,11 +282,11 @@ func (a *App) SetTheme(dark bool) {
 }
 
 // updateWindowTitle fires OnTitleChange with the current document's own
-// title (Document.Title(): its first heading, any level), or a generic
-// fallback if it has none - call whenever Panel's View is replaced with
-// a different document's. While the TOC is showing, its own "Table of
-// contents" heading is skipped in favor of the real document's title
-// (a.tocDocView) plus a " - TOC" suffix.
+// title (see documentTitle), or a generic fallback if it has none, if
+// it's changed since it last fired - call whenever Panel's View is
+// replaced with a different document's. While the TOC is showing, its
+// own "Table of contents" heading is skipped in favor of the real
+// document's title (a.tocDocView) plus a " - TOC" suffix.
 func (a *App) updateWindowTitle() {
 	if a.OnTitleChange == nil {
 		return
@@ -215,14 +295,31 @@ func (a *App) updateWindowTitle() {
 	if a.tocDocView != nil {
 		view = a.tocDocView
 	}
-	title, ok := view.Document().Title()
+	title, ok := a.documentTitle(view.Document())
 	if !ok {
 		title = "Untitled document"
 	}
 	if a.tocDocView != nil {
 		title += " - TOC"
 	}
-	a.OnTitleChange(title)
+	if title != a.title {
+		a.title = title
+		a.OnTitleChange(title)
+	}
+}
+
+// documentTitle returns doc's title: the title its front matter gives,
+// else its first heading's text.
+func (a *App) documentTitle(doc *whynot.Document) (string, bool) {
+	if raw := doc.RawFrontMatter(); raw != "" {
+		if raw != a.frontMatter {
+			a.frontMatter, a.frontMatterTitle = raw, frontMatterTitle(raw)
+		}
+		if a.frontMatterTitle != "" {
+			return a.frontMatterTitle, true
+		}
+	}
+	return doc.Title()
 }
 
 // ResolveLink parses dest and resolves it against the current
@@ -234,21 +331,28 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 	return resolveAgainst(a.location, dest)
 }
 
-// NewView parses source, loaded from location, into a View - bundling
-// the options every call site needs together: the current StyleSheet,
-// images resolved against location the same way ResolveLink resolves a
-// link's href (so a relative or http(s) image works regardless of where
-// its document came from), and two code-block plugins: kroki.Plugin
-// first, so a ```mermaid fence renders as an actual diagram, then
-// chromahighlight.Plugin for syntax-colored code (and a diagram's source
-// while it loads).
-func (a *App) NewView(source []byte, location *url.URL) *whynot.View {
-	doc := whynot.Parse(source,
-		whynot.WithBaseURL(location),
-		whynot.WithImageRegistry(a.registry),
-		whynot.WithCodeBlockPlugin(kroki.Plugin{}),
-		whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
-	)
+// Load fetches the document at location (see NewRegistry), returning it
+// as it arrives: complete if it arrives quickly, otherwise growing as the
+// rest comes in, in the background. Content that isn't Markdown is an
+// error, and a web page is a *webPageError, which App opens in a web
+// browser instead.
+func (a *App) Load(location *url.URL) (*whynot.Document, error) {
+	doc, err := loadDocument(a.parser, a.registry, location)
+	if err != nil {
+		return nil, loadError(err, location)
+	}
+	if f := a.OnDocumentChange; f != nil {
+		go func() {
+			for range doc.Updates() {
+				f()
+			}
+		}()
+	}
+	return doc, nil
+}
+
+// NewView returns a View of doc with the current fonts and StyleSheet.
+func (a *App) NewView(doc *whynot.Document) *whynot.View {
 	return whynot.NewView(
 		doc,
 		whynot.WithFaceSelector(a.faceSelector),
@@ -294,7 +398,7 @@ func (a *App) follow(resolved *url.URL) {
 		a.Panel.SetView(docView)
 		a.tocDocView = nil
 		if resolved.Fragment != "" {
-			scrollToFragment(docView, resolved.Fragment)
+			a.arrive(resolved.Fragment)
 		}
 		a.location = resolved
 		a.updateWindowTitle()
@@ -306,7 +410,7 @@ func (a *App) follow(resolved *url.URL) {
 			return
 		}
 		a.pushHistory()
-		scrollToFragment(a.Panel.View(), resolved.Fragment)
+		a.arrive(resolved.Fragment)
 		// resolved (unlike a.location) carries the fragment, so a
 		// caller's address bar reflects the jump even though the
 		// document itself didn't change.
@@ -314,21 +418,25 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	source, err := LoadDocument(a.registry, resolved)
+	doc, err := a.Load(resolved)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)
 		}
 		return
 	}
-	view := a.NewView(source, resolved)
+	a.show(doc, resolved)
+}
+
+// show makes doc, loaded from location, the current document, pushing
+// the one being left onto history, and scrolls to location's fragment.
+func (a *App) show(doc *whynot.Document, location *url.URL) {
+	view := a.NewView(doc)
 	a.place(view)
-	if resolved.Fragment != "" {
-		scrollToFragment(view, resolved.Fragment)
-	}
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
-	a.location = resolved
+	a.location = location
+	a.arrive(location.Fragment)
 	a.updateWindowTitle()
 }
 
@@ -419,6 +527,7 @@ func (a *App) travelTo(entry historyEntry, undoStack *[]historyEntry) {
 	entry.view.RestoreScrollPosition(entry.scroll)
 	a.Panel.SetView(entry.view) // re-applies a.styleSheet, then relayouts
 	a.location = entry.location
+	a.arrival = arrival{}
 	a.updateWindowTitle()
 }
 
@@ -431,7 +540,7 @@ func (a *App) Reload() {
 	if a.tocDocView != nil {
 		return
 	}
-	source, err := LoadDocument(a.registry, a.location)
+	doc, err := a.Load(a.location)
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)
@@ -439,10 +548,11 @@ func (a *App) Reload() {
 		return
 	}
 	scroll := a.Panel.View().ScrollPosition()
-	view := a.NewView(source, a.location)
+	view := a.NewView(doc)
 	a.place(view)
 	view.RestoreScrollPosition(scroll)
 	a.Panel.SetView(view)
+	a.arrival = arrival{}
 	a.updateWindowTitle()
 }
 
@@ -481,7 +591,7 @@ func (a *App) Navigate(text string) error {
 		return err
 	}
 
-	source, err := LoadDocument(a.registry, resolved)
+	doc, err := a.Load(resolved)
 	if err != nil {
 		if openIfWebPage(err, resolved) {
 			return nil
@@ -489,12 +599,7 @@ func (a *App) Navigate(text string) error {
 		log.Printf("loading %s: %v", resolved, err)
 		return err
 	}
-	view := a.NewView(source, resolved)
-	a.place(view)
-	a.pushHistory() // must run before SetView - it reads the page being left
-	a.Panel.SetView(view)
-	a.location = resolved
-	a.updateWindowTitle()
+	a.show(doc, resolved)
 	return nil
 }
 
@@ -514,11 +619,16 @@ func (a *App) place(view *whynot.View) {
 
 // scrollToFragment scrolls v to the anchor a URL fragment names, the way
 // browsers do: the heading with that id, else the top of the document
-// for an empty fragment or "top".
-func scrollToFragment(v *whynot.View, id string) {
-	if !v.ScrollToAnchor(id) && (id == "" || strings.EqualFold(id, "top")) {
-		v.ScrollToRatio(0)
+// for an empty fragment or "top". It reports whether it scrolled.
+func scrollToFragment(v *whynot.View, id string) bool {
+	if v.ScrollToAnchor(id) {
+		return true
 	}
+	if id == "" || strings.EqualFold(id, "top") {
+		v.ScrollToRatio(0)
+		return true
+	}
+	return false
 }
 
 // minZoom, maxZoom clamp SetZoom to a sane range.

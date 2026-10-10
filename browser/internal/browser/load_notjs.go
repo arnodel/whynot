@@ -74,11 +74,9 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 	return nil, fmt.Errorf("%q isn't \"welcome\", a URL, an existing file path, or a domain", text)
 }
 
-// LoadDocument fetches the document at location through registry (see
-// NewRegistry). Content that isn't Markdown is an error, and a web page
-// is a *webPageError, which App opens in a web browser instead.
-func LoadDocument(registry *fetch.Registry, location *url.URL) ([]byte, error) {
-	return fetchDocument(registry, location)
+// loadError is the error to report for err, from loading location.
+func loadError(err error, location *url.URL) error {
+	return err
 }
 
 // NewRegistry returns what documents, and the images in them, can be
@@ -90,9 +88,13 @@ func NewRegistry(root *os.Root) *fetch.Registry {
 	if root != nil {
 		files = fetch.FileResolver{Root: root}
 	}
+	// Only the wait for a response is bounded: a document may take longer
+	// than that to arrive in full, and is shown as it does.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = httpTimeout
 	return fetch.NewRegistry(
 		files,
-		fetch.HTTPResolver{Client: &http.Client{Timeout: httpTimeout}, AllowHTTP: true},
+		fetch.HTTPResolver{Client: &http.Client{Transport: transport}, AllowHTTP: true},
 		welcomeResolver{},
 	)
 }
