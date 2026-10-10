@@ -14,6 +14,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/input"
+	"github.com/arnodel/whynot/styles/simpletheme"
 	"golang.org/x/image/font"
 )
 
@@ -423,4 +424,137 @@ func TestStackControllerTouchSideways(t *testing.T) {
 		}
 	}
 	t.Fatal("no link found in the second child")
+}
+
+// barStyle is the stacks' scrollbar style in these tests: its color is
+// unlike anything else drawn.
+var barStyle = &simpletheme.Scrollbar{Idle: color.RGBA{R: 9, G: 8, B: 7, A: 255}, Hover: color.RGBA{R: 9, G: 8, B: 7, A: 255}, Pressed: color.RGBA{R: 9, G: 8, B: 7, A: 255}}
+
+// TestViewStackVisibleRange checks the stack's estimated range: from 0 at
+// its start, to 1 at its end, growing as it scrolls, and that
+// ScrollToRatio lands about where asked.
+func TestViewStackVisibleRange(t *testing.T) {
+	s := stackOf(3, 25, 1, 12)
+	if start, end := s.VisibleRange(); start != 0 || end <= 0 || end >= 1 {
+		t.Errorf("at the start, VisibleRange = %v, %v, want 0 and some way in", start, end)
+	}
+	last := 0.0
+	for range 10 {
+		s.ScrollBy(150)
+		start, _ := s.VisibleRange()
+		if start < last {
+			t.Errorf("scrolling down moved VisibleRange's start back, from %v to %v", last, start)
+		}
+		last = start
+	}
+	s.ScrollToEnd()
+	if _, end := s.VisibleRange(); math.Abs(end-1) > 1e-9 {
+		t.Errorf("at the end, VisibleRange's end = %v, want 1", end)
+	}
+	for _, ratio := range []float64{0.2, 0.5, 0.7} {
+		s.ScrollToRatio(ratio)
+		if start, _ := s.VisibleRange(); math.Abs(start-ratio) > 0.05 {
+			t.Errorf("after ScrollToRatio(%v), VisibleRange's start = %v", ratio, start)
+		}
+	}
+}
+
+// barRects returns the rects drawn in the scrollbar's color.
+func barRects(r *recorder) []image.Rectangle {
+	var out []image.Rectangle
+	for _, rect := range r.Rects {
+		if c, ok := rect.Color.(color.NRGBA); ok && c.R == 9 && c.G == 8 && c.B == 7 && c.A > 0 {
+			out = append(out, rect.R)
+		}
+	}
+	return out
+}
+
+// TestViewStackScrollbarDrawn checks the scrollbar is drawn along the
+// right edge once the stack moves, and not when it's off.
+func TestViewStackScrollbarDrawn(t *testing.T) {
+	s := stackOf(3, 25, 12)
+	s.ScrollBy(100)
+	r := &recorder{Area: s.bounds}
+	s.Draw(r, 0)
+	if bars := barRects(r); len(bars) != 0 {
+		t.Errorf("the scrollbar is drawn while off, in %v", bars)
+	}
+	s.SetScrollbar(barStyle)
+	s.ScrollBy(100)
+	r = &recorder{Area: s.bounds}
+	s.Draw(r, time.Second)
+	bars := barRects(r)
+	if len(bars) != 1 || bars[0].Max.X != 300-2 || bars[0].Dx() != 6 {
+		t.Errorf("after scrolling, the scrollbar is drawn in %v, want one thumb 6 wide, 2 from the right edge", bars)
+	}
+}
+
+// TestStackControllerScrollbarDrag checks that dragging the scrollbar's
+// thumb, with the mouse or a finger, scrolls the stack, reporting a
+// Scroll, and that a click on its track jumps there.
+func TestStackControllerScrollbarDrag(t *testing.T) {
+	for _, touch := range []bool{false, true} {
+		s := stackOf(3, 40, 12)
+		s.SetScrollbar(barStyle)
+		c := NewStackController(s)
+		s.ScrollBy(1) // shows the scrollbar
+		r := &recorder{Area: s.bounds}
+		s.Draw(r, 0)
+		thumb, ok := s.thumb()
+		if !ok {
+			t.Fatal("no thumb")
+		}
+		x, y := thumb.Min.X+thumb.Dx()/2, thumb.Min.Y+2
+		before, _ := s.VisibleRange()
+		var events []StackEvent
+		if touch {
+			c.Frame([]input.Event{input.TouchStart{ID: 1, X: x, Y: y}}, 0)
+			events = c.Frame([]input.Event{input.TouchMove{ID: 1, X: x, Y: y + 50}}, 0)
+			c.Frame([]input.Event{input.TouchEnd{ID: 1}}, 0)
+		} else {
+			c.Frame([]input.Event{input.PointerMove{X: x, Y: y}, input.PointerButton{X: x, Y: y, Button: input.ButtonPrimary, Down: true}}, 0)
+			events = c.Frame([]input.Event{input.PointerMove{X: x, Y: y + 50}}, 0)
+			c.Frame([]input.Event{input.PointerButton{X: x, Y: y + 50, Button: input.ButtonPrimary}}, 0)
+		}
+		after, _ := s.VisibleRange()
+		if want := before + 50.0/200; math.Abs(after-want) > 0.03 {
+			t.Errorf("touch %v: dragging the thumb 50 of 200 pixels moved the stack from %.3f to %.3f, want about %.3f", touch, before, after, want)
+		}
+		if len(events) != 1 || events[0] != (StackEvent{Child: -1, Event: whynot.Scroll{}}) {
+			t.Errorf("touch %v: the drag reported %v, want a Scroll", touch, events)
+		}
+	}
+
+	s := stackOf(3, 40, 12)
+	s.SetScrollbar(barStyle)
+	c := NewStackController(s)
+	s.Draw(&recorder{Area: s.bounds}, 0)
+	c.Frame([]input.Event{input.PointerButton{X: 296, Y: 150, Button: input.ButtonPrimary, Down: true}}, 0)
+	c.Frame([]input.Event{input.PointerButton{X: 296, Y: 150, Button: input.ButtonPrimary}}, 0)
+	if start, end := s.VisibleRange(); (start+end)/2 < 0.6 || (start+end)/2 > 0.9 {
+		t.Errorf("a click on the track three quarters down left the stack at %.2f-%.2f, want its middle about there", start, end)
+	}
+}
+
+// TestViewStackVisibleRangeInSecondChild checks the range is right once
+// the top of the stack is in a later child, with the earlier one above
+// it, scrolled past.
+func TestViewStackVisibleRangeInSecondChild(t *testing.T) {
+	s := stackOf(8, 40)
+	first := fullHeight(s.views[0])
+	total := first + fullHeight(s.views[1])
+	s.ScrollBy(first + 100)
+	drawStack(s)
+	if child, _ := s.Position(); child != 1 {
+		t.Fatalf("at child %d, want 1", child)
+	}
+	start, end := s.VisibleRange()
+	if want := (first + 100) / total; math.IsNaN(start) || math.Abs(start-want) > 0.05 || end <= start {
+		t.Errorf("in the second child, VisibleRange = %v, %v, want a start of about %v", start, end, want)
+	}
+	s.ScrollToRatio(0.8)
+	if start, _ := s.VisibleRange(); math.Abs(start-0.8) > 0.05 {
+		t.Errorf("after ScrollToRatio(0.8) from the second child, VisibleRange's start = %v", start)
+	}
 }

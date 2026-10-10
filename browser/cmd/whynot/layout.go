@@ -52,7 +52,7 @@ func (g *game) layoutToolbar() {
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	g.outsideWidth, g.outsideHeight = outsideWidth, outsideHeight
 	g.relayout()
-	return g.width, g.panel.Bounds().Max.Y
+	return g.width, g.app.Bounds().Max.Y
 }
 
 // applyDeviceScale recomputes the toolbar's own physical width

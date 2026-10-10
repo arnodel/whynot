@@ -25,6 +25,9 @@ out, so even a very large document scrolls and resizes just as smoothly as a sho
   **Backspace** (or the back button) goes back, **Shift+Backspace** (or the forward button)
   goes forward.
 - The reload button re-fetches the current document.
+- **{{JOURNAL_SHORTCUT}}** turns journal mode on or off: the pages you went through to get
+  here are shown above this one, as one long document. Follow a link in an earlier page to
+  go on from there instead.
 
 Paste "welcome" at any time to come back to this page.
 

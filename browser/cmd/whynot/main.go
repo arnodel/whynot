@@ -81,8 +81,8 @@ func main() {
 	view := app.NewView(doc)
 	initialHeight := int(float64(initialWindowHeight) * scale)
 	g.panel = whynot.NewPanel(view, image.Rect(0, g.toolbarHeight, g.width, initialHeight))
-	g.panel.SetScrollbar(true)
 	app.Panel = g.panel
+	app.SetScrollbar(true)
 	app.OnTitleChange = ebiten.SetWindowTitle
 
 	g.relayout()

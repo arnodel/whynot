@@ -12,7 +12,7 @@ func (g *game) Update() error {
 	start := time.Now()
 	defer func() { g.updateDuration = time.Since(start) }()
 
-	g.app.HandleEvents(g.panel.Frame(g.input.Events(), time.Since(g.start)))
+	g.app.Frame(g.input.Events(), time.Since(g.start))
 
 	// pointerState so these buttons work with a touch too, not just a mouse.
 	var pointerDown, clicked bool
@@ -76,16 +76,20 @@ func (g *game) Update() error {
 	}
 	switch {
 	case keyRepeat(ebiten.KeyLeft):
-		g.panel.ScrollLeft()
+		g.app.ScrollLeft()
 	case keyRepeat(ebiten.KeyRight):
-		g.panel.ScrollRight()
+		g.app.ScrollRight()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
 		g.debugStats = !g.debugStats
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyV) && (ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)) {
+	shortcut := ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)
+	if inpututil.IsKeyJustPressed(ebiten.KeyV) && shortcut {
 		g.app.Paste()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyJ) && shortcut {
+		g.app.ToggleJournal()
 	}
 	switch {
 	case keyRepeat(ebiten.KeyEqual):

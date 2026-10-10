@@ -16,9 +16,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 	start := time.Now()
 	defer func() { g.drawDuration = time.Since(start) }()
 
-	// The panel draws only within its bounds, below the toolbar.
+	// The document draws only within its bounds, below the toolbar.
 	canvas := g.renderer.NewCanvas(screen)
-	g.panel.Draw(canvas, time.Since(g.start))
+	g.app.Draw(canvas, time.Since(g.start))
 
 	g.drawToolbar(screen, canvas)
 	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
@@ -29,8 +29,10 @@ func (g *game) Draw(screen *ebiten.Image) {
 	}
 
 	if g.debugHit {
-		if r, ok := g.panel.View().HitTest(g.hoverX, g.hoverY); ok {
-			drawOutline(canvas, r, color.RGBA{255, 0, 0, 255})
+		if view, ok := g.app.ViewAt(g.hoverX, g.hoverY); ok {
+			if r, ok := view.HitTest(g.hoverX, g.hoverY); ok {
+				drawOutline(canvas, r, color.RGBA{255, 0, 0, 255})
+			}
 		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/arnodel/whynot"
@@ -43,6 +44,8 @@ type ViewStack struct {
 	// background fills the stack below its last child; separator is the
 	// color of the lines between children.
 	background, separator color.Color
+	// bar is its own scrollbar's state.
+	bar stackScrollbar
 }
 
 // NewViewStack returns a ViewStack of views, at its start, drawn with the
@@ -219,6 +222,26 @@ func (s *ViewStack) Reveal(i int) {
 	}
 }
 
+// scrollToFragment scrolls to the anchor a URL fragment names in child i,
+// the way browsers do: the heading with that id at the top of the stack,
+// else the child's start for an empty fragment or "top". It reports
+// whether it scrolled.
+func (s *ViewStack) scrollToFragment(i int, id string) bool {
+	if i < 0 || i >= len(s.views) {
+		return false
+	}
+	v := s.views[i]
+	if !v.ScrollToAnchor(id) {
+		if id != "" && !strings.EqualFold(id, "top") {
+			return false
+		}
+		toStart(v)
+	}
+	s.top = i
+	s.clampEnd()
+	return true
+}
+
 // Draw draws the stack: the top child from its scroll position, then the
 // next ones from their start, each in the part of the stack it occupies.
 func (s *ViewStack) Draw(dst canvas.Canvas, now time.Duration) {
@@ -250,6 +273,7 @@ func (s *ViewStack) Draw(dst canvas.Canvas, now time.Duration) {
 			clip.DrawRect(s.bounds.Min.X, below.Min.Y-thickness/2, s.bounds.Dx(), thickness, s.separator)
 		}
 	}
+	s.drawScrollbar(clip, now)
 }
 
 // scale is the display's scale: the children's.
@@ -305,6 +329,8 @@ type StackController struct {
 	touchPos   image.Point
 	touchChild int
 	axis       touchAxis
+	// touchOnBar is whether the touch is dragging the stack's scrollbar.
+	touchOnBar bool
 
 	// momentum is the stack's fling velocity, in pixels a second; tick
 	// is the time of the last frame that moved or coasted it.
@@ -380,9 +406,33 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 				e.DY = 0
 			}
 			forChildren = append(forChildren, e)
+		case input.PointerMove:
+			if c.stack.bar.dragging {
+				c.stack.dragScrollbarTo(e.Y)
+				continue
+			}
+			c.stack.bar.hovered = c.stack.onScrollbar(image.Pt(e.X, e.Y))
+			forChildren = append(forChildren, e)
+		case input.PointerLeave:
+			c.stack.bar.hovered = false
+			forChildren = append(forChildren, e)
 		case input.PointerButton:
-			if e.Down {
-				c.momentum = 0
+			if e.Button != input.ButtonPrimary {
+				forChildren = append(forChildren, e)
+				continue
+			}
+			if !e.Down {
+				if c.stack.bar.dragging {
+					c.stack.endScrollbarDrag()
+					c.stack.bar.hovered = c.stack.onScrollbar(image.Pt(e.X, e.Y))
+				}
+				forChildren = append(forChildren, e)
+				continue
+			}
+			c.momentum = 0
+			if p := image.Pt(e.X, e.Y); p.In(c.stack.bounds) && c.stack.onScrollbar(p) {
+				c.stack.beginScrollbarDrag(p)
+				continue
 			}
 			forChildren = append(forChildren, e)
 		case input.TouchStart:
@@ -392,6 +442,13 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 			}
 			c.touching, c.touchID, c.touchStart, c.touchPos = true, e.ID, p, p
 			c.axis, c.momentum = axisUndecided, 0
+			if c.stack.onScrollbar(p) && c.stack.barOpacity(c.stack.bar.now) > 0 {
+				// A visible scrollbar is dragged by touch too; a hidden one
+				// mustn't swallow touches along the edge.
+				c.touchOnBar = true
+				c.stack.beginScrollbarDrag(p)
+				continue
+			}
 			c.touchChild = c.childAt(p)
 			c.advance(now)
 			forTouched = append(forTouched, e)
@@ -400,6 +457,10 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 				continue
 			}
 			p := image.Pt(e.X, e.Y)
+			if c.touchOnBar {
+				c.stack.dragScrollbarTo(p.Y)
+				continue
+			}
 			if c.axis == axisUndecided {
 				d := p.Sub(c.touchStart)
 				if math.Hypot(float64(d.X), float64(d.Y)) < stackAxisLockDistance*scale {
@@ -437,6 +498,7 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 	}
 
 	switch {
+	case c.touchOnBar:
 	case c.touching && c.axis == axisVertical:
 		// Also while the finger is held still, so the velocity decays
 		// before it lifts rather than flinging.
@@ -448,6 +510,10 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 	}
 	if touchEnded {
 		c.touching = false
+		if c.touchOnBar {
+			c.touchOnBar = false
+			c.stack.endScrollbarDrag()
+		}
 	}
 
 	var out []StackEvent
@@ -474,6 +540,29 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 		out = append(out, StackEvent{Child: -1, Event: whynot.Scroll{}})
 	}
 	return out
+}
+
+// ScrollLeft and ScrollRight scroll a block wider than the stack (a code
+// block or table, say) a step sideways, as a whynot.Controller's do: in
+// the first child on screen with such a block under the pointer, or last
+// scrolled. They report whether there was one.
+func (c *StackController) ScrollLeft() bool {
+	return c.anyChild((*whynot.Controller).ScrollLeft)
+}
+
+func (c *StackController) ScrollRight() bool {
+	return c.anyChild((*whynot.Controller).ScrollRight)
+}
+
+// anyChild calls scroll on the controllers of the children on screen, in
+// order, until one reports it scrolled.
+func (c *StackController) anyChild(scroll func(*whynot.Controller) bool) bool {
+	for i, r := range c.stack.regions {
+		if !r.Empty() && scroll(c.controllers[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 // childAt returns the index of the child drawn at p by the last Draw, or
@@ -543,7 +632,7 @@ func absInt(n int) int {
 // does. A program that draws only when something happens should draw
 // another frame.
 func (c *StackController) Animating() bool {
-	if c.flinging() {
+	if c.flinging() || c.stack.barAnimating() {
 		return true
 	}
 	for i, r := range c.stack.regions {
