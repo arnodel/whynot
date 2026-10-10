@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/arnodel/whynot"
@@ -260,73 +261,293 @@ func (s *ViewStack) scale() float64 {
 }
 
 // A StackEvent is something a child of a ViewStack reported, such as a
-// link clicked: Event, from the child at index Child.
+// link clicked: Event, from the child at index Child. A whynot.Scroll,
+// the reader scrolling the stack, has Child -1.
 type StackEvent struct {
 	Child int
 	Event whynot.Event
 }
 
+// Touch flings, as a whynot.Controller does them: the fraction of a
+// fling's velocity (pixels a second) left after a second, and the speed
+// below which it stops.
+const (
+	stackMomentumDecayPerSecond = 0.05
+	stackMomentumMinVelocity    = 30
+)
+
+// stackAxisLockDistance is how far, in logical pixels, a touch moves
+// before its main direction decides whether it scrolls the stack or a
+// child sideways.
+const stackAxisLockDistance = 10
+
 // A StackController turns input into what a ViewStack does, as a
-// whynot.Controller does for a View. The stack scrolls itself, by the
-// wheel's vertical part; everything else in a child, such as hovering and
-// clicking links and scrolling code blocks sideways, is its own
-// Controller's, which only acts within its child's region.
+// whynot.Controller does for a View. The stack scrolls itself: by the
+// wheel's vertical part, and by touch drags that are mostly vertical,
+// with a fling when the finger lifts. Everything else in a child, such
+// as hovering and clicking links, and scrolling code blocks sideways, is
+// its own Controller's, which only acts within its child's region.
+//
+// A touch drag waits until it has moved stackAxisLockDistance to decide:
+// a View's Controller only waits on a block that scrolls sideways, but
+// the stack can't tell where those are.
 type StackController struct {
 	stack       *ViewStack
 	controllers []*whynot.Controller
+
+	// The touch in progress, from its TouchStart to its TouchEnd: its
+	// id, where it started and last was, the child it started on (-1 if
+	// none), and what it scrolls (axis), once it has moved far enough to
+	// tell.
+	touching   bool
+	touchID    int
+	touchStart image.Point
+	touchPos   image.Point
+	touchChild int
+	axis       touchAxis
+
+	// momentum is the stack's fling velocity, in pixels a second; tick
+	// is the time of the last frame that moved or coasted it.
+	momentum float64
+	tick     time.Duration
+	ticked   bool
+
+	// position is the stack's position at the end of the last Frame: if
+	// it's changed by the next one, the app moved the stack, which stops
+	// a fling.
+	position stackPosition
+}
+
+// touchAxis is what a touch drag scrolls.
+type touchAxis int
+
+const (
+	axisUndecided touchAxis = iota // not moved far enough to tell
+	axisVertical                   // the stack
+	axisSideways                   // the child it started on
+)
+
+// stackPosition is a cheap snapshot of a stack's position, to tell
+// whether it moved.
+type stackPosition struct {
+	top    int
+	scroll whynot.ScrollPosition
+}
+
+func (s *ViewStack) position() stackPosition {
+	if len(s.views) == 0 {
+		return stackPosition{}
+	}
+	return stackPosition{s.top, s.views[s.top].ScrollPosition()}
 }
 
 // NewStackController returns a StackController for s.
 func NewStackController(s *ViewStack) *StackController {
-	c := &StackController{stack: s}
+	c := &StackController{stack: s, touchChild: -1}
 	for _, v := range s.views {
 		c.controllers = append(c.controllers, whynot.NewController(v))
 	}
+	c.position = s.position()
 	return c
 }
 
-// Frame handles a frame's input, at now, and returns what the children
-// reported. Touch isn't handled yet: it's dropped.
+// Frame handles a frame's input, at now, and returns what happened: what
+// the children reported, and a whynot.Scroll if the input scrolled the
+// stack. Call it once a frame, with no events if there were none, so
+// flings keep coasting. A fling stops if the app moves the stack.
 func (c *StackController) Frame(events []input.Event, now time.Duration) []StackEvent {
-	var forChildren []input.Event
+	if c.stack.position() != c.position {
+		c.momentum = 0
+	}
+	start := c.stack.position()
+	scale := c.stack.scale()
+	// forTouched is what the child the touch started on gets of it, on top
+	// of forChildren.
+	var forChildren, forTouched []input.Event
+	touchEnded := false
+	dragY := 0
 	for _, e := range events {
 		switch e := e.(type) {
 		case input.Wheel:
 			if !image.Pt(e.X, e.Y).In(c.stack.bounds) {
 				continue
 			}
+			c.momentum = 0
 			if !e.Mods.Contain(input.ModShift) {
 				// Wheel deltas are logical pixels, as a Controller takes
 				// them; the vertical part is the stack's.
-				c.stack.ScrollBy(e.DY * c.stack.scale())
+				c.stack.ScrollBy(e.DY * scale)
 				e.DY = 0
 			}
 			forChildren = append(forChildren, e)
-		case input.TouchStart, input.TouchMove, input.TouchEnd, input.TouchCancel:
-			// Not yet: a drag could be meant for the stack or for a code
-			// block, which a Controller decides for one View.
+		case input.PointerButton:
+			if e.Down {
+				c.momentum = 0
+			}
+			forChildren = append(forChildren, e)
+		case input.TouchStart:
+			p := image.Pt(e.X, e.Y)
+			if c.touching || !p.In(c.stack.bounds) {
+				continue
+			}
+			c.touching, c.touchID, c.touchStart, c.touchPos = true, e.ID, p, p
+			c.axis, c.momentum = axisUndecided, 0
+			c.touchChild = c.childAt(p)
+			c.advance(now)
+			forTouched = append(forTouched, e)
+		case input.TouchMove:
+			if !c.touching || e.ID != c.touchID {
+				continue
+			}
+			p := image.Pt(e.X, e.Y)
+			if c.axis == axisUndecided {
+				d := p.Sub(c.touchStart)
+				if math.Hypot(float64(d.X), float64(d.Y)) < stackAxisLockDistance*scale {
+					continue
+				}
+				if absInt(d.X) > absInt(d.Y) {
+					c.axis = axisSideways
+				} else {
+					c.axis = axisVertical
+				}
+			}
+			switch c.axis {
+			case axisVertical:
+				// Content follows the finger, including what it moved
+				// before the lock.
+				dy := p.Y - c.touchPos.Y
+				c.stack.ScrollBy(-float64(dy))
+				dragY += dy
+			case axisSideways:
+				// The child sees a purely sideways drag.
+				forTouched = append(forTouched, input.TouchMove{ID: e.ID, X: e.X, Y: c.touchStart.Y})
+			}
+			c.touchPos = p
+		case input.TouchEnd:
+			if c.touching && e.ID == c.touchID {
+				forTouched, touchEnded = append(forTouched, e), true
+			}
+		case input.TouchCancel:
+			if c.touching && e.ID == c.touchID {
+				forTouched, touchEnded = append(forTouched, e), true
+			}
 		default:
 			forChildren = append(forChildren, e)
 		}
 	}
+
+	switch {
+	case c.touching && c.axis == axisVertical:
+		// Also while the finger is held still, so the velocity decays
+		// before it lifts rather than flinging.
+		c.accumulate(float64(dragY), now)
+	case c.touching:
+		c.advance(now)
+	default:
+		c.coast(now)
+	}
+	if touchEnded {
+		c.touching = false
+	}
+
 	var out []StackEvent
 	for i, r := range c.stack.regions {
-		if r.Empty() {
+		in := forChildren
+		switch {
+		case i == c.touchChild:
+			// Even off screen, until its touch ends.
+			in = append(slices.Clone(forChildren), forTouched...)
+		case r.Empty():
 			continue
 		}
-		for _, e := range c.controllers[i].Frame(forChildren, now) {
+		for _, e := range c.controllers[i].Frame(in, now) {
+			if _, ok := e.(whynot.Scroll); ok {
+				continue // a child doesn't scroll the stack: only the stack does
+			}
 			out = append(out, StackEvent{Child: i, Event: e})
 		}
+	}
+	if touchEnded {
+		c.touchChild = -1
+	}
+	if c.position = c.stack.position(); c.position != start {
+		out = append(out, StackEvent{Child: -1, Event: whynot.Scroll{}})
 	}
 	return out
 }
 
-// Animating reports whether a child is animating, as a scrollbar fading
-// out does: a program that draws only when something happens should draw
+// childAt returns the index of the child drawn at p by the last Draw, or
+// -1 if none was.
+func (c *StackController) childAt(p image.Point) int {
+	for i, r := range c.stack.regions {
+		if p.In(r) {
+			return i
+		}
+	}
+	return -1
+}
+
+// advance returns the seconds since the last frame it was called in (0
+// the first time).
+func (c *StackController) advance(now time.Duration) float64 {
+	dt := 0.0
+	if c.ticked {
+		dt = (now - c.tick).Seconds()
+	}
+	c.tick, c.ticked = now, true
+	return dt
+}
+
+// accumulate blends delta, how far the finger moved since the last frame,
+// into the fling's velocity.
+func (c *StackController) accumulate(delta float64, now time.Duration) {
+	if dt := c.advance(now); dt > 0 {
+		c.momentum = c.momentum*0.5 + delta/dt*0.5
+	}
+}
+
+// coast applies a frame of the fling, if there's one, decaying it.
+func (c *StackController) coast(now time.Duration) {
+	dt := c.advance(now)
+	if !c.flinging() {
+		// Dropped before applying any of it: a slow velocity left over a
+		// long gap between frames would otherwise turn into a jump.
+		c.momentum = 0
+		return
+	}
+	if dt <= 0 {
+		return
+	}
+	d := c.momentum * dt
+	c.momentum *= math.Pow(stackMomentumDecayPerSecond, dt)
+	if !c.flinging() {
+		c.momentum = 0
+	}
+	c.stack.ScrollBy(-d)
+}
+
+// flinging reports whether the fling is fast enough to coast.
+func (c *StackController) flinging() bool {
+	return math.Abs(c.momentum) >= stackMomentumMinVelocity
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// Animating reports whether frames must keep coming even without input:
+// while a fling coasts, or a child animates, as a scrollbar fading out
+// does. A program that draws only when something happens should draw
 // another frame.
 func (c *StackController) Animating() bool {
+	if c.flinging() {
+		return true
+	}
 	for i, r := range c.stack.regions {
-		if !r.Empty() && c.controllers[i].Animating() {
+		if (!r.Empty() || i == c.touchChild) && c.controllers[i].Animating() {
 			return true
 		}
 	}

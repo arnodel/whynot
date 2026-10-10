@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/canvas"
@@ -304,4 +305,122 @@ func TestViewStackSeparators(t *testing.T) {
 	if len(want) < 2 || fmt.Sprint(lines) != fmt.Sprint(want) {
 		t.Errorf("separators at %v, want them at the tops of the children below the first, %v", lines, want)
 	}
+}
+
+// TestStackControllerTouchDrag checks that a vertical touch drag scrolls
+// the stack by what the finger moved once it's moved far enough to tell,
+// reporting a Scroll, and that a smaller move doesn't scroll it.
+func TestStackControllerTouchDrag(t *testing.T) {
+	s := stackOf(3, 25, 12)
+	c := NewStackController(s)
+	drawStack(s)
+	before := absolute(s)
+	c.Frame([]input.Event{input.TouchStart{ID: 1, X: 100, Y: 150}}, 0)
+	if events := c.Frame([]input.Event{input.TouchMove{ID: 1, X: 102, Y: 145}}, 10*time.Millisecond); absolute(s) != before || len(events) != 0 {
+		t.Errorf("a move of 5 pixels scrolled the stack by %v, reporting %v, want nothing yet", absolute(s)-before, events)
+	}
+	events := c.Frame([]input.Event{input.TouchMove{ID: 1, X: 103, Y: 90}}, 20*time.Millisecond)
+	if got := absolute(s) - before; got != 60 {
+		t.Errorf("a drag of 60 pixels up scrolled the stack by %v, want 60", got)
+	}
+	if len(events) != 1 || events[0] != (StackEvent{Child: -1, Event: whynot.Scroll{}}) {
+		t.Errorf("the drag reported %v, want a Scroll of the stack", events)
+	}
+}
+
+// TestStackControllerFling checks that a quick drag keeps the stack
+// scrolling after the finger lifts, slowing down to a stop, and that the
+// app moving the stack stops it.
+func TestStackControllerFling(t *testing.T) {
+	fling := func(c *StackController) time.Duration {
+		c.Frame([]input.Event{input.TouchStart{ID: 1, X: 100, Y: 180}}, 0)
+		c.Frame([]input.Event{input.TouchMove{ID: 1, X: 100, Y: 120}}, 20*time.Millisecond)
+		c.Frame([]input.Event{input.TouchEnd{ID: 1}}, 40*time.Millisecond)
+		return 40 * time.Millisecond
+	}
+
+	s := stackOf(3, 60, 12)
+	c := NewStackController(s)
+	drawStack(s)
+	now := fling(c)
+	if !c.Animating() {
+		t.Fatal("not animating after a quick drag")
+	}
+	last := absolute(s)
+	steps := 0
+	for ; c.Animating() && steps < 1000; steps++ {
+		now += 16 * time.Millisecond
+		c.Frame(nil, now)
+		if absolute(s) < last {
+			t.Fatal("the fling scrolled backwards")
+		}
+		last = absolute(s)
+	}
+	if steps < 10 || steps == 1000 {
+		t.Errorf("the fling coasted for %d frames, want a while, then to stop", steps)
+	}
+
+	s = stackOf(3, 60, 12)
+	c = NewStackController(s)
+	drawStack(s)
+	now = fling(c)
+	s.Reveal(0)
+	at := absolute(s)
+	c.Frame(nil, now+16*time.Millisecond)
+	if absolute(s) != at || c.Animating() {
+		t.Error("the fling went on after the app moved the stack")
+	}
+}
+
+// TestStackControllerTouchSideways checks that a sideways touch drag on a
+// code block too wide for the stack scrolls the block, not the stack, and
+// that a tap on a link clicks it.
+func TestStackControllerTouchSideways(t *testing.T) {
+	wide := "```\n" + strings.Repeat("wide_code_line_", 40) + "\n```\n\n[A link](https://example.com)\n"
+	views := []*whynot.View{
+		whynot.NewView(whynot.Parse([]byte("Some text.\n"))),
+		whynot.NewView(whynot.Parse([]byte(wide))),
+	}
+	s := NewViewStack(color.Black, separatorColor, views...)
+	s.SetBounds(image.Rect(0, 0, 300, 400))
+	c := NewStackController(s)
+	codeX := func() int {
+		r := &recorder{Area: s.bounds}
+		s.Draw(r, 0)
+		for _, text := range r.Texts {
+			if strings.Contains(text.S, "wide_code") {
+				return text.X
+			}
+		}
+		t.Fatal("no code drawn")
+		return 0
+	}
+	before := codeX()
+	code := s.regions[1].Min.Y + 30
+	at := absolute(s)
+	c.Frame([]input.Event{input.TouchStart{ID: 1, X: 200, Y: code}}, 0)
+	c.Frame([]input.Event{input.TouchMove{ID: 1, X: 120, Y: code + 3}}, 20*time.Millisecond)
+	c.Frame([]input.Event{input.TouchEnd{ID: 1}}, 40*time.Millisecond)
+	if after := codeX(); after >= before {
+		t.Errorf("a sideways drag on the code left it at x %d, from %d, want it scrolled left", after, before)
+	}
+	if absolute(s) != at {
+		t.Error("a sideways drag scrolled the stack")
+	}
+
+	second := s.regions[1]
+	for y := second.Min.Y; y < second.Max.Y; y++ {
+		for x := second.Min.X; x < second.Min.X+120; x++ {
+			if _, ok := views[1].LinkAt(x, y); !ok {
+				continue
+			}
+			events := c.Frame([]input.Event{input.TouchStart{ID: 2, X: x, Y: y}}, time.Second)
+			c.Frame([]input.Event{input.TouchEnd{ID: 2}}, time.Second)
+			if len(events) != 1 || events[0] != (StackEvent{Child: 1, Event: whynot.LinkClick{Destination: "https://example.com"}}) {
+				t.Errorf("a tap on the link reported %v, want a link click in child 1", events)
+			}
+			return
+		}
+	}
+	t.Fatal("no link found in the second child")
 }
