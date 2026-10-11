@@ -21,7 +21,7 @@ func cellarDoc(journal bool) string {
 		"`if not turn.state.lamp then`\n- [Take the lamp](#take-the-lamp)\n`end`\n" +
 		"- [Go down](#cellar) · [Shout](?shout=yes)\n\n" +
 		"# (Take the lamp)\n\n```lua\nturn.state.lamp = true\n```\n\nYou take the lamp. [Back to the hall](#hall)\n\n" +
-		"# Cellar\n\n`if turn.state.lamp then`\nA bottle of port. You win!\n`else`\nIt's pitch black. [Back up](#hall)\n`end`\n"
+		"# Cellar\n\n`if turn.state.lamp then`\nA bottle of port. You win! [Play again](cellar.md)\n`else`\nIt's pitch black. [Back up](#hall)\n`end`\n"
 }
 
 // pageText returns the text the current page shows, drawn.
@@ -86,6 +86,18 @@ func TestWhymarkInBrowser(t *testing.T) {
 	app.FollowAnchor("cellar")
 	if !strings.Contains(pageText(app), "pitch black") {
 		t.Errorf("the cellar, from the first page, shows %q", pageText(app))
+	}
+
+	// Winning, then playing again: a link naming the document starts it.
+	app.Back()
+	app.FollowAnchor("take-the-lamp")
+	app.FollowAnchor("cellar")
+	if !strings.Contains(pageText(app), "You win!") {
+		t.Fatalf("the cellar, with the lamp, shows %q", pageText(app))
+	}
+	app.Follow("cellar.md")
+	if !strings.Contains(pageText(app), "dark below") || app.Location().Fragment != "hall" {
+		t.Errorf("playing again shows %q, at %s; want the hall, with no lamp", pageText(app), app.Location())
 	}
 }
 

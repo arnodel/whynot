@@ -522,7 +522,9 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	if samePage(a.location, resolved) {
+	// On a page of a whymark document, a link naming the document starts
+	// it again: its page isn't the document.
+	if samePage(a.location, resolved) && a.pageOf(a.Panel.View().Document()) == nil {
 		if resolved.Fragment == "" {
 			return
 		}

@@ -225,7 +225,7 @@ func (a *App) followFrom(i int, dest string) {
 		log.Printf("link destination %q: %v", dest, err)
 		return
 	}
-	if samePage(page.location, resolved) {
+	if samePage(page.location, resolved) && a.pageOf(a.journal.stack.views[i].Document()) == nil {
 		a.arrival = arrival{}
 		a.journal.stack.scrollToFragment(i, resolved.Fragment)
 		return
