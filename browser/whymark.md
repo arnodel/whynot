@@ -17,7 +17,9 @@ A document is a program, and a page is its output. A **turn** is one exchange: a
 in, a page out. The user agent reads the page, chooses one of its links, and sends the next
 request.
 
-Given a request and the document's content, the page is determined. So going back shows a
+Given a request and the document's content, the page is determined. The request names the
+page it comes from, which names the one before it, and so on: a page's **trail**, the pages
+that led to it, is part of what determines it. So going back shows a
 page kept from before, with nothing run again; following a link on an earlier page carries
 on from that page, as if nothing after it had happened; and a list of turns, played again,
 gives the same pages.
@@ -108,6 +110,8 @@ Lua code sees the current turn as `turn`, passed to it, never global:
 | `turn.query` | the request's query, as a table of strings |
 | `turn.input` | the fields typed in, by name, as a table of strings |
 | `turn.passage` | the id of the passage shown |
+| `turn.note` | what this page records of itself, an empty table at the start of every turn; plain data only. Unlike `turn.state`, it isn't carried to the next page, but later pages see it in their trail |
+| `turn.trail` | the pages that led to this one, oldest first: the page the request came from, and the pages before it. Each has the `state` it left, its `note`, its `passage`, and its request's `query` and `input`. Changing them changes nothing |
 | `turn.write(...)` | writes its arguments to the page |
 | `turn.write_headers{title = …}` | writes the page's header (see below) |
 | `turn.link(text, query)` | a Markdown link to `?query`, from a table, escaped |

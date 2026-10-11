@@ -330,7 +330,7 @@ func TestRunProgram(t *testing.T) {
 		var out strings.Builder
 		p := &page{w: &out, header: Header{Location: location, PageID: "test"}, auto: true, program: prog}
 		state := &table{keys: []any{"lamp"}, values: []any{c.lamp}}
-		if _, _, err := run(prog, p, turnInput{state: state, passage: "cellar"}); err != nil {
+		if _, err := run(prog, p, turnInput{state: state, passage: "cellar"}); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), c.want) {
@@ -406,4 +406,37 @@ func TestSnapshotParents(t *testing.T) {
 			t.Errorf("page %s: parent %q, request %s; want parent %q, passage %q", c.page, snap.parent, snap.request.Location, c.parent, c.passage)
 		}
 	}
+}
+
+// TestTrail checks turn.trail: the pages that led to the turn, oldest
+// first, each with the state it left, its note, its passage, and its
+// request's query and input; and that a branch sees only its own.
+func TestTrail(t *testing.T) {
+	doc := "---\nwhymark:\n  version: 1\n---\n" +
+		"```lua\nfunction init(turn) return {score = 0} end\n```\n\n" +
+		"# (Play)\n\n" +
+		"```lua\nif turn.query.add then turn.state.score = turn.state.score + tonumber(turn.query.add) end\n" +
+		"turn.note.said = turn.input.say\n```\n\n" +
+		"`for i, page in ipairs(turn.trail) do`\n" +
+		"- page `= i`: `= page.passage`, score `= page.state.score`, said `= page.note.said or \"-\"`, typed `= page.input.say or \"-\"`, added `= page.query.add or \"-\"`\n" +
+		"`end`\n\n" +
+		"Score `= turn.state.score`. [Add two](?add=2) [Add three](?add=3)\n"
+	e, file := testEngine(t, map[string]string{"play.md": doc})
+	first := take(t, e, Request{Location: file("play.md")})
+	wants(t, "the first page", first, []string{"Score 0."}, []string{"- page"})
+
+	req, _ := Follow(first.Header, "?add=2")
+	req.Input = map[string]string{"say": "hi"}
+	second := take(t, e, req)
+	third := follow(t, e, second, "?add=3")
+	wants(t, "the third page", third, []string{
+		"page 1: play, score 0, said -, typed -, added -",
+		"page 2: play, score 2, said hi, typed hi, added 2",
+		"Score 5.",
+	}, []string{"page 3"})
+
+	// From the first page again: the second and third pages aren't in
+	// this branch's trail.
+	branch := follow(t, e, first, "?add=3")
+	wants(t, "a branch from the first page", branch, []string{"page 1: play, score 0", "Score 3."}, []string{"page 2"})
 }

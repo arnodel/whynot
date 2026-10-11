@@ -126,14 +126,23 @@ type turnInput struct {
 	// passage is the passage to show, query and input the request's.
 	passage      string
 	query, input map[string]string
+	// trail is the pages that led to the turn, oldest first (turn.trail).
+	trail []*snapshot
 	// seed seeds math.random, so that the same request gives the same
 	// numbers.
 	seed int64
 }
 
+// turnOutput is what a turn leaves: the state, the passage it ended on,
+// and its note.
+type turnOutput struct {
+	state, note any
+	passage     string
+}
+
 // run runs a turn of prog, in a fresh sandbox, writing its page to p. It
 // returns the state and the passage the turn leaves.
-func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage string, err error) {
+func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err error) {
 	def := rt.RuntimeContextDef{
 		HardLimits:    rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
 		RequiredFlags: rt.ComplyIoSafe,
@@ -217,6 +226,8 @@ func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage
 		turn.Set(rt.StringValue("query"), stringTable(in.query))
 		turn.Set(rt.StringValue("input"), stringTable(in.input))
 		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
+		turn.Set(rt.StringValue("note"), rt.TableValue(rt.NewTable()))
+		turn.Set(rt.StringValue("trail"), trailTable(r, in.trail))
 
 		thread := r.MainThread()
 		turnChunk, err := r.CompileAndLoadLuaChunk("turn", []byte(turnLua), rt.TableValue(env))
@@ -251,14 +262,61 @@ func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage
 		if _, err := rt.Call1(thread, pageFn, rt.TableValue(turn)); err != nil {
 			return err
 		}
-		newState, err = fromLua(turn.Get(rt.StringValue("state")), 0)
+		out.state, err = fromLua(turn.Get(rt.StringValue("state")), 0)
 		if err != nil {
 			return fmt.Errorf("turn.state: %w", err)
 		}
-		newPassage = turnPassage()
+		out.note, err = fromLua(turn.Get(rt.StringValue("note")), 0)
+		if err != nil {
+			return fmt.Errorf("turn.note: %w", err)
+		}
+		out.passage = turnPassage()
 		return nil
 	}, def, io.Discard)
-	return newState, newPassage, err
+	return out, err
+}
+
+// trailTable makes turn.trail: a list of the pages in trail, each a table
+// whose fields (state, note, passage, query, input) are made the first
+// time they're read, so that a long trail costs only what's used.
+func trailTable(r *rt.Runtime, trail []*snapshot) rt.Value {
+	list := rt.NewTable()
+	for i, s := range trail {
+		entry := rt.NewTable()
+		meta := rt.NewTable()
+		index := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+			key, _ := c.Arg(1).TryString()
+			var v rt.Value
+			switch key {
+			case "state":
+				v = toLua(s.state)
+			case "note":
+				v = toLua(s.note)
+				if v.IsNil() {
+					v = rt.TableValue(rt.NewTable())
+				}
+			case "passage":
+				v = rt.StringValue(s.passage)
+			case "query":
+				query := map[string]string{}
+				for k, vs := range s.request.Location.Query() {
+					query[k] = vs[0]
+				}
+				v = stringTable(query)
+			case "input":
+				v = stringTable(s.request.Input)
+			}
+			if !v.IsNil() {
+				entry.Set(rt.StringValue(key), v)
+			}
+			return c.PushingNext1(t.Runtime, v), nil
+		}, "trail", 2, false)
+		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
+		meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
+		entry.SetMetatable(meta)
+		list.Set(rt.IntValue(int64(i+1)), rt.TableValue(entry))
+	}
+	return rt.TableValue(list)
 }
 
 // goFunction sets t's field name to a Go function.
