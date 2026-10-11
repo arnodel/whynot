@@ -191,6 +191,11 @@ func (a *App) Frame(events []input.Event, now time.Duration) {
 		case whynot.LinkClick:
 			a.followFrom(e.Child, ev.Destination)
 		case whynot.AnchorClick:
+			if a.pageOf(j.stack.views[e.Child].Document()) != nil {
+				// A passage, on a page of a whymark document.
+				a.followFrom(e.Child, "#"+url.PathEscape(ev.ID))
+				break
+			}
 			a.arrival = arrival{}
 			j.stack.scrollToFragment(e.Child, ev.ID)
 		}
@@ -205,6 +210,16 @@ func (a *App) Frame(events []input.Event, now time.Duration) {
 // new one. A link to that page itself scrolls the stack there.
 func (a *App) followFrom(i int, dest string) {
 	page := a.journal.pages[i]
+	if req, ok := a.whymarkLink(a.journal.stack.views[i].Document(), dest); ok {
+		// A turn from that page of a whymark document.
+		doc, err := a.takeTurn(req)
+		if err != nil {
+			log.Printf("taking a turn of %s: %v", req.Location, err)
+			return
+		}
+		a.branchFrom(i, doc, req.Location)
+		return
+	}
 	resolved, err := resolveAgainst(page.location, dest)
 	if err != nil {
 		log.Printf("link destination %q: %v", dest, err)
@@ -222,12 +237,18 @@ func (a *App) followFrom(i int, dest string) {
 		}
 		return
 	}
-	// Back at page i, as if the pages after it hadn't been visited.
+	a.branchFrom(i, doc, resolved)
+}
+
+// branchFrom shows doc, loaded from location by a link in page i of the
+// trail, as if the pages after page i hadn't been visited.
+func (a *App) branchFrom(i int, doc *whynot.Document, location *url.URL) {
+	page := a.journal.pages[i]
 	view := a.journal.stack.views[i]
 	a.history, a.future = a.history[:page.first], nil
 	a.Panel.SetView(view)
 	a.location = page.location
-	a.show(doc, resolved)
+	a.show(doc, location)
 }
 
 // Draw draws what's shown, at now: the current page, or in journal mode

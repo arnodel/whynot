@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/browser/internal/whymark"
 	"github.com/arnodel/whynot/codeblocks/chromahighlight"
 	"github.com/arnodel/whynot/codeblocks/kroki"
 	"github.com/arnodel/whynot/fetch"
@@ -96,6 +97,10 @@ type App struct {
 	registry *fetch.Registry
 	// parser parses every document, with the code-block plugins.
 	parser *whynot.Parser
+	// engine takes the turns of whymark documents, and pages keeps, for
+	// each page of one, its header and the request it answered.
+	engine *whymark.Engine
+	pages  map[*whynot.Document]*whymarkPage
 	// arrival is what's left to do as the current document arrives.
 	arrival arrival
 	// journal is journal mode's state, nil outside it (see ToggleJournal).
@@ -156,6 +161,7 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 			whynot.WithCodeBlockPlugin(kroki.Plugin{}),
 			whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 		),
+		engine:    &whymark.Engine{Registry: registry},
 		darkTheme: dark,
 		zoom:      1,
 		touch:     runtime.GOOS == "android" || runtime.GOOS == "ios",
@@ -178,7 +184,7 @@ type arrival struct {
 // Panel.View().Document().Title()); every later navigation goes through Follow/
 // Reload/Paste/Back/Forward instead, which also push history.
 func (a *App) Open(location *url.URL) {
-	a.location = location
+	a.location = a.locationOf(a.Panel.View().Document(), location)
 	a.arrive(location.Fragment)
 	a.updateWindowTitle()
 }
@@ -361,6 +367,9 @@ func (a *App) updateWindowTitle() {
 // documentTitle returns doc's title: the title its front matter gives,
 // else its first heading's text.
 func (a *App) documentTitle(doc *whynot.Document) (string, bool) {
+	if p := a.pageOf(doc); p != nil && p.header.Title != "" {
+		return p.header.Title, true
+	}
 	if raw := doc.RawFrontMatter(); raw != "" {
 		if raw != a.frontMatter {
 			a.frontMatter, a.frontMatterTitle = raw, frontMatterTitle(raw)
@@ -386,11 +395,24 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 // rest comes in, in the background. Content that isn't Markdown is an
 // error, and a web page is a *webPageError, which App opens in a web
 // browser instead.
+//
+// A whymark document is shown through its engine (see package whymark):
+// the Document is the page of a turn starting it, at location's passage
+// if it names one.
 func (a *App) Load(location *url.URL) (*whynot.Document, error) {
 	doc, err := loadDocument(a.parser, a.registry, location)
+	if errors.Is(err, errWhymark) {
+		return a.takeTurn(whymark.Request{Location: location})
+	}
 	if err != nil {
 		return nil, loadError(err, location)
 	}
+	a.watch(doc)
+	return doc, nil
+}
+
+// watch calls OnDocumentChange, if set, as more of doc arrives.
+func (a *App) watch(doc *whynot.Document) {
 	if f := a.OnDocumentChange; f != nil {
 		go func() {
 			for range doc.Updates() {
@@ -398,7 +420,15 @@ func (a *App) Load(location *url.URL) (*whynot.Document, error) {
 			}
 		}()
 	}
-	return doc, nil
+}
+
+// locationOf returns where doc, loaded from location, is: for a page of a
+// whymark document, where its header says, with its passage.
+func (a *App) locationOf(doc *whynot.Document, location *url.URL) *url.URL {
+	if p := a.pageOf(doc); p != nil {
+		return p.header.Location
+	}
+	return location
 }
 
 // NewView returns a View of doc with the current fonts and StyleSheet.
@@ -431,6 +461,12 @@ func (a *App) Follow(dest string) {
 		}
 		return
 	}
+	if a.overlaid == nil {
+		if req, ok := a.whymarkLink(a.Panel.View().Document(), dest); ok {
+			a.followTurn(req)
+			return
+		}
+	}
 	resolved, err := a.ResolveLink(dest)
 	if err != nil {
 		log.Printf("link destination %q: %v", dest, err)
@@ -439,10 +475,28 @@ func (a *App) Follow(dest string) {
 	a.follow(resolved)
 }
 
+// followTurn takes the turn req, from the current page, and shows its
+// page, as Follow does.
+func (a *App) followTurn(req whymark.Request) {
+	doc, err := a.takeTurn(req)
+	if err != nil {
+		log.Printf("taking a turn of %s: %v", req.Location, err)
+		return
+	}
+	a.show(doc, req.Location)
+}
+
 // FollowAnchor is Follow for a link within the current document to the
 // heading with the given id, already percent-decoded, as in a
 // whynot.AnchorClick.
 func (a *App) FollowAnchor(id string) {
+	if a.overlaid == nil {
+		// A passage, on a page of a whymark document.
+		if req, ok := a.whymarkLink(a.Panel.View().Document(), "#"+url.PathEscape(id)); ok {
+			a.followTurn(req)
+			return
+		}
+	}
 	resolved := *a.location
 	resolved.Fragment, resolved.RawFragment = id, ""
 	a.follow(&resolved)
@@ -498,10 +552,19 @@ func (a *App) show(doc *whynot.Document, location *url.URL) {
 	a.place(view)
 	a.pushHistory() // must run before SetView - it reads the page being left
 	a.Panel.SetView(view)
-	a.location = location
+	a.location = a.locationOf(doc, location)
 	a.restack()
-	a.arrive(location.Fragment)
+	if a.pageOf(doc) != nil {
+		// A page's fragment is its passage, not a heading to scroll to.
+		a.arrive("")
+	} else {
+		a.arrive(location.Fragment)
+	}
 	a.updateWindowTitle()
+	// A whymark document starting, which reads best as a trail.
+	if p := a.pageOf(doc); p != nil && p.request.FromPageID == "" && p.header.Journal && a.journal == nil {
+		a.ToggleJournal()
+	}
 }
 
 // openIfWebPage opens location in a web browser if err says it's a web
@@ -605,7 +668,14 @@ func (a *App) Reload() {
 	if a.overlaid != nil {
 		return
 	}
-	doc, err := a.Load(a.location)
+	var doc *whynot.Document
+	var err error
+	if p := a.pageOf(a.Panel.View().Document()); p != nil {
+		// The same request again.
+		doc, err = a.takeTurn(p.request)
+	} else {
+		doc, err = a.Load(a.location)
+	}
 	if err != nil {
 		if !openIfWebPage(err, a.location) {
 			log.Printf("reloading %s: %v", a.location, err)

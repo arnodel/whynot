@@ -126,6 +126,9 @@ type turnInput struct {
 	// passage is the passage to show, query and input the request's.
 	passage      string
 	query, input map[string]string
+	// seed seeds math.random, so that the same request gives the same
+	// numbers.
+	seed int64
 }
 
 // run runs a turn of prog, in a fresh sandbox, writing its page to p. It
@@ -203,6 +206,12 @@ func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage
 		}, 1, false)
 		// They only reach the turn's own page.
 		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, write, writeHeaders, started, heading)
+
+		// Pages are determined by their requests, random numbers included.
+		math := env.Get(rt.StringValue("math")).AsTable()
+		if _, err := rt.Call1(r.MainThread(), math.Get(rt.StringValue("randomseed")), rt.IntValue(in.seed)); err != nil {
+			return err
+		}
 
 		turn.Set(rt.StringValue("state"), toLua(in.state))
 		turn.Set(rt.StringValue("query"), stringTable(in.query))

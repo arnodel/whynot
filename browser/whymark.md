@@ -129,7 +129,9 @@ after a passage's blank lines can still write the header, or go elsewhere. `turn
 the page has started is an error.
 
 **The sandbox:** the Lua standard libraries base, string, table, math, utf8 and coroutine,
-and nothing else: no files, no network. A turn's CPU and memory are limited.
+and nothing else: no files, no network. A turn's CPU and memory are limited. `math.random`
+is seeded from the request, so the same request gives the same numbers: a page, Reload's
+included, is determined by its request.
 
 **A failed turn**, whether the document doesn't compile or its code raises an error, gives
 a page all the same: the error, and the state the turn started from.

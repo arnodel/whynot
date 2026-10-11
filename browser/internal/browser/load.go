@@ -1,6 +1,8 @@
 package browser
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -48,17 +50,27 @@ func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url
 		if err := checkMarkdown(mediaType, data, location); err != nil {
 			return nil, err
 		}
+		if isWhymark(headOf(data)) {
+			return nil, errWhymark
+		}
 		return parser.Parse(data, base), nil
 	}
 	if err := checkMarkdown(mediaType, nil, location); err != nil {
 		body.Close()
 		return nil, err
 	}
+	br := bufio.NewReader(body)
+	head := readHead(br)
+	if isWhymark(head) {
+		body.Close()
+		return nil, errWhymark
+	}
+	rest := io.MultiReader(bytes.NewReader(head), br)
 	doc, w := parser.Stream(base)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, err := io.Copy(w, body); err != nil {
+		if _, err := io.Copy(w, rest); err != nil {
 			log.Printf("loading %s: %v", location, err)
 		}
 		body.Close()
