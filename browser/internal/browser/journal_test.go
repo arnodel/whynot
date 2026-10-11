@@ -32,7 +32,7 @@ func journalApp(t *testing.T) (app *App, dir string) {
 func titles(app *App) []string {
 	var out []string
 	for _, v := range app.journal.stack.views {
-		title, _ := v.Document().Title()
+		title, _ := app.documentTitle(v.Document())
 		out = append(out, title)
 	}
 	return out

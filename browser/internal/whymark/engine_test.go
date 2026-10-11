@@ -338,3 +338,72 @@ func TestRunProgram(t *testing.T) {
 		}
 	}
 }
+
+// TestRandomFromRequest checks that math.random gives the same numbers
+// for the same request, Reload's, and others for another.
+func TestRandomFromRequest(t *testing.T) {
+	doc := "---\nwhymark:\n  version: 1\n---\n# Roll\n\nYou roll `= math.random(1000000)`. [Again](?again=1)\n"
+	e, file := testEngine(t, map[string]string{"roll.md": doc})
+	first := take(t, e, Request{Location: file("roll.md")})
+	req, _ := Follow(first.Header, "?again=1")
+	a, b := take(t, e, req), take(t, e, req)
+	if a.body != b.body {
+		t.Errorf("the same request rolled differently:\n%s\n%s", a.body, b.body)
+	}
+	req.Location.RawQuery = "again=2"
+	if c := take(t, e, req); c.body == a.body {
+		t.Error("another request rolled the same")
+	}
+}
+
+// TestExamples plays the browser's example documents, in examples/.
+func TestExamples(t *testing.T) {
+	read := func(name string) string {
+		data, err := os.ReadFile("../../examples/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md")})
+
+	hall := take(t, e, Request{Location: file("cellar.md")})
+	won := follow(t, e, follow(t, e, follow(t, e, hall, "#take-the-lamp"), "#hall"), "#cellar")
+	wants(t, "the cellar example", won, []string{"You win!"}, []string{"The page stopped"})
+
+	shop := take(t, e, Request{Location: file("clockmaker.md")})
+	wants(t, "the shop", shop, []string{"Every clock in the shop has stopped", "10 minutes to midnight"}, []string{"The page stopped", "Describe the shop"})
+	page := shop
+	for range 5 {
+		page = follow(t, e, page, "#the-workbench")
+		if strings.Contains(page.body, "brass key") {
+			break
+		}
+		page = follow(t, e, page, "#the-shop")
+	}
+	if !strings.Contains(page.body, "brass key") {
+		t.Fatalf("five searches of the workbench found no key:\n%s", page.body)
+	}
+	page = follow(t, e, follow(t, e, page, "#the-shop"), "#the-cabinet")
+	wants(t, "the cabinet", page, []string{"clock oil"}, nil)
+	page = follow(t, e, follow(t, e, page, "#the-shop"), "#the-stairs")
+	page = follow(t, e, page, "#midnight")
+	wants(t, "midnight", page, []string{"You've won"}, []string{"The page stopped"})
+}
+
+// TestSnapshotParents checks that each page remembers the page it came
+// from, and the request it answered.
+func TestSnapshotParents(t *testing.T) {
+	e, file := testEngine(t, map[string]string{"cellar.md": cellar})
+	hall := take(t, e, Request{Location: file("cellar.md")})
+	lamp := follow(t, e, hall, "#take-the-lamp")
+	dark := follow(t, e, hall, "#cellar")
+	for _, c := range []struct {
+		page, parent, passage string
+	}{{hall.PageID, "", ""}, {lamp.PageID, hall.PageID, "take-the-lamp"}, {dark.PageID, hall.PageID, "cellar"}} {
+		snap := e.pages[c.page]
+		if snap.parent != c.parent || snap.request.Location.Fragment != c.passage {
+			t.Errorf("page %s: parent %q, request %s; want parent %q, passage %q", c.page, snap.parent, snap.request.Location, c.parent, c.passage)
+		}
+	}
+}

@@ -48,6 +48,14 @@ Linux, **Ctrl** takes the place of **Cmd**.
 | Show FPS and frame timings | **F**, or start with `-debug-stats` |
 | Outline what's under the pointer | start with `-debug-hit` |
 
+## Documents that run
+
+A **whymark** document is Markdown whose front matter says so: passages, with Lua in them,
+that make a page at a time as you follow links. The viewer shows its pages, and journal mode
+shows how you got to one. Try [the cellar](../../examples/cellar.md) or
+[the clockmaker's shop](../../examples/clockmaker.md); [whymark.md](../../whymark.md) is
+the format's specification.
+
 ## What it does with links and images
 
 - A link to a Markdown document opens in the viewer. A link to a web page (one served as

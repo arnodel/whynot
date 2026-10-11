@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +38,11 @@ type snapshot struct {
 	document string // the document's URL, with no query or fragment
 	passage  string
 	state    any
+	// request is the request the page answered, and parent the page it
+	// came from (its FromPageID), "" for a document's start: together,
+	// pages make a tree of what a reader did.
+	request Request
+	parent  string
 }
 
 // compiled is a document compiled, cached by its content: its program,
@@ -93,6 +101,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	}
 
 	id, snap := e.newPage(document.String())
+	snap.request, snap.parent = req, req.FromPageID
 	ctx, cancel := context.WithCancel(ctx)
 	pr, pw := io.Pipe()
 	p := &page{
@@ -113,7 +122,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			// on, within its CPU limit, but fails at its next write.
 			var newState any
 			var newPassage string
-			newState, newPassage, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input})
+			newState, newPassage, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input, seed: seed(req)})
 			if err == nil {
 				snap.state, snap.passage = newState, newPassage
 			}
@@ -130,6 +139,18 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 		fmt.Fprintf(pw, "\n\n---\n\n**The page stopped:**\n\n```text\n%s\n```\n", strings.TrimPrefix(err.Error(), "error: "))
 	}()
 	return cancelOnClose{ReadCloser: pr, cancel: cancel}, nil
+}
+
+// seed returns a seed for math.random from req, so that the same request
+// gives the same numbers, and another, others.
+func seed(req Request) int64 {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s\x00%s", req.Location, req.FromPageID)
+	keys := slices.Sorted(maps.Keys(req.Input))
+	for _, k := range keys {
+		fmt.Fprintf(h, "\x00%s\x00%s", k, req.Input[k])
+	}
+	return int64(h.Sum64())
 }
 
 // fetch returns the source of the document at location, which must be a
