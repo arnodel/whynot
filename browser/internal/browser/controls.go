@@ -2,6 +2,7 @@ package browser
 
 import (
 	"bytes"
+	"regexp"
 	"sync"
 
 	"github.com/arnodel/whynot"
@@ -9,10 +10,11 @@ import (
 	"github.com/yuin/goldmark/v2/parser"
 )
 
-// A whymark page's controls are what follows its last top-level thematic
-// break ("---"): links that only make sense on the current page, such as
-// "Play again" or a menu of actions. In journal mode, the earlier pages of
-// the trail are shown without them.
+// A whymark page's controls are what follows its controls heading, a
+// top-level "## (Controls)", the last one if there are several: what only
+// makes sense on the current page, such as "Play again" or a menu of
+// actions. The heading is quiet: it's never shown. In journal mode, the
+// earlier pages of the trail are shown without their controls.
 
 // pageSource is a page's Markdown, kept as it arrives.
 type pageSource struct {
@@ -32,14 +34,21 @@ func (s *pageSource) bytes() []byte {
 	return bytes.Clone(s.buf.Bytes())
 }
 
-// controlsStart returns where a page's controls start in source: the start
-// of its last top-level thematic break, or -1 if it has none.
+// controlsHeading matches a controls heading's line.
+var controlsHeading = regexp.MustCompile(`(?i)^ {0,3}##[ \t]+\([ \t]*controls[ \t]*\)[ \t]*#*[ \t]*$`)
+
+// controlsStart returns where a page's controls start in source, its
+// Markdown: the start of its last controls heading, or -1 if it has none.
 func controlsStart(source []byte) int {
 	doc := parser.New().Parse(source)
 	start := -1
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
-		if _, ok := n.(*gmast.ThematicBreak); ok {
-			start = bytes.LastIndexByte(source[:n.Pos()], '\n') + 1
+		if h, ok := n.(*gmast.Heading); ok && h.Level == 2 {
+			lineStart := bytes.LastIndexByte(source[:n.Pos()], '\n') + 1
+			line, _, _ := bytes.Cut(source[lineStart:], []byte("\n"))
+			if controlsHeading.Match(bytes.TrimRight(line, "\r")) {
+				start = lineStart
+			}
 		}
 	}
 	return start

@@ -8,17 +8,20 @@ import (
 )
 
 // TestControlsStart checks where a page's controls start: at its last
-// top-level thematic break, not at a setext heading's underline, nor at a
-// break inside a code block.
+// top-level controls heading, whatever its case, and not at a thematic
+// break, another heading, or a controls heading in a code block or a
+// quote.
 func TestControlsStart(t *testing.T) {
 	for _, c := range []struct {
 		source string
 		want   string // what's before the controls, or "" for none
 	}{
-		{"A page.\n\n---\n\n[Next](#next)\n", "A page.\n\n"},
-		{"One.\n\n---\n\nTwo.\n\n***\n\n[Next](#next)\n", "One.\n\n---\n\nTwo.\n\n"},
-		{"Title\n---\n\nText.\n", ""},
-		{"Text.\n\n```\n---\n```\n", ""},
+		{"A page.\n\n## (Controls)\n\n[Next](#next)\n", "A page.\n\n"},
+		{"One.\n\n## (controls)\n\nTwo.\n\n## ( Controls )\n\n[Next](#next)\n", "One.\n\n## (controls)\n\nTwo.\n\n"},
+		{"A page.\n\n---\n\nMore prose.\n", ""},
+		{"A page.\n\n## Controls\n\nNot quiet.\n", ""},
+		{"Text.\n\n```\n## (Controls)\n```\n", ""},
+		{"> ## (Controls)\n", ""},
 	} {
 		start := controlsStart([]byte(c.source))
 		got := ""
@@ -36,8 +39,8 @@ func TestControlsStart(t *testing.T) {
 // with them, and that the pages themselves keep them.
 func TestJournalHidesControls(t *testing.T) {
 	doc := "---\nwhymark:\n  version: 1\n---\n" +
-		"# Hall\n\nA hall.\n\n---\n\n[Go down](#cellar)\n\n" +
-		"# Cellar\n\nA cellar.\n\n---\n\n[Go up](#hall)\n"
+		"# Hall\n\nA hall.\n\n---\n\nA decorative break, then more.\n\n## (Controls)\n\n[Go down](#cellar)\n\n" +
+		"# Cellar\n\nA cellar.\n\n## (Controls)\n\n[Go up](#hall)\n"
 	dir := t.TempDir()
 	start := writeTempMD(t, dir, "start.md", "# Start\n\n[Play](house.md)\n")
 	writeTempMD(t, dir, "house.md", doc)
@@ -64,11 +67,11 @@ func TestJournalHidesControls(t *testing.T) {
 		return b.String()
 	}
 	drawApp(app)
-	if got := text(1); !strings.Contains(got, "A hall") || strings.Contains(got, "Go down") {
-		t.Errorf("the hall, in the trail, shows %q: want it without its controls", got)
+	if got := text(1); !strings.Contains(got, "A hall") || !strings.Contains(got, "more") || strings.Contains(got, "Go down") {
+		t.Errorf("the hall, in the trail, shows %q: want it, after its decorative break too, without its controls", got)
 	}
-	if got := text(2); !strings.Contains(got, "Go up") {
-		t.Errorf("the current page shows %q: want its controls", got)
+	if got := text(2); !strings.Contains(got, "Go up") || strings.Contains(got, "Controls") {
+		t.Errorf("the current page shows %q: want its controls, without their heading", got)
 	}
 
 	app.Back()

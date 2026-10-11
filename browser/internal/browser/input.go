@@ -55,11 +55,14 @@ func (p *pageInput) get() *inputField {
 // of a page.
 var inputFence = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})[ \t]*input(?:[ \t]+(\\S+))?(?:[ \t]+(\\S+))?[ \t]*$")
 
-// inputFilter passes a page's Markdown on to w without its input blocks,
-// and records the last one's field in input.
+// inputFilter passes a page's Markdown on to w without its input blocks
+// and its controls headings (see controls.go), which it passes on to
+// source, if set, with the rest, and records the last input block's field
+// in input.
 type inputFilter struct {
-	w     io.Writer
-	input *pageInput
+	w      io.Writer
+	source io.Writer
+	input  *pageInput
 
 	pending []byte // the end of what was written, an unfinished line
 	// fence is the fence of the code block being passed through, or
@@ -123,11 +126,26 @@ func (f *inputFilter) line(line string) error {
 			f.field, f.inputFence = &inputField{name: m[2], target: m[3]}, m[1]
 			return nil
 		}
+		if controlsHeading.MatchString(trimmed) {
+			// Quiet: kept only where the controls are looked for.
+			return f.write(f.source, line)
+		}
 		if t := strings.TrimLeft(trimmed, " "); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
 			f.fence = t[:strings.IndexFunc(t+"x", func(r rune) bool { return r != rune(t[0]) })]
 		}
 	}
-	_, err := io.WriteString(f.w, line)
+	if err := f.write(f.w, line); err != nil {
+		return err
+	}
+	return f.write(f.source, line)
+}
+
+// write writes line to w, if it's set.
+func (f *inputFilter) write(w io.Writer, line string) error {
+	if w == nil {
+		return nil
+	}
+	_, err := io.WriteString(w, line)
 	return err
 }
 

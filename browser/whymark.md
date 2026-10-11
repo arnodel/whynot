@@ -214,10 +214,19 @@ counts. In other Markdown viewers, the block shows as code.
 
 ### Controls
 
-What follows a page's last top-level thematic break (`---`) is its **controls**: what only
-makes sense on the current page, such as a menu of actions or "Play again". A user agent
-showing earlier pages, as a trail, may leave their controls out. A page without a thematic
-break has no controls.
+A page's **controls** are what only makes sense while it's current, such as a menu of
+actions or "Play again". They're what follows its **controls heading**: a top-level
+`## (Controls)` (whatever its case), the last one if there are several. The heading is quiet,
+like a quiet passage's: a user agent doesn't show it. A user agent showing earlier pages, as
+a trail, may leave their controls out. A page without a controls heading has none.
+
+```markdown
+You take the lamp from its hook.
+
+## (Controls)
+
+- [Back to the hall](#hall)
+```
 
 ## Following links
 

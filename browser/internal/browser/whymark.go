@@ -83,7 +83,7 @@ func (a *App) takeTurn(req whymark.Request) (*whynot.Document, error) {
 	}
 	doc, w := a.parser.Stream(whynot.WithBaseURL(h.Location))
 	page := &whymarkPage{header: h, request: req}
-	filter := &inputFilter{w: io.MultiWriter(w, &page.source), input: &page.input}
+	filter := &inputFilter{w: w, source: &page.source, input: &page.input}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
