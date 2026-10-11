@@ -38,6 +38,11 @@ type snapshot struct {
 	document string // the document's URL, with no query or fragment
 	passage  string
 	state    any
+	// request is the request the page answered, and parent the page it
+	// came from (its FromPageID), "" for a document's start: together,
+	// pages make a tree of what a reader did.
+	request Request
+	parent  string
 }
 
 // compiled is a document compiled, cached by its content: its program,
@@ -96,6 +101,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	}
 
 	id, snap := e.newPage(document.String())
+	snap.request, snap.parent = req, req.FromPageID
 	ctx, cancel := context.WithCancel(ctx)
 	pr, pw := io.Pipe()
 	p := &page{

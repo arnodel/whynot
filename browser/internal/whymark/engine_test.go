@@ -390,3 +390,20 @@ func TestExamples(t *testing.T) {
 	page = follow(t, e, page, "#midnight")
 	wants(t, "midnight", page, []string{"You've won"}, []string{"The page stopped"})
 }
+
+// TestSnapshotParents checks that each page remembers the page it came
+// from, and the request it answered.
+func TestSnapshotParents(t *testing.T) {
+	e, file := testEngine(t, map[string]string{"cellar.md": cellar})
+	hall := take(t, e, Request{Location: file("cellar.md")})
+	lamp := follow(t, e, hall, "#take-the-lamp")
+	dark := follow(t, e, hall, "#cellar")
+	for _, c := range []struct {
+		page, parent, passage string
+	}{{hall.PageID, "", ""}, {lamp.PageID, hall.PageID, "take-the-lamp"}, {dark.PageID, hall.PageID, "cellar"}} {
+		snap := e.pages[c.page]
+		if snap.parent != c.parent || snap.request.Location.Fragment != c.passage {
+			t.Errorf("page %s: parent %q, request %s; want parent %q, passage %q", c.page, snap.parent, snap.request.Location, c.parent, c.passage)
+		}
+	}
+}
