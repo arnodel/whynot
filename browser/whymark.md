@@ -212,6 +212,13 @@ typed as a request from the page, to the block's target, with the text as the fi
 `input`: `input: {say: …}`. A page has at most one field: if it has several blocks, the last
 counts. In other Markdown viewers, the block shows as code.
 
+### Controls
+
+What follows a page's last top-level thematic break (`---`) is its **controls**: what only
+makes sense on the current page, such as a menu of actions or "Play again". A user agent
+showing earlier pages, as a trail, may leave their controls out. A page without a thematic
+break has no controls.
+
 ## Following links
 
 A user agent makes the request for a link on a page from how the link is written:

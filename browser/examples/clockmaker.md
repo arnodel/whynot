@@ -28,9 +28,12 @@ function spend(minutes)
   return turn.state.minutes > 0
 end
 
+-- footer writes the page's status, after its menu: what follows the
+-- page's last "---", its controls, which journal mode leaves out of the
+-- earlier pages.
 function footer()
   local carrying = #turn.state.items > 0 and table.concat(turn.state.items, ", ") or "nothing"
-  turn.write("\n---\n\n*", turn.state.minutes, " minutes to midnight · carrying ", carrying, "*\n")
+  turn.write("\n*", turn.state.minutes, " minutes to midnight · carrying ", carrying, "*\n")
 end
 ```
 
@@ -49,6 +52,8 @@ They hold a can of clock oil.
 ```noai
 The pendulums hang still. Somewhere, a spring creaks as it cools.
 ```
+
+---
 
 - [Search the workbench](#the-workbench)
 - [Open the cabinet](#the-cabinet)
@@ -72,6 +77,8 @@ Nothing but a pricked finger.
 `end`
 `end`
 
+---
+
 - [Back to the shop](#the-shop)
 
 `footer()`
@@ -88,6 +95,8 @@ The brass key turns. Inside, on a velvet shelf: a can of clock oil.
 The cabinet is locked. The keyhole is small, and brass.
 `end`
 
+---
+
 - [Back to the shop](#the-shop)
 
 `footer()`
@@ -98,9 +107,13 @@ The cabinet is locked. The keyhole is small, and brass.
 The great clock fills the attic: wheels as tall as you, all seized.
 `if has("oil") then`
 
+---
+
 - [Oil the wheels and wind the clock](#midnight)
 `else`
 Its gears won't move. They need oil.
+
+---
 
 - [Go back down](#the-shop)
 `end`
