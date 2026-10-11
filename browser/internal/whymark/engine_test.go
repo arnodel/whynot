@@ -365,7 +365,7 @@ func TestExamples(t *testing.T) {
 		}
 		return string(data)
 	}
-	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md")})
+	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md"), "notebook.md": read("notebook.md")})
 
 	hall := take(t, e, Request{Location: file("cellar.md")})
 	won := follow(t, e, follow(t, e, follow(t, e, hall, "#take-the-lamp"), "#hall"), "#cellar")
@@ -389,6 +389,19 @@ func TestExamples(t *testing.T) {
 	page = follow(t, e, follow(t, e, page, "#the-shop"), "#the-stairs")
 	page = follow(t, e, page, "#midnight")
 	wants(t, "midnight", page, []string{"You've won"}, []string{"The page stopped"})
+
+	// The notebook: what's written on each page, walking back.
+	write := func(p turned, text string) turned {
+		req, _ := Follow(p.Header, "?")
+		req.Input = map[string]string{"entry": text}
+		return take(t, e, req)
+	}
+	empty := take(t, e, Request{Location: file("notebook.md")})
+	wants(t, "the empty notebook", empty, []string{"Nothing written yet.", "```input entry"}, nil)
+	two := write(write(empty, "eggs"), "milk")
+	wants(t, "two entries", two, []string{"1. eggs", "2. milk"}, []string{"Nothing written"})
+	other := write(empty, "tea")
+	wants(t, "another notebook, from the start", other, []string{"1. tea"}, []string{"eggs"})
 }
 
 // TestSnapshotParents checks that each page remembers the page it came

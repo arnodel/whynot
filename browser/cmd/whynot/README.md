@@ -52,9 +52,11 @@ Linux, **Ctrl** takes the place of **Cmd**.
 
 A **whymark** document is Markdown whose front matter says so: passages, with Lua in them,
 that make a page at a time as you follow links. The viewer shows its pages, and journal mode
-shows how you got to one. Try [the cellar](../../examples/cellar.md) or
-[the clockmaker's shop](../../examples/clockmaker.md); [whymark.md](../../whymark.md) is
-the format's specification.
+shows how you got to one. A page can ask for text: a strip below it opens a field (Enter
+sends). Try [the cellar](../../examples/cellar.md),
+[the clockmaker's shop](../../examples/clockmaker.md) or
+[the notebook](../../examples/notebook.md); [whymark.md](../../whymark.md) is the format's
+specification.
 
 ## What it does with links and images
 

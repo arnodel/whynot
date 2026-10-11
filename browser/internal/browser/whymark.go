@@ -20,6 +20,8 @@ import (
 type whymarkPage struct {
 	header  whymark.Header
 	request whymark.Request
+	// input is the page's input field, as its Markdown arrives.
+	input pageInput
 }
 
 // errWhymark means loadDocument found a whymark document, which is shown
@@ -75,12 +77,15 @@ func (a *App) takeTurn(req whymark.Request) (*whynot.Document, error) {
 		return nil, err
 	}
 	doc, w := a.parser.Stream(whynot.WithBaseURL(h.Location))
+	page := &whymarkPage{header: h, request: req}
+	filter := &inputFilter{w: w, input: &page.input}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, err := io.Copy(w, br); err != nil {
+		if _, err := io.Copy(filter, br); err != nil {
 			log.Printf("taking a turn of %s: %v", h.Location, err)
 		}
+		filter.Close()
 		r.Close()
 		w.Close()
 	}()
@@ -91,7 +96,7 @@ func (a *App) takeTurn(req whymark.Request) (*whynot.Document, error) {
 	if a.pages == nil {
 		a.pages = map[*whynot.Document]*whymarkPage{}
 	}
-	a.pages[doc] = &whymarkPage{header: h, request: req}
+	a.pages[doc] = page
 	a.watch(doc)
 	return doc, nil
 }

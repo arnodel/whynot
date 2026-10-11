@@ -9,3 +9,5 @@
 /browser/cmd/whynot/web/giowhynot
 /browser/cmd/giowhynot/web/giowhynot.wasm
 /browser/cmd/giowhynot/web/wasm_exec.js
+/browser/whynot
+/browser/giowhynot

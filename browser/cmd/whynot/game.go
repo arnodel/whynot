@@ -25,7 +25,11 @@ type game struct {
 	// deviceScale*72 dpi, not zoomed with the document.
 	toolbarFaceSelector fonts.FaceSelector
 	renderer            *ebitenbackend.Renderer
-	debugHit            bool
+	// field is the text field for the page's input block, and strip is
+	// set while the strip below the document, which opens it, shows.
+	field    *inputField
+	strip    bool
+	debugHit bool
 
 	// debugStats shows FPS/TPS and per-frame timing (see
 	// drawDebugStats) - set from -debug-stats at startup, togglable at

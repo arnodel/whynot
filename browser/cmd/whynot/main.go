@@ -69,6 +69,7 @@ func main() {
 	g := &game{
 		app:                 app,
 		toolbarFaceSelector: fonts.NewGoSelector(),
+		field:               newInputField(),
 		renderer:            ebitenbackend.New(),
 		debugHit:            *debugHit,
 		debugStats:          *debugStats,

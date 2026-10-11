@@ -83,14 +83,14 @@ func main() {
 	browserApp.Open(location)
 
 	go func() {
-		if err := run(win, browserApp, doc, tb); err != nil {
+		if err := run(win, browserApp, doc, tb, newDock(renderer)); err != nil {
 			log.Fatal(err)
 		}
 	}()
 	app.Main()
 }
 
-func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) error {
+func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar, d *dock) error {
 	var ops op.Ops
 	for {
 		e := win.Event()
@@ -104,18 +104,24 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar) e
 			toolbarHeight := gtx.Dp(unit.Dp(toolbarLogicalHeight))
 			outsideWidth := int(float64(e.Size.X) / deviceScale)
 			outsideHeight := int(float64(e.Size.Y) / deviceScale)
+			// The dock's height as laid out last frame: the document is
+			// shown above it.
+			browserApp.SetBottomBar(d.height)
 			browserApp.Relayout(outsideWidth, outsideHeight, deviceScale, toolbarHeight)
 			tb.dpi = deviceScale * 72
 
 			tb.update(gtx, browserApp)
-			// Suspended while editing the address bar - pollKeys's
-			// filters match regardless of focus, so e.g. typing "-" or
-			// space into it would otherwise also fire ZoomOut/PageDown.
-			if !tb.editing {
+			d.update(gtx, browserApp)
+			// Suspended while editing the address bar or the dock -
+			// pollKeys's filters match regardless of focus, so e.g. typing
+			// "-" or space into it would otherwise also fire
+			// ZoomOut/PageDown.
+			if !tb.editing && !d.focused(gtx) {
 				pollKeys(gtx, browserApp)
 			}
 			browserApp.Update()
 			doc.layout(gtx)
+			d.layout(gtx)
 			tb.layout(gtx, browserApp)
 
 			e.Frame(gtx.Ops)

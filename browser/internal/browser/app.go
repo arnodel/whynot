@@ -101,6 +101,13 @@ type App struct {
 	// each page of one, its header and the request it answered.
 	engine *whymark.Engine
 	pages  map[*whynot.Document]*whymarkPage
+	// draftView is the View InputDraft last saw current, and draftVersion
+	// changes with it.
+	draftView    *whynot.View
+	draftVersion int
+	// bottomBar is the height of what the app draws below the document
+	// (see SetBottomBar).
+	bottomBar int
 	// arrival is what's left to do as the current document arrives.
 	arrival arrival
 	// journal is journal mode's state, nil outside it (see ToggleJournal).
@@ -800,7 +807,7 @@ func (a *App) Relayout(outsideWidth, outsideHeight int, deviceScale float64, too
 	a.width = int(float64(outsideWidth) * deviceScale)
 	a.height = int(float64(outsideHeight) * deviceScale)
 	a.toolbarHeight = toolbarHeight
-	a.bounds = image.Rect(0, toolbarHeight, a.width, a.height)
+	a.bounds = image.Rect(0, toolbarHeight, a.width, max(toolbarHeight, a.height-a.bottomBar))
 	j := a.stacked()
 	if j == nil {
 		a.Panel.SetBounds(a.bounds)
