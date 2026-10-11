@@ -126,14 +126,25 @@ type turnInput struct {
 	// passage is the passage to show, query and input the request's.
 	passage      string
 	query, input map[string]string
+	// previous is the page the turn comes from (turn.previous), or nil;
+	// pages gives a page's own previous one.
+	previous *snapshot
+	pages    func(*snapshot) *snapshot
 	// seed seeds math.random, so that the same request gives the same
 	// numbers.
 	seed int64
 }
 
+// turnOutput is what a turn leaves: the state, the passage it ended on,
+// and its notes.
+type turnOutput struct {
+	state, notes any
+	passage      string
+}
+
 // run runs a turn of prog, in a fresh sandbox, writing its page to p. It
 // returns the state and the passage the turn leaves.
-func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage string, err error) {
+func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err error) {
 	def := rt.RuntimeContextDef{
 		HardLimits:    rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
 		RequiredFlags: rt.ComplyIoSafe,
@@ -217,6 +228,10 @@ func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage
 		turn.Set(rt.StringValue("query"), stringTable(in.query))
 		turn.Set(rt.StringValue("input"), stringTable(in.input))
 		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
+		turn.Set(rt.StringValue("notes"), rt.TableValue(rt.NewTable()))
+		if in.previous != nil {
+			turn.Set(rt.StringValue("previous"), pageTable(in.previous, in.pages))
+		}
 
 		thread := r.MainThread()
 		turnChunk, err := r.CompileAndLoadLuaChunk("turn", []byte(turnLua), rt.TableValue(env))
@@ -251,14 +266,62 @@ func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage
 		if _, err := rt.Call1(thread, pageFn, rt.TableValue(turn)); err != nil {
 			return err
 		}
-		newState, err = fromLua(turn.Get(rt.StringValue("state")), 0)
+		out.state, err = fromLua(turn.Get(rt.StringValue("state")), 0)
 		if err != nil {
 			return fmt.Errorf("turn.state: %w", err)
 		}
-		newPassage = turnPassage()
+		out.notes, err = fromLua(turn.Get(rt.StringValue("notes")), 0)
+		if err != nil {
+			return fmt.Errorf("turn.notes: %w", err)
+		}
+		out.passage = turnPassage()
 		return nil
 	}, def, io.Discard)
-	return newState, newPassage, err
+	return out, err
+}
+
+// pageTable makes the table of an earlier page, s, as turn.previous is:
+// its fields (state, notes, passage, query, input, and its own previous
+// page) are made the first time they're read, so that looking back costs
+// only as far as a document looks. pages gives a page's previous one.
+func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
+	entry := rt.NewTable()
+	meta := rt.NewTable()
+	index := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+		key, _ := c.Arg(1).TryString()
+		var v rt.Value
+		switch key {
+		case "state":
+			v = toLua(s.state)
+		case "notes":
+			v = toLua(s.notes)
+			if v.IsNil() {
+				v = rt.TableValue(rt.NewTable())
+			}
+		case "passage":
+			v = rt.StringValue(s.passage)
+		case "query":
+			query := map[string]string{}
+			for k, vs := range s.request.Location.Query() {
+				query[k] = vs[0]
+			}
+			v = stringTable(query)
+		case "input":
+			v = stringTable(s.request.Input)
+		case "previous":
+			if p := pages(s); p != nil {
+				v = pageTable(p, pages)
+			}
+		}
+		if !v.IsNil() {
+			entry.Set(rt.StringValue(key), v)
+		}
+		return c.PushingNext1(t.Runtime, v), nil
+	}, "page", 2, false)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
+	meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
+	entry.SetMetatable(meta)
+	return rt.TableValue(entry)
 }
 
 // goFunction sets t's field name to a Go function.

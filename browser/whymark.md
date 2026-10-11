@@ -17,7 +17,9 @@ A document is a program, and a page is its output. A **turn** is one exchange: a
 in, a page out. The user agent reads the page, chooses one of its links, and sends the next
 request.
 
-Given a request and the document's content, the page is determined. So going back shows a
+Given a request and the document's content, the page is determined. The request names the
+page it comes from, which names the one before it, and so on: a page's **trail**, the pages
+that led to it, is part of what determines it. So going back shows a
 page kept from before, with nothing run again; following a link on an earlier page carries
 on from that page, as if nothing after it had happened; and a list of turns, played again,
 gives the same pages.
@@ -108,11 +110,25 @@ Lua code sees the current turn as `turn`, passed to it, never global:
 | `turn.query` | the request's query, as a table of strings |
 | `turn.input` | the fields typed in, by name, as a table of strings |
 | `turn.passage` | the id of the passage shown |
+| `turn.notes` | what this page records of itself, an empty table at the start of every turn; plain data only. Unlike `turn.state`, it isn't carried to the next page, but later pages see it (see below) |
+| `turn.previous` | the page the request came from, or `nil` on a turn starting the document. It has the `state` it left, its `notes`, its `passage`, its request's `query` and `input`, and its own `previous`, back to the start. Changing them changes nothing |
 | `turn.write(...)` | writes its arguments to the page |
 | `turn.write_headers{title = …}` | writes the page's header (see below) |
 | `turn.link(text, query)` | a Markdown link to `?query`, from a table, escaped |
 | `turn.go(id)` | stops this passage and shows passage `id` instead; the page's location follows |
 | `turn.show(id)` | runs passage `id`, without its heading, where it's called, then carries on |
+
+**Earlier pages:** `turn.previous` and the pages before it are the page's trail, newest
+first. A chat, say, keeps each reply in its page's notes, and finds the conversation by
+walking back (the reader's side is in each page's `input`):
+
+```lua
+local pages, p = {}, turn.previous
+while p do
+  table.insert(pages, 1, p)   -- oldest first
+  p = p.previous
+end
+```
 
 `init(turn)`, if defined, returns the starting state, on a turn that starts the document;
 without it, the state starts as an empty table. `page(turn)` writes the page. A document

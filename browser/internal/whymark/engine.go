@@ -38,6 +38,8 @@ type snapshot struct {
 	document string // the document's URL, with no query or fragment
 	passage  string
 	state    any
+	// notes is what the page's turn recorded of itself (turn.notes).
+	notes any
 	// request is the request the page answered, and parent the page it
 	// came from (its FromPageID), "" for a document's start: together,
 	// pages make a tree of what a reader did.
@@ -79,6 +81,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	start := req.FromPageID == ""
 	var state any = &table{}
 	passage := ""
+	var previous *snapshot
 	if !start {
 		from, err := e.page(ctx, req.FromPageID)
 		if err != nil {
@@ -88,6 +91,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			return nil, fmt.Errorf("page %s isn't one of %s's", req.FromPageID, &document)
 		}
 		state, passage = from.state, from.passage
+		previous = from
 	}
 	if req.Location.Fragment != "" {
 		passage = req.Location.Fragment
@@ -120,11 +124,10 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 		if err == nil {
 			// golua can't be interrupted: a turn whose page is closed carries
 			// on, within its CPU limit, but fails at its next write.
-			var newState any
-			var newPassage string
-			newState, newPassage, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input, seed: seed(req)})
+			var out turnOutput
+			out, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input, previous: previous, pages: e.parent, seed: seed(req)})
 			if err == nil {
-				snap.state, snap.passage = newState, newPassage
+				snap.state, snap.passage, snap.notes = out.state, out.passage, out.notes
 			}
 		}
 		if err == nil || ctx.Err() != nil {
@@ -215,6 +218,17 @@ func (e *Engine) newPage(document string) (string, *snapshot) {
 	}
 	e.pages[id] = snap
 	return id, snap
+}
+
+// parent returns the snapshot of the page s came from, or nil if s
+// started its document. Its turn is over, as it was before s's began.
+func (e *Engine) parent(s *snapshot) *snapshot {
+	if s.parent == "" {
+		return nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.pages[s.parent]
 }
 
 // page returns the snapshot behind the page id, once its turn is over.
