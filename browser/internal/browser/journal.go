@@ -104,6 +104,10 @@ func (a *App) restack() {
 	}
 	add(a.Panel.View(), a.location, -1)
 	j.pages[len(j.pages)-1].first = -1
+	// Earlier pages without their controls; the current one, whole.
+	for i := range len(views) - 1 {
+		views[i] = a.trailView(views[i])
+	}
 
 	background, separator := a.stackColors()
 	for _, v := range views {
@@ -111,10 +115,20 @@ func (a *App) restack() {
 	}
 	j.stack = NewViewStack(background, separator, views...)
 	j.stack.top = len(views) - 1
+	cutTop := -1
 	if i := slices.Index(views, top); i >= 0 {
 		j.stack.top = i
+	} else if top != nil {
+		// The page at the top has lost its controls, joining the trail:
+		// its end, at the bottom, is where the reader was.
+		cutTop = slices.IndexFunc(views, func(v *whynot.View) bool { return v != top && a.fullView(v) == top })
 	}
 	j.stack.SetBounds(a.bounds)
+	if cutTop >= 0 {
+		j.stack.top = cutTop
+		views[cutTop].ScrollToEnd()
+		j.stack.clampEnd()
+	}
 	j.stack.SetScrollbar(a.stackScrollbar())
 	j.controller = NewStackController(j.stack)
 }
@@ -244,7 +258,7 @@ func (a *App) followFrom(i int, dest string) {
 // trail, as if the pages after page i hadn't been visited.
 func (a *App) branchFrom(i int, doc *whynot.Document, location *url.URL) {
 	page := a.journal.pages[i]
-	view := a.journal.stack.views[i]
+	view := a.fullView(a.journal.stack.views[i])
 	a.history, a.future = a.history[:page.first], nil
 	a.Panel.SetView(view)
 	a.location = page.location

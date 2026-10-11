@@ -212,6 +212,22 @@ typed as a request from the page, to the block's target, with the text as the fi
 `input`: `input: {say: …}`. A page has at most one field: if it has several blocks, the last
 counts. In other Markdown viewers, the block shows as code.
 
+### Controls
+
+A page's **controls** are what only makes sense while it's current, such as a menu of
+actions or "Play again". They're what follows its **controls heading**: a top-level
+`## (Controls)` (whatever its case), the last one if there are several. The heading is quiet,
+like a quiet passage's: a user agent doesn't show it. A user agent showing earlier pages, as
+a trail, may leave their controls out. A page without a controls heading has none.
+
+```markdown
+You take the lamp from its hook.
+
+## (Controls)
+
+- [Back to the hall](#hall)
+```
+
 ## Following links
 
 A user agent makes the request for a link on a page from how the link is written:
