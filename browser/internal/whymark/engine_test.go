@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	rt "github.com/arnodel/golua/runtime"
+
 	"github.com/arnodel/whynot/browser/internal/whymark/compile"
 	"github.com/arnodel/whynot/fetch"
 )
@@ -339,21 +341,98 @@ func TestRunProgram(t *testing.T) {
 	}
 }
 
-// TestRandomFromRequest checks that math.random gives the same numbers
-// for the same request, Reload's, and others for another.
-func TestRandomFromRequest(t *testing.T) {
-	doc := "---\nwhymark:\n  version: 1\n---\n# Roll\n\nYou roll `= math.random(1000000)`. [Again](?again=1)\n"
+// TestRandomPerPage checks that rolls belong to the page: the same
+// request makes a new page, which rolls anew; and that dice seeded from
+// the state follow the story instead.
+func TestRandomPerPage(t *testing.T) {
+	doc := "---\nwhymark:\n  version: 1\n---\n" +
+		"```lua\nfunction init(turn) return {seed = math.random(1 << 30)} end\n```\n\n" +
+		"# Roll\n\nYou roll `= math.random(1000000)`.\n" +
+		"`math.randomseed(turn.state.seed)`\nThe story rolls `= math.random(1000000)`.\n" +
+		"`turn.state.seed = math.random(1 << 30)`\n[Again](?again=1)\n"
 	e, file := testEngine(t, map[string]string{"roll.md": doc})
 	first := take(t, e, Request{Location: file("roll.md")})
 	req, _ := Follow(first.Header, "?again=1")
 	a, b := take(t, e, req), take(t, e, req)
-	if a.body != b.body {
-		t.Errorf("the same request rolled differently:\n%s\n%s", a.body, b.body)
+	free := func(p turned) string { return strings.SplitN(p.body, "The story", 2)[0] }
+	story := func(p turned) string { return strings.SplitN(p.body, "The story", 2)[1] }
+	if free(a) == free(b) {
+		t.Errorf("two pages from the same request rolled the same:\n%s\n%s", a.body, b.body)
 	}
-	req.Location.RawQuery = "again=2"
-	if c := take(t, e, req); c.body == a.body {
-		t.Error("another request rolled the same")
+	if story(a) != story(b) {
+		t.Errorf("dice seeded from the state rolled differently for the same request:\n%s\n%s", a.body, b.body)
 	}
+}
+
+// greeter is a capability for tests: its module has hello(name), which
+// writes a greeting into the page, and the page's id.
+type greeter struct{}
+
+func (greeter) Module(tc *TurnContext) (rt.Value, error) {
+	m := rt.NewTable()
+	hello := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+		name, err := c.StringArg(0)
+		if err != nil {
+			return nil, err
+		}
+		if err := tc.Write("Hello, " + name + "!"); err != nil {
+			return nil, err
+		}
+		return c.Next(), nil
+	}, "hello", 1, false)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, hello)
+	m.Set(rt.StringValue("hello"), rt.FunctionValue(hello))
+	m.Set(rt.StringValue("page"), rt.StringValue(tc.PageID))
+	return rt.TableValue(m), nil
+}
+
+// TestCapabilities checks what require gives for capabilities: the module,
+// when declared, available and granted; false when optional but not
+// granted or not available; an error page when required but missing; and
+// nothing at all when not declared.
+func TestCapabilities(t *testing.T) {
+	doc := func(uses string) string {
+		return "---\nwhymark:\n  version: 1\n" + uses + "---\n# Hi\n\n" +
+			"```lua\nlocal greet = require \"greet\"\nif greet then greet.hello(\"reader\") else turn.write(\"No greeting.\") end\n```\n"
+	}
+	files := map[string]string{
+		"optional.md": doc("  uses:\n    greet: optional\n"),
+		"required.md": doc("  uses:\n    greet: required\n"),
+		"none.md":     doc(""),
+	}
+	allow := true
+	e, file := testEngine(t, files)
+	e.Capabilities = map[string]Capability{"greet": greeter{}}
+	e.Grant = func(document *url.URL, name string) bool { return allow }
+
+	wants(t, "granted", take(t, e, Request{Location: file("optional.md")}), []string{"Hello, reader!"}, nil)
+	wants(t, "required and granted", take(t, e, Request{Location: file("required.md")}), []string{"Hello, reader!"}, nil)
+	wants(t, "not declared", take(t, e, Request{Location: file("none.md")}), []string{"The page stopped", `require "greet"`}, []string{"Hello"})
+
+	allow = false
+	wants(t, "optional, not granted", take(t, e, Request{Location: file("optional.md")}), []string{"No greeting."}, []string{"Hello"})
+	wants(t, "required, not granted", take(t, e, Request{Location: file("required.md")}), []string{"The page stopped", "isn't allowed"}, []string{"Hello", "No greeting"})
+
+	allow = true
+	e.Capabilities = nil
+	wants(t, "optional, not available", take(t, e, Request{Location: file("optional.md")}), []string{"No greeting."}, nil)
+	wants(t, "required, not available", take(t, e, Request{Location: file("required.md")}), []string{"The page stopped", "isn't available"}, nil)
+}
+
+// TestModules checks the document's own Lua modules: one next to the
+// document, required from its prelude and a passage, run once a turn, and
+// errors for a missing one and a bad name.
+func TestModules(t *testing.T) {
+	e, file := testEngine(t, map[string]string{
+		"story.md": "---\nwhymark:\n  version: 1\n---\n```lua\nlocal helpers = require \"helpers\"\n```\n\n" +
+			"# Start\n\n`= require(\"helpers\").shout(\"hello\")` (loaded `= require(\"helpers\").loads` time)\n",
+		"helpers.lua": "loads = (loads or 0) + 1\nreturn {shout = function(s) return s:upper() .. \"!\" end, loads = loads}\n",
+		"missing.md":  "---\nwhymark:\n  version: 1\n---\n# Start\n\n`require \"nowhere\"`\n",
+		"badname.md":  "---\nwhymark:\n  version: 1\n---\n# Start\n\n`require \"/etc/passwd\"`\n",
+	})
+	wants(t, "a module", take(t, e, Request{Location: file("story.md")}), []string{"HELLO! (loaded 1 time)"}, nil)
+	wants(t, "a missing module", take(t, e, Request{Location: file("missing.md")}), []string{"The page stopped", `require "nowhere"`}, nil)
+	wants(t, "a bad module name", take(t, e, Request{Location: file("badname.md")}), []string{"The page stopped", "relative to the document"}, nil)
 }
 
 // TestExamples plays the browser's example documents, in examples/.

@@ -17,9 +17,11 @@ A document is a program, and a page is its output. A **turn** is one exchange: a
 in, a page out. The user agent reads the page, chooses one of its links, and sends the next
 request.
 
-Given a request and the document's content, the page is determined. The request names the
-page it comes from, which names the one before it, and so on: a page's **trail**, the pages
-that led to it, is part of what determines it. So going back shows a
+Given a request and the document's content, the page is determined, apart from what happens
+during the page itself: its random numbers, and what capabilities answer, such as an AI.
+Those belong to the page: a new page, even for the same request, may differ; the page itself,
+made again, doesn't. The request names the page it comes from, which names the one before
+it, and so on: a page's **trail**, the pages that led to it, is part of what determines it. So going back shows a
 page kept from before, with nothing run again; following a link on an earlier page carries
 on from that page, as if nothing after it had happened; and a list of turns, played again,
 gives the same pages.
@@ -77,6 +79,8 @@ It's pitch black. [Back up](#hall)
   - `start`: the id of the passage the document starts at. By default, the first.
   - `journal`: `true` hints that the document reads best as a trail of pages, each below
     the one before. User agents may ignore it.
+  - `uses`: the capabilities the document uses (see below), each `optional` (it works
+    without it) or `required` (it can't): `uses: {ai: optional}`.
 
 ### Passages
 
@@ -145,9 +149,43 @@ after a passage's blank lines can still write the header, or go elsewhere. `turn
 the page has started is an error.
 
 **The sandbox:** the Lua standard libraries base, string, table, math, utf8 and coroutine,
-and nothing else: no files, no network. A turn's CPU and memory are limited. `math.random`
-is seeded from the request, so the same request gives the same numbers: a page, Reload's
-included, is determined by its request.
+and nothing else: no files, no network. A turn's CPU and memory are limited.
+
+**Randomness belongs to the page:** `math.random` is seeded from the page's own identity, so a
+new page, even for the same request, rolls anew, and a page made again rolls the same. A
+document wanting dice that follow the story instead keeps a seed in its state, seeds from it
+(`math.randomseed`), and draws the next turn's seed into the state:
+
+```lua
+function init(turn) return {seed = math.random(1 << 30)} end
+```
+
+```lua
+math.randomseed(turn.state.seed)
+local roll = math.random(6)
+turn.state.seed = math.random(1 << 30)
+```
+
+**`require`** loads, in order: what it loaded earlier in the turn; a capability the document
+declares (see below); or the document's own **Lua module**: `require "lib/story"` runs
+`lib/story.lua`, next to the document, in the same sandbox, and returns what it returns.
+Module names are paths relative to the document.
+
+### Capabilities
+
+A capability is something a document can't do by itself, which the engine running it may
+provide, such as asking an AI. A document declares the capabilities it uses (`uses` in its
+front matter); the engine provides those it has, and the reader allows, and a document
+reaches one with `require`:
+
+```lua
+local ai = require "ai"   -- false if optional and not provided
+if ai then … end
+```
+
+A capability declared optional, but not provided, gives `false`. One declared required, but
+not provided, stops the turn before it runs, with a page saying so. One not declared can't be
+required at all: a document's declaration is the complete list of what it can reach.
 
 **A failed turn**, whether the document doesn't compile or its code raises an error, gives
 a page all the same: the error, and the state the turn started from.

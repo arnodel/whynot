@@ -130,9 +130,14 @@ type turnInput struct {
 	// pages gives a page's own previous one.
 	previous *snapshot
 	pages    func(*snapshot) *snapshot
-	// seed seeds math.random, so that the same request gives the same
-	// numbers.
+	// seed seeds math.random (see seed).
 	seed int64
+	// engine is the turn's, for require, which reaches granted, the
+	// capabilities the turn gets, and the document's Lua modules; context
+	// is what their modules know of the turn.
+	engine  *Engine
+	granted map[string]Capability
+	context *TurnContext
 }
 
 // turnOutput is what a turn leaves: the state, the passage it ended on,
@@ -155,8 +160,9 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		lib.LoadLibs(r, packagelib.LibLoader, base.LibLoader, coroutine.LibLoader,
 			stringlib.LibLoader, tablelib.LibLoader, mathlib.LibLoader, utf8lib.LibLoader)
 		env := r.GlobalEnv()
-		r.SetEnv(env, "require", rt.NilValue)
+		// The engine's require, not golua's, which reads files anywhere.
 		r.SetEnv(env, "package", rt.NilValue)
+		r.SetEnv(env, "require", rt.NilValue)
 
 		turn := rt.NewTable()
 		turnPassage := func() string {
@@ -218,7 +224,14 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		// They only reach the turn's own page.
 		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, write, writeHeaders, started, heading)
 
-		// Pages are determined by their requests, random numbers included.
+		if in.engine != nil {
+			tc := *in.context
+			tc.Runtime = r
+			tc.Write = func(s string) error { return p.write(turnPassage(), s) }
+			r.SetEnv(env, "require", rt.FunctionValue(in.engine.requireFunc(r, env, &tc, prog.Uses, in.granted)))
+		}
+
+		// Rolls belong to the page (see seed).
 		math := env.Get(rt.StringValue("math")).AsTable()
 		if _, err := rt.Call1(r.MainThread(), math.Get(rt.StringValue("randomseed")), rt.IntValue(in.seed)); err != nil {
 			return err
