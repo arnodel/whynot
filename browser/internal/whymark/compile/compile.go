@@ -1,27 +1,86 @@
-package whymark
+package compile
 
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strings"
 
+	"github.com/arnodel/golua/code"
+	rt "github.com/arnodel/golua/runtime"
 	gmast "github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/parser"
 )
 
-// compiled is a document compiled to Lua.
-type compiled struct {
-	// code is a Lua chunk taking the turn and the host's helpers, which
-	// runs the prelude and, for a document with passages, defines
-	// page(turn), turn.go and turn.show.
-	code string
-	// titles are the passages' titles, by id; first is the first
-	// passage's id, "" for a document without passages.
-	titles map[string]string
-	first  string
+// A Program is a whymark document compiled: Lua, and golua's code for it.
+// It's plain data, which any number of turns, in any runtime, can run.
+type Program struct {
+	Settings
+	// Lua is the chunk, as Lua source (see the package documentation for
+	// how it's called). Its lines are the document's, so that errors give
+	// the document's line numbers.
+	Lua string
+	// Unit is Lua compiled by golua, ready to load into a runtime.
+	Unit *code.Unit
+	// Passages are the document's passages, in order.
+	Passages []Passage
 }
 
-// compile compiles a whymark document to Lua. Each level-1 heading starts
+// A Passage is a passage of a document.
+type Passage struct {
+	// ID is the passage's id: its heading's anchor.
+	ID string
+	// Title is its heading's text, without brackets.
+	Title string
+	// Quiet is whether its heading is left off its page: "# (Title)".
+	Quiet bool
+}
+
+// Passage returns the passage id, and whether there's one.
+func (p *Program) Passage(id string) (Passage, bool) {
+	for _, ps := range p.Passages {
+		if ps.ID == id {
+			return ps, true
+		}
+	}
+	return Passage{}, false
+}
+
+// StartPassage returns the id of the passage the document starts at: its
+// settings' Start, else its first passage's, or "" without passages.
+func (p *Program) StartPassage() string {
+	if p.Start != "" || len(p.Passages) == 0 {
+		return p.Start
+	}
+	return p.Passages[0].ID
+}
+
+// Compile compiles source, a whymark document, to a Program. name names
+// the document in the code's errors, such as its URL. It's an error if
+// source isn't a whymark document, is written for another version of the
+// format, or doesn't compile.
+func Compile(name string, source []byte) (*Program, error) {
+	settings, err := ReadSettings(source)
+	if err != nil {
+		return nil, err
+	}
+	if settings.Version != Version {
+		return nil, fmt.Errorf("written for version %d of whymark; this compiler knows version %d", settings.Version, Version)
+	}
+	p, err := toLua(source)
+	if err != nil {
+		return nil, err
+	}
+	p.Settings = settings
+	// Compiling needs a runtime, but not the sandbox: nothing runs.
+	p.Unit, _, err = rt.New(io.Discard).CompileLuaChunk(name, []byte(p.Lua))
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// toLua compiles a whymark document to Lua. Each level-1 heading starts
 // a passage, whose id is the heading's anchor; a heading in brackets,
 // "# (Title)", is a quiet passage's, not shown on its page. Before the
 // first heading, lua blocks are the prelude, run every turn, and anything
@@ -37,9 +96,9 @@ type compiled struct {
 //
 // The chunk's lines are the document's, so that errors give its line
 // numbers.
-func compile(source []byte) (*compiled, error) {
+func toLua(source []byte) (*Program, error) {
 	// Front matter is blanked, keeping its lines.
-	if _, n, ok := frontMatter(source); ok {
+	if _, n, ok := splitFrontMatter(source); ok {
 		lines := bytes.SplitN(source, []byte("\n"), n+1)
 		source = append(bytes.Repeat([]byte("\n"), n), lines[n]...)
 	}
@@ -61,7 +120,7 @@ func compile(source []byte) (*compiled, error) {
 	)
 	kinds := make([]lineKind, len(lines))
 	titles, quiet, ids := map[int]string{}, map[int]bool{}, map[int]string{}
-	c := &compiled{titles: map[string]string{}}
+	p := &Program{}
 
 	doc := parser.New(parser.WithAutoHeadingID()).Parse(source)
 	err := gmast.Walk(doc, func(n gmast.Node, entering bool) (gmast.WalkStatus, error) {
@@ -87,7 +146,7 @@ func compile(source []byte) (*compiled, error) {
 			}
 			id, _ := n.Attribute("id")
 			kinds[line], titles[line], ids[line] = heading, title, id.Value(source)
-			c.titles[ids[line]] = title
+			p.Passages = append(p.Passages, Passage{ID: ids[line], Title: title, Quiet: quiet[line]})
 			if n.HeadingKind == gmast.HeadingKindSetext {
 				for i := line + 1; i <= line+len(parts); i++ {
 					kinds[i] = hidden
@@ -139,18 +198,18 @@ func compile(source []byte) (*compiled, error) {
 	// The chunk's first line also declares what passages need, so that
 	// the document's lines keep their numbers.
 	out[0] = `local turn, __host = ... local __passages, __go = {}, {} local function __value(x) if x ~= nil then turn.write(x) end end `
+	inPassages := false
 	for i, line := range lines {
 		switch {
 		case kinds[i] == heading:
-			if c.first != "" {
+			if inPassages {
 				out[i] += "end} "
-			} else {
-				c.first = ids[i]
 			}
+			inPassages = true
 			out[i] += fmt.Sprintf("__passages[%s] = {title = %s, quiet = %t, body = function(turn) ", luaQuote(ids[i]), luaQuote(titles[i]), quiet[i])
 		case kinds[i] == luaLine:
 			out[i] += line
-		case c.first == "":
+		case !inPassages:
 			// Before the first passage, only the prelude's Lua counts.
 		case kinds[i] == ordinary || kinds[i] == literal:
 			if i == len(lines)-1 && line == "" {
@@ -163,14 +222,12 @@ func compile(source []byte) (*compiled, error) {
 			out[i] += code
 		}
 	}
-	var end string
-	if c.first != "" {
+	end := "\n" + noPassagesLua
+	if inPassages {
 		end = " end}\n" + passagesLua
-	} else {
-		end = "\n" + noPassagesLua
 	}
-	c.code = strings.Join(out, "\n") + end
-	return c, nil
+	p.Lua = strings.Join(out, "\n") + end
+	return p, nil
 }
 
 // passagesLua ends the chunk of a document with passages: its page(turn)

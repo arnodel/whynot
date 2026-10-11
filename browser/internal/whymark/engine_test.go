@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arnodel/whynot/browser/internal/whymark/compile"
 	"github.com/arnodel/whynot/fetch"
 )
 
@@ -155,8 +156,8 @@ func TestWalkthrough(t *testing.T) {
 	if n := len(e.compiled); n != 1 {
 		t.Errorf("the document was compiled %d times, want once", n)
 	}
-	if c := e.compiled[sha256.Sum256([]byte(cellar))]; c == nil || c.unit.unit == nil {
-		t.Error("the compiled code unit isn't cached")
+	if c := e.compiled[sha256.Sum256([]byte(cellar))]; c == nil || c.program.Unit == nil {
+		t.Error("the compiled program isn't cached")
 	}
 }
 
@@ -312,4 +313,28 @@ func TestSpecExample(t *testing.T) {
 	lamp := follow(t, e, hall, "#take-the-lamp")
 	wants(t, "the spec's lamp", lamp, []string{"You take the lamp"}, []string{"# Take"})
 	wants(t, "the spec's cellar", follow(t, e, follow(t, e, lamp, "#hall"), "#cellar"), []string{"You win!"}, nil)
+}
+
+// TestRunProgram runs a compiled program on its own, with no engine and
+// no request: a program is a value, which any number of turns can run.
+func TestRunProgram(t *testing.T) {
+	prog, err := compile.Compile("cellar.md", []byte(cellar))
+	if err != nil {
+		t.Fatal(err)
+	}
+	location, _ := url.Parse("cellar.md")
+	for _, c := range []struct {
+		lamp bool
+		want string
+	}{{false, "pitch black"}, {true, "You win!"}} {
+		var out strings.Builder
+		p := &page{w: &out, header: Header{Location: location, PageID: "test"}, auto: true, program: prog}
+		state := &table{keys: []any{"lamp"}, values: []any{c.lamp}}
+		if _, _, err := run(prog, p, turnInput{state: state, passage: "cellar"}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), c.want) {
+			t.Errorf("with the lamp %v, the cellar says:\n%s\nwant %q", c.lamp, out.String(), c.want)
+		}
+	}
 }

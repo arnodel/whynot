@@ -8,6 +8,10 @@
 // agent reads a page with ReadHeader, and makes the request for a link on
 // it with Follow.
 //
-// The engine knows nothing of rendering: it only fetches documents, runs
-// them in golua's sandbox, and writes pages.
+// The work is in three layers. Package compile turns a document into a
+// Program, a value that knows nothing of turns. Running a program, for one
+// turn in a fresh sandbox, is this package's run. The Engine handles
+// requests: it fetches documents, compiles them (once per content), finds
+// the snapshot a request comes from, runs the program, and writes the
+// page. None of it knows anything of rendering.
 package whymark

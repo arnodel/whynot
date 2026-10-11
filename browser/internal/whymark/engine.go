@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arnodel/whynot/browser/internal/whymark/compile"
 	"github.com/arnodel/whynot/fetch"
 )
 
@@ -24,7 +25,7 @@ type Engine struct {
 	mu       sync.Mutex
 	pages    map[string]*snapshot
 	lastPage int
-	compiled map[[sha256.Size]byte]*compiledDocument
+	compiled map[[sha256.Size]byte]*compiled
 }
 
 // snapshot is what's behind a page-id.
@@ -36,12 +37,12 @@ type snapshot struct {
 	state    any
 }
 
-// compiledDocument is a document compiled, cached by its content.
-type compiledDocument struct {
-	*compiled
-	settings settings
-	unit     cachedUnit
-	err      error // if it doesn't compile
+// compiled is a document compiled, cached by its content: its program,
+// or why it has none, which its pages show.
+type compiled struct {
+	program  *compile.Program
+	settings compile.Settings
+	err      error
 }
 
 // Turn takes a turn: it runs the document at req.Location, from the page
@@ -60,7 +61,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := e.compile(source)
+	c, err := e.compile(document.String(), source)
 	if err != nil {
 		return nil, err
 	}
@@ -84,10 +85,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 		passage = req.Location.Fragment
 	}
 	if passage == "" && c.err == nil {
-		passage = c.first
-		if w := c.settings.Whymark; w != nil && w.Start != "" {
-			passage = w.Start
-		}
+		passage = c.program.StartPassage()
 	}
 	query := map[string]string{}
 	for k, vs := range req.Location.Query() {
@@ -98,11 +96,10 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	pr, pw := io.Pipe()
 	p := &page{
-		w:      pw,
-		header: Header{Location: req.Location, PageID: id, Journal: c.settings.Whymark.Journal},
-		auto:   c.err != nil || c.first != "",
-		titles: c.titles,
-		title:  c.settings.Title,
+		w:       pw,
+		header:  Header{Location: req.Location, PageID: id, Journal: c.settings.Journal},
+		auto:    c.err != nil || len(c.program.Passages) > 0,
+		program: c.program,
 	}
 	go func() {
 		defer pw.Close()
@@ -116,7 +113,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			// on, within its CPU limit, but fails at its next write.
 			var newState any
 			var newPassage string
-			newState, newPassage, err = run(c.compiled, &c.unit, document.String(), p, state, start, passage, query, req.Input)
+			newState, newPassage, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input})
 			if err == nil {
 				snap.state, snap.passage = newState, newPassage
 			}
@@ -151,37 +148,35 @@ func (e *Engine) fetch(ctx context.Context, location *url.URL) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !IsDocument(source) {
+	if !compile.IsDocument(source) {
 		return nil, fmt.Errorf("%s isn't a whymark document: its front matter has no whymark key", location)
 	}
 	return source, nil
 }
 
-// compile returns source compiled, from the cache if it's been seen. A
-// document that doesn't compile, or is written for another version of
-// the format, is compiled to its error, shown as its pages.
-func (e *Engine) compile(source []byte) (*compiledDocument, error) {
+// compile returns source, the document name, compiled, from the cache if
+// it's been seen. A document that doesn't compile is compiled to its
+// error, which its pages show; it's an error only if its front matter
+// can't be read.
+func (e *Engine) compile(name string, source []byte) (*compiled, error) {
 	key := sha256.Sum256(source)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if c, ok := e.compiled[key]; ok {
 		return c, nil
 	}
-	s, err := readSettings(source)
+	settings, err := compile.ReadSettings(source)
 	if err != nil {
 		return nil, err
 	}
-	c := &compiledDocument{settings: s}
-	if v := s.Whymark.Version; v != version {
-		c.err = fmt.Errorf("written for version %d of whymark; this engine knows version %d", v, version)
-	} else {
-		c.compiled, c.err = compile(source)
-	}
-	if c.compiled == nil {
-		c.compiled = &compiled{}
+	c := &compiled{settings: settings}
+	c.program, c.err = compile.Compile(name, source)
+	if c.program == nil {
+		// For the error page's header.
+		c.program = &compile.Program{Settings: settings}
 	}
 	if e.compiled == nil {
-		e.compiled = map[[sha256.Size]byte]*compiledDocument{}
+		e.compiled = map[[sha256.Size]byte]*compiled{}
 	}
 	e.compiled[key] = c
 	return c, nil

@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 
-	"github.com/arnodel/golua/code"
 	"github.com/arnodel/golua/lib"
 	"github.com/arnodel/golua/lib/base"
 	"github.com/arnodel/golua/lib/coroutine"
@@ -17,6 +15,8 @@ import (
 	"github.com/arnodel/golua/lib/tablelib"
 	"github.com/arnodel/golua/lib/utf8lib"
 	rt "github.com/arnodel/golua/runtime"
+
+	"github.com/arnodel/whynot/browser/internal/whymark/compile"
 )
 
 const (
@@ -64,10 +64,8 @@ type page struct {
 	sent bool
 	// heading is the passage's heading, written before its first output.
 	heading string
-	// titles are the passages' titles, and title the document's, for
-	// the header's default title.
-	titles map[string]string
-	title  string
+	// program is the document's, for the header's default title.
+	program *compile.Program
 }
 
 // send writes the header, for the turn's passage, with title if it's not
@@ -82,14 +80,13 @@ func (p *page) send(passage, title string) error {
 		location.Fragment, location.RawFragment = passage, ""
 		p.header.Location = &location
 	}
-	switch {
-	case title != "":
-		p.header.Title = title
-	case p.titles[passage] != "":
-		p.header.Title = p.titles[passage]
-	default:
-		p.header.Title = p.title
+	if title == "" {
+		title = p.program.Title
+		if ps, ok := p.program.Passage(passage); ok {
+			title = ps.Title
+		}
 	}
+	p.header.Title = title
 	return writeHeader(p.w, p.header)
 }
 
@@ -120,11 +117,20 @@ func (p *page) write(passage, s string) error {
 	return err
 }
 
-// run runs a turn of the document c, starting from state at passage, or
-// from init(turn) if start is set, and writes its page to p. It returns
-// the state and the passage the turn leaves. unit caches the compiled
-// chunk across turns.
-func run(c *compiled, unit *cachedUnit, name string, p *page, state any, start bool, passage string, query, input map[string]string) (newState any, newPassage string, err error) {
+// turnInput is what a turn starts from.
+type turnInput struct {
+	// state is the trail's data; start says the turn starts the document,
+	// from init(turn).
+	state any
+	start bool
+	// passage is the passage to show, query and input the request's.
+	passage      string
+	query, input map[string]string
+}
+
+// run runs a turn of prog, in a fresh sandbox, writing its page to p. It
+// returns the state and the passage the turn leaves.
+func run(prog *compile.Program, p *page, in turnInput) (newState any, newPassage string, err error) {
 	def := rt.RuntimeContextDef{
 		HardLimits:    rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
 		RequiredFlags: rt.ComplyIoSafe,
@@ -198,10 +204,10 @@ func run(c *compiled, unit *cachedUnit, name string, p *page, state any, start b
 		// They only reach the turn's own page.
 		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, write, writeHeaders, started, heading)
 
-		turn.Set(rt.StringValue("state"), toLua(state))
-		turn.Set(rt.StringValue("query"), stringTable(query))
-		turn.Set(rt.StringValue("input"), stringTable(input))
-		turn.Set(rt.StringValue("passage"), rt.StringValue(passage))
+		turn.Set(rt.StringValue("state"), toLua(in.state))
+		turn.Set(rt.StringValue("query"), stringTable(in.query))
+		turn.Set(rt.StringValue("input"), stringTable(in.input))
+		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
 
 		thread := r.MainThread()
 		turnChunk, err := r.CompileAndLoadLuaChunk("turn", []byte(turnLua), rt.TableValue(env))
@@ -211,16 +217,12 @@ func run(c *compiled, unit *cachedUnit, name string, p *page, state any, start b
 		if _, err := rt.Call1(thread, rt.FunctionValue(turnChunk), rt.TableValue(turn)); err != nil {
 			return err
 		}
-		u, err := unit.get(r, name, c.code)
-		if err != nil {
-			return err
-		}
-		chunk := r.LoadLuaUnit(u, rt.TableValue(env))
+		chunk := r.LoadLuaUnit(prog.Unit, rt.TableValue(env))
 		if _, err := rt.Call1(thread, rt.FunctionValue(chunk), rt.TableValue(turn), rt.TableValue(host)); err != nil {
 			return err
 		}
 
-		if start {
+		if in.start {
 			fresh := rt.TableValue(rt.NewTable())
 			if init := env.Get(rt.StringValue("init")); !init.IsNil() {
 				v, err := rt.Call1(thread, init, rt.TableValue(turn))
@@ -264,26 +266,6 @@ func stringTable(m map[string]string) rt.Value {
 		t.Set(rt.StringValue(k), rt.StringValue(v))
 	}
 	return rt.TableValue(t)
-}
-
-// cachedUnit is a document's chunk compiled by golua, once: a code unit
-// is plain data, which any runtime can load.
-type cachedUnit struct {
-	mu   sync.Mutex
-	unit *code.Unit
-}
-
-func (u *cachedUnit) get(r *rt.Runtime, name, source string) (*code.Unit, error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if u.unit == nil {
-		unit, _, err := r.CompileLuaChunk(name, []byte(source))
-		if err != nil {
-			return nil, err
-		}
-		u.unit = unit
-	}
-	return u.unit, nil
 }
 
 // table is a Lua table copied out of a runtime by fromLua.
