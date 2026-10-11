@@ -408,17 +408,20 @@ func TestSnapshotParents(t *testing.T) {
 	}
 }
 
-// TestTrail checks turn.trail: the pages that led to the turn, oldest
-// first, each with the state it left, its note, its passage, and its
-// request's query and input; and that a branch sees only its own.
-func TestTrail(t *testing.T) {
+// TestPrevious checks turn.previous: the page the turn comes from, and
+// through it the pages before, each with the state it left, its notes,
+// its passage, and its request's query and input; and that a branch sees
+// only its own.
+func TestPrevious(t *testing.T) {
 	doc := "---\nwhymark:\n  version: 1\n---\n" +
-		"```lua\nfunction init(turn) return {score = 0} end\n```\n\n" +
+		"```lua\nfunction init(turn) return {score = 0} end\n" +
+		"function pages()\n  local list, p = {}, turn.previous\n" +
+		"  while p do table.insert(list, 1, p) p = p.previous end\n  return list\nend\n```\n\n" +
 		"# (Play)\n\n" +
 		"```lua\nif turn.query.add then turn.state.score = turn.state.score + tonumber(turn.query.add) end\n" +
-		"turn.note.said = turn.input.say\n```\n\n" +
-		"`for i, page in ipairs(turn.trail) do`\n" +
-		"- page `= i`: `= page.passage`, score `= page.state.score`, said `= page.note.said or \"-\"`, typed `= page.input.say or \"-\"`, added `= page.query.add or \"-\"`\n" +
+		"turn.notes.said = turn.input.say\n```\n\n" +
+		"`for i, page in ipairs(pages()) do`\n" +
+		"- page `= i`: `= page.passage`, score `= page.state.score`, said `= page.notes.said or \"-\"`, typed `= page.input.say or \"-\"`, added `= page.query.add or \"-\"`\n" +
 		"`end`\n\n" +
 		"Score `= turn.state.score`. [Add two](?add=2) [Add three](?add=3)\n"
 	e, file := testEngine(t, map[string]string{"play.md": doc})
@@ -436,7 +439,7 @@ func TestTrail(t *testing.T) {
 	}, []string{"page 3"})
 
 	// From the first page again: the second and third pages aren't in
-	// this branch's trail.
+	// this branch.
 	branch := follow(t, e, first, "?add=3")
 	wants(t, "a branch from the first page", branch, []string{"page 1: play, score 0", "Score 3."}, []string{"page 2"})
 }

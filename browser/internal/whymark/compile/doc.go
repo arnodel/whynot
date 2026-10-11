@@ -10,8 +10,8 @@
 // document without passages defines page(turn) itself, in its prelude.
 // Either may define init(turn).
 //
-// The turn is a table with the fields state, query, input, passage, note
-// and trail (see whymark.md, the format's specification), and the
+// The turn is a table with the fields state, query, input, passage, notes
+// and previous (see whymark.md, the format's specification), and the
 // functions write, write_headers and link, which the host provides before
 // calling the chunk.
 //

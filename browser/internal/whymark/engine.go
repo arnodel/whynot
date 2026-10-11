@@ -38,8 +38,8 @@ type snapshot struct {
 	document string // the document's URL, with no query or fragment
 	passage  string
 	state    any
-	// note is what the page's turn recorded of itself (turn.note).
-	note any
+	// notes is what the page's turn recorded of itself (turn.notes).
+	notes any
 	// request is the request the page answered, and parent the page it
 	// came from (its FromPageID), "" for a document's start: together,
 	// pages make a tree of what a reader did.
@@ -81,7 +81,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	start := req.FromPageID == ""
 	var state any = &table{}
 	passage := ""
-	var trail []*snapshot
+	var previous *snapshot
 	if !start {
 		from, err := e.page(ctx, req.FromPageID)
 		if err != nil {
@@ -91,7 +91,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			return nil, fmt.Errorf("page %s isn't one of %s's", req.FromPageID, &document)
 		}
 		state, passage = from.state, from.passage
-		trail = e.trail(from)
+		previous = from
 	}
 	if req.Location.Fragment != "" {
 		passage = req.Location.Fragment
@@ -125,9 +125,9 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			// golua can't be interrupted: a turn whose page is closed carries
 			// on, within its CPU limit, but fails at its next write.
 			var out turnOutput
-			out, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input, trail: trail, seed: seed(req)})
+			out, err = run(c.program, p, turnInput{state: state, start: start, passage: passage, query: query, input: req.Input, previous: previous, pages: e.parent, seed: seed(req)})
 			if err == nil {
-				snap.state, snap.passage, snap.note = out.state, out.passage, out.note
+				snap.state, snap.passage, snap.notes = out.state, out.passage, out.notes
 			}
 		}
 		if err == nil || ctx.Err() != nil {
@@ -220,20 +220,15 @@ func (e *Engine) newPage(document string) (string, *snapshot) {
 	return id, snap
 }
 
-// trail returns the pages that led to from, from included, oldest first:
-// from and its ancestors, whose turns are all over.
-func (e *Engine) trail(from *snapshot) []*snapshot {
+// parent returns the snapshot of the page s came from, or nil if s
+// started its document. Its turn is over, as it was before s's began.
+func (e *Engine) parent(s *snapshot) *snapshot {
+	if s.parent == "" {
+		return nil
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	var trail []*snapshot
-	for s := from; s != nil; s = e.pages[s.parent] {
-		trail = append(trail, s)
-		if s.parent == "" {
-			break
-		}
-	}
-	slices.Reverse(trail)
-	return trail
+	return e.pages[s.parent]
 }
 
 // page returns the snapshot behind the page id, once its turn is over.

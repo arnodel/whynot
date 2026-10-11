@@ -126,18 +126,20 @@ type turnInput struct {
 	// passage is the passage to show, query and input the request's.
 	passage      string
 	query, input map[string]string
-	// trail is the pages that led to the turn, oldest first (turn.trail).
-	trail []*snapshot
+	// previous is the page the turn comes from (turn.previous), or nil;
+	// pages gives a page's own previous one.
+	previous *snapshot
+	pages    func(*snapshot) *snapshot
 	// seed seeds math.random, so that the same request gives the same
 	// numbers.
 	seed int64
 }
 
 // turnOutput is what a turn leaves: the state, the passage it ended on,
-// and its note.
+// and its notes.
 type turnOutput struct {
-	state, note any
-	passage     string
+	state, notes any
+	passage      string
 }
 
 // run runs a turn of prog, in a fresh sandbox, writing its page to p. It
@@ -226,8 +228,10 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		turn.Set(rt.StringValue("query"), stringTable(in.query))
 		turn.Set(rt.StringValue("input"), stringTable(in.input))
 		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
-		turn.Set(rt.StringValue("note"), rt.TableValue(rt.NewTable()))
-		turn.Set(rt.StringValue("trail"), trailTable(r, in.trail))
+		turn.Set(rt.StringValue("notes"), rt.TableValue(rt.NewTable()))
+		if in.previous != nil {
+			turn.Set(rt.StringValue("previous"), pageTable(in.previous, in.pages))
+		}
 
 		thread := r.MainThread()
 		turnChunk, err := r.CompileAndLoadLuaChunk("turn", []byte(turnLua), rt.TableValue(env))
@@ -266,9 +270,9 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		if err != nil {
 			return fmt.Errorf("turn.state: %w", err)
 		}
-		out.note, err = fromLua(turn.Get(rt.StringValue("note")), 0)
+		out.notes, err = fromLua(turn.Get(rt.StringValue("notes")), 0)
 		if err != nil {
-			return fmt.Errorf("turn.note: %w", err)
+			return fmt.Errorf("turn.notes: %w", err)
 		}
 		out.passage = turnPassage()
 		return nil
@@ -276,47 +280,48 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 	return out, err
 }
 
-// trailTable makes turn.trail: a list of the pages in trail, each a table
-// whose fields (state, note, passage, query, input) are made the first
-// time they're read, so that a long trail costs only what's used.
-func trailTable(r *rt.Runtime, trail []*snapshot) rt.Value {
-	list := rt.NewTable()
-	for i, s := range trail {
-		entry := rt.NewTable()
-		meta := rt.NewTable()
-		index := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
-			key, _ := c.Arg(1).TryString()
-			var v rt.Value
-			switch key {
-			case "state":
-				v = toLua(s.state)
-			case "note":
-				v = toLua(s.note)
-				if v.IsNil() {
-					v = rt.TableValue(rt.NewTable())
-				}
-			case "passage":
-				v = rt.StringValue(s.passage)
-			case "query":
-				query := map[string]string{}
-				for k, vs := range s.request.Location.Query() {
-					query[k] = vs[0]
-				}
-				v = stringTable(query)
-			case "input":
-				v = stringTable(s.request.Input)
+// pageTable makes the table of an earlier page, s, as turn.previous is:
+// its fields (state, notes, passage, query, input, and its own previous
+// page) are made the first time they're read, so that looking back costs
+// only as far as a document looks. pages gives a page's previous one.
+func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
+	entry := rt.NewTable()
+	meta := rt.NewTable()
+	index := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+		key, _ := c.Arg(1).TryString()
+		var v rt.Value
+		switch key {
+		case "state":
+			v = toLua(s.state)
+		case "notes":
+			v = toLua(s.notes)
+			if v.IsNil() {
+				v = rt.TableValue(rt.NewTable())
 			}
-			if !v.IsNil() {
-				entry.Set(rt.StringValue(key), v)
+		case "passage":
+			v = rt.StringValue(s.passage)
+		case "query":
+			query := map[string]string{}
+			for k, vs := range s.request.Location.Query() {
+				query[k] = vs[0]
 			}
-			return c.PushingNext1(t.Runtime, v), nil
-		}, "trail", 2, false)
-		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
-		meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
-		entry.SetMetatable(meta)
-		list.Set(rt.IntValue(int64(i+1)), rt.TableValue(entry))
-	}
-	return rt.TableValue(list)
+			v = stringTable(query)
+		case "input":
+			v = stringTable(s.request.Input)
+		case "previous":
+			if p := pages(s); p != nil {
+				v = pageTable(p, pages)
+			}
+		}
+		if !v.IsNil() {
+			entry.Set(rt.StringValue(key), v)
+		}
+		return c.PushingNext1(t.Runtime, v), nil
+	}, "page", 2, false)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
+	meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
+	entry.SetMetatable(meta)
+	return rt.TableValue(entry)
 }
 
 // goFunction sets t's field name to a Go function.

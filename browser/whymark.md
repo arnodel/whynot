@@ -110,13 +110,25 @@ Lua code sees the current turn as `turn`, passed to it, never global:
 | `turn.query` | the request's query, as a table of strings |
 | `turn.input` | the fields typed in, by name, as a table of strings |
 | `turn.passage` | the id of the passage shown |
-| `turn.note` | what this page records of itself, an empty table at the start of every turn; plain data only. Unlike `turn.state`, it isn't carried to the next page, but later pages see it in their trail |
-| `turn.trail` | the pages that led to this one, oldest first: the page the request came from, and the pages before it. Each has the `state` it left, its `note`, its `passage`, and its request's `query` and `input`. Changing them changes nothing |
+| `turn.notes` | what this page records of itself, an empty table at the start of every turn; plain data only. Unlike `turn.state`, it isn't carried to the next page, but later pages see it (see below) |
+| `turn.previous` | the page the request came from, or `nil` on a turn starting the document. It has the `state` it left, its `notes`, its `passage`, its request's `query` and `input`, and its own `previous`, back to the start. Changing them changes nothing |
 | `turn.write(...)` | writes its arguments to the page |
 | `turn.write_headers{title = …}` | writes the page's header (see below) |
 | `turn.link(text, query)` | a Markdown link to `?query`, from a table, escaped |
 | `turn.go(id)` | stops this passage and shows passage `id` instead; the page's location follows |
 | `turn.show(id)` | runs passage `id`, without its heading, where it's called, then carries on |
+
+**Earlier pages:** `turn.previous` and the pages before it are the page's trail, newest
+first. A chat, say, keeps each reply in its page's notes, and finds the conversation by
+walking back (the reader's side is in each page's `input`):
+
+```lua
+local pages, p = {}, turn.previous
+while p do
+  table.insert(pages, 1, p)   -- oldest first
+  p = p.previous
+end
+```
 
 `init(turn)`, if defined, returns the starting state, on a turn that starts the document;
 without it, the state starts as an empty table. `page(turn)` writes the page. A document
