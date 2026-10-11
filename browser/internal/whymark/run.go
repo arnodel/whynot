@@ -151,8 +151,10 @@ type turnOutput struct {
 // returns the state and the passage the turn leaves.
 func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err error) {
 	def := rt.RuntimeContextDef{
-		HardLimits:    rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
-		RequiredFlags: rt.ComplyIoSafe,
+		// The limits make the context require Go functions to be CPU and
+		// memory safe. Not IO safe: golua can't yet say what IO is allowed,
+		// so the sandbox leaves out the functions doing IO instead.
+		HardLimits: rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
 	}
 	_, err = rt.DoInContext(func(r *rt.Runtime) error {
 		// The other libraries register in package's table, but documents
@@ -163,6 +165,8 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		// The engine's require, not golua's, which reads files anywhere.
 		r.SetEnv(env, "package", rt.NilValue)
 		r.SetEnv(env, "require", rt.NilValue)
+		r.SetEnv(env, "dofile", rt.NilValue)
+		r.SetEnv(env, "loadfile", rt.NilValue)
 
 		turn := rt.NewTable()
 		turnPassage := func() string {
@@ -222,7 +226,7 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 			return c.Next(), nil
 		}, 1, false)
 		// They only reach the turn's own page.
-		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, write, writeHeaders, started, heading)
+		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, write, writeHeaders, started, heading)
 
 		if in.engine != nil {
 			tc := *in.context
@@ -237,9 +241,9 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 			return err
 		}
 
-		turn.Set(rt.StringValue("state"), toLua(in.state))
-		turn.Set(rt.StringValue("query"), stringTable(in.query))
-		turn.Set(rt.StringValue("input"), stringTable(in.input))
+		turn.Set(rt.StringValue("state"), toLua(r, in.state))
+		turn.Set(rt.StringValue("query"), stringTable(r, in.query))
+		turn.Set(rt.StringValue("input"), stringTable(r, in.input))
 		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
 		turn.Set(rt.StringValue("notes"), rt.TableValue(rt.NewTable()))
 		if in.previous != nil {
@@ -305,9 +309,9 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 		var v rt.Value
 		switch key {
 		case "state":
-			v = toLua(s.state)
+			v = toLua(t.Runtime, s.state)
 		case "notes":
-			v = toLua(s.notes)
+			v = toLua(t.Runtime, s.notes)
 			if v.IsNil() {
 				v = rt.TableValue(rt.NewTable())
 			}
@@ -318,9 +322,9 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 			for k, vs := range s.request.Location.Query() {
 				query[k] = vs[0]
 			}
-			v = stringTable(query)
+			v = stringTable(t.Runtime, query)
 		case "input":
-			v = stringTable(s.request.Input)
+			v = stringTable(t.Runtime, s.request.Input)
 		case "previous":
 			if p := pages(s); p != nil {
 				v = pageTable(p, pages)
@@ -331,7 +335,7 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 		}
 		return c.PushingNext1(t.Runtime, v), nil
 	}, "page", 2, false)
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, index)
 	meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
 	entry.SetMetatable(meta)
 	return rt.TableValue(entry)
@@ -344,13 +348,20 @@ func goFunction(r *rt.Runtime, t *rt.Table, name string, f func(*rt.Thread, *rt.
 	return fn
 }
 
-// stringTable makes a table of m.
-func stringTable(m map[string]string) rt.Value {
+// stringTable makes a table of m, in r, which it charges for it.
+func stringTable(r *rt.Runtime, m map[string]string) rt.Value {
 	t := rt.NewTable()
 	for k, v := range m {
-		t.Set(rt.StringValue(k), rt.StringValue(v))
+		r.RequireBytes(len(k) + len(v))
+		set(r, t, rt.StringValue(k), rt.StringValue(v))
 	}
 	return rt.TableValue(t)
+}
+
+// set sets t[k] to v, charging r for it.
+func set(r *rt.Runtime, t *rt.Table, k, v rt.Value) {
+	r.RequireCPU(1)
+	r.RequireMem(t.Set(k, v))
 }
 
 // table is a Lua table copied out of a runtime by fromLua.
@@ -393,8 +404,8 @@ func fromLua(v rt.Value, depth int) (any, error) {
 	return nil, fmt.Errorf("can only hold plain data, not a %s", v.TypeName())
 }
 
-// toLua makes a new runtime value from data made by fromLua.
-func toLua(data any) rt.Value {
+// toLua makes a value in r from data made by fromLua, charging r for it.
+func toLua(r *rt.Runtime, data any) rt.Value {
 	switch d := data.(type) {
 	case bool:
 		return rt.BoolValue(d)
@@ -403,11 +414,12 @@ func toLua(data any) rt.Value {
 	case float64:
 		return rt.FloatValue(d)
 	case string:
+		r.RequireBytes(len(d))
 		return rt.StringValue(d)
 	case *table:
 		t := rt.NewTable()
 		for i, k := range d.keys {
-			t.Set(toLua(k), toLua(d.values[i]))
+			set(r, t, toLua(r, k), toLua(r, d.values[i]))
 		}
 		return rt.TableValue(t)
 	}

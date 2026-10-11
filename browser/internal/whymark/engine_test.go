@@ -380,7 +380,7 @@ func (greeter) Module(tc *TurnContext) (rt.Value, error) {
 		}
 		return c.Next(), nil
 	}, "hello", 1, false)
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, hello)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, hello)
 	m.Set(rt.StringValue("hello"), rt.FunctionValue(hello))
 	m.Set(rt.StringValue("page"), rt.StringValue(tc.PageID))
 	return rt.TableValue(m), nil
@@ -433,6 +433,16 @@ func TestModules(t *testing.T) {
 	wants(t, "a module", take(t, e, Request{Location: file("story.md")}), []string{"HELLO! (loaded 1 time)"}, nil)
 	wants(t, "a missing module", take(t, e, Request{Location: file("missing.md")}), []string{"The page stopped", `require "nowhere"`}, nil)
 	wants(t, "a bad module name", take(t, e, Request{Location: file("badname.md")}), []string{"The page stopped", "relative to the document"}, nil)
+}
+
+// TestNoFileAccess checks that the sandbox has none of golua's functions
+// reading files: turns don't require IO safety, which would rule them out.
+func TestNoFileAccess(t *testing.T) {
+	e, file := testEngine(t, map[string]string{
+		"files.md": "---\nwhymark:\n  version: 1\n---\n# Files\n\n" +
+			"`= tostring(dofile) .. tostring(loadfile) .. tostring(io) .. tostring(os) .. tostring(package)`\n",
+	})
+	wants(t, "the sandbox", take(t, e, Request{Location: file("files.md")}), []string{"nilnilnilnilnil"}, nil)
 }
 
 // TestExamples plays the browser's example documents, in examples/.

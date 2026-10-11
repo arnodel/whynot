@@ -21,6 +21,12 @@ import (
 type Capability interface {
 	// Module makes the capability's Lua module for one turn. It's made
 	// the first time the turn requires it.
+	//
+	// The turn runs with CPU and memory limits, so the module's Go
+	// functions run only if declared CPU and memory safe (see
+	// rt.SolemnlyDeclareCompliance), and must then charge the turn's
+	// runtime for what they make. Turns don't require IO safety, which
+	// golua can't check yet: what a capability reaches is up to it.
 	Module(t *TurnContext) (rt.Value, error)
 }
 
@@ -95,9 +101,9 @@ func (e *Engine) requireFunc(r *rt.Runtime, env *rt.Table, tc *TurnContext, uses
 		loaded[name] = v
 		return c.PushingNext1(t.Runtime, v), nil
 	}, "require", 1, false)
-	// It reaches only declared capabilities, and documents through the
-	// engine's registry.
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, fn)
+	// Modules are charged for in Engine.module, and capabilities by
+	// their own functions.
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, fn)
 	return fn
 }
 
@@ -108,10 +114,15 @@ func (e *Engine) module(t *rt.Thread, env *rt.Table, tc *TurnContext, name strin
 		return rt.NilValue, errors.New("a module is named by a path relative to the document, such as lib/story")
 	}
 	location := tc.Document.ResolveReference(&url.URL{Path: name + ".lua"})
-	unit, err := e.moduleUnit(tc.Context, location)
+	unit, size, err := e.moduleUnit(tc.Context, location)
 	if err != nil {
 		return rt.NilValue, err
 	}
+	// Reading and compiling it, charged as golua's load charges, whether
+	// or not it was compiled earlier, so that a turn's cost doesn't
+	// depend on the engine's cache.
+	t.LinearRequire(4, uint64(size))
+	t.ReleaseBytes(size)
 	chunk := t.Runtime.LoadLuaUnit(unit, rt.TableValue(env))
 	v, err := rt.Call1(t, rt.FunctionValue(chunk), rt.StringValue(name))
 	if err != nil {
@@ -124,20 +135,25 @@ func (e *Engine) module(t *rt.Thread, env *rt.Table, tc *TurnContext, name strin
 }
 
 // moduleUnit returns the Lua module at location compiled, from the cache
-// if its content has been seen.
-func (e *Engine) moduleUnit(ctx context.Context, location *url.URL) (*code.Unit, error) {
+// if its content has been seen, and the size of its source.
+func (e *Engine) moduleUnit(ctx context.Context, location *url.URL) (*code.Unit, int, error) {
 	src, err := e.Registry.Resolve(location, "")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	body, _, err := src.Fetch(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer body.Close()
-	source, err := io.ReadAll(body)
+	// No turn could afford more.
+	source, err := io.ReadAll(io.LimitReader(body, memLimit+1))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return e.compileModule(location.String(), source)
+	if len(source) > memLimit {
+		return nil, 0, errors.New("too big")
+	}
+	unit, err := e.compileModule(location.String(), source)
+	return unit, len(source), err
 }

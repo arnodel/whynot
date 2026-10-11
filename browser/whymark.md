@@ -148,7 +148,8 @@ the passage wrote it first; whitespace written before then doesn't count, so a `
 after a passage's blank lines can still write the header, or go elsewhere. `turn.go` after
 the page has started is an error.
 
-**The sandbox:** the Lua standard libraries base, string, table, math, utf8 and coroutine,
+**The sandbox:** the Lua standard libraries base (without `dofile` and `loadfile`), string,
+table, math, utf8 and coroutine,
 and nothing else: no files, no network. A turn's CPU and memory are limited.
 
 **Randomness belongs to the page:** `math.random` is seeded from the page's own identity, so a
