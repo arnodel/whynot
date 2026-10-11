@@ -20,6 +20,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 	canvas := g.renderer.NewCanvas(screen)
 	g.app.Draw(canvas, time.Since(g.start))
 
+	if g.strip {
+		g.drawStrip(canvas)
+	}
 	g.drawToolbar(screen, canvas)
 	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
 		g.app.DrawZoomIndicator(canvas, face)
@@ -28,6 +31,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 		}
 	}
 
+	if g.field.open {
+		g.drawField(canvas)
+	}
 	if g.debugHit {
 		if view, ok := g.app.ViewAt(g.hoverX, g.hoverY); ok {
 			if r, ok := view.HitTest(g.hoverX, g.hoverY); ok {

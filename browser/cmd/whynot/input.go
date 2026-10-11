@@ -12,12 +12,20 @@ func (g *game) Update() error {
 	start := time.Now()
 	defer func() { g.updateDuration = time.Since(start) }()
 
+	// While the input field is open, it has the keyboard and the pointer.
+	if g.field.open {
+		g.updateField()
+		g.app.Update()
+		return nil
+	}
+
 	g.app.Frame(g.input.Events(), time.Since(g.start))
 
 	// pointerState so these buttons work with a touch too, not just a mouse.
 	var pointerDown, clicked bool
 	g.hoverX, g.hoverY, pointerDown, clicked = pointerState()
 	cursor := image.Pt(g.hoverX, g.hoverY)
+	g.updateStrip(cursor, clicked)
 	g.backState = buttonState{hover: cursor.In(g.backButton), pressed: pointerDown && cursor.In(g.backButton)}
 	g.forwardState = buttonState{hover: cursor.In(g.forwardButton), pressed: pointerDown && cursor.In(g.forwardButton)}
 	g.reloadState = buttonState{hover: cursor.In(g.reloadButton), pressed: pointerDown && cursor.In(g.reloadButton)}

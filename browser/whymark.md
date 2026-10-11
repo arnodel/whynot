@@ -194,6 +194,24 @@ You're in a hall. It's dark below.
 - `title`: the page's title.
 - `journal`: the document's hint, if it gives one.
 
+### Input fields
+
+A page asks the reader for text with an **input block**: a fenced code block whose info
+string is `input`, the field's name and, optionally, where to send it (a link written as
+`#passage` or `?query`; by default, the page's own passage), and whose content is the
+placeholder:
+
+````markdown
+```input say
+Say something…
+```
+````
+
+A user agent shows a field instead of the block, while the page is current, and sends what's
+typed as a request from the page, to the block's target, with the text as the field's
+`input`: `input: {say: …}`. A page has at most one field: if it has several blocks, the last
+counts. In other Markdown viewers, the block shows as code.
+
 ## Following links
 
 A user agent makes the request for a link on a page from how the link is written:
