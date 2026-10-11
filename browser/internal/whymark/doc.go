@@ -1,0 +1,13 @@
+// Package whymark is the engine of whymark documents: Markdown documents
+// that run, written as passages with Lua in them (see whymark.md, at the
+// root of the browser module, for the format).
+//
+// The engine and whoever shows its pages talk in turns. A turn is a
+// Request (a location, the page it comes from, what was typed), and the
+// page it gets: a Header, then Markdown. An Engine takes turns; a user
+// agent reads a page with ReadHeader, and makes the request for a link on
+// it with Follow.
+//
+// The engine knows nothing of rendering: it only fetches documents, runs
+// them in golua's sandbox, and writes pages.
+package whymark
