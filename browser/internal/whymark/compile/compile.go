@@ -67,7 +67,7 @@ func Compile(name string, source []byte) (*Program, error) {
 	if settings.Version != Version {
 		return nil, fmt.Errorf("written for version %d of whymark; this compiler knows version %d", settings.Version, Version)
 	}
-	p, err := toLua(source)
+	p, err := toLua(source, settings.Uses)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +91,15 @@ func Compile(name string, source []byte) (*Program, error) {
 //     anything else is Lua statements, such as `if turn.state.lamp then`;
 //   - a line holding only statement spans disappears, newline and all;
 //   - a code span with two or more backquotes is shown, as code;
-//   - an ai block is left out, and a noai block's lines are shown, as
-//     there's no AI yet.
+//   - a capability block, a fenced block named after a capability the
+//     document declares in uses, captures its lines, spans run, and
+//     hands them to the capability, if the turn has it (see
+//     whymark.Capability); a without block, "without" and the
+//     capability's name, runs as ordinary lines if the turn hasn't it.
 //
 // The chunk's lines are the document's, so that errors give its line
 // numbers.
-func toLua(source []byte) (*Program, error) {
+func toLua(source []byte, uses map[string]Need) (*Program, error) {
 	// Front matter is blanked, keeping its lines.
 	if _, n, ok := splitFrontMatter(source); ok {
 		lines := bytes.SplitN(source, []byte("\n"), n+1)
@@ -108,17 +111,19 @@ func toLua(source []byte) (*Program, error) {
 	// What each line is, besides an ordinary line of a passage.
 	type lineKind int
 	const (
-		ordinary  lineKind = iota
-		literal            // a line of code to show: spans don't run
-		heading            // a passage's heading
-		hidden             // a setext heading's underline: not shown
-		luaFence           // the fence of a lua block
-		luaLine            // a line of Lua
-		aiFence            // the fence of an ai block
-		aiLine             // a line of its prompt
-		noaiFence          // the fence of a noai block
+		ordinary     lineKind = iota
+		literal               // a line of code to show: spans don't run
+		heading               // a passage's heading
+		hidden                // a setext heading's underline: not shown
+		luaFence              // the fence of a lua block
+		luaLine               // a line of Lua
+		blockFence            // the opening fence of a capability block
+		withoutFence          // the opening fence of a without block
+		closingFence          // the closing fence of either
 	)
 	kinds := make([]lineKind, len(lines))
+	// A capability block's capability and arguments, by its opening line.
+	blocks := map[int][]string{}
 	titles, quiet, ids := map[int]string{}, map[int]bool{}, map[int]string{}
 	p := &Program{}
 
@@ -162,30 +167,35 @@ func toLua(source []byte) (*Program, error) {
 			if n.CodeBlockKind == gmast.CodeBlockKindFenced && last+1 < len(lines) && isFence(lines[last+1]) {
 				close = last + 1
 			}
-			language, _ := n.Language(source)
-			if n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || (language != "lua" && language != "ai" && language != "noai") {
+			info := strings.Fields(n.Info.Value(source))
+			kind := literal
+			switch {
+			case n.CodeBlockKind != gmast.CodeBlockKindFenced || n.Parent() != doc || len(info) == 0:
+			case info[0] == "lua":
+				kind = luaFence
+			case info[0] == "without" && len(info) == 2 && declared(uses, info[1]):
+				kind = withoutFence
+			case declared(uses, info[0]):
+				kind = blockFence
+			}
+			if kind == literal {
 				for i := open; i <= max(last, close); i++ {
 					kinds[i] = literal
 				}
 				return gmast.WalkContinue, nil
 			}
 			if close < 0 {
-				return gmast.WalkStop, fmt.Errorf("line %d: a %s block needs its closing fence", open+1, language)
+				return gmast.WalkStop, fmt.Errorf("line %d: a %s block needs its closing fence", open+1, info[0])
 			}
-			switch language {
-			case "lua":
+			switch kind {
+			case luaFence:
 				kinds[open], kinds[close] = luaFence, luaFence
 				for i := open + 1; i < close; i++ {
 					kinds[i] = luaLine
 				}
-			case "noai":
-				// Its lines are ordinary ones.
-				kinds[open], kinds[close] = noaiFence, noaiFence
 			default:
-				kinds[open], kinds[close] = aiFence, aiFence
-				for i := open + 1; i < close; i++ {
-					kinds[i] = aiLine
-				}
+				// Their lines are ordinary ones.
+				kinds[open], kinds[close], blocks[open] = kind, closingFence, info
 			}
 		}
 		return gmast.WalkContinue, nil
@@ -197,8 +207,9 @@ func toLua(source []byte) (*Program, error) {
 	out := make([]string, len(lines))
 	// The chunk's first line also declares what passages need, so that
 	// the document's lines keep their numbers.
-	out[0] = `local turn, __host = ... local __passages, __go = {}, {} local function __value(x) if x ~= nil then turn.write(x) end end `
+	out[0] = `local turn, __host = ... local __passages, __go = {}, {} local function __value(x) if x ~= nil then turn.write(x) end end ` + blocksLua
 	inPassages := false
+	blockEnd := "" // what closes the block being compiled
 	for i, line := range lines {
 		switch {
 		case kinds[i] == heading:
@@ -211,6 +222,18 @@ func toLua(source []byte) (*Program, error) {
 			out[i] += line
 		case !inPassages:
 			// Before the first passage, only the prelude's Lua counts.
+		case kinds[i] == blockFence:
+			var args []string
+			for _, a := range blocks[i][1:] {
+				args = append(args, luaQuote(a))
+			}
+			out[i] += fmt.Sprintf("__block(%s, {%s}, function() ", luaQuote(blocks[i][0]), strings.Join(args, ", "))
+			blockEnd = "end) "
+		case kinds[i] == withoutFence:
+			out[i] += fmt.Sprintf("if not __host.capability(%s) then ", luaQuote(blocks[i][1]))
+			blockEnd = "end "
+		case kinds[i] == closingFence:
+			out[i] += blockEnd
 		case kinds[i] == ordinary || kinds[i] == literal:
 			if i == len(lines)-1 && line == "" {
 				continue // the end of the file's last line
@@ -229,6 +252,22 @@ func toLua(source []byte) (*Program, error) {
 	p.Lua = strings.Join(out, "\n") + end
 	return p, nil
 }
+
+// declared reports whether uses declares the capability name.
+func declared(uses map[string]Need, name string) bool {
+	_, ok := uses[name]
+	return ok
+}
+
+// blocksLua defines __block(name, args, f), which runs a capability
+// block: it hands what f writes, instead of writing it, to the
+// capability's __block, if the turn has the capability.
+const blocksLua = `local function __block(name, args, f) ` +
+	`local c = __host.capability(name) if not c then return end ` +
+	`local b = c.__block if b == nil then error("blocks named " .. name .. " mean nothing to it", 2) end ` +
+	`local w, parts = turn.write, {} turn.write = function(s) parts[#parts+1] = tostring(s) end ` +
+	`local ok, err = pcall(f) turn.write = w if not ok then error(err, 0) end ` +
+	`b(turn, args, table.concat(parts)) end `
 
 // passagesLua ends the chunk of a document with passages: its page(turn)
 // shows the turn's passage, its heading first unless it's quiet, and

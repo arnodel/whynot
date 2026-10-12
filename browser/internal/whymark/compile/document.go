@@ -19,7 +19,19 @@ type Settings struct {
 	Start string
 	// Journal is a hint that the document reads best as a trail.
 	Journal bool
+	// Uses is the capabilities the document declares, by name.
+	Uses map[string]Need
 }
+
+// Need is how a document needs a capability it declares.
+type Need int
+
+const (
+	// Optional is a capability the document works without, better with.
+	Optional Need = iota
+	// Required is one it can't work without.
+	Required
+)
 
 // Version is the version of the format this compiler understands.
 const Version = 1
@@ -29,9 +41,10 @@ type frontMatter struct {
 	Title       string `yaml:"title"`
 	Description string `yaml:"description"`
 	Whymark     *struct {
-		Version int    `yaml:"version"`
-		Start   string `yaml:"start"`
-		Journal bool   `yaml:"journal"`
+		Version int               `yaml:"version"`
+		Start   string            `yaml:"start"`
+		Journal bool              `yaml:"journal"`
+		Uses    map[string]string `yaml:"uses"`
 	} `yaml:"whymark"`
 }
 
@@ -72,12 +85,24 @@ func ReadSettings(source []byte) (Settings, error) {
 	if fm.Whymark == nil {
 		return Settings{}, errNotDocument
 	}
+	uses := map[string]Need{}
+	for name, need := range fm.Whymark.Uses {
+		switch need {
+		case "optional":
+			uses[name] = Optional
+		case "required":
+			uses[name] = Required
+		default:
+			return Settings{}, fmt.Errorf("front matter: uses: %s is %q: a capability is optional or required", name, need)
+		}
+	}
 	return Settings{
 		Title:       fm.Title,
 		Description: fm.Description,
 		Version:     fm.Whymark.Version,
 		Start:       fm.Whymark.Start,
 		Journal:     fm.Whymark.Journal,
+		Uses:        uses,
 	}, nil
 }
 

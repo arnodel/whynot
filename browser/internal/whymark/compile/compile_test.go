@@ -40,6 +40,7 @@ func TestCompileErrors(t *testing.T) {
 		{"no whymark key", "---\ntitle: X\n---\n# Hello\n", "not a whymark document"},
 		{"another version", "---\nwhymark:\n  version: 2\n---\n# Hello\n", "version 2"},
 		{"bad Lua", "---\nwhymark:\n  version: 1\n---\n# Hello\n\n`if then`\n", "doc.md:7"},
+		{"a bad declaration", "---\nwhymark:\n  version: 1\n  uses:\n    ai: maybe\n---\n# Hello\n", "optional or required"},
 		{"an unclosed lua block", "---\nwhymark:\n  version: 1\n---\n# Hello\n\n```lua\nx = 1\n", "closing fence"},
 	} {
 		_, err := Compile("doc.md", []byte(c.doc))

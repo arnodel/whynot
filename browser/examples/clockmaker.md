@@ -3,6 +3,8 @@ title: The Clockmaker's Shop
 description: A tiny game against the clock, written as passages.
 whymark:
   version: 1
+  uses:
+    ai: optional
 ---
 
 The Clockmaker's Shop: a tiny game written as a whymark document. Open it in whynot to play
@@ -49,7 +51,7 @@ Describe the shop as the reader stands in it, among the stopped clocks.
 They hold a can of clock oil.
 `end`
 ```
-```noai
+```without ai
 The pendulums hang still. Somewhere, a spring creaks as it cools.
 ```
 
