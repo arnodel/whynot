@@ -19,6 +19,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/browser/internal/browser"
+	"github.com/arnodel/whynot/browser/internal/whymark/ai/anthropic"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -33,6 +34,7 @@ func main() {
 
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
+	remoteAI := flag.Bool("remote-ai", false, "with ANTHROPIC_API_KEY set, let whymark documents from the web use the AI too, at your expense: by default, only local ones can")
 	flag.Parse()
 
 	var root *os.Root
@@ -62,6 +64,9 @@ func main() {
 
 	win := new(app.Window)
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		browserApp.EnableAI(anthropic.New(key), anthropic.Models, *remoteAI)
+	}
 	// Gio draws only when asked: a frame each time more of a document
 	// arrives.
 	browserApp.OnDocumentChange = win.Invalidate

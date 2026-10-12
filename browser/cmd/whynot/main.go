@@ -12,6 +12,7 @@ import (
 	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/backends/ebitenbackend"
 	"github.com/arnodel/whynot/browser/internal/browser"
+	"github.com/arnodel/whynot/browser/internal/whymark/ai/anthropic"
 	"github.com/arnodel/whynot/fonts"
 	"github.com/arnodel/whynot/styles/simpletheme"
 )
@@ -28,6 +29,7 @@ func main() {
 	debugHit := flag.Bool("debug-hit", false, "outline the box under the mouse, via View.HitTest")
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
 	debugStats := flag.Bool("debug-stats", false, "show FPS/TPS and per-frame Update/Draw timing at startup - togglable at runtime with F regardless")
+	remoteAI := flag.Bool("remote-ai", false, "with ANTHROPIC_API_KEY set, let whymark documents from the web use the AI too, at your expense: by default, only local ones can")
 	flag.Parse()
 
 	var root *os.Root
@@ -61,6 +63,9 @@ func main() {
 	scale := ebiten.Monitor().DeviceScaleFactor()
 	faceSelector := browser.NewDocumentFaceSelector()
 	app := browser.NewApp(faceSelector, styleSheet, !*light, registry)
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		app.EnableAI(anthropic.New(key), anthropic.Models, *remoteAI)
+	}
 	doc, err := app.Load(location)
 	if err != nil {
 		panic(err)
