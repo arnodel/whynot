@@ -44,6 +44,7 @@ Linux, **Ctrl** takes the place of **Cmd**.
 | Journal mode: the pages visited, above the current one | **Cmd+J** |
 | Light / dark theme | **Cmd+Shift+L**, the actions page, or start with `-light` |
 | Only open local files beneath a directory | start with `-root dir` |
+| Let documents from the web use the AI | start with `-remote-ai` |
 | Reload | **Cmd+R**, or the toolbar |
 | Show FPS and frame timings | **F**, or start with `-debug-stats` |
 | Outline what's under the pointer | start with `-debug-hit` |
@@ -57,6 +58,10 @@ sends). Try [the cellar](../../examples/cellar.md),
 [the clockmaker's shop](../../examples/clockmaker.md) or
 [the notebook](../../examples/notebook.md); [whymark.md](../../whymark.md) is the format's
 specification.
+
+A document can also ask an AI, if it declares so, when `ANTHROPIC_API_KEY` is set: it asks
+Claude, at your expense. Local documents can; ones from the web only if you start with
+`-remote-ai`. Without the AI, a document shows what it wrote for that case instead.
 
 ## What it does with links and images
 

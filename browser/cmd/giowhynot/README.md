@@ -21,7 +21,7 @@ and see [`web`](web) for how that's built and what differs.
 ## Use
 
 The same as [`whynot`](../whynot#use): the same arguments, keys, and
-`-light` and `-root` options. The differences:
+`-light`, `-root` and `-remote-ai` options. The differences:
 
 - **The address bar is editable:** click it, type a path, a URL or "welcome", and press
   **Enter** to go there.
