@@ -17,8 +17,14 @@ import (
 // A Capability is something a document can't do by itself, such as asking
 // an AI, which an engine can provide to the documents declaring it in
 // their front matter (whymark: uses:), and the reader allowing it (see
-// Engine.Grant). A document reaches it as a Lua module, with require.
+// WithGrant). A document reaches it as a Lua module, with require, and
+// through blocks named after it (see the compile package): the module's
+// field __block, a function, if set, gives them their meaning, called as
+// __block(turn, args, text), where args are the words after the name in
+// the block's info string, and text its lines, code spans run.
 type Capability interface {
+	// Name is what documents declare, and require: "ai", say.
+	Name() string
 	// Module makes the capability's Lua module for one turn. It's made
 	// the first time the turn requires it.
 	//
@@ -48,16 +54,16 @@ type TurnContext struct {
 	Write func(string) error
 }
 
-// capabilities works out what a turn of a document gets of the
+// granted works out what a turn of a document gets of the
 // capabilities it declares: those the engine has and the reader allows,
 // by name. It's an error, which the turn's page shows, if a capability the
 // document requires isn't among them.
-func (e *Engine) capabilities(document *url.URL, uses map[string]compile.Need) (map[string]Capability, error) {
+func (e *Engine) granted(document *url.URL, uses map[string]compile.Need) (map[string]Capability, error) {
 	granted := map[string]Capability{}
 	for name, need := range uses {
-		c := e.Capabilities[name]
+		c := e.capabilities[name]
 		switch {
-		case c != nil && (e.Grant == nil || e.Grant(document, name)):
+		case c != nil && (e.grant == nil || e.grant(document, name)):
 			granted[name] = c
 		case need != compile.Required:
 		case c == nil:
@@ -69,42 +75,56 @@ func (e *Engine) capabilities(document *url.URL, uses map[string]compile.Need) (
 	return granted, nil
 }
 
-// requireFunc makes the turn's require. require(name) returns, in order of
-// precedence: what it returned for name earlier in the turn; for a
-// capability the document declares, its module, or false if the turn
-// doesn't get it (see Engine.capabilities); or the document's Lua module
-// name, the file name.lua next to the document, fetched through the
-// engine's registry and run in the turn's sandbox.
-func (e *Engine) requireFunc(r *rt.Runtime, env *rt.Table, tc *TurnContext, uses map[string]compile.Need, granted map[string]Capability) *rt.GoFunction {
+// requireFuncs makes the turn's require, and __host.capability, which
+// capability blocks use. require(name) returns, in order of precedence:
+// what it returned for name earlier in the turn; for a capability the
+// document declares, its module, or false if the turn doesn't get it (see
+// Engine.granted); or the document's Lua module name, the file name.lua
+// next to the document, fetched through the engine's registry and run in
+// the turn's sandbox. __host.capability(name) is require(name) for a
+// capability the document declares, and never a Lua module.
+func (e *Engine) requireFuncs(env *rt.Table, tc *TurnContext, uses map[string]compile.Need, granted map[string]Capability) (require, capability *rt.GoFunction) {
 	loaded := map[string]rt.Value{}
-	fn := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
-		name, err := c.StringArg(0)
-		if err != nil {
-			return nil, err
-		}
+	load := func(t *rt.Thread, name string, modules bool) (rt.Value, error) {
 		if v, ok := loaded[name]; ok {
-			return c.PushingNext1(t.Runtime, v), nil
+			return v, nil
 		}
-		var v rt.Value
-		if _, declared := uses[name]; declared {
-			v = rt.BoolValue(false)
+		v := rt.BoolValue(false)
+		var err error
+		switch _, declared := uses[name]; {
+		case declared:
 			if capability := granted[name]; capability != nil {
-				if v, err = capability.Module(tc); err != nil {
-					return nil, fmt.Errorf("require %q: %w", name, err)
-				}
+				v, err = capability.Module(tc)
 			}
-		} else {
-			if v, err = e.module(t, env, tc, name); err != nil {
-				return nil, fmt.Errorf("require %q: %w", name, err)
-			}
+		case modules:
+			v, err = e.module(t, env, tc, name)
+		default:
+			err = errors.New("the document doesn't declare it")
+		}
+		if err != nil {
+			return rt.NilValue, fmt.Errorf("require %q: %w", name, err)
 		}
 		loaded[name] = v
-		return c.PushingNext1(t.Runtime, v), nil
-	}, "require", 1, false)
+		return v, nil
+	}
+	goFunc := func(name string, modules bool) *rt.GoFunction {
+		return rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+			arg, err := c.StringArg(0)
+			if err != nil {
+				return nil, err
+			}
+			v, err := load(t, arg, modules)
+			if err != nil {
+				return nil, err
+			}
+			return c.PushingNext1(t.Runtime, v), nil
+		}, name, 1, false)
+	}
+	require, capability = goFunc("require", true), goFunc("capability", false)
 	// Modules are charged for in Engine.module, and capabilities by
 	// their own functions.
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, fn)
-	return fn
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, require, capability)
+	return require, capability
 }
 
 // module runs the document's Lua module name, and returns what it returns,
@@ -137,7 +157,7 @@ func (e *Engine) module(t *rt.Thread, env *rt.Table, tc *TurnContext, name strin
 // moduleUnit returns the Lua module at location compiled, from the cache
 // if its content has been seen, and the size of its source.
 func (e *Engine) moduleUnit(ctx context.Context, location *url.URL) (*code.Unit, int, error) {
-	src, err := e.Registry.Resolve(location, "")
+	src, err := e.registry.Resolve(location, "")
 	if err != nil {
 		return nil, 0, err
 	}

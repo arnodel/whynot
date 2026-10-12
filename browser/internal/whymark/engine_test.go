@@ -61,7 +61,7 @@ const cellar = "---\n" +
 
 // testEngine returns an Engine serving files, by name, from a temporary
 // directory, and a function giving a file's URL.
-func testEngine(t *testing.T, files map[string]string) (*Engine, func(string) *url.URL) {
+func testEngine(t *testing.T, files map[string]string, options ...Option) (*Engine, func(string) *url.URL) {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
@@ -74,7 +74,7 @@ func testEngine(t *testing.T, files map[string]string) (*Engine, func(string) *u
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { root.Close() })
-	return &Engine{Registry: fetch.NewRegistry(fetch.FileResolver{Root: root})}, func(name string) *url.URL {
+	return NewEngine(fetch.NewRegistry(fetch.FileResolver{Root: root}), options...), func(name string) *url.URL {
 		return &url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(dir, name))}
 	}
 }
@@ -364,9 +364,12 @@ func TestRandomPerPage(t *testing.T) {
 	}
 }
 
-// greeter is a capability for tests: its module has hello(name), which
-// writes a greeting into the page, and the page's id.
+// greeter is a capability for tests, "greet": its module has hello(name),
+// which writes a greeting into the page, and the page's id, and its blocks
+// write their arguments and text.
 type greeter struct{}
+
+func (greeter) Name() string { return "greet" }
 
 func (greeter) Module(tc *TurnContext) (rt.Value, error) {
 	m := rt.NewTable()
@@ -380,8 +383,28 @@ func (greeter) Module(tc *TurnContext) (rt.Value, error) {
 		}
 		return c.Next(), nil
 	}, "hello", 1, false)
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, hello)
+	block := rt.NewGoFunction(func(t *rt.Thread, c *rt.GoCont) (rt.Cont, error) {
+		args, err := c.TableArg(1)
+		if err != nil {
+			return nil, err
+		}
+		text, err := c.StringArg(2)
+		if err != nil {
+			return nil, err
+		}
+		var words []string
+		for i := int64(1); i <= args.Len(); i++ {
+			s, _ := args.Get(rt.IntValue(i)).TryString()
+			words = append(words, s)
+		}
+		if err := tc.Write("[" + strings.Join(words, " ") + "] " + text); err != nil {
+			return nil, err
+		}
+		return c.Next(), nil
+	}, "__block", 3, false)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, hello, block)
 	m.Set(rt.StringValue("hello"), rt.FunctionValue(hello))
+	m.Set(rt.StringValue("__block"), rt.FunctionValue(block))
 	m.Set(rt.StringValue("page"), rt.StringValue(tc.PageID))
 	return rt.TableValue(m), nil
 }
@@ -401,9 +424,7 @@ func TestCapabilities(t *testing.T) {
 		"none.md":     doc(""),
 	}
 	allow := true
-	e, file := testEngine(t, files)
-	e.Capabilities = map[string]Capability{"greet": greeter{}}
-	e.Grant = func(document *url.URL, name string) bool { return allow }
+	e, file := testEngine(t, files, WithCapabilities(greeter{}), WithGrant(func(document *url.URL, name string) bool { return allow }))
 
 	wants(t, "granted", take(t, e, Request{Location: file("optional.md")}), []string{"Hello, reader!"}, nil)
 	wants(t, "required and granted", take(t, e, Request{Location: file("required.md")}), []string{"Hello, reader!"}, nil)
@@ -413,10 +434,30 @@ func TestCapabilities(t *testing.T) {
 	wants(t, "optional, not granted", take(t, e, Request{Location: file("optional.md")}), []string{"No greeting."}, []string{"Hello"})
 	wants(t, "required, not granted", take(t, e, Request{Location: file("required.md")}), []string{"The page stopped", "isn't allowed"}, []string{"Hello", "No greeting"})
 
-	allow = true
-	e.Capabilities = nil
+	e, file = testEngine(t, files)
 	wants(t, "optional, not available", take(t, e, Request{Location: file("optional.md")}), []string{"No greeting."}, nil)
 	wants(t, "required, not available", take(t, e, Request{Location: file("required.md")}), []string{"The page stopped", "isn't available"}, nil)
+}
+
+// TestCapabilityBlocks checks blocks named after a capability: their text,
+// spans run, and arguments handed to the capability's __block; without
+// blocks, shown only without the capability; and both as code when the
+// document doesn't declare the capability.
+func TestCapabilityBlocks(t *testing.T) {
+	body := "# Hi\n\nBefore.\n\n```greet loud warm\nOne `= 1 + 1`\n```\n```without greet\nNo greeter.\n```\n\nAfter.\n"
+	files := map[string]string{
+		"blocks.md": "---\nwhymark:\n  version: 1\n  uses:\n    greet: optional\n---\n" + body,
+		"plain.md":  "---\nwhymark:\n  version: 1\n---\n" + body,
+		"nothing.md": "---\nwhymark:\n  version: 1\n  uses:\n    greet: optional\n---\n```lua\nlocal m = require \"greet\"\nif m then m.__block = nil end\n```\n" +
+			"# Hi\n\n```greet\nHello\n```\n",
+	}
+	allow := true
+	e, file := testEngine(t, files, WithCapabilities(greeter{}), WithGrant(func(*url.URL, string) bool { return allow }))
+	wants(t, "with the capability", take(t, e, Request{Location: file("blocks.md")}), []string{"Before.\n\n[loud warm] One 2\n", "After."}, []string{"No greeter", "```"})
+	wants(t, "undeclared", take(t, e, Request{Location: file("plain.md")}), []string{"```greet loud warm\nOne `= 1 + 1`\n```", "```without greet\nNo greeter.\n```"}, nil)
+	wants(t, "no __block", take(t, e, Request{Location: file("nothing.md")}), []string{"The page stopped", "mean nothing"}, nil)
+	allow = false
+	wants(t, "without the capability", take(t, e, Request{Location: file("blocks.md")}), []string{"Before.\n\nNo greeter.\n\nAfter."}, []string{"loud", "One"})
 }
 
 // TestModules checks the document's own Lua modules: one next to the

@@ -23,16 +23,9 @@ import (
 // it gives out, in memory: the state, and the passage the page shows.
 // It's safe for concurrent use.
 type Engine struct {
-	// Registry is what documents, and their Lua modules, are fetched
-	// from.
-	Registry *fetch.Registry
-	// Capabilities are what the engine can provide to documents declaring
-	// them, by name, such as "ai".
-	Capabilities map[string]Capability
-	// Grant, if set, reports whether the document at a URL may use the
-	// capability name, as the reader decides; without it, every document
-	// may use every capability it declares.
-	Grant func(document *url.URL, name string) bool
+	registry     *fetch.Registry
+	capabilities map[string]Capability
+	grant        func(document *url.URL, name string) bool
 
 	mu       sync.Mutex
 	pages    map[string]*snapshot
@@ -72,6 +65,40 @@ type compiled struct {
 //
 // A document that fails, at compiling or running, still gives a page: one
 // with an error message, whose page-id keeps the state it started from.
+// NewEngine returns an Engine fetching documents, and their Lua modules,
+// from registry.
+func NewEngine(registry *fetch.Registry, options ...Option) *Engine {
+	e := &Engine{registry: registry, capabilities: map[string]Capability{}}
+	for _, o := range options {
+		o(e)
+	}
+	return e
+}
+
+// An Option configures an Engine made by NewEngine.
+type Option func(*Engine)
+
+// WithCapabilities gives the engine capabilities to provide to the
+// documents declaring them. It panics if two have the same name.
+func WithCapabilities(capabilities ...Capability) Option {
+	return func(e *Engine) {
+		for _, c := range capabilities {
+			name := c.Name()
+			if e.capabilities[name] != nil {
+				panic(fmt.Sprintf("whymark: two capabilities named %q", name))
+			}
+			e.capabilities[name] = c
+		}
+	}
+}
+
+// WithGrant makes the engine ask grant whether the document at a URL may
+// use the capability name, as the reader decides. Without it, every
+// document may use every capability it declares that the engine has.
+func WithGrant(grant func(document *url.URL, name string) bool) Option {
+	return func(e *Engine) { e.grant = grant }
+}
+
 // An error means there's no page at all: the document can't be fetched,
 // isn't a whymark document, or req.FromPageID isn't one of its pages.
 func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
@@ -173,10 +200,10 @@ func seed(pageID string) int64 {
 }
 
 // withCapabilities returns the capabilities a turn of c gets (see
-// Engine.capabilities), or, if c requires one it can't have, c compiled
+// Engine.granted), or, if c requires one it can't have, c compiled
 // to that error, for its page to show.
 func (e *Engine) withCapabilities(c *compiled, document *url.URL) (map[string]Capability, *compiled) {
-	granted, err := e.capabilities(document, c.program.Uses)
+	granted, err := e.granted(document, c.program.Uses)
 	if err != nil {
 		return nil, &compiled{program: c.program, settings: c.settings, err: err}
 	}
@@ -206,7 +233,7 @@ func (e *Engine) compileModule(name string, source []byte) (*code.Unit, error) {
 // fetch returns the source of the document at location, which must be a
 // whymark document.
 func (e *Engine) fetch(ctx context.Context, location *url.URL) ([]byte, error) {
-	src, err := e.Registry.Resolve(location, "")
+	src, err := e.registry.Resolve(location, "")
 	if err != nil {
 		return nil, err
 	}

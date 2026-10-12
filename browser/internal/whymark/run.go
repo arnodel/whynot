@@ -232,7 +232,9 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 			tc := *in.context
 			tc.Runtime = r
 			tc.Write = func(s string) error { return p.write(turnPassage(), s) }
-			r.SetEnv(env, "require", rt.FunctionValue(in.engine.requireFunc(r, env, &tc, prog.Uses, in.granted)))
+			require, capability := in.engine.requireFuncs(env, &tc, prog.Uses, in.granted)
+			r.SetEnv(env, "require", rt.FunctionValue(require))
+			host.Set(rt.StringValue("capability"), rt.FunctionValue(capability))
 		}
 
 		// Rolls belong to the page (see seed).

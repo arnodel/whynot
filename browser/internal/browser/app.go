@@ -168,7 +168,7 @@ func NewApp(faceSelector fonts.FaceSelector, styleSheet whynot.StyleSheet, dark 
 			whynot.WithCodeBlockPlugin(kroki.Plugin{}),
 			whynot.WithCodeBlockPlugin(chromahighlight.Plugin{}),
 		),
-		engine:    &whymark.Engine{Registry: registry},
+		engine:    whymark.NewEngine(registry),
 		darkTheme: dark,
 		zoom:      1,
 		touch:     runtime.GOOS == "android" || runtime.GOOS == "ios",

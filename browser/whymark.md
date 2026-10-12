@@ -101,6 +101,8 @@ In a passage:
 - A code span with two or more backquotes is shown, as code. So is any code block other
   than the ones below.
 - A `lua` block runs where it is, and isn't shown.
+- A block named after a capability the document declares, or `without` and its name, is a
+  capability block (see [Capabilities](#capabilities)).
 - A link to `#id` goes to the passage `id`; a link to `?query` stays on the passage, with
   the query.
 
@@ -187,6 +189,22 @@ if ai then … end
 A capability declared optional, but not provided, gives `false`. One declared required, but
 not provided, stops the turn before it runs, with a page saying so. One not declared can't be
 required at all: a document's declaration is the complete list of what it can reach.
+
+**Capability blocks:** a fenced block named after a capability the document declares is
+handed to the capability. Its lines, code spans run, make a text, which goes to the module's
+`__block(turn, args, text)` function, with `args` the words after the name in the info string;
+without the capability, the block shows nothing. A block named `without` and the
+capability's name is the opposite: ordinary lines, written only when the turn doesn't have
+the capability. A block naming a capability the document doesn't declare is just code.
+
+````markdown
+```ai
+Describe the shop. `if turn.state.oil then` The reader holds a can of oil. `end`
+```
+```without ai
+The pendulums hang still.
+```
+````
 
 **A failed turn**, whether the document doesn't compile or its code raises an error, gives
 a page all the same: the error, and the state the turn started from.
