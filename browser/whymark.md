@@ -209,6 +209,49 @@ The pendulums hang still.
 **A failed turn**, whether the document doesn't compile or its code raises an error, gives
 a page all the same: the error, and the state the turn started from.
 
+### The AI
+
+The `ai` capability asks an AI. Its module is callable: `ai{…}` asks, and returns the answer;
+`ai.write{…}` asks, writes the answer on the page as it arrives, and returns it. Both take a
+table:
+
+- `prompt`: the question.
+- `messages`: a conversation so far, a list of `{role = "user", content = …}` and
+  `{role = "ai", content = …}`, to which `prompt`, if given, adds a turn. It must end with
+  the user's turn.
+- `system`: instructions, added after the module's `system` field, a document's default
+  (`ai.system = "…"`).
+- `model`: a tier, `fast`, `balanced` or `smart`, which the engine maps to the models of
+  its provider; the module's `model` field is the default.
+- `effort`: how hard the AI thinks, `low`, `medium` or `high`, where the provider supports it.
+- `returns`, for `ai{…}` only: the shape of the answer, which is then a Lua value instead of
+  text: `"string"`, `"number"`, `"integer"` or `"boolean"`; `{shape}` for a list;
+  `{field = shape, …}` for a table with those fields; `{one_of = {"a", "b"}}` for one of
+  those strings.
+- `key`: shares the answer across the document (below).
+
+An `ai` block is `ai.write{prompt = text}`, with the block's text.
+
+The engine's own instructions come first, and include that the AI never writes links: a
+document's choices are its own.
+
+**An answer belongs to its page.** It's recorded by the page's id and the call, so every
+new page, even for the same request, Reload included, gets new answers, while the pages it
+came from keep theirs. A call with a `key` gets the answer recorded for that key and call,
+whichever page makes it: an answer that should stay the same across the document. Only
+complete answers are recorded; one cut short stays on its page, marked as such.
+
+```lua
+local ai = require "ai"
+if ai then
+  local mood = ai{prompt = "The reader said: " .. turn.input.say, returns = {one_of = {"calm", "angry"}}}
+  ai.write{prompt = "The innkeeper, " .. mood .. ", answers the reader."}
+end
+```
+
+Helpers, such as keeping a story's past answers in its prompts, are Lua modules a document
+requires.
+
 ## Requests
 
 ```yaml
