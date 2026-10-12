@@ -65,6 +65,9 @@ type inputFilter struct {
 	input  *pageInput
 
 	pending []byte // the end of what was written, an unfinished line
+	// passing says the unfinished line is being passed on as it arrives:
+	// its start showed it's an ordinary line (see passable).
+	passing bool
 	// fence is the fence of the code block being passed through, or
 	// "" outside one; field is the input block being read, with its
 	// fence in inputFence.
@@ -79,20 +82,69 @@ func (f *inputFilter) Write(p []byte) (int, error) {
 	for {
 		i := bytes.IndexByte(f.pending, '\n')
 		if i < 0 {
-			return len(p), nil
+			break
 		}
 		line := string(f.pending[:i+1])
 		f.pending = f.pending[i+1:]
-		if err := f.line(line); err != nil {
+		var err error
+		if f.passing {
+			f.passing = false
+			err = f.pass(line)
+		} else {
+			err = f.line(line)
+		}
+		if err != nil {
 			return len(p), err
 		}
 	}
+	// A paragraph is often a single line, arriving word by word.
+	if len(f.pending) > 0 && (f.passing || f.passable()) {
+		f.passing = true
+		line := string(f.pending)
+		f.pending = f.pending[:0]
+		if err := f.pass(line); err != nil {
+			return len(p), err
+		}
+	}
+	return len(p), nil
+}
+
+// passable reports whether the unfinished line can be passed on before
+// its end: it's not in an input block, and its start shows it can't be a
+// fence or a controls heading, which only start with up to three spaces
+// and a backquote, a tilde or a hash.
+func (f *inputFilter) passable() bool {
+	if f.field != nil {
+		return false
+	}
+	start := bytes.TrimLeft(f.pending, " ")
+	switch {
+	case len(f.pending)-len(start) > 3:
+		return true
+	case len(start) == 0:
+		return false
+	}
+	return !bytes.ContainsAny(start[:1], "`~#")
+}
+
+// pass passes on part of an ordinary line.
+func (f *inputFilter) pass(s string) error {
+	if err := f.write(f.w, s); err != nil {
+		return err
+	}
+	return f.write(f.source, s)
 }
 
 // Close passes on the end of the page.
 func (f *inputFilter) Close() error {
 	if len(f.pending) > 0 {
-		if err := f.line(string(f.pending)); err != nil {
+		var err error
+		if f.passing {
+			err = f.pass(string(f.pending))
+		} else {
+			err = f.line(string(f.pending))
+		}
+		if err != nil {
 			return err
 		}
 		f.pending = nil
