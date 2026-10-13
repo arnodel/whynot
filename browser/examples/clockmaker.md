@@ -3,6 +3,7 @@ title: The Clockmaker's Shop
 description: A tiny game against the clock, written as passages.
 whymark:
   version: 1
+  journal: true
   uses:
     ai: optional
 ---

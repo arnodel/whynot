@@ -495,7 +495,7 @@ func TestExamples(t *testing.T) {
 		}
 		return string(data)
 	}
-	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md"), "notebook.md": read("notebook.md")})
+	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md"), "notebook.md": read("notebook.md"), "chat.md": read("chat.md")})
 
 	hall := take(t, e, Request{Location: file("cellar.md")})
 	won := follow(t, e, follow(t, e, follow(t, e, hall, "#take-the-lamp"), "#hall"), "#cellar")
@@ -532,6 +532,13 @@ func TestExamples(t *testing.T) {
 	wants(t, "two entries", two, []string{"1. eggs", "2. milk"}, []string{"Nothing written"})
 	other := write(empty, "tea")
 	wants(t, "another notebook, from the start", other, []string{"1. tea"}, []string{"eggs"})
+
+	// The chat, here without an AI (see package ai's tests for one).
+	chat := take(t, e, Request{Location: file("chat.md")})
+	wants(t, "the chat", chat, []string{"Say something to start.", "needs an AI", "``ANTHROPIC_API_KEY``"}, []string{"The page stopped"})
+	req, _ := Follow(chat.Header, "?")
+	req.Input = map[string]string{"say": "Hello"}
+	wants(t, "the chat, saying something", take(t, e, req), []string{"needs an AI"}, []string{"The page stopped", "You:"})
 }
 
 // TestSnapshotParents checks that each page remembers the page it came
