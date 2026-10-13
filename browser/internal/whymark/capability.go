@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/arnodel/golua/code"
 	rt "github.com/arnodel/golua/runtime"
+	"github.com/arnodel/golua/safeio"
 
 	"github.com/arnodel/whynot/browser/internal/whymark/compile"
 )
@@ -28,11 +31,13 @@ type Capability interface {
 	// Module makes the capability's Lua module for one turn. It's made
 	// the first time the turn requires it.
 	//
-	// The turn runs with CPU and memory limits, so the module's Go
-	// functions run only if declared CPU and memory safe (see
-	// rt.SolemnlyDeclareCompliance), and must then charge the turn's
-	// runtime for what they make. Turns don't require IO safety, which
-	// golua can't check yet: what a capability reaches is up to it.
+	// The turn runs with CPU and memory limits, and requires IO safety,
+	// so the module's Go functions run only if declared CPU, memory and
+	// IO safe (see rt.SolemnlyDeclareCompliance). They must then charge
+	// the turn's runtime for what they make, and reach files only through
+	// golua's safeio, which allows only what the turn may read. Other
+	// effects, such as asking an AI over the network, are the host's to
+	// allow, which it does by giving a document the capability.
 	Module(t *TurnContext) (rt.Value, error)
 }
 
@@ -121,20 +126,26 @@ func (e *Engine) requireFuncs(env *rt.Table, tc *TurnContext, uses map[string]co
 		}, name, 1, false)
 	}
 	require, capability = goFunc("require", true), goFunc("capability", false)
-	// Modules are charged for in Engine.module, and capabilities by
-	// their own functions.
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, require, capability)
+	// Modules are charged for, and read through safeio, in
+	// Engine.module; capabilities answer for their own functions.
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, require, capability)
 	return require, capability
 }
 
 // module runs the document's Lua module name, and returns what it returns,
-// or true if that's nil, as Lua's require does.
+// or true if that's nil, as Lua's require does. Modules are at or below
+// the document's directory: for a local document, golua's safeio ensures
+// it (see documentAccess), and for a remote one, the module's URL must be
+// under the document's.
 func (e *Engine) module(t *rt.Thread, env *rt.Table, tc *TurnContext, name string) (rt.Value, error) {
 	if name == "" || strings.ContainsAny(name, ":\\") || strings.HasPrefix(name, "/") {
 		return rt.NilValue, errors.New("a module is named by a path relative to the document, such as lib/story")
 	}
 	location := tc.Document.ResolveReference(&url.URL{Path: name + ".lua"})
-	unit, size, err := e.moduleUnit(tc.Context, location)
+	if !under(location, tc.Document) {
+		return rt.NilValue, errors.New("a module must be at or below the document's directory")
+	}
+	unit, size, err := e.moduleUnit(t, tc.Context, location)
 	if err != nil {
 		return rt.NilValue, err
 	}
@@ -155,15 +166,25 @@ func (e *Engine) module(t *rt.Thread, env *rt.Table, tc *TurnContext, name strin
 }
 
 // moduleUnit returns the Lua module at location compiled, from the cache
-// if its content has been seen, and the size of its source.
-func (e *Engine) moduleUnit(ctx context.Context, location *url.URL) (*code.Unit, int, error) {
-	src, err := e.registry.Resolve(location, "")
-	if err != nil {
-		return nil, 0, err
-	}
-	body, _, err := src.Fetch(ctx)
-	if err != nil {
-		return nil, 0, err
+// if its content has been seen, and the size of its source. A local module
+// is read through golua's safeio, with the turn's access, and a remote one
+// fetched through the engine's registry.
+func (e *Engine) moduleUnit(t *rt.Thread, ctx context.Context, location *url.URL) (*code.Unit, int, error) {
+	var body io.ReadCloser
+	if location.Scheme == "file" {
+		f, err := safeio.OpenFile(t.Runtime, urlFilePath(location), os.O_RDONLY, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		body = f
+	} else {
+		src, err := e.registry.Resolve(location, "")
+		if err != nil {
+			return nil, 0, err
+		}
+		if body, _, err = src.Fetch(ctx); err != nil {
+			return nil, 0, err
+		}
 	}
 	defer body.Close()
 	// No turn could afford more.
@@ -176,4 +197,39 @@ func (e *Engine) moduleUnit(ctx context.Context, location *url.URL) (*code.Unit,
 	}
 	unit, err := e.compileModule(location.String(), source)
 	return unit, len(source), err
+}
+
+// documentAccess returns the files a turn of document may reach: for a
+// local document, reading those at or below its directory; for any other,
+// nil, which, with IO safety required, means none.
+func documentAccess(document *url.URL) (*safeio.FSAccess, error) {
+	if document.Scheme != "file" {
+		return nil, nil
+	}
+	return safeio.Unrestricted.Restrict([]safeio.FSGrant{{
+		Dir:     filepath.Dir(urlFilePath(document)),
+		Actions: safeio.ReadAction,
+	}})
+}
+
+// under reports whether u is at or below the directory of document: the
+// same scheme and host, and a path in that directory. ResolveReference has
+// already taken out any dot segments.
+func under(u, document *url.URL) bool {
+	dir := document.Path[:strings.LastIndex(document.Path, "/")+1]
+	return u.Scheme == document.Scheme && u.Host == document.Host && u.User.String() == document.User.String() &&
+		strings.HasPrefix(u.Path, dir)
+}
+
+// urlFilePath is the local file path of a file: URL.
+func urlFilePath(u *url.URL) string {
+	p := u.Path
+	if p == "" {
+		p = u.Opaque
+	}
+	// A Windows path in a URL has a slash before its drive: /C:/dir.
+	if len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
 }
