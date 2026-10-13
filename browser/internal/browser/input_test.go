@@ -32,6 +32,37 @@ func TestInputFilter(t *testing.T) {
 	}
 }
 
+// TestInputFilterStreams checks that an ordinary line is passed on as it
+// arrives, before its end, while one that may be a fence or a controls
+// heading waits for its end.
+func TestInputFilterStreams(t *testing.T) {
+	var out, source strings.Builder
+	var input pageInput
+	f := &inputFilter{w: &out, source: &source, input: &input}
+	for _, c := range []struct{ write, want string }{
+		{"Once upon", "Once upon"},
+		{" a time.\n\n", "Once upon a time.\n\n"},
+		{"   ", "Once upon a time.\n\n"},
+		{"``", "Once upon a time.\n\n"},
+		{"`input say\nSay…\n```\n", "Once upon a time.\n\n"},
+		{"## (Contr", "Once upon a time.\n\n"},
+		{"ols)\n", "Once upon a time.\n\n"},
+		{"    indented", "Once upon a time.\n\n    indented"},
+	} {
+		f.Write([]byte(c.write))
+		if out.String() != c.want {
+			t.Errorf("after %q, passed on %q, want %q", c.write, out.String(), c.want)
+		}
+	}
+	f.Close()
+	if want := "Once upon a time.\n\n## (Controls)\n    indented"; source.String() != want {
+		t.Errorf("the source is %q, want %q", source.String(), want)
+	}
+	if got := input.get(); got == nil || got.name != "say" {
+		t.Errorf("the field is %+v, want say", got)
+	}
+}
+
 // TestInputInBrowser checks a whymark page's input field: its
 // placeholder, sending text as a turn, and drafts kept per page.
 func TestInputInBrowser(t *testing.T) {
