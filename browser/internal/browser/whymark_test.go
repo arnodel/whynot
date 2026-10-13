@@ -3,8 +3,13 @@
 package browser
 
 import (
+	"image"
 	"strings"
 	"testing"
+
+	"github.com/arnodel/whynot"
+	"github.com/arnodel/whynot/fonts"
+	"github.com/arnodel/whynot/styles/simpletheme"
 )
 
 // cellarDoc is a tiny whymark adventure, with the journal hint if
@@ -98,6 +103,27 @@ func TestWhymarkInBrowser(t *testing.T) {
 	app.Follow("cellar.md")
 	if !strings.Contains(pageText(app), "dark below") || app.Location().Fragment != "hall" {
 		t.Errorf("playing again shows %q, at %s; want the hall, with no lamp", pageText(app), app.Location())
+	}
+}
+
+// TestWhymarkJournalAtLaunch checks that a document hinting at journal
+// mode turns it on when it's the first one opened, as the viewers open it,
+// and that one without the hint doesn't.
+func TestWhymarkJournalAtLaunch(t *testing.T) {
+	for _, hint := range []bool{true, false} {
+		dir := t.TempDir()
+		location := writeTempMD(t, dir, "cellar.md", cellarDoc(hint))
+		app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
+		doc, err := app.Load(location)
+		if err != nil {
+			t.Fatal(err)
+		}
+		app.Panel = whynot.NewPanel(app.NewView(doc), image.Rectangle{})
+		app.Open(location)
+		app.Relayout(testWidth, testHeight, 1, 0)
+		if app.Journal() != hint {
+			t.Errorf("with the hint %v, journal mode is %v", hint, app.Journal())
+		}
 	}
 }
 

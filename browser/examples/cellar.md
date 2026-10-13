@@ -3,6 +3,7 @@ title: The Cellar
 description: A tiny adventure in two rooms, the whymark format's running example.
 whymark:
   version: 1
+  journal: true
 ---
 
 A tiny adventure: find the lamp, and go down to the cellar. Open it in whynot to play

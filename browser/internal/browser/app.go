@@ -191,9 +191,16 @@ type arrival struct {
 // Panel.View().Document().Title()); every later navigation goes through Follow/
 // Reload/Paste/Back/Forward instead, which also push history.
 func (a *App) Open(location *url.URL) {
-	a.location = a.locationOf(a.Panel.View().Document(), location)
-	a.arrive(location.Fragment)
+	doc := a.Panel.View().Document()
+	a.location = a.locationOf(doc, location)
+	if a.pageOf(doc) != nil {
+		// A page's fragment is its passage, not a heading to scroll to.
+		a.arrive("")
+	} else {
+		a.arrive(location.Fragment)
+	}
 	a.updateWindowTitle()
+	a.journalHint(doc)
 }
 
 // Update carries on with what showing the current document needs as it
@@ -570,7 +577,12 @@ func (a *App) show(doc *whynot.Document, location *url.URL) {
 		a.arrive(location.Fragment)
 	}
 	a.updateWindowTitle()
-	// A whymark document starting, which reads best as a trail.
+	a.journalHint(doc)
+}
+
+// journalHint turns journal mode on if doc is a whymark document's first
+// page, and the document reads best as a trail.
+func (a *App) journalHint(doc *whynot.Document) {
 	if p := a.pageOf(doc); p != nil && p.request.FromPageID == "" && p.header.Journal && a.journal == nil {
 		a.ToggleJournal()
 	}
