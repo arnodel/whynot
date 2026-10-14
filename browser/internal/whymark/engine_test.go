@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -547,7 +548,8 @@ func TestExamples(t *testing.T) {
 		}
 		return string(data)
 	}
-	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md"), "notebook.md": read("notebook.md"), "chat.md": read("chat.md")})
+	e, file := testEngine(t, map[string]string{"cellar.md": read("cellar.md"), "clockmaker.md": read("clockmaker.md"), "notebook.md": read("notebook.md"), "chat.md": read("chat.md"),
+		"lib/dice.lua": read("lib/dice.lua"), "lib/story.lua": read("lib/story.lua")})
 
 	hall := take(t, e, Request{Location: file("cellar.md")})
 	won := follow(t, e, follow(t, e, follow(t, e, hall, "#take-the-lamp"), "#hall"), "#cellar")
@@ -591,6 +593,51 @@ func TestExamples(t *testing.T) {
 	req, _ := Follow(chat.Header, "?")
 	req.Input = map[string]string{"say": "Hello"}
 	wants(t, "the chat, saying something", take(t, e, req), []string{"needs an AI"}, []string{"The page stopped", "You:"})
+}
+
+// TestLibDice checks the example dice module: fixed rolls are the same on
+// sibling pages and move on with the trail, free rolls differ, a fixed
+// roll leaves later free rolls free, and rolls are within their range.
+func TestLibDice(t *testing.T) {
+	dice, err := os.ReadFile("../../examples/lib/dice.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, file := testEngine(t, map[string]string{
+		"lib/dice.lua": string(dice),
+		"rolls.md": "---\nwhymark:\n  version: 1\n---\n```lua\nlocal dice = require \"lib/dice\"\n" +
+			"function init(turn) return dice.init({}) end\n" +
+			"function free() local r = {} for i = 1, 20 do r[i] = dice.roll(1000) end return table.concat(r, \",\") end\n" +
+			"function fixed() local r = {} for i = 1, 20 do r[i] = dice.fixed_roll(turn, \"d1000\") end return table.concat(r, \",\") end\n" +
+			"function inrange(spec, lo, hi) for _ = 1, 200 do local v = dice.roll(spec) if v < lo or v > hi then return false end end return true end\n" +
+			"```\n# (Rolls)\n\nfixed `= fixed()` free `= free()` end\n\n" +
+			"ranges `= tostring(inrange(\"2d6+1\", 3, 13) and inrange(\"d20\", 1, 20) and inrange(4, 1, 4) and inrange(\"3d6-3\", 0, 15))`\n",
+		"bad.md": "---\nwhymark:\n  version: 1\n---\n```lua\nlocal dice = require \"lib/dice\"\n```\n# Bad\n\n`= dice.roll(\"2x6\")`\n",
+	})
+	rolls := regexp.MustCompile(`fixed (\S+) free (\S+) end`)
+	parse := func(p turned) (fixed, free string) {
+		t.Helper()
+		m := rolls.FindStringSubmatch(p.body)
+		if m == nil {
+			t.Fatalf("no rolls on the page:\n%s", p.body)
+		}
+		return m[1], m[2]
+	}
+	start := take(t, e, Request{Location: file("rolls.md")})
+	wants(t, "the ranges", start, []string{"ranges true"}, []string{"The page stopped"})
+	a, b := follow(t, e, start, "?"), follow(t, e, start, "?")
+	fixedA, freeA := parse(a)
+	fixedB, freeB := parse(b)
+	if fixedA != fixedB {
+		t.Errorf("sibling pages rolled differently with fixed rolls: %s and %s", fixedA, fixedB)
+	}
+	if freeA == freeB {
+		t.Errorf("sibling pages rolled the same with free rolls, after fixed ones: %s", freeA)
+	}
+	if fixedNext, _ := parse(follow(t, e, a, "?")); fixedNext == fixedA {
+		t.Errorf("the next page's fixed rolls are the same as its parent's: %s", fixedNext)
+	}
+	wants(t, "a bad roll", take(t, e, Request{Location: file("bad.md")}), []string{"The page stopped", "not a roll: 2x6"}, nil)
 }
 
 // TestSnapshotParents checks that each page remembers the page it came

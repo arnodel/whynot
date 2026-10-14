@@ -76,7 +76,11 @@ func testFiles(t *testing.T, files map[string]string, options ...whymark.Option)
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -236,11 +240,15 @@ func TestIncomplete(t *testing.T) {
 // TestChatExample plays the chat example: each exchange is a page, and
 // the conversation sent is the exchanges on the pages that led there.
 func TestChatExample(t *testing.T) {
-	source, err := os.ReadFile("../../../examples/chat.md")
-	if err != nil {
-		t.Fatal(err)
+	files := map[string]string{}
+	for _, name := range []string{"chat.md", "lib/story.lua"} {
+		source, err := os.ReadFile("../../../examples/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(source)
 	}
-	e, provider, file := testFiles(t, map[string]string{"chat.md": string(source)})
+	e, provider, file := testFiles(t, files)
 	start := turn(t, e, whymark.Request{Location: file("chat.md")})
 	say := func(from page, text string) page {
 		t.Helper()
@@ -264,5 +272,37 @@ func TestChatExample(t *testing.T) {
 	say(start, "Something else")
 	if msgs := provider.last().Messages; len(msgs) != 1 || msgs[0].Content != "Something else" {
 		t.Errorf("a conversation started again from the first page sends %+v", msgs)
+	}
+}
+
+// TestLibStory checks the example story module: each page's exchanges,
+// two of them here, are sent before the next page's, oldest first; ask
+// records text answers too; and without the AI, it does nothing.
+func TestLibStory(t *testing.T) {
+	source, err := os.ReadFile("../../../examples/lib/story.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := "---\nwhymark:\n  version: 1\n  uses:\n    ai: optional\n---\n```lua\nlocal ai = require \"ai\"\nlocal story = require \"lib/story\"\n```\n" +
+		"# (Story)\n\n```lua\nlocal n = turn.query.n or \"1\"\n" +
+		"turn.write(tostring(story.write(turn, ai, {prompt = \"first \" .. n})), \" \")\n" +
+		"turn.write(tostring(story.ask(turn, ai, {prompt = \"second \" .. n})))\n```\n"
+	allow := true
+	e, provider, file := testFiles(t, map[string]string{"lib/story.lua": string(source), "story.md": doc},
+		whymark.WithGrant(func(*url.URL, string) bool { return allow }))
+	first := turn(t, e, whymark.Request{Location: file("story.md")})
+	req, _ := whymark.Follow(first.Header, "?n=2")
+	turn(t, e, req)
+	var got []string
+	for _, m := range provider.last().Messages {
+		got = append(got, m.Role+": "+m.Content)
+	}
+	want := "user: first 1, assistant: answer 1, user: second 1, assistant: answer 2, user: first 2, assistant: answer 3, user: second 2"
+	if strings.Join(got, ", ") != want {
+		t.Errorf("the last request's messages are\n%s\nwant\n%s", strings.Join(got, ", "), want)
+	}
+	allow = false
+	if p := turn(t, e, whymark.Request{Location: file("story.md")}); !strings.Contains(p.body, "nil nil") {
+		t.Errorf("without the AI, the page shows %q", p.body)
 	}
 }

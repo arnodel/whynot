@@ -14,8 +14,10 @@ each `#` heading is a page, and the code in backquotes runs. See
 [whymark.md](../whymark.md) for the format.
 
 ```lua
+local dice = require "lib/dice"
+
 function init(turn)
-  return {minutes = 10, items = {}}
+  return dice.init({minutes = 10, items = {}})
 end
 
 function has(item)
@@ -70,7 +72,7 @@ The pendulums hang still. Somewhere, a spring creaks as it cools.
 `if has("key") then`
 Tools, springs and a cold cup of tea. Nothing else of use.
 `else`
-`local roll = math.random(6)`
+`local roll = dice.fixed_roll(turn, 6)`
 You rummage through drawers of springs and screws. You roll a `= roll`.
 `if roll >= 3 then`
 `table.insert(turn.state.items, "key")`
