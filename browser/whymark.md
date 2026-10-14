@@ -151,8 +151,8 @@ after a passage's blank lines can still write the header, or go elsewhere. `turn
 the page has started is an error.
 
 **The sandbox:** the Lua standard libraries base (without `dofile` and `loadfile`), string,
-table, math, utf8 and coroutine,
-and nothing else: no files, no network. A turn's CPU and memory are limited.
+table, math, utf8 and coroutine, and nothing else: no files, apart from the document's
+modules (see `require` below), and no network. A turn's CPU and memory are limited.
 
 **Randomness belongs to the page:** `math.random` is seeded from the page's own identity, so a
 new page, even for the same request, rolls anew, and a page made again rolls the same. A
@@ -172,7 +172,9 @@ turn.state.seed = math.random(1 << 30)
 **`require`** loads, in order: what it loaded earlier in the turn; a capability the document
 declares (see below); or the document's own **Lua module**: `require "lib/story"` runs
 `lib/story.lua`, next to the document, in the same sandbox, and returns what it returns.
-Module names are paths relative to the document.
+Module names are paths relative to the document, to a module at or below the document's
+directory: `require "../shared"` is an error, and so, for a local document, is a module
+reached through a link pointing out of that directory.
 
 ### Capabilities
 

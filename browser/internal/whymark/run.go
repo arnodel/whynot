@@ -152,17 +152,29 @@ type turnOutput struct {
 func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err error) {
 	def := rt.RuntimeContextDef{
 		// The limits make the context require Go functions to be CPU and
-		// memory safe. Not IO safe: golua can't yet say what IO is allowed,
-		// so the sandbox leaves out the functions doing IO instead.
-		HardLimits: rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
+		// memory safe too.
+		HardLimits:    rt.RuntimeResources{Cpu: cpuLimit, Memory: memLimit},
+		RequiredFlags: rt.ComplyIoSafe,
+	}
+	if in.context != nil {
+		access, err := documentAccess(in.context.Document)
+		if err != nil {
+			return out, err
+		}
+		if access != nil {
+			defer access.Close()
+			def.FSAccess = access
+		}
 	}
 	_, err = rt.DoInContext(func(r *rt.Runtime) error {
-		// The other libraries register in package's table, but documents
-		// have nothing to require yet.
+		// The other libraries register in package's table, though
+		// documents get the engine's require instead.
 		lib.LoadLibs(r, packagelib.LibLoader, base.LibLoader, coroutine.LibLoader,
 			stringlib.LibLoader, tablelib.LibLoader, mathlib.LibLoader, utf8lib.LibLoader)
 		env := r.GlobalEnv()
-		// The engine's require, not golua's, which reads files anywhere.
+		// The engine's require, not golua's, which reads modules
+		// relative to the process, not the document; dofile and loadfile
+		// would too.
 		r.SetEnv(env, "package", rt.NilValue)
 		r.SetEnv(env, "require", rt.NilValue)
 		r.SetEnv(env, "dofile", rt.NilValue)
@@ -226,7 +238,7 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 			return c.Next(), nil
 		}, 1, false)
 		// They only reach the turn's own page.
-		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, write, writeHeaders, started, heading)
+		rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, write, writeHeaders, started, heading)
 
 		if in.engine != nil {
 			tc := *in.context
@@ -315,7 +327,7 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 		case "notes":
 			v = toLua(t.Runtime, s.notes)
 			if v.IsNil() {
-				v = rt.TableValue(rt.NewTable())
+				v = rt.TableValue(newTable(t.Runtime))
 			}
 		case "passage":
 			v = rt.StringValue(s.passage)
@@ -337,7 +349,7 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 		}
 		return c.PushingNext1(t.Runtime, v), nil
 	}, "page", 2, false)
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, index)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, index)
 	meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
 	entry.SetMetatable(meta)
 	return rt.TableValue(entry)
@@ -352,12 +364,18 @@ func goFunction(r *rt.Runtime, t *rt.Table, name string, f func(*rt.Thread, *rt.
 
 // stringTable makes a table of m, in r, which it charges for it.
 func stringTable(r *rt.Runtime, m map[string]string) rt.Value {
-	t := rt.NewTable()
+	t := newTable(r)
 	for k, v := range m {
 		r.RequireBytes(len(k) + len(v))
 		set(r, t, rt.StringValue(k), rt.StringValue(v))
 	}
 	return rt.TableValue(t)
+}
+
+// newTable makes a table, charging r for it.
+func newTable(r *rt.Runtime) *rt.Table {
+	r.RequireMem(rt.TableHeaderSize)
+	return rt.NewTable()
 }
 
 // set sets t[k] to v, charging r for it.
@@ -419,7 +437,7 @@ func toLua(r *rt.Runtime, data any) rt.Value {
 		r.RequireBytes(len(d))
 		return rt.StringValue(d)
 	case *table:
-		t := rt.NewTable()
+		t := newTable(r)
 		for i, k := range d.keys {
 			set(r, t, toLua(r, k), toLua(r, d.values[i]))
 		}

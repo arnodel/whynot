@@ -155,9 +155,10 @@ func (a *AI) Module(tc *whymark.TurnContext) (rt.Value, error) {
 		}
 		return c.Next(), nil
 	}, "__block", 3, false)
-	// They charge the turn for the answers they return. Not IO safe:
-	// they ask the provider, over the network.
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, ask, write, block)
+	// They charge the turn for the answers they return, and reach no
+	// files; asking the provider is the host's to allow (see
+	// whymark.Capability).
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, ask, write, block)
 	meta.Set(rt.StringValue("__call"), rt.FunctionValue(ask))
 	m.Set(rt.StringValue("write"), rt.FunctionValue(write))
 	m.Set(rt.StringValue("__block"), rt.FunctionValue(block))

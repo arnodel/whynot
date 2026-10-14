@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -65,7 +67,11 @@ func testEngine(t *testing.T, files map[string]string, options ...Option) (*Engi
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -402,7 +408,7 @@ func (greeter) Module(tc *TurnContext) (rt.Value, error) {
 		}
 		return c.Next(), nil
 	}, "__block", 3, false)
-	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe, hello, block)
+	rt.SolemnlyDeclareCompliance(rt.ComplyCpuSafe|rt.ComplyMemSafe|rt.ComplyIoSafe, hello, block)
 	m.Set(rt.StringValue("hello"), rt.FunctionValue(hello))
 	m.Set(rt.StringValue("__block"), rt.FunctionValue(block))
 	m.Set(rt.StringValue("page"), rt.StringValue(tc.PageID))
@@ -484,6 +490,52 @@ func TestNoFileAccess(t *testing.T) {
 			"`= tostring(dofile) .. tostring(loadfile) .. tostring(io) .. tostring(os) .. tostring(package)`\n",
 	})
 	wants(t, "the sandbox", take(t, e, Request{Location: file("files.md")}), []string{"nilnilnilnilnil"}, nil)
+}
+
+// TestModulesStayBelow checks that a document's modules are at or below
+// its directory: one above is refused, and so is one reached through a
+// symbolic link pointing out of it, which golua's safeio refuses.
+func TestModulesStayBelow(t *testing.T) {
+	doc := func(module string) string {
+		return "---\nwhymark:\n  version: 1\n---\n# Start\n\n`= require(\"" + module + "\")`\n"
+	}
+	e, file := testEngine(t, map[string]string{
+		"secret.lua":       "return \"the secret\"\n",
+		"story/lib/ok.lua": "return \"fine\"\n",
+		"story/below.md":   doc("lib/ok"),
+		"story/above.md":   doc("../secret"),
+		"story/linked.md":  doc("linked"),
+	})
+	wants(t, "a module below", take(t, e, Request{Location: file("story/below.md")}), []string{"fine"}, []string{"The page stopped"})
+	wants(t, "a module above", take(t, e, Request{Location: file("story/above.md")}), []string{"The page stopped", "at or below"}, []string{"the secret"})
+	if err := os.Symlink(filepath.FromSlash(file("secret.lua").Path), filepath.FromSlash(file("story/linked.lua").Path)); err != nil {
+		t.Skip("no symbolic links here:", err)
+	}
+	wants(t, "a link out", take(t, e, Request{Location: file("story/linked.md")}), []string{"The page stopped", `require "linked"`}, []string{"the secret"})
+}
+
+// TestRemoteModules checks a remote document's modules: fetched from
+// below its URL, and refused above it.
+func TestRemoteModules(t *testing.T) {
+	files := map[string]string{
+		"/stories/story.md":   "---\nwhymark:\n  version: 1\n---\n# Start\n\n`= require(\"lib/ok\")` `= turn.query.up and require(\"../secret\") or \"\"`\n",
+		"/stories/lib/ok.lua": "return \"fine\"\n",
+		"/secret.lua":         "return \"the secret\"\n",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content, ok := files[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, content)
+	}))
+	defer server.Close()
+	e := NewEngine(fetch.NewRegistry(fetch.HTTPResolver{AllowHTTP: true}))
+	location, _ := url.Parse(server.URL + "/stories/story.md")
+	wants(t, "a module below", take(t, e, Request{Location: location}), []string{"fine"}, []string{"The page stopped"})
+	location, _ = url.Parse(server.URL + "/stories/story.md?up=yes")
+	wants(t, "a module above", take(t, e, Request{Location: location}), []string{"The page stopped", "at or below"}, []string{"the secret"})
 }
 
 // TestExamples plays the browser's example documents, in examples/.

@@ -111,12 +111,14 @@ func jsonToLua(r *rt.Runtime, v any) rt.Value {
 		}
 		return rt.FloatValue(v)
 	case []any:
+		r.RequireMem(rt.TableHeaderSize)
 		t := rt.NewTable()
 		for i, item := range v {
 			set(t, rt.IntValue(int64(i+1)), jsonToLua(r, item))
 		}
 		return rt.TableValue(t)
 	case map[string]any:
+		r.RequireMem(rt.TableHeaderSize)
 		t := rt.NewTable()
 		for k, item := range v {
 			r.RequireBytes(len(k))
