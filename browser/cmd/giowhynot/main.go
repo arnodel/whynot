@@ -117,13 +117,11 @@ func run(win *app.Window, browserApp *browser.App, doc *document, tb *toolbar, d
 
 			tb.update(gtx, browserApp)
 			d.update(gtx, browserApp)
-			// Suspended while editing the address bar or the dock -
+			// Only shortcuts while typing in the address bar or the dock:
 			// pollKeys's filters match regardless of focus, so e.g. typing
 			// "-" or space into it would otherwise also fire
 			// ZoomOut/PageDown.
-			if !tb.editing && !d.focused(gtx) {
-				pollKeys(gtx, browserApp)
-			}
+			pollKeys(gtx, browserApp, tb.editing || d.focused(gtx))
 			browserApp.Update()
 			doc.layout(gtx)
 			d.layout(gtx)
