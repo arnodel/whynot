@@ -9,10 +9,10 @@ whymark:
 ---
 
 A chat with an AI. Each page holds one exchange: what you said, and the answer. The
-conversation so far is found again by walking back through the pages that led here, so
-going back and saying something else starts a different conversation from there. Open it
-in whynot with `ANTHROPIC_API_KEY` set (`whynot browser/examples/chat.md`);
-[whymark.md](../whymark.md) describes the format.
+conversation so far is found again by walking back through the pages that led here (see
+[lib/story.lua](lib/story.lua)), so going back and saying something else starts a
+different conversation from there. Open it in whynot with `ANTHROPIC_API_KEY` set
+(`whynot browser/examples/chat.md`); [whymark.md](../whymark.md) describes the format.
 
 ```lua
 local ai = require "ai"
@@ -23,19 +23,7 @@ replies fairly short unless asked for more.
 ]]
 end
 
--- conversation returns the exchanges on the pages that led here, oldest
--- first, as the messages of a conversation.
-function conversation()
-  local messages, p = {}, turn.previous
-  while p do
-    if p.notes.reply then
-      table.insert(messages, 1, {role = "ai", content = p.notes.reply})
-      table.insert(messages, 1, {role = "user", content = p.notes.say})
-    end
-    p = p.previous
-  end
-  return messages
-end
+local story = require "lib/story"
 ```
 
 # (Chat)
@@ -47,10 +35,7 @@ Say something to start.
 > **You:** `= (say:gsub("\n", "\n> "))`
 
 ```lua
-local messages = conversation()
-messages[#messages + 1] = {role = "user", content = say}
-turn.notes.say = say
-turn.notes.reply = ai.write{messages = messages}
+story.write(turn, ai, {prompt = say})
 turn.write("\n")
 ```
 `end`
