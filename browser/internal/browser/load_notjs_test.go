@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,13 +27,13 @@ func TestNewRegistryRoot(t *testing.T) {
 	defer root.Close()
 
 	confined := NewRegistry(root)
-	if _, err := loadDocument(whynot.NewParser(), confined, inside); err != nil {
+	if _, err := loadDocument(whynot.NewParser(), confined, inside, io.Discard); err != nil {
 		t.Errorf("document beneath the root: err = %v, want nil", err)
 	}
-	if _, err := loadDocument(whynot.NewParser(), confined, outside); err == nil {
+	if _, err := loadDocument(whynot.NewParser(), confined, outside, io.Discard); err == nil {
 		t.Error("document outside the root: err = nil, want an error")
 	}
-	if _, err := loadDocument(whynot.NewParser(), NewRegistry(nil), outside); err != nil {
+	if _, err := loadDocument(whynot.NewParser(), NewRegistry(nil), outside, io.Discard); err != nil {
 		t.Errorf("without a root: err = %v, want nil", err)
 	}
 }

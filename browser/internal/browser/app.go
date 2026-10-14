@@ -101,6 +101,13 @@ type App struct {
 	// each page of one, its header and the request it answered.
 	engine *whymark.Engine
 	pages  map[*whynot.Document]*whymarkPage
+	// sources keeps the Markdown of the other documents loaded, as it
+	// arrives, for CopyMarkdown.
+	sources map[*whynot.Document]*pageSource
+	// copied is whether CopyMarkdown ran since the actions page was last
+	// shown, and copyErr how it went, for the page to say.
+	copied  bool
+	copyErr error
 	// draftView is the View InputDraft last saw current, and draftVersion
 	// changes with it.
 	draftView    *whynot.View
@@ -414,13 +421,18 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 // the Document is the page of a turn starting it, at location's passage
 // if it names one.
 func (a *App) Load(location *url.URL) (*whynot.Document, error) {
-	doc, err := loadDocument(a.parser, a.registry, location)
+	source := &pageSource{}
+	doc, err := loadDocument(a.parser, a.registry, location, source)
 	if errors.Is(err, errWhymark) {
 		return a.takeTurn(whymark.Request{Location: location})
 	}
 	if err != nil {
 		return nil, loadError(err, location)
 	}
+	if a.sources == nil {
+		a.sources = map[*whynot.Document]*pageSource{}
+	}
+	a.sources[doc] = source
 	a.watch(doc)
 	return doc, nil
 }

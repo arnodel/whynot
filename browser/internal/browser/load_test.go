@@ -2,6 +2,7 @@ package browser
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -34,7 +35,7 @@ func TestLoadDocumentChecksMediaType(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = loadDocument(whynot.NewParser(), registry, u)
+		_, err = loadDocument(whynot.NewParser(), registry, u, io.Discard)
 		return err
 	}
 
@@ -81,7 +82,7 @@ func TestCheckMarkdown(t *testing.T) {
 // TestLoadDocumentWelcome checks the welcome page is served by the
 // registry, like any other document.
 func TestLoadDocumentWelcome(t *testing.T) {
-	doc, err := loadDocument(whynot.NewParser(), NewRegistry(nil), WelcomeURL)
+	doc, err := loadDocument(whynot.NewParser(), NewRegistry(nil), WelcomeURL, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}

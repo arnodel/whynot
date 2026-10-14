@@ -42,6 +42,7 @@ func (a *App) ActionsShowing() bool { return a.overlay == actionsOverlay }
 // as journal mode, closes the page first. Only the actions page's own
 // links run actions: they're "whynot:" links (see Follow).
 func (a *App) ShowActions() {
+	a.copied = false
 	a.showOverlay(actionsOverlay, a.actionsSource())
 }
 
@@ -61,6 +62,23 @@ func (a *App) refreshActions() {
 	view := a.overlayView(a.actionsSource())
 	view.ScrollToRatio(start)
 	a.Panel.SetView(view)
+}
+
+// copyAction is the actions page's copy link, page for a page, or journal
+// in journal mode, followed by how the last copy went, if it ran since
+// the page was shown.
+func (a *App) copyAction(page, journal string) string {
+	text := page
+	if a.journal != nil {
+		text = journal
+	}
+	switch {
+	case !a.copied:
+		return text
+	case a.copyErr != nil:
+		return text + " · *couldn't copy: " + escapeMarkdown(a.copyErr.Error()) + "*"
+	}
+	return text + " · *copied*"
 }
 
 // actionsSource generates the Markdown source of the actions page.
@@ -127,6 +145,7 @@ func (a *App) actionsSource() []byte {
 		{unless(len(a.history) == 0, "back", "Go back"), keysOf("back")},
 		{unless(len(a.future) == 0, "forward", "Go forward"), keysOf("forward")},
 		{link("reload", "Reload this page"), keysOf("reload")},
+		{a.copyAction(link("copy", "Copy this page as Markdown"), link("copy", "Copy the journal as Markdown")), keysOf("copy")},
 		{link("paste", "Open the path or URL in the clipboard"), keysOf("paste")},
 		{unless(!a.CanShowTOC(), "toc", "Show the table of contents"), keysOf("toc")},
 	})

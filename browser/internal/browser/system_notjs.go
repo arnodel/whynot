@@ -7,7 +7,35 @@ import (
 	"log"
 	"os/exec"
 	"runtime"
+	"strings"
 )
+
+// writeClipboard puts text on the clipboard, with the same utilities as
+// readClipboard.
+func writeClipboard(text string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "windows":
+		// UTF-8 in, whatever the console's code page.
+		cmd = exec.Command("powershell", "-NoProfile", "-Command",
+			"[Console]::InputEncoding = [Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())")
+	default:
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-i")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		} else {
+			return fmt.Errorf("no clipboard utility found (tried xclip, xsel)")
+		}
+	}
+	cmd.Stdin = strings.NewReader(text)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 // readClipboard returns the clipboard's current text content, via each
 // OS's own command-line paste utility rather than a third-party
