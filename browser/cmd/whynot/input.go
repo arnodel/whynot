@@ -68,7 +68,7 @@ func (g *game) Update() error {
 
 // ebitenKeys are the ebiten keys of browser.Key names.
 var ebitenKeys = map[string]ebiten.Key{
-	"J": ebiten.KeyJ, "L": ebiten.KeyL, "R": ebiten.KeyR, "T": ebiten.KeyT, "V": ebiten.KeyV,
+	"C": ebiten.KeyC, "J": ebiten.KeyJ, "L": ebiten.KeyL, "R": ebiten.KeyR, "T": ebiten.KeyT, "V": ebiten.KeyV,
 	"0": ebiten.KeyDigit0, "[": ebiten.KeyBracketLeft, "]": ebiten.KeyBracketRight,
 	"=": ebiten.KeyEqual, "-": ebiten.KeyMinus, "/": ebiten.KeySlash,
 	"Space": ebiten.KeySpace, "Backspace": ebiten.KeyBackspace, "Escape": ebiten.KeyEscape,

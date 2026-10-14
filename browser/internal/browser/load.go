@@ -30,8 +30,8 @@ const loadWait = 100 * time.Millisecond
 // otherwise growing as the rest arrives in the background (see
 // whynot.Parser.Stream). It's checked to be Markdown first (see
 // checkMarkdown): a body of unknown media type is read in full, to sniff
-// it.
-func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url.URL) (*whynot.Document, error) {
+// it. Its Markdown is written to source as it arrives.
+func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url.URL, source io.Writer) (*whynot.Document, error) {
 	src, err := registry.Resolve(location, "")
 	if err != nil {
 		return nil, err
@@ -53,6 +53,7 @@ func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url
 		if isWhymark(headOf(data)) {
 			return nil, errWhymark
 		}
+		source.Write(data)
 		return parser.Parse(data, base), nil
 	}
 	if err := checkMarkdown(mediaType, nil, location); err != nil {
@@ -70,7 +71,7 @@ func loadDocument(parser *whynot.Parser, registry *fetch.Registry, location *url
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, err := io.Copy(w, rest); err != nil {
+		if _, err := io.Copy(io.MultiWriter(w, source), rest); err != nil {
 			log.Printf("loading %s: %v", location, err)
 		}
 		body.Close()
