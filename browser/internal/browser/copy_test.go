@@ -3,8 +3,11 @@
 package browser
 
 import (
+	"image"
 	"strings"
 	"testing"
+
+	"github.com/arnodel/whynot/input"
 )
 
 // copiedText runs CopyMarkdown, or the actions page's link to it, and
@@ -117,5 +120,84 @@ func TestJournalKeepsOneSelection(t *testing.T) {
 	}
 	if got := copiedText(t, app.CopySelection); got != "# Notes\n\nSome notes." {
 		t.Errorf("copied %q", got)
+	}
+}
+
+// twoPageJournal returns an app in journal mode on two pages, start.md then
+// notes.md.
+func twoPageJournal(t *testing.T) *App {
+	t.Helper()
+	dir := t.TempDir()
+	start := writeTempMD(t, dir, "start.md", "# Start\n\nAlpha beta gamma.\n\n[Notes](notes.md)\n")
+	writeTempMD(t, dir, "notes.md", "# Notes\n\nDelta epsilon zeta.\n")
+	app := newTestApp(t, dir, start, "# Start\n\nAlpha beta gamma.\n\n[Notes](notes.md)\n")
+	app.Follow("notes.md")
+	app.ToggleJournal()
+	return app
+}
+
+// textAt returns a point inside the first drawing of the text s in app
+// that shows.
+func textAt(t *testing.T, app *App, s string) image.Point {
+	t.Helper()
+	r := &recorder{Area: app.Bounds()}
+	app.Draw(r, 0)
+	for _, tx := range r.Texts {
+		if p := image.Pt(tx.X+2, tx.Y-4); tx.S == s && p.In(app.Bounds()) {
+			return p
+		}
+	}
+	t.Fatalf("no text %q drawn where it shows", s)
+	return image.Point{}
+}
+
+// TestSelectAcrossPages checks that a drag from one page of the journal
+// into the next selects in both, and copying joins them.
+func TestSelectAcrossPages(t *testing.T) {
+	app := twoPageJournal(t)
+	// The journal shows the end of the trail: on the first page, its link.
+	from, to := textAt(t, app, "Notes"), textAt(t, app, "epsilon")
+	app.Frame([]input.Event{
+		input.PointerMove{X: from.X, Y: from.Y},
+		input.PointerButton{X: from.X, Y: from.Y, Button: input.ButtonPrimary, Down: true},
+		input.PointerMove{X: to.X, Y: to.Y},
+		input.PointerButton{X: to.X, Y: to.Y, Button: input.ButtonPrimary},
+	}, 0)
+	// From the link to the first page's end, then the second page from
+	// its start to "epsilon", which spans its heading and paragraph whole.
+	want := "[Notes](notes.md)\n\n---\n\n# Notes\n\nDelta epsilon zeta."
+	if got := copiedText(t, app.CopySelection); got != want {
+		t.Errorf("copied %q, want %q", got, want)
+	}
+	// A drag within one page then clears the other's selection.
+	a, b := textAt(t, app, "Delta"), textAt(t, app, "zeta")
+	b.X += 10
+	app.Frame([]input.Event{
+		input.PointerMove{X: a.X, Y: a.Y},
+		input.PointerButton{X: a.X, Y: a.Y, Button: input.ButtonPrimary, Down: true},
+		input.PointerMove{X: b.X, Y: b.Y},
+		input.PointerButton{X: b.X, Y: b.Y, Button: input.ButtonPrimary},
+	}, 0)
+	if views := app.journal.stack.views; views[0].HasSelection() || !views[1].HasSelection() {
+		t.Errorf("after a drag within the second page, selections: %v, %v", views[0].HasSelection(), views[1].HasSelection())
+	}
+}
+
+// TestSelectAllTwice checks that Select all selects the current page, and
+// again, the whole journal.
+func TestSelectAllTwice(t *testing.T) {
+	app := twoPageJournal(t)
+	views := app.journal.stack.views
+	app.SelectAll()
+	if views[0].HasSelection() || !views[1].AllSelected() {
+		t.Fatal("Select all didn't select just the current page")
+	}
+	app.SelectAll()
+	if !views[0].AllSelected() || !views[1].AllSelected() {
+		t.Fatal("Select all again didn't select the whole journal")
+	}
+	want := "# Start\n\nAlpha beta gamma.\n\n[Notes](notes.md)\n\n---\n\n# Notes\n\nDelta epsilon zeta."
+	if got := copiedText(t, app.CopySelection); got != want {
+		t.Errorf("copied %q, want %q", got, want)
 	}
 }

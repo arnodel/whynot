@@ -164,6 +164,54 @@ func (v *View) ClearSelection() {
 	v.setSelection(engine.Position{}, engine.Position{}, false)
 }
 
+// SelectToEnd and SelectToStart move the end of the selection being made
+// to the end or the start of the document, keeping where it started: for
+// a selection carried on past the View, into another one. They do nothing
+// without a selection.
+func (v *View) SelectToEnd() {
+	if end, ok := v.selTree().End(); ok && v.sel.active {
+		v.sel.focus = end
+	}
+}
+
+func (v *View) SelectToStart() {
+	if start, ok := v.selTree().Start(); ok && v.sel.active {
+		v.sel.focus = start
+	}
+}
+
+// SelectFromStartTo and SelectFromEndTo select from the start or the end
+// of the document to the text nearest (x, y): for a selection carried on
+// into the View from another one, above it or below it.
+func (v *View) SelectFromStartTo(x, y int) {
+	start, ok1 := v.selTree().Start()
+	p, ok2 := v.positionAt(x, y)
+	if ok1 && ok2 {
+		v.setSelection(start, p, true)
+	}
+}
+
+func (v *View) SelectFromEndTo(x, y int) {
+	end, ok1 := v.selTree().End()
+	p, ok2 := v.positionAt(x, y)
+	if ok1 && ok2 {
+		v.setSelection(end, p, true)
+	}
+}
+
+// AllSelected reports whether the whole document is selected.
+func (v *View) AllSelected() bool {
+	s, ok := v.span()
+	if !ok {
+		return false
+	}
+	tree := v.selTree()
+	start, _ := tree.Start()
+	end, _ := tree.End()
+	all, _ := engine.Normalize(start, end)
+	return s == all
+}
+
 // setSelection sets the selection, between anchor and focus if active.
 func (v *View) setSelection(anchor, focus engine.Position, active bool) {
 	v.sel.anchor, v.sel.focus, v.sel.active = anchor, focus, active

@@ -197,9 +197,6 @@ func (a *App) Frame(events []input.Event, now time.Duration) {
 		return
 	}
 	for _, e := range j.controller.Frame(events, now) {
-		if _, ok := e.Event.(whynot.SelectionChange); ok && e.Child >= 0 && j.stack.views[e.Child].HasSelection() {
-			a.keepOneSelection(j.stack.views[e.Child])
-		}
 		if e.Child < 0 || e.Child == len(j.pages)-1 {
 			a.HandleEvents([]whynot.Event{e.Event})
 			continue

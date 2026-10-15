@@ -64,6 +64,15 @@ func (a *App) refreshActions() {
 	a.Panel.SetView(view)
 }
 
+// selectAllText is what SelectAll does next: in journal mode, once the
+// current page is all selected, it selects the whole journal.
+func (a *App) selectAllText() string {
+	if j := a.stacked(); j != nil && j.stack.views[len(j.stack.views)-1].AllSelected() {
+		return "Select the whole journal"
+	}
+	return "Select all of this page"
+}
+
 // copyAction is the actions page's copy link, page for a page, or journal
 // in journal mode, followed by how the last copy went, if it ran since
 // the page was shown.
@@ -147,7 +156,7 @@ func (a *App) actionsSource() []byte {
 		{link("reload", "Reload this page"), keysOf("reload")},
 		{a.copyAction(link("copy", "Copy this page as Markdown"), link("copy", "Copy the journal as Markdown")), keysOf("copy")},
 		{unless(!a.HasSelection(), "copy-selection", "Copy the selection as Markdown"), keysOf("copy-selection")},
-		{link("select-all", "Select all of this page"), keysOf("select-all")},
+		{link("select-all", a.selectAllText()), keysOf("select-all")},
 		{link("paste", "Open the path or URL in the clipboard"), keysOf("paste")},
 		{unless(!a.CanShowTOC(), "toc", "Show the table of contents"), keysOf("toc")},
 	})

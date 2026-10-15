@@ -2,6 +2,7 @@ package browser
 
 import (
 	"log"
+	"strings"
 
 	"github.com/arnodel/whynot"
 )
@@ -19,42 +20,54 @@ func (a *App) shownViews() []*whynot.View {
 	return []*whynot.View{a.Panel.View()}
 }
 
-// selectedView returns the shown View with a selection, or nil: in
-// journal mode, selecting in one page clears the others (see
-// keepOneSelection).
-func (a *App) selectedView() *whynot.View {
+// selectedViews returns the shown Views with a selection, in order: in
+// journal mode, a selection can run across pages.
+func (a *App) selectedViews() []*whynot.View {
+	var views []*whynot.View
 	for _, v := range a.shownViews() {
 		if v.HasSelection() {
-			return v
+			views = append(views, v)
 		}
 	}
-	return nil
+	return views
 }
 
 // HasSelection reports whether text is selected.
-func (a *App) HasSelection() bool { return a.selectedView() != nil }
+func (a *App) HasSelection() bool { return len(a.selectedViews()) > 0 }
 
 // CopySelection puts the selected text on the clipboard, as Markdown, if
-// there is some. Whether it worked shows on the actions page, as for
-// CopyMarkdown.
+// there is some: across pages of the journal, each page's, separated by
+// a thematic break, as CopyMarkdown separates them. Whether it worked
+// shows on the actions page.
 func (a *App) CopySelection() {
-	v := a.selectedView()
-	if v == nil {
+	views := a.selectedViews()
+	if len(views) == 0 {
 		return
 	}
-	a.copied, a.copyErr = true, clipboardWriter(v.SelectedMarkdown())
+	var parts []string
+	for _, v := range views {
+		parts = append(parts, v.SelectedMarkdown())
+	}
+	a.copied, a.copyErr = true, clipboardWriter(strings.Join(parts, "\n\n---\n\n"))
 	if a.copyErr != nil {
 		log.Printf("copying the selection: %v", a.copyErr)
 	}
 }
 
-// SelectAll selects the whole current page.
+// SelectAll selects the whole current page, or in journal mode, if it's
+// already all selected, the whole journal.
 func (a *App) SelectAll() {
 	if a.overlaid != nil {
 		return
 	}
 	if j := a.stacked(); j != nil {
 		current := j.stack.views[len(j.stack.views)-1]
+		if current.AllSelected() {
+			for _, v := range j.stack.views {
+				v.SelectAll()
+			}
+			return
+		}
 		a.keepOneSelection(current)
 		current.SelectAll()
 		return
