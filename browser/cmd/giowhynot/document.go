@@ -39,14 +39,16 @@ func (d *document) layout(gtx layout.Context) {
 		d.onPress()
 	}
 	d.app.Frame(events, now)
-	area := clip.Rect(bounds).Push(gtx.Ops)
-	pointer.Cursor(gioCursors[d.app.Cursor()]).Add(gtx.Ops)
-	area.Pop()
 	// Gio only produces frames when something happens.
 	if d.app.Animating() {
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	d.app.Draw(d.renderer.NewCanvas(gtx.Ops, bounds), now)
+	// After drawing, which adds areas of its own: Gio takes the cursor
+	// from the topmost area under the pointer.
+	area := clip.Rect(bounds).Push(gtx.Ops)
+	pointer.Cursor(gioCursors[d.app.Cursor()]).Add(gtx.Ops)
+	area.Pop()
 	if stack := d.app.JournalStack(); stack != nil {
 		d.scrollbar.Layout(gtx, stack)
 	} else {
