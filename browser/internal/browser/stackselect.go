@@ -128,6 +128,11 @@ func (c *StackController) carrySelection(now time.Duration) {
 	}
 }
 
+// selecting reports whether a drag is selecting, wherever the pointer is.
+func (c *StackController) selecting() bool {
+	return c.press.down && c.press.moved && c.press.child >= 0
+}
+
 // selectionScrolling reports whether a drag past the stack's top or bottom
 // is scrolling it.
 func (c *StackController) selectionScrolling() bool {

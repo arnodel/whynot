@@ -53,6 +53,9 @@ type SelTree struct {
 	// each leaf's Block to its node.
 	where  map[Inline]Position
 	leaves map[Block]*SelNode
+	// text holds the Blocks laying out a leaf's text, which hit testing
+	// reports between its words (see IsText).
+	text map[Block]bool
 }
 
 // A Position is a place in a leaf's text: before the byte at Offset in
@@ -66,7 +69,7 @@ type Position struct {
 
 // NewSelTree builds the selection tree of blocks.
 func NewSelTree(blocks []Block) *SelTree {
-	t := &SelTree{where: map[Inline]Position{}, leaves: map[Block]*SelNode{}}
+	t := &SelTree{where: map[Inline]Position{}, leaves: map[Block]*SelNode{}, text: map[Block]bool{}}
 	t.Root = &SelNode{}
 	for _, b := range blocks {
 		t.add(t.Root, b)
@@ -129,10 +132,13 @@ func (t *SelTree) fill(n *SelNode, b Block) {
 		}
 	case *TextBlock:
 		n.leaf, n.items = true, b.Parts
+		t.text[b] = true
 	case *ListItemHeadBlock:
 		n.leaf, n.items, n.marker = true, b.Parts, b.Marker
+		t.text[b] = true
 	case *CodeBlock:
 		n.leaf = true
+		t.text[b] = true
 		for _, line := range b.Lines {
 			n.lineStarts = append(n.lineStarts, len(n.items))
 			n.items = append(n.items, line...)
@@ -159,6 +165,19 @@ func (t *SelTree) PositionOf(item Inline, offset int) (Position, bool) {
 	p, ok := t.where[item]
 	p.Offset = offset
 	return p, ok
+}
+
+// IsText reports whether a hit test's Source is text that can be
+// selected: a word, or a block of text, between its words.
+func (t *SelTree) IsText(s Source) bool {
+	switch s := s.(type) {
+	case Inline:
+		_, ok := t.where[s]
+		return ok
+	case Block:
+		return t.text[s]
+	}
+	return false
 }
 
 // Carry returns p, a Position in another tree of the same document, in

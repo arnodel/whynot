@@ -92,6 +92,9 @@ func (a *App) Cursor() whynot.Cursor {
 	if a.Panel == nil {
 		return whynot.CursorDefault
 	}
+	if j := a.stacked(); j != nil && j.controller.selecting() {
+		return whynot.CursorText
+	}
 	cursor := whynot.CursorDefault
 	for _, v := range a.shownViews() {
 		cursor = max(cursor, v.Cursor())

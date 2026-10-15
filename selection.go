@@ -27,6 +27,8 @@ type selection struct {
 	// whole is whether it's a selection carried on from another View,
 	// which selects whole blocks (see SelectToEnd).
 	whole bool
+	// dragging is whether the mouse is dragging a selection, for Cursor.
+	dragging bool
 
 	// drawSpan is the selection as of the draw in progress, if drawing.
 	drawSpan engine.Span
@@ -62,15 +64,25 @@ const (
 )
 
 // Cursor returns what the pointer should look like where it last hovered
-// (see [Controller.Frame]).
+// (see [Controller.Frame]): over text, including between its words, the
+// text cursor, and while dragging a selection, too, wherever it is.
 func (v *View) Cursor() Cursor {
 	switch {
+	case v.sel.dragging:
+		return CursorText
 	case v.ctx.HighlightNode != nil:
 		return CursorLink
 	case v.overText && !v.unselectable:
 		return CursorText
 	}
 	return CursorDefault
+}
+
+// isTextAt reports whether there's text that can be selected at (x, y),
+// including between its words.
+func (v *View) isTextAt(x, y int) bool {
+	hit, _, _ := v.hitTest(x, y)
+	return hit != nil && v.selTree().IsText(hit.Source())
 }
 
 // textAt returns the Position in the text under (x, y), if there's text
@@ -363,6 +375,7 @@ func (c *Controller) dragSelection(p image.Point) {
 	if c.unselectable {
 		return
 	}
+	v.sel.dragging = true
 	pos, ok := v.positionAt(p.X, p.Y)
 	if !ok {
 		return
@@ -388,6 +401,7 @@ func (c *Controller) dragSelection(p image.Point) {
 func (c *Controller) endSelection(p image.Point) {
 	m := &c.mouse
 	m.down = false
+	c.view.sel.dragging = false
 	if m.moved || m.clicks > 1 {
 		return
 	}

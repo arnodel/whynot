@@ -493,7 +493,7 @@ func (v *View) hover(x, y int) (destination string, ok bool) {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
 	if !v.unselectable {
-		_, v.overText = v.textAt(x, y)
+		v.overText = v.isTextAt(x, y)
 	}
 	return v.hoverLink(x, y)
 }

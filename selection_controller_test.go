@@ -128,6 +128,27 @@ func TestCursor(t *testing.T) {
 	if v.Cursor() != CursorDefault {
 		t.Errorf("over nothing, the cursor is %v", v.Cursor())
 	}
+	// Between words: still text.
+	gap := wordAt(t, v, "and", 0, -3)
+	frame(c, move(gap))
+	if v.Cursor() != CursorText {
+		t.Errorf("between words, the cursor is %v", v.Cursor())
+	}
+	// Dragging a selection from the link: text, even over the link or
+	// nothing, until the release.
+	l := wordAt(t, v, "link", 0, 2)
+	frame(c, move(l), press(l.X, l.Y), move(image.Pt(l.X+20, l.Y)))
+	if v.Cursor() != CursorText {
+		t.Errorf("dragging from a link, the cursor is %v", v.Cursor())
+	}
+	frame(c, move(image.Pt(b.Max.X-2, b.Max.Y-2)))
+	if v.Cursor() != CursorText {
+		t.Errorf("dragging over nothing, the cursor is %v", v.Cursor())
+	}
+	frame(c, move(l), release(l.X, l.Y))
+	if v.Cursor() != CursorLink {
+		t.Errorf("released over the link, the cursor is %v", v.Cursor())
+	}
 }
 
 // TestUnselectable checks a Controller whose mouse doesn't select: drags
