@@ -68,6 +68,9 @@ type inputFilter struct {
 	// passing says the unfinished line is being passed on as it arrives:
 	// its start showed it's an ordinary line (see passable).
 	passing bool
+	// skipBlank says a line was just taken out, so a blank line after it
+	// is too: it separated what was taken out from what follows.
+	skipBlank bool
 	// fence is the fence of the code block being passed through, or
 	// "" outside one; field is the input block being read, with its
 	// fence in inputFence.
@@ -129,6 +132,7 @@ func (f *inputFilter) passable() bool {
 
 // pass passes on part of an ordinary line.
 func (f *inputFilter) pass(s string) error {
+	f.skipBlank = false
 	if err := f.write(f.w, s); err != nil {
 		return err
 	}
@@ -164,7 +168,7 @@ func (f *inputFilter) line(line string) error {
 		if closes(f.inputFence) {
 			f.field.placeholder = strings.TrimSpace(strings.Join(f.lines, " "))
 			f.input.set(f.field)
-			f.field, f.lines = nil, nil
+			f.field, f.lines, f.skipBlank = nil, nil, true
 		} else {
 			f.lines = append(f.lines, strings.TrimSpace(trimmed))
 		}
@@ -174,12 +178,19 @@ func (f *inputFilter) line(line string) error {
 			f.fence = ""
 		}
 	default:
+		if skip := f.skipBlank; skip {
+			f.skipBlank = false
+			if strings.TrimSpace(trimmed) == "" {
+				return f.write(f.source, line)
+			}
+		}
 		if m := inputFence.FindStringSubmatch(trimmed); m != nil && m[2] != "" {
 			f.field, f.inputFence = &inputField{name: m[2], target: m[3]}, m[1]
 			return nil
 		}
 		if controlsHeading.MatchString(trimmed) {
 			// Quiet: kept only where the controls are looked for.
+			f.skipBlank = true
 			return f.write(f.source, line)
 		}
 		if t := strings.TrimLeft(trimmed, " "); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
