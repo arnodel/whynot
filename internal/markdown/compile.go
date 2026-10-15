@@ -63,7 +63,7 @@ func Compile(source []byte, opts Options) *Result {
 	c := newCompiler(source, opts)
 	// A nil parent ast.Node is what marks a block as top-level.
 	return &Result{
-		Root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil)},
+		Root:       &engine.StackBlock{Blocks: c.compileBlocks(node.FirstChild(), nil, len(source))},
 		Headings:   c.headings,
 		SoleImages: c.soleImages,
 	}
@@ -98,6 +98,10 @@ func newCompiler(source []byte, opts Options) *compiler {
 // compiler is the state of one Compile call.
 type compiler struct {
 	source []byte
+	// offset is where source starts in the whole document, which the
+	// source Ranges recorded are offsets in: a Stream compiles the text
+	// from its unfinished end.
+	offset int
 
 	// codeBlockPlugins are the code-block plugins, in priority order;
 	// pluginCache records which of them handle each language seen so
@@ -124,14 +128,16 @@ type compiler struct {
 }
 
 // compileBlocks compiles first and its following siblings under parent,
-// dropping any that compile to nothing.
-func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node) []engine.Block {
+// dropping any that compile to nothing. The last of them ends at end, an
+// offset in c.source.
+func (c *compiler) compileBlocks(first gmast.Node, parent *ast.Node, end int) []engine.Block {
+	ranges := c.blockRanges(first, end)
 	var blocks []engine.Block
 	for node := first; node != nil; node = node.NextSibling() {
 		if _, ok := node.(gmast.BlockNode); !ok {
 			continue
 		}
-		if block := c.compileBlock(node, parent); block != nil {
+		if block := c.compileBlock(node, parent, ranges[node]); block != nil {
 			blocks = append(blocks, block)
 		}
 	}

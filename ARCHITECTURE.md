@@ -128,6 +128,18 @@ what nests in what - not into appearance: no font, color, or margin value
 is decided here, only recorded via each `Block`/`Inline`'s `node *ast.Node`
 field for the styles to resolve later, in Layer 2.
 
+The compiler also records where things are in the source: each block's
+and inline element's `ast.Node.Source` (markers, fences and closing markup
+included), and each word's `InlineText.Source`, so that any element's
+Markdown is a slice of the source ([source.go](internal/markdown/source.go)).
+goldmark gives where nodes start, not where they end: a block ends where
+the next one starts (or its parent ends), less the blank lines between
+them, and an inline element after its last child and its closing markup. A
+word's text can differ from its source (escapes, entities): the two are
+aligned, so the word's source is still exact; a smart quote, which
+goldmark makes, only gets the span between its neighbors. A streamed
+document's ranges are offsets in its whole text.
+
 Margins aren't a field every `Block` carries: most embed `withoutMargins`
 (a zero-value `Margins()`) and get real ones only where the compiler wraps
 them in a `MarginBlock{Block, node}` - resolved from `Styles.Margins`
