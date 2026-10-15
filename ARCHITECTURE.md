@@ -491,6 +491,34 @@ The `whynot` viewer can outline whatever's under the mouse each frame, via
 `HitTest`, gated behind the `-debug-hit` flag (off by default) - see
 `game.Draw` in [browser/cmd/whynot/draw.go](browser/cmd/whynot/draw.go).
 
+## Selection
+
+A `View`'s selection runs between two positions in its text, an anchor and a
+focus ([selection.go](selection.go)); the `Controller` turns mouse gestures
+into changes to it. It's normalized structurally
+([internal/engine/selection.go](internal/engine/selection.go)), over a tree of
+the View's blocks as a reader sees them (`SelTree`): leaves hold text (a
+paragraph, a heading, a list item's text, a table cell, a code block),
+containers hold leaves or containers (lists, list items, blockquotes, tables
+and their rows), and wrappers like `MarginBlock` are seen through. Within a
+leaf, a selection is a range of characters; across leaves, it's the run of
+children of the innermost container holding both ends, each whole: list
+items, paragraphs, table rows, or the cells of one row.
+
+A position is a word (an `InlineText`, the compiler's leaf) and a byte offset
+into it, and the tree is rebuilt as the document grows, carrying positions
+over by their leaf's `Block`: finished blocks never change, so a selection
+there survives, while one in the unfinished end is cleared when it's
+compiled again. Copying uses the source ranges the compiler records: whole
+blocks are slices of the source, and a range within a leaf is widened to the
+edges of the outermost inline elements it cuts, so markup stays balanced.
+
+Drawing doesn't need a new layout when the selection changes: each
+`TextBox` keeps the `Context`'s `Selected` hook, which the View answers from
+the selection as of the draw in progress, and each `LineBox` fills the
+background of its selected parts, and of the gaps between parts selected on
+both sides, before drawing them.
+
 ## Graceful degradation for unsupported Markdown
 
 `compileBlock`/`appendInline` ([blocks.go](internal/markdown/blocks.go), [inlines.go](internal/markdown/inlines.go)) don't

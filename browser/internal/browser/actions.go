@@ -146,6 +146,8 @@ func (a *App) actionsSource() []byte {
 		{unless(len(a.future) == 0, "forward", "Go forward"), keysOf("forward")},
 		{link("reload", "Reload this page"), keysOf("reload")},
 		{a.copyAction(link("copy", "Copy this page as Markdown"), link("copy", "Copy the journal as Markdown")), keysOf("copy")},
+		{unless(!a.HasSelection(), "copy-selection", "Copy the selection as Markdown"), keysOf("copy-selection")},
+		{link("select-all", "Select all of this page"), keysOf("select-all")},
 		{link("paste", "Open the path or URL in the clipboard"), keysOf("paste")},
 		{unless(!a.CanShowTOC(), "toc", "Show the table of contents"), keysOf("toc")},
 	})

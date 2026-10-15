@@ -6,6 +6,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/arnodel/whynot"
 )
 
 func (g *game) Update() error {
@@ -20,6 +22,7 @@ func (g *game) Update() error {
 	}
 
 	g.app.Frame(g.input.Events(), time.Since(g.start))
+	ebiten.SetCursorShape(ebitenCursors[g.app.Cursor()])
 
 	// pointerState so these buttons work with a touch too, not just a mouse.
 	var pointerDown, clicked bool
@@ -66,9 +69,16 @@ func (g *game) Update() error {
 	return nil
 }
 
+// ebitenCursors are ebiten's cursors for whynot's.
+var ebitenCursors = map[whynot.Cursor]ebiten.CursorShapeType{
+	whynot.CursorDefault: ebiten.CursorShapeDefault,
+	whynot.CursorText:    ebiten.CursorShapeText,
+	whynot.CursorLink:    ebiten.CursorShapePointer,
+}
+
 // ebitenKeys are the ebiten keys of browser.Key names.
 var ebitenKeys = map[string]ebiten.Key{
-	"C": ebiten.KeyC, "J": ebiten.KeyJ, "L": ebiten.KeyL, "R": ebiten.KeyR, "T": ebiten.KeyT, "V": ebiten.KeyV,
+	"A": ebiten.KeyA, "C": ebiten.KeyC, "J": ebiten.KeyJ, "L": ebiten.KeyL, "R": ebiten.KeyR, "T": ebiten.KeyT, "V": ebiten.KeyV,
 	"0": ebiten.KeyDigit0, "[": ebiten.KeyBracketLeft, "]": ebiten.KeyBracketRight,
 	"=": ebiten.KeyEqual, "-": ebiten.KeyMinus, "/": ebiten.KeySlash,
 	"Space": ebiten.KeySpace, "Backspace": ebiten.KeyBackspace, "Escape": ebiten.KeyEscape,

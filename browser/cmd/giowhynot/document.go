@@ -3,8 +3,12 @@ package main
 import (
 	"time"
 
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/clip"
+
+	"github.com/arnodel/whynot"
 
 	"github.com/arnodel/whynot/backends/giobackend"
 	"github.com/arnodel/whynot/browser/internal/browser"
@@ -35,6 +39,9 @@ func (d *document) layout(gtx layout.Context) {
 		d.onPress()
 	}
 	d.app.Frame(events, now)
+	area := clip.Rect(bounds).Push(gtx.Ops)
+	pointer.Cursor(gioCursors[d.app.Cursor()]).Add(gtx.Ops)
+	area.Pop()
 	// Gio only produces frames when something happens.
 	if d.app.Animating() {
 		gtx.Execute(op.InvalidateCmd{})
@@ -45,6 +52,13 @@ func (d *document) layout(gtx layout.Context) {
 	} else {
 		d.scrollbar.Layout(gtx, d.app.Panel.View())
 	}
+}
+
+// gioCursors are Gio's cursors for whynot's.
+var gioCursors = map[whynot.Cursor]pointer.Cursor{
+	whynot.CursorDefault: pointer.CursorDefault,
+	whynot.CursorText:    pointer.CursorText,
+	whynot.CursorLink:    pointer.CursorPointer,
 }
 
 // pressed reports whether events include a press: a mouse button or a

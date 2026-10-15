@@ -75,3 +75,47 @@ func TestCopyFromActions(t *testing.T) {
 		t.Errorf("in journal mode, shown again, the actions page is %q", page())
 	}
 }
+
+// TestCopySelection checks Cmd+C's command: it copies the selection as
+// Markdown, and does nothing without one; and Select all.
+func TestCopySelection(t *testing.T) {
+	dir := t.TempDir()
+	start := writeTempMD(t, dir, "start.md", "# Start\n\n[Notes](notes.md)\n")
+	writeTempMD(t, dir, "notes.md", "# Notes\n\nSome *notes*.\n")
+	app := newTestApp(t, dir, start, "# Start\n\n[Notes](notes.md)\n")
+	app.Follow("notes.md")
+	if got := copiedText(t, app.CopySelection); got != "" || app.HasSelection() {
+		t.Errorf("with nothing selected, copied %q", got)
+	}
+	app.SelectAll()
+	if got := copiedText(t, app.CopySelection); got != "# Notes\n\nSome *notes*." {
+		t.Errorf("copied the page selected all as %q", got)
+	}
+	app.ShowActions()
+	if !strings.Contains(string(app.actionsSource()), "[Copy the selection as Markdown](whynot:copy-selection)") {
+		t.Errorf("with a selection, the actions page is %q", app.actionsSource())
+	}
+	if got := copiedText(t, func() { app.Follow("whynot:copy-selection") }); got != "# Notes\n\nSome *notes*." {
+		t.Errorf("the actions page copied the selection as %q", got)
+	}
+}
+
+// TestJournalKeepsOneSelection checks that selecting in one page of the
+// journal clears the others' selections.
+func TestJournalKeepsOneSelection(t *testing.T) {
+	dir := t.TempDir()
+	start := writeTempMD(t, dir, "start.md", "# Start\n\n[Notes](notes.md)\n")
+	writeTempMD(t, dir, "notes.md", "# Notes\n\nSome notes.\n")
+	app := newTestApp(t, dir, start, "# Start\n\n[Notes](notes.md)\n")
+	app.Follow("notes.md")
+	app.ToggleJournal()
+	views := app.journal.stack.views
+	views[0].SelectAll()
+	app.SelectAll() // the current page's
+	if views[0].HasSelection() || !views[1].HasSelection() {
+		t.Errorf("after selecting all of the current page, selections: %v, %v", views[0].HasSelection(), views[1].HasSelection())
+	}
+	if got := copiedText(t, app.CopySelection); got != "# Notes\n\nSome notes." {
+		t.Errorf("copied %q", got)
+	}
+}
