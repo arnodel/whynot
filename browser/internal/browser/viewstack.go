@@ -440,7 +440,7 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 				c.stack.beginScrollbarDrag(p)
 				continue
 			}
-			c.beginPress(image.Pt(e.X, e.Y), now)
+			c.beginPress(image.Pt(e.X, e.Y), e.Mods, now)
 			forChildren = append(forChildren, e)
 		case input.TouchStart:
 			p := image.Pt(e.X, e.Y)

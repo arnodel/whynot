@@ -34,9 +34,19 @@ type stackPress struct {
 	scrolled time.Duration
 }
 
-// beginPress starts a press at p.
-func (c *StackController) beginPress(p image.Point, now time.Duration) {
+// beginPress starts a press at p. Unless it's with Shift, which extends
+// a selection, it clears the other pages' selections: what it selects, or
+// clears if it's a click, is in its own page.
+func (c *StackController) beginPress(p image.Point, mods input.Modifiers, now time.Duration) {
 	c.press = stackPress{down: true, child: c.childAt(p), at: p, pointer: p, scrolled: now}
+	if mods.Contain(input.ModShift) {
+		return
+	}
+	for k, v := range c.stack.views {
+		if k != c.press.child {
+			v.ClearSelection()
+		}
+	}
 }
 
 // movePointer notes the pointer at p.

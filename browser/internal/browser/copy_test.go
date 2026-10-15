@@ -196,6 +196,17 @@ func TestSelectAllTwice(t *testing.T) {
 	if !views[0].AllSelected() || !views[1].AllSelected() {
 		t.Fatal("Select all again didn't select the whole journal")
 	}
+	defer func() {
+		// A click in one page clears them all.
+		p := textAt(t, app, "epsilon")
+		app.Frame([]input.Event{
+			input.PointerButton{X: p.X, Y: p.Y, Button: input.ButtonPrimary, Down: true},
+			input.PointerButton{X: p.X, Y: p.Y, Button: input.ButtonPrimary},
+		}, 0)
+		if app.HasSelection() {
+			t.Errorf("after a click, selections: %v, %v", views[0].HasSelection(), views[1].HasSelection())
+		}
+	}()
 	want := "# Start\n\nAlpha beta gamma.\n\n[Notes](notes.md)\n\n---\n\n# Notes\n\nDelta epsilon zeta."
 	if got := copiedText(t, app.CopySelection); got != want {
 		t.Errorf("copied %q, want %q", got, want)
