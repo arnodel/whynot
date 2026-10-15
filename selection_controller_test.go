@@ -163,3 +163,29 @@ func TestUnselectable(t *testing.T) {
 		t.Error("with selection off, SelectAll selected nothing")
 	}
 }
+
+// TestCarriedSelectionIsWhole checks that a selection carried on from
+// another View is whole blocks even within one paragraph, as a selection
+// leaving a paragraph is within a View.
+func TestCarriedSelectionIsWhole(t *testing.T) {
+	c, v := newTestController(t, "First paragraph here.\n\nLast paragraph here.\n")
+	// Pressed in the last paragraph, carried on past the end.
+	p := wordAt(t, v, "paragraph", 1, 2)
+	q := wordAt(t, v, "here", 1, 2)
+	frame(c, press(p.X, p.Y), move(q), release(q.X, q.Y))
+	v.SelectToEnd()
+	if got := v.SelectedText(); got != "Last paragraph here." {
+		t.Errorf("carried on to the end: %q, want the whole last paragraph", got)
+	}
+	// Carried in from above, to a point in the first paragraph.
+	r := wordAt(t, v, "paragraph", 0, 2)
+	v.SelectFromStartTo(r.X, r.Y)
+	if got := v.SelectedText(); got != "First paragraph here." {
+		t.Errorf("carried in from the start: %q, want the whole first paragraph", got)
+	}
+	// A selection made within the View afterwards is a range again.
+	frame(c, press(p.X, p.Y), move(q), release(q.X, q.Y))
+	if got := v.SelectedText(); got == "Last paragraph here." || got == "" {
+		t.Errorf("a drag within a paragraph after a carried selection: %q", got)
+	}
+}

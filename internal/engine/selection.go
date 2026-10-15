@@ -304,6 +304,16 @@ func Normalize(a, b Position) (Span, bool) {
 	return Span{}, false
 }
 
+// NormalizeWhole is Normalize for a selection that has left the
+// document, carried on into another one: it's whole blocks even with both
+// ends in one leaf, which it then selects whole.
+func NormalizeWhole(a, b Position) (Span, bool) {
+	if a.Leaf != nil && a.Leaf == b.Leaf {
+		return Span{Container: a.Leaf.Parent, First: a.Leaf.Index, Last: a.Leaf.Index}, true
+	}
+	return Normalize(a, b)
+}
+
 // Contains reports whether the Span selects the leaf n whole, or, within
 // it, which bytes of its item at index: from start to end.
 func (s Span) Contains(n *SelNode, item int, textLen int) (start, end int, ok bool) {

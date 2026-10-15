@@ -24,6 +24,9 @@ type selection struct {
 	treeVersion   int // the View's blocksVersion tree is of
 	anchor, focus engine.Position
 	active        bool
+	// whole is whether it's a selection carried on from another View,
+	// which selects whole blocks (see SelectToEnd).
+	whole bool
 
 	// drawSpan is the selection as of the draw in progress, if drawing.
 	drawSpan engine.Span
@@ -142,6 +145,9 @@ func (v *View) span() (engine.Span, bool) {
 	if !v.sel.active {
 		return engine.Span{}, false
 	}
+	if v.sel.whole {
+		return engine.NormalizeWhole(v.sel.anchor, v.sel.focus)
+	}
 	return engine.Normalize(v.sel.anchor, v.sel.focus)
 }
 
@@ -166,28 +172,31 @@ func (v *View) ClearSelection() {
 
 // SelectToEnd and SelectToStart move the end of the selection being made
 // to the end or the start of the document, keeping where it started: for
-// a selection carried on past the View, into another one. They do nothing
-// without a selection.
+// a selection carried on past the View, into another one. Having left the
+// block it started in, it's whole blocks, as a selection across blocks is
+// within a View. They do nothing without a selection.
 func (v *View) SelectToEnd() {
 	if end, ok := v.selTree().End(); ok && v.sel.active {
-		v.sel.focus = end
+		v.sel.focus, v.sel.whole = end, true
 	}
 }
 
 func (v *View) SelectToStart() {
 	if start, ok := v.selTree().Start(); ok && v.sel.active {
-		v.sel.focus = start
+		v.sel.focus, v.sel.whole = start, true
 	}
 }
 
 // SelectFromStartTo and SelectFromEndTo select from the start or the end
 // of the document to the text nearest (x, y): for a selection carried on
-// into the View from another one, above it or below it.
+// into the View from another one, above it or below it. Like SelectToEnd,
+// it's whole blocks.
 func (v *View) SelectFromStartTo(x, y int) {
 	start, ok1 := v.selTree().Start()
 	p, ok2 := v.positionAt(x, y)
 	if ok1 && ok2 {
 		v.setSelection(start, p, true)
+		v.sel.whole = true
 	}
 }
 
@@ -196,6 +205,7 @@ func (v *View) SelectFromEndTo(x, y int) {
 	p, ok2 := v.positionAt(x, y)
 	if ok1 && ok2 {
 		v.setSelection(end, p, true)
+		v.sel.whole = true
 	}
 }
 
@@ -214,7 +224,7 @@ func (v *View) AllSelected() bool {
 
 // setSelection sets the selection, between anchor and focus if active.
 func (v *View) setSelection(anchor, focus engine.Position, active bool) {
-	v.sel.anchor, v.sel.focus, v.sel.active = anchor, focus, active
+	v.sel.anchor, v.sel.focus, v.sel.active, v.sel.whole = anchor, focus, active, false
 }
 
 // SelectedText returns the selection's plain text: the exact range within
@@ -245,11 +255,11 @@ func (v *View) SelectedMarkdown() string {
 // selectionState is what SelectionChange compares.
 type selectionState struct {
 	anchor, focus engine.Position
-	active        bool
+	active, whole bool
 }
 
 func (v *View) selectionState() selectionState {
-	return selectionState{v.sel.anchor, v.sel.focus, v.sel.active}
+	return selectionState{v.sel.anchor, v.sel.focus, v.sel.active, v.sel.whole}
 }
 
 // The mouse selects: a press on text and a drag select characters; a
