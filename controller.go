@@ -71,8 +71,10 @@ type Controller struct {
 	touchOnBar bool
 
 	// mouse is the press of the primary button in progress, and how it
-	// selects (see selection.go).
-	mouse mousePress
+	// selects (see selection.go); unselectable is whether it doesn't
+	// (see SetSelectable).
+	mouse        mousePress
+	unselectable bool
 }
 
 // touchAxis is what a touch drag scrolls.
@@ -110,6 +112,7 @@ func (c *Controller) SetView(v *View) {
 		c.view.unhover()
 	}
 	c.view = v
+	v.unselectable = c.unselectable
 	c.hTarget, c.lastHScrolled = nil, nil
 	c.viewMoves = v.moves
 	c.cancelMomentum()

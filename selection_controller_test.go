@@ -129,3 +129,37 @@ func TestCursor(t *testing.T) {
 		t.Errorf("over nothing, the cursor is %v", v.Cursor())
 	}
 }
+
+// TestUnselectable checks a Controller whose mouse doesn't select: drags
+// and multiple presses select nothing, a click on a link still follows
+// it, the cursor over text is the default one, and turning it off clears
+// the selection.
+func TestUnselectable(t *testing.T) {
+	c, v := newTestController(t, "Hello brave new world, see [here](dest).\n")
+	v.SelectAll()
+	c.SetSelectable(false)
+	if v.HasSelection() {
+		t.Error("turning selection off left a selection")
+	}
+	from, to := wordAt(t, v, "Hello", 0, 0), wordAt(t, v, "new", 0, 3)
+	frame(c, move(from), press(from.X, from.Y), move(to), release(to.X, to.Y))
+	p := wordAt(t, v, "brave", 0, 2)
+	c.Frame([]input.Event{press(p.X, p.Y), release(p.X, p.Y)}, 0)
+	c.Frame([]input.Event{press(p.X, p.Y), release(p.X, p.Y)}, time.Millisecond)
+	if v.HasSelection() {
+		t.Errorf("with selection off, the mouse selected %q", v.SelectedText())
+	}
+	frame(c, move(p))
+	if v.Cursor() != CursorDefault {
+		t.Errorf("with selection off, the cursor over text is %v", v.Cursor())
+	}
+	link := wordAt(t, v, "here", 0, 2)
+	events := frame(c, move(link), press(link.X, link.Y), release(link.X, link.Y))
+	if !hasEvent(events, LinkClick{Destination: "dest"}) {
+		t.Errorf("with selection off, a click on a link gave %v", events)
+	}
+	v.SelectAll()
+	if !v.HasSelection() {
+		t.Error("with selection off, SelectAll selected nothing")
+	}
+}

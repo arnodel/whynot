@@ -64,7 +64,7 @@ func (v *View) Cursor() Cursor {
 	switch {
 	case v.ctx.HighlightNode != nil:
 		return CursorLink
-	case v.overText:
+	case v.overText && !v.unselectable:
 		return CursorText
 	}
 	return CursorDefault
@@ -244,6 +244,20 @@ type mousePress struct {
 	scrolled time.Duration
 }
 
+// SetSelectable sets whether the mouse selects text, as it does by
+// default. Off, pressing and dragging select nothing, and the View's
+// Cursor is never CursorText; clicks on links still follow them, and the
+// View's own methods, such as [View.SelectAll], still select. Turning it
+// off clears the selection.
+func (c *Controller) SetSelectable(on bool) {
+	c.unselectable = !on
+	c.view.unselectable = !on
+	if !on {
+		c.view.ClearSelection()
+		c.view.overText = false
+	}
+}
+
 // beginSelection starts a press at p.
 func (c *Controller) beginSelection(p image.Point, mods input.Modifiers, now time.Duration) {
 	m, v := &c.mouse, c.view
@@ -255,6 +269,10 @@ func (c *Controller) beginSelection(p image.Point, mods input.Modifiers, now tim
 	}
 	m.down, m.at, m.moved, m.last, m.lastAt, m.scrolled = true, p, false, now, p, now
 	m.link, m.onLink = v.LinkAt(p.X, p.Y)
+	if c.unselectable {
+		m.anchored = false
+		return
+	}
 	pos, ok := v.positionAt(p.X, p.Y)
 	m.anchored = ok
 	if !ok {
@@ -284,6 +302,9 @@ func (c *Controller) dragSelection(p image.Point) {
 		return
 	}
 	m.moved = true
+	if c.unselectable {
+		return
+	}
 	pos, ok := v.positionAt(p.X, p.Y)
 	if !ok {
 		return
@@ -316,13 +337,15 @@ func (c *Controller) endSelection(p image.Point) {
 		c.click(m.link)
 		return
 	}
-	c.view.ClearSelection()
+	if !c.unselectable {
+		c.view.ClearSelection()
+	}
 }
 
 // selectionScrolling reports whether a drag past the View's top or bottom
 // is scrolling it.
 func (c *Controller) selectionScrolling() bool {
-	if !c.mouse.down || !c.mouse.moved || !c.hasPointer {
+	if c.unselectable || !c.mouse.down || !c.mouse.moved || !c.hasPointer {
 		return false
 	}
 	b := c.bounds()

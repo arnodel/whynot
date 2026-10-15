@@ -43,9 +43,10 @@ type View struct {
 	blocksVersion int
 	// sel is what the reader selected (see selection.go), and overText
 	// whether the pointer is over text, for Cursor.
-	sel        selection
-	overText   bool
-	soleImages map[engine.Block]fetch.Source
+	sel          selection
+	overText     bool
+	unselectable bool // its Controller\'s mouse doesn\'t select
+	soleImages   map[engine.Block]fetch.Source
 
 	// hscroll is the sideways scrolling state of the View's code blocks
 	// and tables, and draws their scrollbars: ctx's ScrollOffset and
@@ -491,7 +492,9 @@ func (v *View) hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
-	_, v.overText = v.textAt(x, y)
+	if !v.unselectable {
+		_, v.overText = v.textAt(x, y)
+	}
 	return v.hoverLink(x, y)
 }
 
