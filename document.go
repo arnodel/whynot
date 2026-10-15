@@ -36,6 +36,10 @@ type Document struct {
 	// frontMatter is the document's front matter, so far.
 	frontMatter string
 
+	// text is a parsed Document's source; a streamed one's is its
+	// stream's.
+	text []byte
+
 	complete  bool
 	listeners []chan struct{}
 	// partial is the start of a UTF-8 character at the end of what was
@@ -251,4 +255,15 @@ func blocksOf(pieces []markdown.Piece) []engine.Block {
 		blocks[i] = p.Block
 	}
 	return blocks
+}
+
+// source returns the document's source text so far, which the source
+// ranges its blocks record are offsets in.
+func (d *Document) source() []byte {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stream != nil {
+		return d.stream.Text()
+	}
+	return d.text
 }

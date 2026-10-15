@@ -39,6 +39,10 @@ type View struct {
 	reader     reader
 	blocks     []engine.Block
 	tailBlocks int
+	// blocksVersion changes whenever blocks do.
+	blocksVersion int
+	// sel is what the reader selected (see selection.go).
+	sel        selection
 	soleImages map[engine.Block]fetch.Source
 
 	// hscroll is the sideways scrolling state of the View's code blocks
@@ -644,6 +648,7 @@ func (v *View) take() bool {
 		return false
 	}
 	v.blocks = v.blocks[:len(v.blocks)-v.tailBlocks]
+	v.blocksVersion++
 	for _, pieces := range [][]markdown.Piece{added, tail} {
 		for _, p := range pieces {
 			v.blocks = append(v.blocks, p.Block)
