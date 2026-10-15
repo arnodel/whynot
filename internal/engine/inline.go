@@ -29,6 +29,15 @@ type InlineText struct {
 	// false (the zero value) for every InlineText built directly rather
 	// than through the compiler, matching the old always-space behavior.
 	Glued bool
+
+	// Source is where the word is in the document's source, and
+	// SourceExact whether the word is that source exactly: a word with an
+	// escape or an entity isn't. Where the word's place can't be told,
+	// such as a smart quote, or code whose tabs were expanded, Source is
+	// that of the text the word is part of. The zero Range if the word
+	// has no source, such as a list item's number.
+	Source      ast.Range
+	SourceExact bool
 }
 
 var _ Inline = (*InlineText)(nil)

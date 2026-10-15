@@ -49,7 +49,7 @@ func lineTexts(t *testing.T, line []engine.Inline) []string {
 }
 
 func TestTokenLinesEmpty(t *testing.T) {
-	if lines := tokenLines(nil, nil, 0); len(lines) != 0 {
+	if lines := tokenLines(nil, nil, make([]lineSource, 0)); len(lines) != 0 {
 		t.Fatalf("lines = %#v, want empty", lines)
 	}
 }
@@ -59,7 +59,7 @@ func TestTokenLinesMultipleSpansPerLine(t *testing.T) {
 	lines := tokenLines([]codeblocks.Span{
 		{Text: "func", Class: codeblocks.ClassKeyword},
 		{Text: " f() {"},
-	}, blockNode, 1)
+	}, blockNode, make([]lineSource, 1))
 	if len(lines) != 1 {
 		t.Fatalf("len(lines) = %d, want 1", len(lines))
 	}
@@ -86,7 +86,7 @@ func TestTokenLinesMultipleSpansPerLine(t *testing.T) {
 // don't know is still recorded on the node: classes are open-ended.
 func TestTokenLinesKeepsUnknownClass(t *testing.T) {
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
-	lines := tokenLines([]codeblocks.Span{{Text: "@decorator", Class: "decorator"}}, blockNode, 1)
+	lines := tokenLines([]codeblocks.Span{{Text: "@decorator", Class: "decorator"}}, blockNode, make([]lineSource, 1))
 	if node := lines[0][0].(*engine.InlineText).ASTNode; node.Class != "decorator" {
 		t.Errorf("class = %q, want %q", node.Class, "decorator")
 	}
@@ -97,7 +97,7 @@ func TestTokenLinesSpanCrossingMultipleLines(t *testing.T) {
 	lines := tokenLines([]codeblocks.Span{
 		{Text: "/* a\nb */", Class: codeblocks.ClassComment},
 		{Text: "\nrest"},
-	}, blockNode, 3)
+	}, blockNode, make([]lineSource, 3))
 	if len(lines) != 3 {
 		t.Fatalf("len(lines) = %d, want 3", len(lines))
 	}
@@ -122,7 +122,7 @@ func TestTokenLinesSpanCrossingMultipleLines(t *testing.T) {
 // rendering. Every line must end up with at least one part.
 func TestTokenLinesBlankLineGetsAPart(t *testing.T) {
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
-	lines := tokenLines([]codeblocks.Span{{Text: "func f() {\n\n}\n"}}, blockNode, 3)
+	lines := tokenLines([]codeblocks.Span{{Text: "func f() {\n\n}\n"}}, blockNode, make([]lineSource, 3))
 	if len(lines) != 3 {
 		t.Fatalf("len(lines) = %d, want 3: %#v", len(lines), lines)
 	}
@@ -137,7 +137,7 @@ func TestTokenLinesBlankLineGetsAPart(t *testing.T) {
 func TestTokenLinesMismatchedLineCountFails(t *testing.T) {
 	blockNode := (*ast.Node)(nil).AddChild(ast.TagCodeBlock)
 	// One line's worth of text for a two-line block: a misbehaving plugin.
-	if lines := tokenLines([]codeblocks.Span{{Text: "just one line"}}, blockNode, 2); lines != nil {
+	if lines := tokenLines([]codeblocks.Span{{Text: "just one line"}}, blockNode, make([]lineSource, 2)); lines != nil {
 		t.Fatalf("lines = %#v, want nil (fallback signal)", lines)
 	}
 }
@@ -150,7 +150,7 @@ func codeBlockOf(rawLines []string, plugins ...codeblocks.Plugin) (engine.Block,
 	for i, p := range plugins {
 		ps[i] = plugin{Plugin: p, namespace: fmt.Sprintf("#%d:", i+1)}
 	}
-	return (&compiler{}).codeBlock(astNode, "go", rawLines, ps), astNode
+	return (&compiler{}).codeBlock(astNode, "go", rawLines, make([]lineSource, len(rawLines)), ps), astNode
 }
 
 // TestCodeBlockPassesSourceVerbatim is a regression test: rawLines each

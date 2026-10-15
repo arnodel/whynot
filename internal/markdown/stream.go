@@ -7,6 +7,7 @@ import (
 	"github.com/yuin/goldmark/v2/parser"
 
 	"github.com/arnodel/whynot/fetch"
+	"github.com/arnodel/whynot/internal/ast"
 	"github.com/arnodel/whynot/internal/engine"
 )
 
@@ -154,7 +155,7 @@ func (s *Stream) Update() (finished, tail []Piece) {
 		s.done = true
 		src := s.text[s.start:]
 		nodes, pc := s.parse(src)
-		finished = s.compileNodes(src, nodes)
+		finished = s.compileNodes(src, nodes, len(nodes))
 		s.finish(finished, pc)
 		s.start = len(s.text)
 		return finished, nil
@@ -164,14 +165,14 @@ func (s *Stream) Update() (finished, tail []Piece) {
 		src := s.text[s.start : s.start+nl+1]
 		if nodes, pc := s.parse(src); len(nodes) >= 2 {
 			last := nodes[len(nodes)-1]
-			finished = s.compileNodes(src, nodes[:len(nodes)-1])
+			finished = s.compileNodes(src, nodes, len(nodes)-1)
 			s.finish(finished, pc)
 			s.start += bytes.LastIndexByte(src[:last.Pos()], '\n') + 1
 		}
 	}
 	src := s.text[s.start:]
 	nodes, _ := s.parse(src)
-	return finished, s.compileNodes(src, nodes)
+	return finished, s.compileNodes(src, nodes, len(nodes))
 }
 
 // parse parses src, part of the text from its unfinished end, seeded with
@@ -195,15 +196,21 @@ func (s *Stream) parse(src []byte) ([]gmast.Node, parser.Context) {
 	return nodes, pc
 }
 
-// compileNodes compiles nodes, top-level block nodes of a parse of src,
-// dropping any that show nothing.
-func (s *Stream) compileNodes(src []byte, nodes []gmast.Node) []Piece {
+// compileNodes compiles the first count of nodes, the top-level block
+// nodes of a parse of src, which starts at s.start in the text, dropping
+// any that show nothing. The nodes after them are where they end.
+func (s *Stream) compileNodes(src []byte, nodes []gmast.Node, count int) []Piece {
 	c := newCompiler(src, s.opts)
+	c.offset = s.start
+	var ranges map[gmast.Node]ast.Range
+	if len(nodes) > 0 {
+		ranges = c.blockRanges(nodes[0], len(src))
+	}
 	var pieces []Piece
-	for _, node := range nodes {
+	for _, node := range nodes[:count] {
 		headings := len(c.headings)
 		// A nil parent ast.Node is what marks a block as top-level.
-		block := c.compileBlock(node, nil)
+		block := c.compileBlock(node, nil, ranges[node])
 		if block == nil {
 			continue
 		}

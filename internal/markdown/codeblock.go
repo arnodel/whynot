@@ -54,14 +54,31 @@ func (c *compiler) pluginsFor(language string) []plugin {
 // colored code block, and an Image a diagram that falls back to what
 // the remaining plugins make of the block. With no plugin left, it's
 // plain text, one InlineText per line.
-func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []string, plugins []plugin) engine.Block {
+// lineSource is where a code block's line is in the document's source, and
+// whether its text is that source exactly: a line whose tabs were
+// expanded isn't.
+type lineSource struct {
+	start, end int
+	exact      bool
+}
+
+// source returns the Range of text, starting at offset in the line: text
+// exactly, if the line is exact, or else the whole line.
+func (l lineSource) source(offset int, text string) (ast.Range, bool) {
+	if !l.exact {
+		return ast.Range{Start: l.start, End: l.end}, false
+	}
+	return ast.Range{Start: l.start + offset, End: l.start + offset + len(text)}, true
+}
+
+func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []string, sources []lineSource, plugins []plugin) engine.Block {
 	for i, p := range plugins {
 		// rawLines carry their own trailing newlines - joining with ""
 		// avoids doubling them up.
 		code := strings.Join(rawLines, "")
 		switch content := p.Parse(language, code).(type) {
 		case codeblocks.Tokens:
-			if lines := tokenLines(content.Spans, astNode, len(rawLines)); lines != nil {
+			if lines := tokenLines(content.Spans, astNode, sources); lines != nil {
 				return &engine.CodeBlock{Lines: lines, ASTNode: astNode}
 			}
 			// Tokens that don't reproduce the source: try the next plugin.
@@ -69,13 +86,14 @@ func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []stri
 			if content.Source == nil {
 				continue // nothing to show: try the next plugin
 			}
-			fallback := c.codeBlock(astNode, language, rawLines, plugins[i+1:])
+			fallback := c.codeBlock(astNode, language, rawLines, sources, plugins[i+1:])
 			return engine.NewDiagramBlock(astNode, namespaced{p.namespace, content.Source}, fallback)
 		}
 	}
 	lines := make([][]engine.Inline, len(rawLines))
 	for i, text := range rawLines {
-		lines[i] = []engine.Inline{&engine.InlineText{Text: text, ASTNode: astNode}}
+		source, exact := sources[i].source(0, text)
+		lines[i] = []engine.Inline{&engine.InlineText{Text: text, ASTNode: astNode, Source: source, SourceExact: exact}}
 	}
 	return &engine.CodeBlock{Lines: lines, ASTNode: astNode}
 }
@@ -84,15 +102,25 @@ func (c *compiler) codeBlock(astNode *ast.Node, language string, rawLines []stri
 // slice of Inlines per visual line. A span with a class gets its own
 // TagCodeToken node under blockNode, carrying the class for styling; an
 // unclassified one uses blockNode itself. Returns nil if the spans don't
-// make exactly lineCount lines (a misbehaving plugin), so the caller can
-// fall back.
-func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][]engine.Inline {
+// make exactly one line per source (a misbehaving plugin), so the caller
+// can fall back.
+func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, sources []lineSource) [][]engine.Inline {
+	lineCount := len(sources)
 	if lineCount == 0 {
 		return [][]engine.Inline{}
 	}
 	lines := make([][]engine.Inline, lineCount)
 	lineIndex := 0
 	var current []engine.Inline
+	offset := 0 // in the current line
+	word := func(text string, node *ast.Node) *engine.InlineText {
+		t := &engine.InlineText{Text: text, ASTNode: node}
+		if lineIndex < lineCount {
+			t.Source, t.SourceExact = sources[lineIndex].source(offset, text)
+		}
+		offset += len(text)
+		return t
+	}
 	flushLine := func() {
 		if lineIndex >= len(lines) {
 			return
@@ -104,6 +132,7 @@ func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][
 		lines[lineIndex] = current
 		current = nil
 		lineIndex++
+		offset = 0
 	}
 	for _, span := range spans {
 		node := blockNode
@@ -116,12 +145,12 @@ func tokenLines(spans []codeblocks.Span, blockNode *ast.Node, lineCount int) [][
 			nl := strings.IndexByte(remaining, '\n')
 			if nl == -1 {
 				if remaining != "" {
-					current = append(current, &engine.InlineText{Text: remaining, ASTNode: node})
+					current = append(current, word(remaining, node))
 				}
 				break
 			}
 			if remaining[:nl] != "" {
-				current = append(current, &engine.InlineText{Text: remaining[:nl], ASTNode: node})
+				current = append(current, word(remaining[:nl], node))
 			}
 			flushLine()
 			remaining = remaining[nl+1:]

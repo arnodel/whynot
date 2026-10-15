@@ -41,6 +41,10 @@ const (
 	TagCodeToken
 )
 
+// Range is a span of a document's source, in bytes: [Start, End). Every
+// element takes some source, so the zero Range means unknown.
+type Range struct{ Start, End int }
+
 // Path is a tag ancestry, root-to-leaf.
 type Path []Tag
 
@@ -64,6 +68,11 @@ type Node struct {
 	// TagCodeToken, the kind of token ("keyword", "string", ...). Empty
 	// when there's none.
 	Class string
+
+	// Source is where the element is in the document's source, its markup
+	// included (a heading's "#", a code block's fences, emphasis's "*"),
+	// for blocks and inline elements; the zero Range for other nodes.
+	Source Range
 
 	path Path // memoized on first Path() call
 }

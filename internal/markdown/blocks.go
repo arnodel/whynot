@@ -15,55 +15,65 @@ import (
 )
 
 // compileBlock compiles a block node under parent (nil at the top level),
-// or returns nil for one that shows nothing.
-func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block {
+// whose source is r, or returns nil for one that shows nothing.
+func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node, r ast.Range) engine.Block {
+	// add adds the block's node.
+	add := func(tag ast.Tag) *ast.Node {
+		n := parent.AddChild(tag)
+		n.Source = r
+		return n
+	}
 	switch node.Kind() {
 	case gmast.KindParagraph:
-		return c.compileTextBlock(node, parent.AddChild(ast.TagParagraph), parent == nil)
+		return c.compileTextBlock(node, add(ast.TagParagraph), parent == nil)
 	case gmast.KindHeading:
-		astNode := parent.AddChild(headingTag(node.(*gmast.Heading).Level))
+		astNode := add(headingTag(node.(*gmast.Heading).Level))
 		if attr, ok := node.Attribute("id"); ok {
 			astNode.ID = attr.Value(c.source)
 		}
 		return c.compileTextBlock(node, astNode, parent == nil)
 	case gmast.KindList:
 		list := node.(*gmast.List)
-		astNode := parent.AddChild(ast.TagList)
+		astNode := add(ast.TagList)
+		ranges := c.blockRanges(node.FirstChild(), c.localEnd(r))
 		var items []engine.Block
 		index := 0
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-			items = append(items, c.compileListItem(child, list, index, astNode))
+			items = append(items, c.compileListItem(child, list, index, astNode, ranges[child]))
 			index++
 		}
 		return &engine.MarginBlock{Block: &engine.StackBlock{Blocks: items}, MarginNode: astNode}
 	case gmast.KindCodeBlock:
-		astNode := parent.AddChild(ast.TagCodeBlock)
+		astNode := add(ast.TagCodeBlock)
 		cb := node.(*gmast.CodeBlock)
 		segs := cb.Value.Segments()
 		rawLines := make([]string, len(segs))
+		sources := make([]lineSource, len(segs))
 		for i, seg := range segs {
+			raw := string(seg.Bytes(c.source))
 			// Code keeps its tabs, and most fonts have no glyph for one:
 			// expand them so indentation shows as indentation.
-			rawLines[i] = strings.ReplaceAll(string(seg.Bytes(c.source)), "\t", codeBlockTabExpansion)
+			rawLines[i] = strings.ReplaceAll(raw, "\t", codeBlockTabExpansion)
+			sources[i] = lineSource{start: c.offset + seg.Start, end: c.offset + seg.Stop, exact: rawLines[i] == raw}
 		}
 
 		language, _ := cb.Language(c.source)
-		block := c.codeBlock(astNode, language, rawLines, c.pluginsFor(language))
+		block := c.codeBlock(astNode, language, rawLines, sources, c.pluginsFor(language))
 		return &engine.MarginBlock{Block: block, MarginNode: astNode}
 	case gmast.KindThematicBreak:
-		astNode := parent.AddChild(ast.TagThematicBreak)
+		astNode := add(ast.TagThematicBreak)
 		return &engine.MarginBlock{
 			Block:      &engine.ThematicBreakBlock{ASTNode: astNode},
 			MarginNode: astNode,
 		}
 	case gmast.KindBlockquote:
-		astNode := parent.AddChild(ast.TagBlockquote)
+		astNode := add(ast.TagBlockquote)
 		return &engine.MarginBlock{
-			Block:      &engine.BlockquoteBlock{Inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode)), ASTNode: astNode},
+			Block:      &engine.BlockquoteBlock{Inner: wrapBlocks(c.compileBlocks(node.FirstChild(), astNode, c.localEnd(r))), ASTNode: astNode},
 			MarginNode: astNode,
 		}
 	case extast.KindTable:
-		return c.compileTable(node, parent)
+		return c.compileTable(node, add(ast.TagTable))
 	case gmast.KindLinkReferenceDefinition:
 		// A `[foo]: /url` definition: goldmark has already used it to
 		// resolve links, and it isn't shown.
@@ -74,7 +84,7 @@ func (c *compiler) compileBlock(node gmast.Node, parent *ast.Node) engine.Block 
 			return nil
 		}
 	}
-	return c.compileUnsupportedBlock(node, parent)
+	return c.compileUnsupportedBlock(node, add(ast.TagUnsupported))
 }
 
 // compileTextBlock compiles a paragraph or heading, whose ast.Node the
@@ -129,14 +139,16 @@ func plainText(items []engine.Inline) string {
 // case for as a code block of its raw source (where available), styled
 // as unsupported, and logs it: the gap stays visible rather than
 // silently dropped.
-func (c *compiler) compileUnsupportedBlock(node gmast.Node, parent *ast.Node) engine.Block {
-	astNode := parent.AddChild(ast.TagUnsupported)
+func (c *compiler) compileUnsupportedBlock(node gmast.Node, astNode *ast.Node) engine.Block {
 	log.Printf("whynot: unsupported %s block, showing its source instead", node.Kind())
 
 	var items []engine.Inline
 	if html, ok := node.(*gmast.HTMLBlock); ok {
 		for _, seg := range html.Value.Segments() {
-			items = append(items, &engine.InlineText{Text: string(seg.Bytes(c.source)), ASTNode: astNode})
+			items = append(items, &engine.InlineText{
+				Text: string(seg.Bytes(c.source)), ASTNode: astNode,
+				Source: c.rangeOf(seg.Start, seg.Stop), SourceExact: true,
+			})
 		}
 	}
 	if len(items) == 0 {
@@ -155,9 +167,11 @@ func headingTag(level int) ast.Tag {
 	return ast.TagHeading1 + ast.Tag(level-1)
 }
 
-// compileListItem compiles the item at index (0-based) in list.
-func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ast.Node) engine.Block {
+// compileListItem compiles the item at index (0-based) in list, whose
+// source is r.
+func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int, parent *ast.Node, r ast.Range) engine.Block {
 	itemNode := parent.AddChild(ast.TagListItem)
+	itemNode.Source = r
 	var marker engine.Inline
 	if status, ok := extension.TaskStatusOf(node); ok {
 		marker = &engine.TaskCheckbox{Checked: status == extension.TaskStatusCompleted, ASTNode: itemNode}
@@ -191,7 +205,7 @@ func (c *compiler) compileListItem(node gmast.Node, list *gmast.List, index int,
 	}
 	blocks := []engine.Block{head}
 
-	if trailingBlocks := c.compileBlocks(next, itemNode); len(trailingBlocks) > 0 {
+	if trailingBlocks := c.compileBlocks(next, itemNode, c.localEnd(r)); len(trailingBlocks) > 0 {
 		blocks = append(blocks, wrapBlocks(trailingBlocks))
 	}
 
@@ -211,10 +225,10 @@ func listMarker(list *gmast.List, index int) string {
 	return string(list.Marker)
 }
 
-// compileTable compiles a table. It always has a header, but may have no
-// body: a table with no data rows has no TableBody child.
-func (c *compiler) compileTable(node gmast.Node, parent *ast.Node) engine.Block {
-	astNode := parent.AddChild(ast.TagTable)
+// compileTable compiles a table, whose node the caller has already
+// created. It always has a header, but may have no body: a table with no
+// data rows has no TableBody child.
+func (c *compiler) compileTable(node gmast.Node, astNode *ast.Node) engine.Block {
 	headerNode := node.FirstChild()
 	header := c.compileTableRow(headerNode, astNode)
 
@@ -238,6 +252,10 @@ func (c *compiler) compileTableRow(node gmast.Node, parent *ast.Node) []engine.T
 	for cellNode := node.FirstChild(); cellNode != nil; cellNode = cellNode.NextSibling() {
 		tc := cellNode.(*extast.TableCell)
 		cellNode := parent.AddChild(ast.TagTableCell)
+		if segs := tc.Source(); len(segs) > 0 {
+			start, end := segs[0].Start, segs[len(segs)-1].Stop
+			cellNode.Source = c.rangeOf(start, c.blockEnd(start, end))
+		}
 		cells = append(cells, engine.TableCell{
 			Content:   &engine.TextBlock{Parts: c.compileInlines(tc, cellNode), ASTNode: cellNode},
 			Alignment: tableCellAlignment(tc.Alignment),
