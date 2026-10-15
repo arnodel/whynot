@@ -236,7 +236,11 @@ func (s *Basic) HighlightColor() color.Color {
 	return s.Highlight
 }
 
+// SelectionColor is Selection, or a mid blue if it's unset.
 func (s *Basic) SelectionColor() color.Color {
+	if s.Selection == nil {
+		return color.RGBA{0x40, 0x70, 0xB0, 0xFF}
+	}
 	return s.Selection
 }
 

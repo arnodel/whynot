@@ -161,6 +161,31 @@ func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	}
 }
 
+// OffsetAt returns the byte offset in the box's text of the character
+// boundary nearest x, relative to its pen position.
+func (b *TextBox) OffsetAt(x int) int {
+	best, bestDist := 0, abs(x)
+	for i := range b.Text {
+		if i == 0 {
+			continue
+		}
+		if d := abs(x - font.MeasureString(b.Face, b.Text[:i]).Ceil()); d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	if _, advance := b.BoundsAndAdvance(); abs(x-advance) < bestDist {
+		best = len(b.Text)
+	}
+	return best
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // selectedSpan returns the part of the box that's selected, from x0 to
 // x1, relative to its pen position.
 func (b *TextBox) selectedSpan() (x0, x1 int, c color.Color, ok bool) {

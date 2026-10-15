@@ -41,8 +41,10 @@ type View struct {
 	tailBlocks int
 	// blocksVersion changes whenever blocks do.
 	blocksVersion int
-	// sel is what the reader selected (see selection.go).
+	// sel is what the reader selected (see selection.go), and overText
+	// whether the pointer is over text, for Cursor.
 	sel        selection
+	overText   bool
 	soleImages map[engine.Block]fetch.Source
 
 	// hscroll is the sideways scrolling state of the View's code blocks
@@ -489,6 +491,7 @@ func (v *View) hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
+	_, v.overText = v.textAt(x, y)
 	return v.hoverLink(x, y)
 }
 
@@ -497,6 +500,7 @@ func (v *View) unhover() {
 	if v.hscroll != nil {
 		v.hscroll.unhover()
 	}
+	v.overText = false
 	v.setHighlight(nil, 0)
 }
 

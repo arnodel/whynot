@@ -219,6 +219,20 @@ func (n *SelNode) end() Position {
 	return Position{Leaf: n, Item: i, Offset: len(itemText(n.items[i]))}
 }
 
+// Word returns the Positions at the start and end of p's item: a word,
+// or a whole leaf without items.
+func (p Position) Word() (start, end Position) {
+	if len(p.Leaf.items) == 0 {
+		return Position{Leaf: p.Leaf}, p.Leaf.end()
+	}
+	return Position{Leaf: p.Leaf, Item: p.Item}, Position{Leaf: p.Leaf, Item: p.Item, Offset: len(itemText(p.Leaf.items[p.Item]))}
+}
+
+// Block returns the Positions at the start and end of p's leaf.
+func (p Position) Block() (start, end Position) {
+	return Position{Leaf: p.Leaf}, p.Leaf.end()
+}
+
 // path returns the indices from the root down to n.
 func (n *SelNode) path() []int {
 	var p []int
