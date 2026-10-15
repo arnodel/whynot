@@ -17,6 +17,10 @@ type selection struct {
 	treeVersion   int // the View's blocksVersion tree is of
 	anchor, focus engine.Position
 	active        bool
+
+	// drawSpan is the selection as of the draw in progress, if drawing.
+	drawSpan engine.Span
+	drawing  bool
 }
 
 // selTree returns the selection tree of the View's blocks, carrying the
@@ -35,6 +39,19 @@ func (v *View) selTree() *engine.SelTree {
 	}
 	v.sel.tree, v.sel.treeVersion = tree, v.blocksVersion
 	return tree
+}
+
+// selectedRange is the View's engine.Context.Selected: which bytes of
+// item's text are selected, in the draw in progress.
+func (v *View) selectedRange(item engine.Inline, textLen int) (start, end int, ok bool) {
+	if !v.sel.drawing {
+		return 0, 0, false
+	}
+	p, ok := v.sel.tree.PositionOf(item, 0)
+	if !ok {
+		return 0, 0, false
+	}
+	return v.sel.drawSpan.Contains(p.Leaf, p.Item, textLen)
 }
 
 // span returns the selection's normalized Span, if it selects anything.

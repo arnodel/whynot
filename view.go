@@ -135,6 +135,7 @@ func NewView(doc *Document, opts ...ViewOption) *View {
 		zoom:         1,
 	}
 	v.ctx.ScrollOffset = v.hscroll.scrollOffset
+	v.ctx.Selected = v.selectedRange
 	v.ctx.Scrollbar = func(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration) {
 		v.hscroll.drawScrollbar(dst, r, now, v.ctx.Scale, v.ctx.Styles)
 	}
@@ -402,6 +403,7 @@ func (v *View) Draw(dst canvas.Canvas, now time.Duration) {
 		return
 	}
 	v.update(now)
+	v.sel.drawSpan, v.sel.drawing = v.span()
 	if v.hscroll != nil {
 		v.hscroll.beginFrame()
 	}

@@ -56,6 +56,8 @@ func (t *InlineText) GetInlineLayout(ctx Context, width int) InlineLayout {
 		LineHeight:      ctx.Styles.LineHeight(t.ASTNode),
 		glued:           t.Glued,
 		source:          t,
+		selected:        ctx.Selected,
+		selectionColor:  ctx.Styles.SelectionColor(),
 	}
 }
 

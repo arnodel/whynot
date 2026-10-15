@@ -100,6 +100,8 @@ type Styles interface {
 	// HighlightColor is the text color of whatever's highlighted, e.g. a
 	// hovered link, overriding the normal cascade.
 	HighlightColor() color.Color
+	// SelectionColor fills the background of selected text.
+	SelectionColor() color.Color
 	// ScrollbarColor is the color of a scrollbar thumb: hover whenever
 	// it's highlighted (including while dragged), pressed only while
 	// dragged.

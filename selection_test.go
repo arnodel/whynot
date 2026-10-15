@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arnodel/whynot/canvas/canvastest"
 	"github.com/arnodel/whynot/internal/engine"
 )
 
@@ -188,4 +189,43 @@ func TestSelectionWhileStreaming(t *testing.T) {
 		t.Errorf("a selection in the unfinished end survived its compiling again: %q", v.SelectedText())
 	}
 	w.Close()
+}
+
+// TestSelectionDrawn checks that the selection is drawn behind the text:
+// the selected part of a word, and whole words with the gaps between them.
+func TestSelectionDrawn(t *testing.T) {
+	v := NewView(Parse([]byte("Hello brave new world.\n")))
+	layoutView(v, 600, 400, 1, 0)
+	selColor := v.ctx.Styles.SelectionColor()
+	draw := func() (rects []canvastest.Rect, xs map[string]int) {
+		r := &canvastest.Recorder{Area: v.Bounds()}
+		v.Draw(r, 0)
+		xs = map[string]int{}
+		for _, tx := range r.Texts {
+			xs[tx.S] = tx.X
+		}
+		for _, rc := range r.Rects {
+			if rc.Color == selColor {
+				rects = append(rects, rc)
+			}
+		}
+		return rects, xs
+	}
+	if rects, _ := draw(); len(rects) != 0 {
+		t.Fatalf("nothing selected, but %d selection rectangles drawn", len(rects))
+	}
+
+	// Part of a word: within it.
+	v.setSelection(at(t, v, "brave", 0, 1), at(t, v, "brave", 0, 4), true)
+	rects, xs := draw()
+	if len(rects) != 1 || rects[0].X <= xs["brave"] || rects[0].X+rects[0].W >= xs["new"] {
+		t.Errorf("selecting \"rav\": rectangles %v, words at %v", rects, xs)
+	}
+
+	// Whole words: from the first's start to the last's end, gaps included.
+	v.setSelection(at(t, v, "brave", 0, 0), at(t, v, "new", 0, 3), true)
+	rects, xs = draw()
+	if len(rects) != 2 || rects[0].X != xs["brave"] || rects[0].X+rects[0].W != rects[1].X || rects[1].X != xs["new"] || rects[1].X+rects[1].W >= xs["world"] {
+		t.Errorf("selecting \"brave new\": rectangles %v, words at %v", rects, xs)
+	}
 }

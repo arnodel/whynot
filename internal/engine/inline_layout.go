@@ -70,6 +70,11 @@ type TextBox struct {
 	// source is the InlineText this TextBox was built from - see Source.
 	source Inline
 
+	// selected and selectionColor are the Context's, for drawing the
+	// selection (see selectedSpan).
+	selected       func(item Inline, textLen int) (start, end int, ok bool)
+	selectionColor color.Color
+
 	boundsComputed bool
 	bounds         image.Rectangle
 	advance        int
@@ -154,6 +159,26 @@ func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 		xHeight := b.Face.Metrics().XHeight.Ceil()
 		dst.DrawRect(x, y-xHeight/2-b.StrikeThickness/2, advance, b.StrikeThickness, b.Color)
 	}
+}
+
+// selectedSpan returns the part of the box that's selected, from x0 to
+// x1, relative to its pen position.
+func (b *TextBox) selectedSpan() (x0, x1 int, c color.Color, ok bool) {
+	if b.selected == nil || b.source == nil {
+		return 0, 0, nil, false
+	}
+	start, end, ok := b.selected(b.source, len(b.Text))
+	if !ok {
+		return 0, 0, nil, false
+	}
+	_, advance := b.BoundsAndAdvance()
+	measure := func(i int) int {
+		if i >= len(b.Text) {
+			return advance
+		}
+		return font.MeasureString(b.Face, b.Text[:i]).Ceil()
+	}
+	return measure(start), measure(end), b.selectionColor, true
 }
 
 func (b *TextBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {

@@ -90,6 +90,8 @@ type Basic struct {
 
 	Highlight color.Color
 
+	Selection color.Color
+
 	Scrollbar ScrollbarStyle
 
 	// TokenColors colors code tokens (ast.TagCodeToken) by their Class.
@@ -232,6 +234,10 @@ func (s *Basic) ViewMargins() Margins {
 
 func (s *Basic) HighlightColor() color.Color {
 	return s.Highlight
+}
+
+func (s *Basic) SelectionColor() color.Color {
+	return s.Selection
 }
 
 func (s *Basic) ScrollbarGeometry() ScrollbarGeometry {
