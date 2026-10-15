@@ -149,6 +149,11 @@ type App struct {
 	width, height, toolbarHeight int
 	bounds                       image.Rectangle
 
+	// pointer is the mouse pointer's last position, if hasPointer, for a
+	// new journal to know (see restack).
+	pointer    image.Point
+	hasPointer bool
+
 	// overlaid is the real document's View, saved here while a page the
 	// browser generates, such as the table of contents, is current in
 	// Panel instead (see overlay.go), and overlay which page that is. Every

@@ -346,6 +346,11 @@ type StackController struct {
 	// press is the press of the primary button in progress, for selecting
 	// across pages (see stackselect.go).
 	press stackPress
+
+	// pointer is the mouse pointer's last position, if hasPointer: each
+	// child is told it every frame (see withPointer).
+	pointer    image.Point
+	hasPointer bool
 }
 
 // touchAxis is what a touch drag scrolls.
@@ -417,8 +422,10 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 			}
 			c.stack.bar.hovered = c.stack.onScrollbar(image.Pt(e.X, e.Y))
 			c.movePointer(image.Pt(e.X, e.Y))
+			c.pointer, c.hasPointer = image.Pt(e.X, e.Y), true
 			forChildren = append(forChildren, e)
 		case input.PointerLeave:
+			c.hasPointer = false
 			c.stack.bar.hovered = false
 			forChildren = append(forChildren, e)
 		case input.PointerButton:
@@ -525,13 +532,13 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 
 	var out []StackEvent
 	for i, r := range c.stack.regions {
-		in := forChildren
+		in := c.withPointer(forChildren)
 		switch {
 		case i == c.touchChild:
 			// Even off screen, until its touch ends.
-			in = append(slices.Clone(forChildren), forTouched...)
+			in = append(slices.Clone(in), forTouched...)
 		case i == c.press.child && c.press.down:
-			in = c.pressedChildEvents(forChildren, r)
+			in = c.pressedChildEvents(in, r)
 		case r.Empty():
 			continue
 		}
@@ -554,6 +561,17 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 		out = append(out, StackEvent{Child: -1, Event: whynot.Scroll{}})
 	}
 	return out
+}
+
+// withPointer returns events after a move of the pointer to where it is:
+// a child is only run while it's on screen, and the stack is made anew as
+// the trail changes, so a child may not have seen the pointer move there,
+// and wouldn't know what's under it until it moves again.
+func (c *StackController) withPointer(events []input.Event) []input.Event {
+	if !c.hasPointer {
+		return events
+	}
+	return append([]input.Event{input.PointerMove{X: c.pointer.X, Y: c.pointer.Y}}, events...)
 }
 
 // ScrollLeft and ScrollRight scroll a block wider than the stack (a code

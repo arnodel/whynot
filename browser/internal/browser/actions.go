@@ -2,6 +2,7 @@ package browser
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 	"time"
@@ -26,6 +27,12 @@ func (a *App) noteInput(events []input.Event, now time.Duration) {
 			if now-a.lastTouch > mouseAfterTouch {
 				a.touch = false
 			}
+		}
+		switch e := e.(type) {
+		case input.PointerMove:
+			a.pointer, a.hasPointer = image.Pt(e.X, e.Y), true
+		case input.PointerLeave:
+			a.hasPointer = false
 		}
 	}
 }

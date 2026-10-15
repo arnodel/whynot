@@ -131,6 +131,8 @@ func (a *App) restack() {
 	}
 	j.stack.SetScrollbar(a.stackScrollbar())
 	j.controller = NewStackController(j.stack)
+	// It knows where the pointer is, without waiting for it to move.
+	j.controller.pointer, j.controller.hasPointer = a.pointer, a.hasPointer
 }
 
 // SetScrollbar sets whether what's shown draws its own scrollbar: the

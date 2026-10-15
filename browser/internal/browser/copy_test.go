@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/input"
 )
 
@@ -210,5 +211,20 @@ func TestSelectAllTwice(t *testing.T) {
 	want := "# Start\n\nAlpha beta gamma.\n\n[Notes](notes.md)\n\n---\n\n# Notes\n\nDelta epsilon zeta."
 	if got := copiedText(t, app.CopySelection); got != want {
 		t.Errorf("copied %q, want %q", got, want)
+	}
+}
+
+// TestNewJournalKnowsPointer checks that a journal made anew under a still
+// pointer, as when the trail changes, knows what's under it at once.
+func TestNewJournalKnowsPointer(t *testing.T) {
+	app := twoPageJournal(t)
+	p := textAt(t, app, "epsilon")
+	app.Frame([]input.Event{input.PointerMove{X: p.X, Y: p.Y}}, 0)
+	app.ToggleJournal()
+	app.ToggleJournal()
+	drawApp(app)
+	app.Frame(nil, 0)
+	if c := app.Cursor(); c != whynot.CursorText {
+		t.Errorf("over text in a new journal, the cursor is %v, want the text cursor", c)
 	}
 }
