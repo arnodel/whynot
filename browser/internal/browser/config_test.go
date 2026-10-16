@@ -50,3 +50,34 @@ func TestAPIKeyFrom(t *testing.T) {
 		t.Errorf("a missing file gives %q, %v; want no key and no error", key, err)
 	}
 }
+
+func TestConfigPath(t *testing.T) {
+	xdg, home := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("HOME", home)
+	if path, _ := configPath(); path != "" {
+		t.Errorf("with no config file, the path is %q", path)
+	}
+	system, err := os.UserConfigDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	write := func(dir string) string {
+		p := filepath.Join(dir, "whynot", "config.yaml")
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, nil, 0o600)
+		return p
+	}
+	sys := write(system)
+	if path, ignored := configPath(); path != sys || len(ignored) != 0 {
+		t.Errorf("the path is %q, ignoring %v; want %q", path, ignored, sys)
+	}
+	x := write(xdg)
+	path, ignored := configPath()
+	if path != x {
+		t.Errorf("the path is %q, want %q: $XDG_CONFIG_HOME comes first", path, x)
+	}
+	if sys != x && (len(ignored) != 1 || ignored[0] != sys) {
+		t.Errorf("ignored %v, want %q", ignored, sys)
+	}
+}

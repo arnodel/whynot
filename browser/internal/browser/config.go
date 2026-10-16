@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,8 +17,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// config is the viewers' config file, config.yaml in a whynot directory
-// in the user's config directory (see os.UserConfigDir). It's read by the
+// config is the viewers' config file (see configPath). It's read by the
 // command-line viewers and by the app bundles alike, which don't get the
 // shell's environment.
 type config struct {
@@ -40,11 +40,49 @@ func AnthropicAPIKey() (key, from string, err error) {
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		return key, "ANTHROPIC_API_KEY", nil
 	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
+	path, ignored := configPath()
+	for _, p := range ignored {
+		log.Printf("ignoring %s: %s comes first", p, path)
+	}
+	if path == "" {
 		return "", "", nil
 	}
-	return apiKeyFrom(filepath.Join(dir, "whynot", "config.yaml"))
+	return apiKeyFrom(path)
+}
+
+// configPath returns the config file to read, the first of these that
+// exists, and those after it that exist too: whynot/config.yaml in
+// $XDG_CONFIG_HOME, or else in ~/.config, as Unix tools have it, macOS
+// included; then in the system's own config directory (see
+// os.UserConfigDir), such as ~/Library/Application Support on macOS. It
+// returns "" if there's none.
+func configPath() (path string, ignored []string) {
+	var dirs []string
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		dirs = append(dirs, dir)
+	} else if home, err := os.UserHomeDir(); err == nil && runtime.GOOS != "windows" {
+		dirs = append(dirs, filepath.Join(home, ".config"))
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		dirs = append(dirs, dir)
+	}
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		p := filepath.Join(dir, "whynot", "config.yaml")
+		if seen[p] {
+			continue // on Linux, the system's directory is ~/.config
+		}
+		seen[p] = true
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if path == "" {
+			path = p
+		} else {
+			ignored = append(ignored, p)
+		}
+	}
+	return path, ignored
 }
 
 // apiKeyFrom is AnthropicAPIKey for the config file at path.
