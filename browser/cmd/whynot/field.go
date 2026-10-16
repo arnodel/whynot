@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"log"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -34,6 +35,18 @@ type inputField struct {
 	// caretBounds is where the caret was last drawn, in logical pixels,
 	// for the input method's window.
 	caretBounds image.Rectangle
+	// dictate is set when the field is opened by the microphone button:
+	// dictation starts once the field's input session has. dictating is
+	// whether it's on, as far as the field knows: the system doesn't say.
+	dictate, dictating bool
+	// micHover and sendHover are whether the pointer is over the
+	// microphone button and the send button.
+	micHover, sendHover bool
+	// sendAt is when to send the text, after the send button stopped
+	// dictation: its last words arrive a moment after it stops. Until
+	// then, the field stays, saying it's sending: hidden, it no longer
+	// tells the input method where its caret is, and dictation goes on.
+	sendAt time.Time
 }
 
 func newInputField() *inputField {
@@ -62,6 +75,37 @@ func newInputField() *inputField {
 	return p
 }
 
+// dictationTail is how long dictation's last words take to arrive after
+// it's stopped.
+const dictationTail = 700 * time.Millisecond
+
+// submitField closes the field and sends its text, if it has some, on
+// the next update (see game.submit).
+func (g *game) submitField() {
+	p := g.field
+	p.composer.Confirm()
+	p.open = false
+	p.stopDictation()
+	g.submit = p.text
+}
+
+// closeField closes the field, keeping its text as the page's draft.
+func (g *game) closeField() {
+	p := g.field
+	p.composer.Cancel()
+	p.open = false
+	p.stopDictation()
+	g.app.SetInputDraft(p.text)
+}
+
+// stopDictation stops dictation, if it's on.
+func (p *inputField) stopDictation() {
+	if p.dictating {
+		p.dictating = false
+		browser.StopDictation()
+	}
+}
+
 func (p *inputField) insert(s string) {
 	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace(s) // one line
 	p.text = p.text[:p.caret] + s + p.text[p.caret:]
@@ -83,28 +127,57 @@ func (g *game) updateField() {
 	p := g.field
 	if _, ok := g.app.Input(); !ok {
 		p.open = false // the page changed under it
+		p.stopDictation()
 		return
 	}
 	handled, err := p.composer.Update()
 	if err != nil {
 		log.Printf("text input: %v", err)
 	}
+	if p.dictate {
+		p.dictate, p.dictating = false, true
+		browser.StartDictation()
+	}
+	if !p.sendAt.IsZero() {
+		// Waiting for dictation's last words.
+		if time.Now().After(p.sendAt) {
+			p.sendAt = time.Time{}
+			g.submitField()
+		}
+		return
+	}
+	// Clicks first: while the input method has text in progress, as when
+	// dictating, the Composer handles every update, and the buttons must
+	// still work.
+	x, y, _, clicked := pointerState()
+	_, _, send, mic := g.fieldRects()
+	p.micHover, p.sendHover = image.Pt(x, y).In(mic), image.Pt(x, y).In(send)
+	if clicked {
+		switch {
+		case p.micHover && p.dictating:
+			p.stopDictation()
+		case p.micHover:
+			p.dictating = true
+			browser.StartDictation()
+		case p.sendHover && p.dictating:
+			p.stopDictation()
+			p.sendAt = time.Now().Add(dictationTail)
+		case p.sendHover:
+			g.submitField()
+		case !image.Pt(x, y).In(g.fieldBox()):
+			g.closeField()
+		}
+		return
+	}
 	if handled {
 		return
 	}
-	x, y, _, clicked := pointerState()
 	shortcut := ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter):
-		p.composer.Confirm()
-		p.open = false
-		if p.text != "" {
-			g.app.SubmitInput(p.text)
-		}
-	case inpututil.IsKeyJustPressed(ebiten.KeyEscape) || (clicked && !image.Pt(x, y).In(g.fieldBox())):
-		p.composer.Cancel()
-		p.open = false
-		g.app.SetInputDraft(p.text)
+		g.submitField()
+	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
+		g.closeField()
 	case shortcut && inpututil.IsKeyJustPressed(ebiten.KeyV):
 		p.composer.Confirm()
 		if text, err := browser.ClipboardText(); err == nil {
@@ -134,6 +207,41 @@ func (g *game) updateField() {
 	}
 }
 
+// promptButtons returns where the send and microphone buttons go at the
+// right end of box: squares inset from its edges, the microphone last.
+// Each is an empty rectangle when it isn't shown: send unless withSend,
+// as when there's text to send, and the microphone where dictation isn't
+// available (see browser.CanDictate).
+func (g *game) promptButtons(box image.Rectangle, inset int, withSend bool) (send, mic image.Rectangle) {
+	size := box.Dy() - 2*inset
+	right := box.Max.X - inset
+	next := func() image.Rectangle {
+		r := image.Rect(right-size, box.Min.Y+inset, right, box.Max.Y-inset)
+		right -= size + inset
+		return r
+	}
+	if browser.CanDictate() {
+		mic = next()
+	}
+	if withSend {
+		send = next()
+	}
+	return send, mic
+}
+
+// drawPromptButtons draws the send and microphone buttons, where they're
+// shown: the microphone pressed while dictation is on, so that it reads
+// as the way to stop it.
+func (g *game) drawPromptButtons(dst *ebiten.Image, cv canvas.Canvas, send, mic image.Rectangle) {
+	p := g.field
+	if !send.Empty() {
+		drawButton(dst, cv, sendIcon, send, true, buttonState{hover: p.sendHover})
+	}
+	if !mic.Empty() {
+		drawButton(dst, cv, micIcon, mic, true, buttonState{hover: p.micHover, pressed: p.dictating})
+	}
+}
+
 // fieldBox is where the field is drawn: a box across the top of the
 // document, at most promptWidth logical pixels wide.
 func (g *game) fieldBox() image.Rectangle {
@@ -145,8 +253,27 @@ func (g *game) fieldBox() image.Rectangle {
 	return image.Rect(x, y, x+w, y+int(promptHeight*s))
 }
 
+// fieldRects returns where, in fieldBox, the field's hint, its text and
+// its buttons go (see promptButtons): send while there's text, dictated
+// or still being composed included.
+func (g *game) fieldRects() (label, field, send, mic image.Rectangle) {
+	s := g.deviceScale
+	box := g.fieldBox()
+	pad := int(14 * s)
+	label = image.Rect(box.Min.X+pad, box.Min.Y+pad/2, box.Max.X-pad, box.Min.Y+pad/2+int(24*s))
+	field = image.Rect(box.Min.X+pad, label.Max.Y+pad/2, box.Max.X-pad, box.Max.Y-pad)
+	p := g.field
+	send, mic = g.promptButtons(field, 0, p.text != "" || p.composition != "")
+	for _, b := range []image.Rectangle{mic, send} {
+		if !b.Empty() {
+			field.Max.X = b.Min.X - pad/2
+		}
+	}
+	return label, field, send, mic
+}
+
 // drawField draws the field over the dimmed document, while it's open.
-func (g *game) drawField(cv canvas.Canvas) {
+func (g *game) drawField(dst *ebiten.Image, cv canvas.Canvas) {
 	s := g.deviceScale
 	labelFace, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 13}, s*72)
 	if err != nil {
@@ -161,16 +288,18 @@ func (g *game) drawField(cv canvas.Canvas) {
 	cv.DrawRect(box.Min.X, box.Min.Y, box.Dx(), box.Dy(), color.RGBA{0x2A, 0x2A, 0x2A, 0xFF})
 	drawOutline(cv, box, color.RGBA{0x55, 0x55, 0x55, 0xFF})
 
-	pad := int(14 * s)
-	label := image.Rect(box.Min.X+pad, box.Min.Y+pad/2, box.Max.X-pad, box.Min.Y+pad/2+int(24*s))
+	label, field, send, mic := g.fieldRects()
 	hint := "Type, then press Enter. Escape leaves it for later."
 	if placeholder, _ := g.app.Input(); placeholder != "" {
 		hint = placeholder + "  (Enter sends, Escape leaves it for later)"
 	}
+	if !g.field.sendAt.IsZero() {
+		hint = "Sending…"
+	}
 	cv.DrawText(hint, labelFace, label.Min.X, baselineIn(labelFace, label), color.RGBA{0xAA, 0xAA, 0xAA, 0xFF})
 
-	field := image.Rect(box.Min.X+pad, label.Max.Y+pad/2, box.Max.X-pad, box.Max.Y-pad)
 	cv.DrawRect(field.Min.X, field.Min.Y, field.Dx(), field.Dy(), color.RGBA{0x14, 0x14, 0x14, 0xFF})
+	g.drawPromptButtons(dst, cv, send, mic)
 
 	// The text, with the input method's composition at the caret, scrolled
 	// so the caret shows.
@@ -216,9 +345,26 @@ func (g *game) updateStrip(cursor image.Point, clicked bool) {
 	if !g.strip || !ok {
 		return
 	}
+	send, mic := g.stripButtons()
+	g.field.micHover, g.field.sendHover = cursor.In(mic), cursor.In(send)
+	switch {
+	case clicked && g.field.micHover:
+		g.openField()
+		g.field.dictate = true
+		return
+	case clicked && g.field.sendHover:
+		g.submit, _ = g.app.InputDraft()
+		return
+	}
 	if (clicked && cursor.In(g.stripBox())) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		g.openField()
 	}
+}
+
+// stripButtons is promptButtons for the strip: send while there's a draft.
+func (g *game) stripButtons() (send, mic image.Rectangle) {
+	draft, _ := g.app.InputDraft()
+	return g.promptButtons(g.stripBox(), int(6*g.deviceScale), draft != "")
 }
 
 // stripBox is where the strip is drawn: below the document.
@@ -236,8 +382,8 @@ func (g *game) stripHeightPx() int {
 }
 
 // drawStrip draws the strip, with the input block's placeholder, or the
-// draft if there's one.
-func (g *game) drawStrip(cv canvas.Canvas) {
+// draft if there's one, and its buttons at its right end.
+func (g *game) drawStrip(dst *ebiten.Image, cv canvas.Canvas) {
 	box := g.stripBox()
 	cv.DrawRect(box.Min.X, box.Min.Y, box.Dx(), box.Dy(), color.RGBA{0x20, 0x20, 0x20, 0xFF})
 	cv.DrawRect(box.Min.X, box.Min.Y, box.Dx(), max(1, int(g.deviceScale)), color.RGBA{0x40, 0x40, 0x40, 0xFF})
@@ -253,4 +399,6 @@ func (g *game) drawStrip(cv canvas.Canvas) {
 		label, clr = draft, color.RGBA{0xCC, 0xCC, 0xCC, 0xFF}
 	}
 	cv.DrawText(label, face, box.Min.X+int(16*g.deviceScale), baselineIn(face, box), clr)
+	send, mic := g.stripButtons()
+	g.drawPromptButtons(dst, cv, send, mic)
 }

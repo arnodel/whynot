@@ -8,6 +8,7 @@ require (
 	github.com/arnodel/golua v0.4.0
 	github.com/arnodel/whynot v1.0.0-rc.3
 	github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.2
+	github.com/ebitengine/purego v0.11.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	github.com/yuin/goldmark/v2 v2.1.6
 	go.yaml.in/yaml/v3 v3.0.5
@@ -26,7 +27,6 @@ require (
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
-	github.com/ebitengine/purego v0.11.0 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect

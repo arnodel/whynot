@@ -21,7 +21,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.app.Draw(canvas, time.Since(g.start))
 
 	if g.strip {
-		g.drawStrip(canvas)
+		g.drawStrip(screen, canvas)
 	}
 	g.drawToolbar(screen, canvas)
 	if face, err := g.toolbarFaceSelector.SelectFace(fonts.TextStyle{Size: 14}, g.deviceScale*72); err == nil {
@@ -32,7 +32,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	}
 
 	if g.field.open {
-		g.drawField(canvas)
+		g.drawField(screen, canvas)
 	}
 	if g.debugHit {
 		if view, ok := g.app.ViewAt(g.hoverX, g.hoverY); ok {

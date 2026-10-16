@@ -14,6 +14,11 @@ func (g *game) Update() error {
 	start := time.Now()
 	defer func() { g.updateDuration = time.Since(start) }()
 
+	if text := g.submit; text != "" {
+		g.submit = ""
+		g.app.SubmitInput(text)
+	}
+
 	// While the input field is open, it has the keyboard and the pointer.
 	if g.field.open {
 		g.updateField()
