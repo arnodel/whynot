@@ -11,6 +11,7 @@ const (
 	noOverlay      overlayKind = iota
 	tocOverlay                 // the table of contents (see ShowTOC)
 	actionsOverlay             // the actions page (see ShowActions)
+	sourceOverlay              // the current document's source (see ShowSource)
 )
 
 // showOverlay shows source, a page the browser generated, over the
@@ -60,8 +61,8 @@ func (a *App) hideOverlay() {
 	a.updateWindowTitle()
 }
 
-// HideOverlay hides the table of contents or the actions page, whichever
-// is showing.
+// HideOverlay hides the table of contents, the actions page or the
+// source, whichever is showing.
 func (a *App) HideOverlay() { a.hideOverlay() }
 
 // overlaySuffix is what the window title gets while an overlay shows,
@@ -72,6 +73,8 @@ func (a *App) overlaySuffix() string {
 		return " - TOC"
 	case actionsOverlay:
 		return " - Actions"
+	case sourceOverlay:
+		return " - Source"
 	}
 	return ""
 }
