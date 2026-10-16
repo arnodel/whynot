@@ -10,7 +10,8 @@ whymark:
 A to-do list you talk to: say what you need ("call the bank by Friday, it's urgent", "milk
 and eggs under groceries", "done with the bank"), and the list follows. An AI reads your
 request and turns it into a few operations, which Lua checks and applies: the AI never
-touches the list itself. Going back undoes, and journal mode shows the history. Without an
+touches the list itself. Each item's links mark it done or remove it, without asking the AI. Going back undoes, and
+journal mode shows the history. Without an
 AI, short commands do the same (see the page). Open it in whynot
 (`whynot browser/examples/todo.md`, with `ANTHROPIC_API_KEY` set for the AI);
 [whymark.md](../whymark.md) describes the format.
@@ -226,6 +227,15 @@ local function parseCommands(say, today)
   return list, bad
 end
 
+-- act carries out the action of an item's link (done, undone or
+-- remove), and returns what it did, or an error.
+function act(action, id)
+  if action ~= "done" and action ~= "undone" and action ~= "remove" then
+    return nil, "no action \"" .. tostring(action) .. "\""
+  end
+  return apply({op = action, id = tonumber(id) or 0}, {})
+end
+
 -- handle carries out a request, and returns the reply to show, what
 -- changed, and what couldn't be done.
 function handle(say)
@@ -286,8 +296,10 @@ local function writeItem(it, depth, today)
     facts[#facts + 1] = (k < 0 and "**overdue**, " or "") .. "due " .. dates.describe(it.due, today)
   end
   if it.urgent and not it.done then facts[#facts + 1] = "**urgent**" end
+  local toggle = it.done and turn.link("undo", {act = "undone", id = it.id}) or turn.link("done", {act = "done", id = it.id})
   turn.write(string.rep("  ", depth), "- [", it.done and "x" or " ", "] ", escape(it.title),
-    #facts > 0 and " · " .. table.concat(facts, " · ") or "", " · *#", it.id, "*\n")
+    #facts > 0 and " · " .. table.concat(facts, " · ") or "", " · *#", it.id, "* · ",
+    toggle, " · ", turn.link("remove", {act = "remove", id = it.id}), "\n")
   for _, c in ipairs(sorted(children(it.id))) do
     writeItem(c, depth + 1, today)
   end
@@ -333,6 +345,10 @@ end
 # (To do)
 
 ```lua
+if turn.query.act then
+  local done, err = act(turn.query.act, turn.query.id)
+  turn.write("- ", done or "Couldn't: " .. err, "\n\n")
+end
 local say = turn.input.say
 if say and say ~= "" then
   local reply, changes, problems = handle(say)

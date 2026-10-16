@@ -685,16 +685,24 @@ func TestTodoExample(t *testing.T) {
 	say("add Groceries; add Call the bank by tomorrow !; add Milk under 1; add Eggs under 1 by +3")
 	wants(t, "four items", page, []string{
 		"- Added Call the bank",
-		"## This week\n\n- [ ] Call the bank · due tomorrow · **urgent** · *#2*\n- [ ] Groceries · *#1*\n  - [ ] Eggs · due on Monday · *#4*\n  - [ ] Milk · *#3*\n",
+		"## This week\n\n- [ ] Call the bank · due tomorrow · **urgent** · *#2* · [done](?act=done&id=2) · [remove](?act=remove&id=2)\n" +
+			"- [ ] Groceries · *#1* · [done](?act=done&id=1) · [remove](?act=remove&id=1)\n" +
+			"  - [ ] Eggs · due on Monday · *#4* ·",
 	}, []string{"Couldn't", "The page stopped"})
 	say("done 3; due 1 2026-10-10; add Taxes by +20; move 9 under 1; blah 2")
 	wants(t, "changes and problems", page, []string{
 		"- Done: Milk", "- Couldn't: there's no item 9", "- Couldn't: no operation \"blah\"",
-		"## Overdue\n\n- [ ] Groceries · **overdue**, due 6 days ago · *#1*\n  - [ ] Eggs · due on Monday · *#4*\n  - [x] Milk · *#3*\n",
+		"## Overdue\n\n- [ ] Groceries · **overdue**, due 6 days ago · *#1* ·",
+		"  - [x] Milk · *#3* · [undo](?act=undone&id=3) · [remove](?act=remove&id=3)\n",
 		"## Later\n\n- [ ] Taxes · due in 20 days · *#5*",
 	}, nil)
-	say("done 2; remove 1")
-	wants(t, "done and removed", page, []string{"## Done\n\n- [x] Call the bank", "- Removed Groceries"}, []string{"] Eggs", "] Milk"})
+	// An item's links act on it at once.
+	page = follow(t, e, page, "?act=done&id=2")
+	wants(t, "a done link", page, []string{"- Done: Call the bank\n", "## Done\n\n- [x] Call the bank"}, []string{"Couldn't"})
+	page = follow(t, e, page, "?act=remove&id=1")
+	wants(t, "a remove link", page, []string{"- Removed Groceries"}, []string{"] Eggs", "] Milk"})
+	page = follow(t, e, page, "?act=explode&id=5")
+	wants(t, "a made-up link", page, []string{"- Couldn't: no action \"explode\""}, []string{"The page stopped"})
 }
 
 // TestSnapshotParents checks that each page remembers the page it came

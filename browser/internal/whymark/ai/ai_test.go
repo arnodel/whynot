@@ -329,7 +329,7 @@ func TestTodoExample(t *testing.T) {
 	req, _ := whymark.Follow(start.Header, "?")
 	req.Input = map[string]string{"say": "milk under a groceries list for Sunday, milk is urgent"}
 	page := turn(t, e, req)
-	for _, want := range []string{"*Added your groceries.*", "- [ ] Groceries · due on Sunday · *#1*\n  - [ ] Milk · **urgent** · *#2*"} {
+	for _, want := range []string{"*Added your groceries.*", "- [ ] Groceries · due on Sunday · *#1* ·", "  - [ ] Milk · **urgent** · *#2* ·"} {
 		if !strings.Contains(page.body, want) {
 			t.Errorf("the page doesn't have %q:\n%s", want, page.body)
 		}
