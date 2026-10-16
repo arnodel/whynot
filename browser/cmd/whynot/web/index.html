@@ -23,6 +23,38 @@
   // gives for a bad argument, logged to the console. No ?doc= at all
   // falls back to the built-in welcome page, same as no argument does
   // on desktop.
+  // The viewer zooms with Cmd/Ctrl and =, - or 0: the browser mustn't
+  // as well, wherever the keyboard focus is. Ebitengine's own listeners,
+  // on its canvas, still get the event.
+  const zoomKeys = new Set(["=", "+", "-", "_", "0"]);
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && zoomKeys.has(e.key)) {
+      e.preventDefault();
+    }
+  }, { capture: true });
+
+  // On macOS, browsers send no keyup for a key released while Cmd is
+  // held, so Ebitengine would think it still held: after Cmd+=, Cmd alone
+  // would zoom again. When Cmd is released, the keys pressed with it get
+  // the keyups they missed.
+  const pressedWithCmd = new Map(); // code to key
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey && e.key !== "Meta") {
+      pressedWithCmd.set(e.code, e.key);
+    }
+  }, { capture: true });
+  document.addEventListener("keyup", (e) => {
+    pressedWithCmd.delete(e.code);
+    if (e.key !== "Meta") {
+      return;
+    }
+    const canvas = document.querySelector("canvas");
+    for (const [code, key] of pressedWithCmd) {
+      canvas?.dispatchEvent(new KeyboardEvent("keyup", { code, key, bubbles: true }));
+    }
+    pressedWithCmd.clear();
+  }, { capture: true });
+
   const go = new Go();
   const doc = new URLSearchParams(window.location.search).get("doc");
   if (doc) {
