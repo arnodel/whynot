@@ -94,6 +94,9 @@ type App struct {
 
 	faceSelector fonts.FaceSelector
 	styleSheet   whynot.StyleSheet
+	// arrivals is when each document last grew, for the waiting dots
+	// (see drawWaiting).
+	arrivals arrivals
 	// registry is what documents, and their images, can be fetched from.
 	registry *fetch.Registry
 	// parser parses every document, with the code-block plugins.
@@ -479,13 +482,17 @@ func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 
 // watch calls OnDocumentChange, if set, as more of doc arrives.
 func (a *App) watch(doc *whynot.Document) {
-	if f := a.OnDocumentChange; f != nil {
-		go func() {
-			for range doc.Updates() {
+	f := a.OnDocumentChange
+	a.arrivals.note(doc)
+	go func() {
+		for range doc.Updates() {
+			a.arrivals.note(doc)
+			if f != nil {
 				f()
 			}
-		}()
-	}
+		}
+		a.arrivals.forget(doc) // complete
+	}()
 }
 
 // locationOf returns where doc, loaded from location, is: for a page of a
