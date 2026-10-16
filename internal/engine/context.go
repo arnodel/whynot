@@ -24,6 +24,12 @@ type Context struct {
 	// rebuilds the layout tree when it changes.
 	HighlightNode *ast.Node
 
+	// Selected reports which bytes of item's text, textLen long, are
+	// selected: from start to end. It's asked as text is drawn, so the
+	// selection can change without a new layout; nil means nothing is
+	// ever selected.
+	Selected func(item Inline, textLen int) (start, end int, ok bool)
+
 	// ImageCache fetches and decodes images, caching the result - see
 	// imagecache.Cache. NewView always sets one. If nil, images aren't
 	// loaded at all: an image renders as its alt text, and a diagram as

@@ -46,6 +46,9 @@ Linux, **Ctrl** takes the place of **Cmd**.
 | Only open local files beneath a directory | start with `-root dir` |
 | Let documents from the web use the AI | start with `-remote-ai` |
 | Reload | **Cmd+R**, or the toolbar |
+| Select text | drag (in journal mode, across pages too); double-click for a word, triple-click for a paragraph; Shift-click extends |
+| Copy the selection as Markdown | **Cmd+C**, or the actions page |
+| Select all of the page (in journal mode, again for the whole journal) | **Cmd+A**, or the actions page |
 | Copy the page as Markdown (in journal mode, the whole journal) | **Cmd+Shift+C**, or the actions page |
 | Show FPS and frame timings | **F**, or start with `-debug-stats` |
 | Outline what's under the pointer | start with `-debug-hit` |

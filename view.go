@@ -39,7 +39,14 @@ type View struct {
 	reader     reader
 	blocks     []engine.Block
 	tailBlocks int
-	soleImages map[engine.Block]fetch.Source
+	// blocksVersion changes whenever blocks do.
+	blocksVersion int
+	// sel is what the reader selected (see selection.go), and overText
+	// whether the pointer is over text, for Cursor.
+	sel          selection
+	overText     bool
+	unselectable bool // its Controller\'s mouse doesn\'t select
+	soleImages   map[engine.Block]fetch.Source
 
 	// hscroll is the sideways scrolling state of the View's code blocks
 	// and tables, and draws their scrollbars: ctx's ScrollOffset and
@@ -131,6 +138,7 @@ func NewView(doc *Document, opts ...ViewOption) *View {
 		zoom:         1,
 	}
 	v.ctx.ScrollOffset = v.hscroll.scrollOffset
+	v.ctx.Selected = v.selectedRange
 	v.ctx.Scrollbar = func(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration) {
 		v.hscroll.drawScrollbar(dst, r, now, v.ctx.Scale, v.ctx.Styles)
 	}
@@ -398,6 +406,7 @@ func (v *View) Draw(dst canvas.Canvas, now time.Duration) {
 		return
 	}
 	v.update(now)
+	v.sel.drawSpan, v.sel.drawing = v.span()
 	if v.hscroll != nil {
 		v.hscroll.beginFrame()
 	}
@@ -483,6 +492,9 @@ func (v *View) hover(x, y int) (destination string, ok bool) {
 	if v.hscroll != nil {
 		v.hscroll.hover(image.Pt(x, y), v.ctx.Time)
 	}
+	if !v.unselectable {
+		v.overText = v.isTextAt(x, y)
+	}
 	return v.hoverLink(x, y)
 }
 
@@ -491,6 +503,7 @@ func (v *View) unhover() {
 	if v.hscroll != nil {
 		v.hscroll.unhover()
 	}
+	v.overText = false
 	v.setHighlight(nil, 0)
 }
 
@@ -644,6 +657,7 @@ func (v *View) take() bool {
 		return false
 	}
 	v.blocks = v.blocks[:len(v.blocks)-v.tailBlocks]
+	v.blocksVersion++
 	for _, pieces := range [][]markdown.Piece{added, tail} {
 		for _, p := range pieces {
 			v.blocks = append(v.blocks, p.Block)

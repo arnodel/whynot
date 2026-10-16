@@ -139,6 +139,12 @@ func (p *Panel) SetAnchorScrolling(on bool) {
 	p.anchorScrolling = on
 }
 
+// SetSelectable sets whether the mouse selects text, as it does by
+// default (see [Controller.SetSelectable]).
+func (p *Panel) SetSelectable(on bool) {
+	p.controller.SetSelectable(on)
+}
+
 // scrollToFragment scrolls v to the anchor a URL fragment names, the way
 // browsers do: the heading with that id, else the top of the document
 // for an empty fragment or "top".

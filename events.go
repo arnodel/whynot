@@ -38,6 +38,12 @@ type AnchorClick struct {
 // can stop when the reader scrolls away.
 type Scroll struct{}
 
-func (LinkClick) isEvent()   {}
-func (AnchorClick) isEvent() {}
-func (Scroll) isEvent()      {}
+// SelectionChange is the reader changing the View's selection: selecting
+// text, or clearing what was selected. It's reported at most once a
+// frame. The selection itself is the View's (see [View.SelectedText]).
+type SelectionChange struct{}
+
+func (LinkClick) isEvent()       {}
+func (AnchorClick) isEvent()     {}
+func (Scroll) isEvent()          {}
+func (SelectionChange) isEvent() {}

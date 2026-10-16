@@ -2,6 +2,7 @@ package browser
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 	"time"
@@ -26,6 +27,12 @@ func (a *App) noteInput(events []input.Event, now time.Duration) {
 			if now-a.lastTouch > mouseAfterTouch {
 				a.touch = false
 			}
+		}
+		switch e := e.(type) {
+		case input.PointerMove:
+			a.pointer, a.hasPointer = image.Pt(e.X, e.Y), true
+		case input.PointerLeave:
+			a.hasPointer = false
 		}
 	}
 }
@@ -62,6 +69,15 @@ func (a *App) refreshActions() {
 	view := a.overlayView(a.actionsSource())
 	view.ScrollToRatio(start)
 	a.Panel.SetView(view)
+}
+
+// selectAllText is what SelectAll does next: in journal mode, once the
+// current page is all selected, it selects the whole journal.
+func (a *App) selectAllText() string {
+	if j := a.stacked(); j != nil && j.stack.views[len(j.stack.views)-1].AllSelected() {
+		return "Select the whole journal"
+	}
+	return "Select all of this page"
 }
 
 // copyAction is the actions page's copy link, page for a page, or journal
@@ -146,6 +162,8 @@ func (a *App) actionsSource() []byte {
 		{unless(len(a.future) == 0, "forward", "Go forward"), keysOf("forward")},
 		{link("reload", "Reload this page"), keysOf("reload")},
 		{a.copyAction(link("copy", "Copy this page as Markdown"), link("copy", "Copy the journal as Markdown")), keysOf("copy")},
+		{unless(!a.HasSelection(), "copy-selection", "Copy the selection as Markdown"), keysOf("copy-selection")},
+		{link("select-all", a.selectAllText()), keysOf("select-all")},
 		{link("paste", "Open the path or URL in the clipboard"), keysOf("paste")},
 		{unless(!a.CanShowTOC(), "toc", "Show the table of contents"), keysOf("toc")},
 	})

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"image"
+	"image/color"
 	"time"
 
 	"github.com/arnodel/whynot/canvas"
@@ -155,10 +156,43 @@ func (b *LineBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.bounds.Max.X-left, b.bounds.Dy())
 }
 
+// selectable is a part that can show it's selected (see TextBox).
+type selectable interface {
+	selectedSpan() (x0, x1 int, c color.Color, ok bool)
+}
+
 func (b *LineBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+	b.drawSelection(dst, x, y)
 	y -= b.bounds.Min.Y
 	for i, part := range b.parts {
 		part.DrawInline(dst, x+b.xs[i], y, now)
+	}
+}
+
+// drawSelection fills the background of the line's selected parts, the
+// line's height, and the gaps between parts selected on both sides.
+func (b *LineBox) drawSelection(dst canvas.Canvas, x, y int) {
+	type span struct{ x0, x1 int }
+	spans := make([]span, len(b.parts))
+	selected := make([]bool, len(b.parts))
+	var c color.Color
+	for i, part := range b.parts {
+		if s, ok := part.(selectable); ok {
+			if x0, x1, col, ok := s.selectedSpan(); ok {
+				spans[i], selected[i], c = span{b.xs[i] + x0, b.xs[i] + x1}, true, col
+			}
+		}
+	}
+	for i := range b.parts {
+		if !selected[i] {
+			continue
+		}
+		x1 := spans[i].x1
+		_, advance := b.parts[i].BoundsAndAdvance()
+		if i+1 < len(b.parts) && selected[i+1] && spans[i+1].x0 == b.xs[i+1] && spans[i].x1 == b.xs[i]+advance {
+			x1 = spans[i+1].x0
+		}
+		dst.DrawRect(x+spans[i].x0, y, x1-spans[i].x0, b.bounds.Dy(), c)
 	}
 }
 

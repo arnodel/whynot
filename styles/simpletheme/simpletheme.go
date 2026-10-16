@@ -106,6 +106,8 @@ type Theme struct {
 	// HighlightColor is the text color of the link under the pointer,
 	// instead of LinkColor.
 	HighlightColor color.Color
+	// SelectionColor fills the background of selected text.
+	SelectionColor color.Color
 
 	// Scrollbar is how scrollbars look: the View's own, and those of code
 	// blocks and tables that scroll sideways.
@@ -296,6 +298,7 @@ func Dark() *Theme {
 		BackgroundColor: color.RGBA{0x17, 0x1A, 0x1F, 0xFF},
 		ViewMargins:     Margins{Top: 24, Bottom: 24, Left: 28, Right: 28},
 		HighlightColor:  color.RGBA{0xA8, 0xD4, 0xFF, 0xFF},
+		SelectionColor:  color.RGBA{0x26, 0x4F, 0x78, 0xFF},
 
 		Scrollbar: Scrollbar{
 			Idle:    color.NRGBA{0x80, 0x88, 0x92, 0x80},
@@ -324,6 +327,7 @@ func Light() *Theme {
 	t.BackgroundColor = color.RGBA{0xFC, 0xFC, 0xFD, 0xFF}
 	t.LinkColor = color.RGBA{0x0B, 0x63, 0xC9, 0xFF}
 	t.HighlightColor = color.RGBA{0x06, 0x3F, 0x85, 0xFF}
+	t.SelectionColor = color.RGBA{0xB4, 0xD5, 0xFE, 0xFF}
 	t.CodeBlockColor = color.RGBA{0x2B, 0x31, 0x38, 0xFF}
 	t.CodeSpanColor = color.RGBA{0xA3, 0x4A, 0x12, 0xFF}
 	t.UnsupportedColor = color.RGBA{0xC2, 0x2E, 0x2E, 0xFF}
@@ -418,6 +422,7 @@ func (t *Theme) StyleSheet() StyleSheet {
 	b.Background = t.BackgroundColor
 	b.ViewMargin = styling.Margins(t.ViewMargins)
 	b.Highlight = t.HighlightColor
+	b.Selection = t.SelectionColor
 	b.Scrollbar = t.Scrollbar.style()
 	b.TokenColors = t.SyntaxColors.byClass()
 	b.Dims.LineHeight = t.LineHeight

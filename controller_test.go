@@ -80,13 +80,14 @@ func TestControllerHoverAndClick(t *testing.T) {
 		t.Errorf("a frame without input: events %v, hovered %q; want none, dest", events, hovered(v))
 	}
 
-	// Click it: reported once, on the press.
-	events := frame(c, press(cx, cy))
-	if len(events) != 1 || events[0] != (LinkClick{Destination: "dest"}) {
-		t.Errorf("events for a press on the link = %v, want [LinkClick{dest}]", events)
+	// Click it: reported once, on the release, since a press may start
+	// a selection instead.
+	if events := frame(c, press(cx, cy)); len(events) != 0 {
+		t.Errorf("events for a press on the link = %v, want none", events)
 	}
-	if events := frame(c, release(cx, cy)); len(events) != 0 {
-		t.Errorf("events for the release = %v, want none", events)
+	events := frame(c, release(cx, cy))
+	if len(events) != 1 || events[0] != (LinkClick{Destination: "dest"}) {
+		t.Errorf("events for the release = %v, want [LinkClick{dest}]", events)
 	}
 
 	// Move off - hover clears.
@@ -148,9 +149,9 @@ func TestControllerReportsAnchorClick(t *testing.T) {
 	c, v := newTestController(t, doc)
 	lx, ly := findLinkPos(t, v)
 
-	events := frame(c, press(lx, ly))
+	events := frame(c, press(lx, ly), release(lx, ly))
 	if len(events) != 1 || events[0] != (AnchorClick{ID: "a target"}) {
-		t.Errorf("events for a press on an anchor link = %v, want [AnchorClick{a target}]", events)
+		t.Errorf("events for a click on an anchor link = %v, want [AnchorClick{a target}]", events)
 	}
 	if start, _ := v.VisibleRange(); start != 0 {
 		t.Errorf("VisibleRange start = %v after the click, want 0 (the Controller doesn't scroll)", start)

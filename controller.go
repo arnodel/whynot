@@ -69,6 +69,12 @@ type Controller struct {
 	touchPending image.Point
 	// touchOnBar is whether the touch is dragging the View's scrollbar.
 	touchOnBar bool
+
+	// mouse is the press of the primary button in progress, and how it
+	// selects (see selection.go); unselectable is whether it doesn't
+	// (see SetSelectable).
+	mouse        mousePress
+	unselectable bool
 }
 
 // touchAxis is what a touch drag scrolls.
@@ -106,6 +112,7 @@ func (c *Controller) SetView(v *View) {
 		c.view.unhover()
 	}
 	c.view = v
+	v.unselectable = c.unselectable
 	c.hTarget, c.lastHScrolled = nil, nil
 	c.viewMoves = v.moves
 	c.cancelMomentum()
@@ -144,12 +151,12 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 	}
 	c.events = nil
 	defer func() { c.viewMoves = c.view.moves }()
+	selBefore := c.view.selectionState()
 	// Nothing in a Frame re-anchors the View, so any change of its cursor
 	// is the input's doing.
 	startCursor := c.view.stack.cursor
 	var (
-		pressed      bool        // a primary press inside the bounds, for a click
-		pressedAt    image.Point // where
+		pressed      bool // a primary press inside the bounds
 		wheeled      bool
 		touchStarted bool
 		touchEnded   bool
@@ -163,6 +170,8 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 				c.view.dragScrollbarTo(e.Y)
 			} else if s := c.hscroll(); s != nil && s.dragging != nil {
 				s.dragTo(e.X)
+			} else if c.mouse.down {
+				c.dragSelection(c.pointer)
 			}
 		case input.PointerLeave:
 			c.hasPointer = false
@@ -174,6 +183,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 			c.pointer, c.hasPointer = p, true
 			s := c.hscroll()
 			if !e.Down {
+				if c.mouse.down {
+					c.endSelection(p)
+				}
 				if c.view.vbar.dragging {
 					c.view.endScrollbarDrag()
 				}
@@ -197,7 +209,8 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 			if s != nil && s.beginDrag(p) {
 				continue
 			}
-			pressed, pressedAt = true, p
+			pressed = true
+			c.beginSelection(p, e.Mods, now)
 		case input.Wheel:
 			p := image.Pt(e.X, e.Y)
 			if !p.In(c.bounds()) {
@@ -274,12 +287,8 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 			c.click(dest)
 		}
 	} else if !c.touching {
+		c.scrollSelection(now)
 		c.hover()
-		if pressed {
-			if dest, ok := c.view.LinkAt(pressedAt.X, pressedAt.Y); ok {
-				c.click(dest)
-			}
-		}
 	}
 
 	if touchEnded {
@@ -287,6 +296,9 @@ func (c *Controller) Frame(events []input.Event, now time.Duration) []Event {
 	}
 	if c.view.stack.cursor != startCursor {
 		c.events = append(c.events, Scroll{})
+	}
+	if c.view.selectionState() != selBefore {
+		c.events = append(c.events, SelectionChange{})
 	}
 	return c.events
 }
@@ -515,7 +527,7 @@ func (c *Controller) moving() bool {
 // true, or the animation stops dead.
 func (c *Controller) Animating() bool {
 	s := c.hscroll()
-	return c.moving() || s != nil && s.animating(c.view.ctx.Time) || c.view.scrollbarAnimating(c.view.ctx.Time)
+	return c.moving() || s != nil && s.animating(c.view.ctx.Time) || c.view.scrollbarAnimating(c.view.ctx.Time) || c.selectionScrolling()
 }
 
 func fastEnough(v float64) bool {

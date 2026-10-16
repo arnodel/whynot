@@ -131,6 +131,12 @@ func (s *Stream) Write(p []byte) {
 	s.text = append(s.text, p...)
 }
 
+// Text returns the text written so far. It's only appended to, so the
+// slice returned stays valid.
+func (s *Stream) Text() []byte {
+	return s.text[:len(s.text):len(s.text)]
+}
+
 // Close marks the end of the text: the next Update finishes every block.
 func (s *Stream) Close() {
 	s.closed = true

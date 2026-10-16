@@ -342,6 +342,15 @@ type StackController struct {
 	// it's changed by the next one, the app moved the stack, which stops
 	// a fling.
 	position stackPosition
+
+	// press is the press of the primary button in progress, for selecting
+	// across pages (see stackselect.go).
+	press stackPress
+
+	// pointer is the mouse pointer's last position, if hasPointer: each
+	// child is told it every frame (see withPointer).
+	pointer    image.Point
+	hasPointer bool
 }
 
 // touchAxis is what a touch drag scrolls.
@@ -369,7 +378,7 @@ func (s *ViewStack) position() stackPosition {
 
 // NewStackController returns a StackController for s.
 func NewStackController(s *ViewStack) *StackController {
-	c := &StackController{stack: s, touchChild: -1}
+	c := &StackController{stack: s, touchChild: -1, press: stackPress{child: -1}}
 	for _, v := range s.views {
 		c.controllers = append(c.controllers, whynot.NewController(v))
 	}
@@ -390,7 +399,7 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 	// forTouched is what the child the touch started on gets of it, on top
 	// of forChildren.
 	var forChildren, forTouched []input.Event
-	touchEnded := false
+	touchEnded, released := false, false
 	dragY := 0
 	for _, e := range events {
 		switch e := e.(type) {
@@ -412,8 +421,11 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 				continue
 			}
 			c.stack.bar.hovered = c.stack.onScrollbar(image.Pt(e.X, e.Y))
+			c.movePointer(image.Pt(e.X, e.Y))
+			c.pointer, c.hasPointer = image.Pt(e.X, e.Y), true
 			forChildren = append(forChildren, e)
 		case input.PointerLeave:
+			c.hasPointer = false
 			c.stack.bar.hovered = false
 			forChildren = append(forChildren, e)
 		case input.PointerButton:
@@ -426,6 +438,7 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 					c.stack.endScrollbarDrag()
 					c.stack.bar.hovered = c.stack.onScrollbar(image.Pt(e.X, e.Y))
 				}
+				released = true
 				forChildren = append(forChildren, e)
 				continue
 			}
@@ -434,6 +447,7 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 				c.stack.beginScrollbarDrag(p)
 				continue
 			}
+			c.beginPress(image.Pt(e.X, e.Y), e.Mods, now)
 			forChildren = append(forChildren, e)
 		case input.TouchStart:
 			p := image.Pt(e.X, e.Y)
@@ -518,11 +532,13 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 
 	var out []StackEvent
 	for i, r := range c.stack.regions {
-		in := forChildren
+		in := c.withPointer(forChildren)
 		switch {
 		case i == c.touchChild:
 			// Even off screen, until its touch ends.
-			in = append(slices.Clone(forChildren), forTouched...)
+			in = append(slices.Clone(in), forTouched...)
+		case i == c.press.child && c.press.down:
+			in = c.pressedChildEvents(in, r)
 		case r.Empty():
 			continue
 		}
@@ -536,10 +552,26 @@ func (c *StackController) Frame(events []input.Event, now time.Duration) []Stack
 	if touchEnded {
 		c.touchChild = -1
 	}
+	c.carrySelection(now)
+	c.keepOneSelection(out)
+	if released {
+		c.press.down = false
+	}
 	if c.position = c.stack.position(); c.position != start {
 		out = append(out, StackEvent{Child: -1, Event: whynot.Scroll{}})
 	}
 	return out
+}
+
+// withPointer returns events after a move of the pointer to where it is:
+// a child is only run while it's on screen, and the stack is made anew as
+// the trail changes, so a child may not have seen the pointer move there,
+// and wouldn't know what's under it until it moves again.
+func (c *StackController) withPointer(events []input.Event) []input.Event {
+	if !c.hasPointer {
+		return events
+	}
+	return append([]input.Event{input.PointerMove{X: c.pointer.X, Y: c.pointer.Y}}, events...)
 }
 
 // ScrollLeft and ScrollRight scroll a block wider than the stack (a code
@@ -632,7 +664,7 @@ func absInt(n int) int {
 // does. A program that draws only when something happens should draw
 // another frame.
 func (c *StackController) Animating() bool {
-	if c.flinging() || c.stack.barAnimating() {
+	if c.flinging() || c.stack.barAnimating() || c.selectionScrolling() {
 		return true
 	}
 	for i, r := range c.stack.regions {

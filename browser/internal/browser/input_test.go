@@ -7,15 +7,16 @@ import (
 	"testing"
 )
 
-// TestInputFilter checks that input blocks are taken out of a page's
-// Markdown, written in pieces, and the last one's field recorded, while
-// other code blocks, even ones holding an input fence, pass through.
+// TestInputFilter checks that input blocks and the controls heading are
+// taken out of a page's Markdown, written in pieces, with the blank line
+// after each, and the last input block's field recorded, while other code
+// blocks, even ones holding an input fence, pass through.
 func TestInputFilter(t *testing.T) {
 	page := "Hello.\n\n" +
 		"```text\n```input not this one\n```\n\n" +
 		"```input first\nIgnored\n```\n\n" +
 		"~~~~input say #reply\nSay\nsomething…\n~~~~\n\n" +
-		"Bye.\n"
+		"Bye.\n\n## (Controls)\n\n- [Go](#go)\n"
 	var out strings.Builder
 	var input pageInput
 	f := &inputFilter{w: &out, input: &input}
@@ -23,7 +24,8 @@ func TestInputFilter(t *testing.T) {
 		f.Write([]byte(page[i:min(i+7, len(page))]))
 	}
 	f.Close()
-	want := "Hello.\n\n```text\n```input not this one\n```\n\n\n\nBye.\n"
+	// Without the blank lines after what's taken out, too.
+	want := "Hello.\n\n```text\n```input not this one\n```\n\nBye.\n\n- [Go](#go)\n"
 	if out.String() != want {
 		t.Errorf("the page passed on is %q, want %q", out.String(), want)
 	}
