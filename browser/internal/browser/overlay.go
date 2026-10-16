@@ -35,10 +35,11 @@ func (a *App) showOverlay(kind overlayKind, source []byte) {
 	a.updateWindowTitle()
 }
 
-// overlayView returns a View of source, a page the browser generated.
+// overlayView returns a View of source, a page the browser generated,
+// parsed as documents are, so that its code blocks are highlighted.
 func (a *App) overlayView(source []byte) *whynot.View {
 	view := whynot.NewView(
-		whynot.Parse(source),
+		a.parser.Parse(source),
 		whynot.WithFaceSelector(a.faceSelector),
 		whynot.WithStyleSheet(a.styleSheet),
 	)

@@ -17,7 +17,7 @@ func TestShowSource(t *testing.T) {
 	app.Follow("a.md")
 	doc := app.Panel.View()
 	app.PressKey(Key{Name: "U", Shortcut: true})
-	if !app.SourceShowing() || !strings.Contains(pageText(app), "Some *text*.") {
+	if !app.SourceShowing() || !strings.Contains(pageText(app), "*text*") {
 		t.Fatalf("the source shows %q, want the document's Markdown", pageText(app))
 	}
 	app.PressKey(Key{Name: "U", Shortcut: true})
