@@ -28,6 +28,16 @@ func (a *App) CopyMarkdown() {
 	}
 }
 
+// CopyLink puts the current page's URL on the clipboard: for a whymark
+// page, its page URL, which any whynot on the machine can carry on from.
+// Whether it worked shows on the actions page, as for CopyMarkdown.
+func (a *App) CopyLink() {
+	a.copied, a.copyErr = true, clipboardWriter(a.location.String())
+	if a.copyErr != nil {
+		log.Printf("copying the link: %v", a.copyErr)
+	}
+}
+
 // copyDocuments returns the documents CopyMarkdown copies, oldest first.
 func (a *App) copyDocuments() []*whynot.Document {
 	current := a.Panel.View()

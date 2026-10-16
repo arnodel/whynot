@@ -69,7 +69,9 @@ remember earlier pages, and dates.
 whymark pages are kept on disk, in your user configuration directory (on macOS,
 `~/Library/Application Support/whynot/whymark`), so a document that asks to be resumed,
 like the to-do list, carries on where you left it the next time you open it; a link to it
-from its own page, like "Start over", starts it afresh.
+from its own page, like "Start over", starts it afresh. Each page has a URL of its own,
+ending in `@` and its page id (copy it from the actions page): opening it, in any whynot on
+the machine, carries on from that page.
 
 A document can also ask an AI, if it declares so, when `ANTHROPIC_API_KEY` is set: it asks
 Claude, at your expense. Local documents can; ones from the web only if you start with

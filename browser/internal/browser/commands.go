@@ -56,6 +56,7 @@ func init() {
 		{name: "zoom-reset", keys: []Key{{Name: "0", Shortcut: true}}, run: func(a *App) { a.SetZoom(1) }},
 		{name: "paste", keys: []Key{{Name: "V", Shortcut: true}}, run: (*App).Paste, closes: true},
 		{name: "copy", keys: []Key{{Name: "C", Shortcut: true, Shift: true}}, run: (*App).CopyMarkdown},
+		{name: "copy-link", run: (*App).CopyLink},
 		{name: "copy-selection", keys: []Key{{Name: "C", Shortcut: true}}, run: (*App).CopySelection},
 		{name: "select-all", keys: []Key{{Name: "A", Shortcut: true}}, run: (*App).SelectAll},
 		{name: "actions", keys: []Key{{Name: "/", Shortcut: true}, {Name: "/", Shift: true}}, run: (*App).ToggleActions},

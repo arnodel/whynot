@@ -442,6 +442,14 @@ func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 	source := &pageSource{}
 	doc, err := loadDocument(a.parser, a.registry, location, source)
 	if errors.Is(err, errWhymark) {
+		if location, id, ok := splitPageURL(location); ok {
+			doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
+			if err == nil {
+				return doc, nil
+			}
+			log.Printf("opening page %s of %s: %v", id, location, err)
+			return a.takeTurn(whymark.Request{Location: location})
+		}
 		if id := a.latestPage(location); id != "" && !fresh {
 			doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
 			if err == nil {
@@ -477,7 +485,7 @@ func (a *App) watch(doc *whynot.Document) {
 // whymark document, where its header says, with its passage.
 func (a *App) locationOf(doc *whynot.Document, location *url.URL) *url.URL {
 	if p := a.pageOf(doc); p != nil {
-		return p.header.Location
+		return pageURL(p.header)
 	}
 	return location
 }

@@ -42,6 +42,13 @@ func pageText(app *App) string {
 	return b.String()
 }
 
+// passageOf returns the passage of the current whymark page: its page
+// URL's fragment, without the page-id.
+func passageOf(app *App) string {
+	passage, _, _ := strings.Cut(app.Location().Fragment, "@")
+	return passage
+}
+
 // TestWhymarkInBrowser plays a whymark document in the browser: its
 // pages, their titles and locations, links as turns, Back showing a kept
 // page, and Reload sending the same request again.
@@ -54,7 +61,7 @@ func TestWhymarkInBrowser(t *testing.T) {
 	app.OnTitleChange = func(s string) { title = s }
 
 	app.Follow("cellar.md")
-	if !strings.Contains(pageText(app), "dark below") || title != "Hall" || app.Location().Fragment != "hall" {
+	if !strings.Contains(pageText(app), "dark below") || title != "Hall" || passageOf(app) != "hall" {
 		t.Fatalf("the first page shows %q, titled %q, at %s; want the hall", pageText(app), title, app.Location())
 	}
 	if strings.Contains(pageText(app), "turn.state") {
@@ -77,7 +84,7 @@ func TestWhymarkInBrowser(t *testing.T) {
 		t.Error("going back didn't show the kept page")
 	}
 	app.Follow("?shout=yes")
-	if !strings.Contains(pageText(app), "Your voice echoes") || app.Location().Fragment != "hall" {
+	if !strings.Contains(pageText(app), "Your voice echoes") || passageOf(app) != "hall" {
 		t.Errorf("shouting shows %q, at %s; want the hall, echoing", pageText(app), app.Location())
 	}
 	shouted := app.Panel.View()
@@ -101,7 +108,7 @@ func TestWhymarkInBrowser(t *testing.T) {
 		t.Fatalf("the cellar, with the lamp, shows %q", pageText(app))
 	}
 	app.Follow("cellar.md")
-	if !strings.Contains(pageText(app), "dark below") || app.Location().Fragment != "hall" {
+	if !strings.Contains(pageText(app), "dark below") || passageOf(app) != "hall" {
 		t.Errorf("playing again shows %q, at %s; want the hall, with no lamp", pageText(app), app.Location())
 	}
 }
