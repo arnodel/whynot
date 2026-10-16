@@ -57,7 +57,13 @@ func ResolveLocationArg(text string) (*url.URL, error) {
 			if _, err := os.Stat(path); err != nil {
 				return nil, err
 			}
-			return absFileURL(path)
+			abs, err := absFileURL(path)
+			if err != nil {
+				return nil, err
+			}
+			// A page URL's page-id is in its fragment.
+			abs.RawQuery, abs.Fragment = u.RawQuery, u.Fragment
+			return abs, nil
 		default:
 			return nil, fmt.Errorf("unsupported link scheme %q", u.Scheme)
 		}

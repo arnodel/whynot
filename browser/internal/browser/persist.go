@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/arnodel/whynot/browser/internal/whymark"
 )
@@ -81,4 +82,30 @@ func (a *App) noteLatest(h whymark.Header) {
 // their queries and fragments.
 func sameDocument(x, y *url.URL) bool {
 	return documentKey(x) == documentKey(y)
+}
+
+// A whymark page has a URL of its own, its page URL: its location, with
+// its page-id after its passage, separated by "@", as in
+// "todo.md#to-do@k3j9x2m4qp7r5t8w". Opening it carries on from that page,
+// in any whynot on the machine keeping it (see EnablePersistence). The
+// fragment is the user agent's business, never sent to the engine, and a
+// passage's id, a heading's anchor, never has an "@".
+
+// pageURL returns the page URL of the page h.
+func pageURL(h whymark.Header) *url.URL {
+	u := *h.Location
+	u.Fragment, u.RawFragment = u.Fragment+"@"+h.PageID, ""
+	return &u
+}
+
+// splitPageURL returns, if u is a page URL, its location, without the
+// page-id, and the page-id.
+func splitPageURL(u *url.URL) (*url.URL, string, bool) {
+	passage, id, ok := strings.Cut(u.Fragment, "@")
+	if !ok || id == "" {
+		return u, "", false
+	}
+	location := *u
+	location.Fragment, location.RawFragment = passage, ""
+	return &location, id, true
 }

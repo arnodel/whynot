@@ -163,6 +163,7 @@ func (a *App) actionsSource() []byte {
 		{link("reload", "Reload this page"), keysOf("reload")},
 		{a.copyAction(link("copy", "Copy this page as Markdown"), link("copy", "Copy the journal as Markdown")), keysOf("copy")},
 		{unless(!a.HasSelection(), "copy-selection", "Copy the selection as Markdown"), keysOf("copy-selection")},
+		{link("copy-link", "Copy a link to this page"), keysOf("copy-link")},
 		{link("select-all", a.selectAllText()), keysOf("select-all")},
 		{link("paste", "Open the path or URL in the clipboard"), keysOf("paste")},
 		{unless(!a.CanShowTOC(), "toc", "Show the table of contents"), keysOf("toc")},

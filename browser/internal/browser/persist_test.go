@@ -54,3 +54,58 @@ func TestResume(t *testing.T) {
 	next.Follow("plain.md")
 	shows(next, "the next session, plain", "count 1")
 }
+
+// TestPageURL checks page URLs: a whymark page's location carries its
+// page-id, opening it in another session carries on from that page rather
+// than the latest, an unknown page-id opens the document afresh, and
+// CopyLink copies it.
+func TestPageURL(t *testing.T) {
+	dir, data := t.TempDir(), t.TempDir()
+	start := writeTempMD(t, dir, "start.md", "# Start\n\n[Count](count.md)\n")
+	writeTempMD(t, dir, "count.md", "---\nwhymark:\n  version: 1\n  resume: true\n---\n```lua\nfunction init(turn) return {n = 0} end\n```\n"+
+		"# Count\n\n`turn.state.n = turn.state.n + 1`\ncount `= turn.state.n`\n")
+	session := func() *App {
+		app := newTestApp(t, dir, start, "# Start\n\n[Count](count.md)\n")
+		if err := app.EnablePersistence(data); err != nil {
+			t.Fatal(err)
+		}
+		return app
+	}
+	first := session()
+	first.Follow("count.md")
+	first.Follow("?")
+	second := first.Location().String()
+	if passageOf(first) != "count" || !strings.Contains(second, "#count@") {
+		t.Fatalf("the page's URL is %s, want its passage and page-id", second)
+	}
+	if got := copiedText(t, first.CopyLink); got != second {
+		t.Errorf("CopyLink copied %q, want %q", got, second)
+	}
+	first.Follow("?")
+	if !strings.Contains(pageText(first), "count 3") {
+		t.Fatalf("the first session's last page shows %q", pageText(first))
+	}
+
+	next := session()
+	next.Follow(second)
+	if text := pageText(next); !strings.Contains(text, "count 3") {
+		t.Errorf("opening the second page's URL shows %q, want it carried on from: count 3", text)
+	}
+	next.Follow(strings.Replace(second, "@", "@nosuchpage", 1))
+	if text := pageText(next); !strings.Contains(text, "count 1") {
+		t.Errorf("an unknown page-id shows %q, want the document afresh", text)
+	}
+}
+
+// TestPageURLArg checks that a page URL given on the command line keeps its
+// page-id.
+func TestPageURLArg(t *testing.T) {
+	path := writeTempMD(t, t.TempDir(), "count.md", "# Count\n").Path
+	u, err := ResolveLocationArg("file://" + path + "#count@k3j9x2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Fragment != "count@k3j9x2" {
+		t.Errorf("the location is %s, want the page URL's fragment kept", u)
+	}
+}
