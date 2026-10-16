@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/arnodel/whynot/browser/internal/whymark"
 	"github.com/arnodel/whynot/fetch"
@@ -304,5 +305,36 @@ func TestLibStory(t *testing.T) {
 	allow = false
 	if p := turn(t, e, whymark.Request{Location: file("story.md")}); !strings.Contains(p.body, "nil nil") {
 		t.Errorf("without the AI, the page shows %q", p.body)
+	}
+}
+
+// TestTodoExample plays the to-do example with an AI: its operations, one
+// adding an item under another added by the same request, are applied,
+// and its reply shown.
+func TestTodoExample(t *testing.T) {
+	files := map[string]string{}
+	for _, name := range []string{"todo.md", "lib/dates.lua"} {
+		source, err := os.ReadFile("../../../examples/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = string(source)
+	}
+	now := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	e, provider, file := testFiles(t, files, whymark.WithClock(func() time.Time { return now }))
+	start := turn(t, e, whymark.Request{Location: file("todo.md")})
+	provider.json = `{"reply": "Added your groceries.", "ops": [
+		{"op": "add", "id": 0, "title": "Groceries", "parent": 0, "due": "2026-10-18", "urgent": false},
+		{"op": "add", "id": 0, "title": "Milk", "parent": -1, "due": "", "urgent": true}]}`
+	req, _ := whymark.Follow(start.Header, "?")
+	req.Input = map[string]string{"say": "milk under a groceries list for Sunday, milk is urgent"}
+	page := turn(t, e, req)
+	for _, want := range []string{"*Added your groceries.*", "- [ ] Groceries · due on Sunday · *#1*\n  - [ ] Milk · **urgent** · *#2*"} {
+		if !strings.Contains(page.body, want) {
+			t.Errorf("the page doesn't have %q:\n%s", want, page.body)
+		}
+	}
+	if p := provider.last(); !strings.Contains(p.Messages[len(p.Messages)-1].Content, "Today is Friday 2026-10-16") {
+		t.Errorf("the prompt doesn't say what day it is: %q", p.Messages[len(p.Messages)-1].Content)
 	}
 }
