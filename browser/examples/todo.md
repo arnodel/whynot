@@ -3,6 +3,7 @@ title: To do
 description: A to-do list you talk to. An AI reads what you ask; Lua keeps the list.
 whymark:
   version: 1
+  resume: true
   uses:
     ai: optional
 ---
@@ -11,7 +12,7 @@ A to-do list you talk to: say what you need ("call the bank by Friday, it's urge
 and eggs under groceries", "done with the bank"), and the list follows. An AI reads your
 request and turns it into a few operations, which Lua checks and applies: the AI never
 touches the list itself. Each item's links mark it done or remove it, without asking the AI. Going back undoes, and
-journal mode shows the history. Without an
+journal mode shows the history. The list is still there the next time you open it. Without an
 AI, short commands do the same (see the page). Open it in whynot
 (`whynot browser/examples/todo.md`, with `ANTHROPIC_API_KEY` set for the AI);
 [whymark.md](../whymark.md) describes the format.

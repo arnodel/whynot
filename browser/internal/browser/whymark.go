@@ -81,6 +81,7 @@ func (a *App) takeTurn(req whymark.Request) (*whynot.Document, error) {
 		r.Close()
 		return nil, err
 	}
+	a.noteLatest(h)
 	doc, w := a.parser.Stream(whynot.WithBaseURL(h.Location))
 	page := &whymarkPage{header: h, request: req}
 	filter := &inputFilter{w: w, source: &page.source, input: &page.input}

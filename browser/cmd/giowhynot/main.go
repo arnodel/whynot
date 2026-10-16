@@ -10,6 +10,7 @@ import (
 	"image"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gioui.org/app"
@@ -66,6 +67,11 @@ func main() {
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		browserApp.EnableAI(anthropic.New(key), anthropic.Models, *remoteAI)
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		if err := browserApp.EnablePersistence(filepath.Join(dir, "whynot", "whymark")); err != nil {
+			log.Printf("keeping whymark pages: %v", err)
+		}
 	}
 	// Gio draws only when asked: a frame each time more of a document
 	// arrives.

@@ -79,6 +79,9 @@ It's pitch black. [Back up](#hall)
   - `start`: the id of the passage the document starts at. By default, the first.
   - `journal`: `true` hints that the document reads best as a trail of pages, each below
     the one before. User agents may ignore it.
+  - `resume`: `true` hints that opening the document again should carry on from where its
+    reader left it, rather than start it afresh (see [Following links](#following-links)).
+    User agents may ignore it.
   - `uses`: the capabilities the document uses (see below), each `optional` (it works
     without it) or `required` (it can't): `uses: {ai: optional}`.
 
@@ -297,7 +300,7 @@ You're in a hall. It's dark below.
   `from-page-id`, with requests from the page, and never interprets it. What's behind it is
   the engine's business.
 - `title`: the page's title.
-- `journal`: the document's hint, if it gives one.
+- `journal`, `resume`: the document's hints, if it gives them.
 
 ### Input fields
 
@@ -342,3 +345,10 @@ A user agent makes the request for a link on a page from how the link is written
   on the page's passage.
 - Anything else, the document itself included (`[Play again](cellar.md)`): an ordinary
   link. One to a whymark document starts it, with no `from-page-id`.
+
+**Resuming:** a user agent may remember the latest page of a document that hints `resume`,
+and when the reader opens the document again, from elsewhere and without a query or
+passage, carry on from it: a request with that page's `page-id` as `from-page-id`, and no
+input. A link to the document from one of its own pages still starts it afresh. For that, an
+engine keeps its pages beyond one run of the program; their `page-id`s stay valid as long as
+it keeps them.

@@ -2,12 +2,14 @@ package whymark
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base32"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"log"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,10 +30,10 @@ type Engine struct {
 	capabilities map[string]Capability
 	grant        func(document *url.URL, name string) bool
 	clock        func() time.Time
+	store        Store
 
 	mu       sync.Mutex
 	pages    map[string]*snapshot
-	lastPage int
 	compiled map[[sha256.Size]byte]*compiled
 	modules  map[[sha256.Size]byte]*code.Unit
 }
@@ -102,6 +104,13 @@ func WithClock(clock func() time.Time) Option {
 	return func(e *Engine) { e.clock = clock }
 }
 
+// WithStore makes the engine keep its pages in store as well as in
+// memory, so that pages made by an earlier run of the program can be
+// continued from.
+func WithStore(store Store) Option {
+	return func(e *Engine) { e.store = store }
+}
+
 // WithGrant makes the engine ask grant whether the document at a URL may
 // use the capability name, as the reader decides. Without it, every
 // document may use every capability it declares that the engine has.
@@ -161,7 +170,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	pr, pw := io.Pipe()
 	p := &page{
 		w:       pw,
-		header:  Header{Location: req.Location, PageID: id, Journal: c.settings.Journal},
+		header:  Header{Location: req.Location, PageID: id, Journal: c.settings.Journal, Resume: c.settings.Resume},
 		auto:    c.err != nil || len(c.program.Passages) > 0,
 		program: c.program,
 	}
@@ -170,7 +179,10 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 		// Until the turn is over, the page continues from where it
 		// started; a failed turn leaves it so.
 		snap.state, snap.passage = state, passage
-		defer close(snap.done)
+		defer func() {
+			e.save(id, snap)
+			close(snap.done)
+		}()
 		err := c.err
 		if err == nil {
 			// golua can't be interrupted: a turn whose page is closed carries
@@ -294,8 +306,7 @@ func (e *Engine) compile(name string, source []byte) (*compiled, error) {
 func (e *Engine) newPage(document string) (string, *snapshot) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.lastPage++
-	id := strconv.FormatInt(int64(e.lastPage), 36)
+	id := newPageID()
 	snap := &snapshot{done: make(chan struct{}), document: document, time: e.clock()}
 	if e.pages == nil {
 		e.pages = map[string]*snapshot{}
@@ -310,17 +321,61 @@ func (e *Engine) parent(s *snapshot) *snapshot {
 	if s.parent == "" {
 		return nil
 	}
+	p, _ := e.lookup(s.parent)
+	return p
+}
+
+// lookup returns the snapshot behind the page id: in memory, or else
+// from the store, if the engine has one and it has the page.
+func (e *Engine) lookup(id string) (*snapshot, error) {
+	e.mu.Lock()
+	snap, ok := e.pages[id]
+	e.mu.Unlock()
+	if ok || e.store == nil {
+		return snap, nil
+	}
+	saved, ok, err := e.store.LoadPage(id)
+	if err != nil || !ok {
+		return nil, err
+	}
+	if snap, err = restored(saved); err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.pages[s.parent]
+	if e.pages == nil {
+		e.pages = map[string]*snapshot{}
+	}
+	e.pages[id] = snap
+	return snap, nil
+}
+
+// save saves the page id to the engine's store, if it has one, once its
+// turn is over.
+func (e *Engine) save(id string, snap *snapshot) {
+	if e.store == nil {
+		return
+	}
+	if err := e.store.SavePage(id, snap.saved()); err != nil {
+		log.Printf("whymark: saving page %s: %v", id, err)
+	}
+}
+
+// newPageID returns a new page id: random, so that pages made by different
+// runs of the program, kept in a Store, don't clash.
+func newPageID() string {
+	var b [10]byte
+	rand.Read(b[:])
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b[:]))
 }
 
 // page returns the snapshot behind the page id, once its turn is over.
 func (e *Engine) page(ctx context.Context, id string) (*snapshot, error) {
-	e.mu.Lock()
-	snap, ok := e.pages[id]
-	e.mu.Unlock()
-	if !ok {
+	snap, err := e.lookup(id)
+	if err != nil {
+		return nil, err
+	}
+	if snap == nil {
 		return nil, fmt.Errorf("no page %q", id)
 	}
 	select {
