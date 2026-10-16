@@ -14,7 +14,7 @@ request and turns it into a few operations, which Lua checks and applies: the AI
 touches the list itself. Each item's links mark it done or remove it, without asking the AI. Going back undoes, and
 journal mode shows the history. The list is still there the next time you open it. Without an
 AI, short commands do the same (see the page). Open it in whynot
-(`whynot browser/examples/todo.md`, with `ANTHROPIC_API_KEY` set for the AI);
+(`whynot browser/examples/todo.md`, with an API key for the AI, as the viewer's README says);
 [whymark.md](../whymark.md) describes the format.
 
 ```lua
