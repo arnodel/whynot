@@ -20,4 +20,6 @@ var (
 	reloadIcon  = toEbitenIcon(browser.ReloadIcon)
 	tocIcon     = toEbitenIcon(browser.TOCIcon)
 	actionsIcon = toEbitenIcon(browser.ActionsIcon)
+	micIcon     = toEbitenIcon(browser.MicIcon)
+	sendIcon    = toEbitenIcon(browser.SendIcon)
 )
