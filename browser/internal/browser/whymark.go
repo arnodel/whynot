@@ -27,6 +27,12 @@ type whymarkPage struct {
 	// full, the page's own View (see trailView).
 	source    pageSource
 	cut, full *whynot.View
+	// trailFrom is the page before it, for a page opened from elsewhere,
+	// such as from its page URL: the journal shows its trail, the pages
+	// leading to it, once loaded (see loadTrail); trailLoading says it's
+	// been asked for.
+	trailFrom    string
+	trailLoading bool
 }
 
 // errWhymark means loadDocument found a whymark document, which is shown
@@ -75,13 +81,22 @@ func (a *App) takeTurn(req whymark.Request) (*whynot.Document, error) {
 	if err != nil {
 		return nil, err
 	}
+	return a.pageFrom(r, req, true)
+}
+
+// pageFrom returns the page r, as Turn returns pages, answering req, as a
+// Document (see takeTurn). latest says it's a new page, its document's
+// latest, rather than one made earlier, shown again.
+func (a *App) pageFrom(r io.ReadCloser, req whymark.Request, latest bool) (*whynot.Document, error) {
 	br := bufio.NewReader(r)
 	h, err := whymark.ReadHeader(br)
 	if err != nil {
 		r.Close()
 		return nil, err
 	}
-	a.noteLatest(h)
+	if latest {
+		a.noteLatest(h)
+	}
 	doc, w := a.parser.Stream(whynot.WithBaseURL(h.Location))
 	page := &whymarkPage{header: h, request: req}
 	filter := &inputFilter{w: w, source: &page.source, input: &page.input}

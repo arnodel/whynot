@@ -1,9 +1,12 @@
 package whymark
 
 import (
+	"bufio"
+	"io"
 	"math"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +59,20 @@ func TestEngineResumesFromStore(t *testing.T) {
 	// The same files: the new engine's registry reads them from the first
 	// engine's directory.
 	again.registry = e.registry
+	// The page as it was written, header and all, from the store.
+	r, req, err := again.Saved(t.Context(), page.PageID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br := bufio.NewReader(r)
+	h, err := ReadHeader(br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(br)
+	if h.PageID != page.PageID || !strings.Contains(string(body), "count 2, before 1") || req.FromPageID == "" {
+		t.Errorf("the saved page is %+v, %q, answering %+v", h, body, req)
+	}
 	resumed := take(t, again, Request{Location: page.Location, FromPageID: page.PageID})
 	wants(t, "the next run, from the last page", resumed, []string{"count 3, before 2"}, []string{"The page stopped"})
 	if _, err := again.Turn(t.Context(), Request{Location: page.Location, FromPageID: "nosuchpage"}); err == nil {

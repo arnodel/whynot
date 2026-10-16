@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/arnodel/whynot"
@@ -107,6 +108,10 @@ type App struct {
 	// resumed, by its URL, kept in latestFile if set (see persist.go).
 	latest     map[string]string
 	latestFile string
+	// trails holds the trails loaded in the background, for Update to add
+	// to history (see loadTrail).
+	trailsMu sync.Mutex
+	trails   []loadedTrail
 	// sources keeps the Markdown of the other documents loaded, as it
 	// arrives, for CopyMarkdown.
 	sources map[*whynot.Document]*pageSource
@@ -226,6 +231,8 @@ func (a *App) Open(location *url.URL) {
 // keeping its end in view for "#end", and its title. Call it once a
 // frame, before drawing.
 func (a *App) Update() {
+	a.loadTrail()
+	a.addTrails()
 	if a.overlaid == nil {
 		a.continueArrival()
 	}
@@ -443,19 +450,19 @@ func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 	doc, err := loadDocument(a.parser, a.registry, location, source)
 	if errors.Is(err, errWhymark) {
 		if location, id, ok := splitPageURL(location); ok {
-			doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
-			if err == nil {
+			if doc, err := a.openPage(location, id); err == nil {
 				return doc, nil
+			} else {
+				log.Printf("opening page %s of %s: %v", id, location, err)
 			}
-			log.Printf("opening page %s of %s: %v", id, location, err)
 			return a.takeTurn(whymark.Request{Location: location})
 		}
 		if id := a.latestPage(location); id != "" && !fresh {
-			doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
-			if err == nil {
+			if doc, err := a.openPage(location, id); err == nil {
 				return doc, nil
+			} else {
+				log.Printf("resuming %s: %v", location, err)
 			}
-			log.Printf("resuming %s: %v", location, err)
 		}
 		return a.takeTurn(whymark.Request{Location: location})
 	}
@@ -630,7 +637,7 @@ func (a *App) show(doc *whynot.Document, location *url.URL) {
 // journalHint turns journal mode on if doc is a whymark document's first
 // page, and the document reads best as a trail.
 func (a *App) journalHint(doc *whynot.Document) {
-	if p := a.pageOf(doc); p != nil && p.request.FromPageID == "" && p.header.Journal && a.journal == nil {
+	if p := a.pageOf(doc); p != nil && (p.request.FromPageID == "" || p.trailFrom != "") && p.header.Journal && a.journal == nil {
 		a.ToggleJournal()
 	}
 }
