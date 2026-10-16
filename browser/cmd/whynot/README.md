@@ -17,9 +17,10 @@ or download a [release binary](https://github.com/arnodel/whynot/releases/latest
 go install github.com/arnodel/whynot/browser/cmd/whynot@latest
 ```
 
-On macOS, from a checkout, `make app` in [`browser`](../..) makes `build/WhyNot.app`: a
-proper app, with its name in the Dock and the menu bar, and macOS's dictation working in the
-prompt, which it doesn't for a bare binary.
+On macOS, from a checkout, `make mac-app` in [`browser`](../..) makes `build/WhyNot.app`: a
+proper app, with its name and icon in the Dock and the menu bar, and macOS's dictation working
+in the prompt, which it doesn't for a bare binary. Started from Finder, it doesn't get the
+shell's environment: it reads the AI's key from the config file (see below).
 
 It also runs in a web browser: **[try it](https://arnodel.github.io/whynot/)**, and see
 [`web`](web) for how that's built and what differs.
