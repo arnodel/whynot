@@ -34,6 +34,8 @@ type SavedPage struct {
 	Parent   string            `json:"parent,omitempty"`
 	Input    map[string]string `json:"input,omitempty"`
 	Time     time.Time         `json:"time"`
+	// Output is the page as its turn wrote it (see Engine.Saved).
+	Output string `json:"output,omitempty"`
 }
 
 // FileStore is a Store keeping each page in a file of its own, named by
@@ -101,6 +103,7 @@ func (snap *snapshot) saved() SavedPage {
 		Parent:   snap.parent,
 		Input:    snap.request.Input,
 		Time:     snap.time,
+		Output:   snap.output.String(),
 	}
 }
 
@@ -120,11 +123,13 @@ func restored(p SavedPage) (*snapshot, error) {
 	}
 	done := make(chan struct{})
 	close(done)
-	return &snapshot{
+	snap := &snapshot{
 		done: done, document: p.Document, passage: p.Passage, state: state, notes: notes,
 		request: Request{Location: location, FromPageID: p.Parent, Input: p.Input},
 		parent:  p.Parent, time: p.Time,
-	}, nil
+	}
+	snap.output.WriteString(p.Output)
+	return snap, nil
 }
 
 // encodeValue turns plain data made by fromLua into JSON that keeps its

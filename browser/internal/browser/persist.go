@@ -1,14 +1,18 @@
 package browser
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/arnodel/whynot"
 	"github.com/arnodel/whynot/browser/internal/whymark"
 )
 
@@ -108,4 +112,103 @@ func splitPageURL(u *url.URL) (*url.URL, string, bool) {
 	location := *u
 	location.Fragment, location.RawFragment = passage, ""
 	return &location, id, true
+}
+
+// openPage shows the page id of the document at location, opened from
+// elsewhere: the page itself, as it was written, if its output was kept,
+// or else a new page carrying on from it. In journal mode, its trail is
+// loaded in the background (see loadTrail).
+func (a *App) openPage(location *url.URL, id string) (*whynot.Document, error) {
+	r, req, err := a.engine.Saved(context.Background(), id)
+	if err == nil {
+		doc, err := a.pageFrom(r, req, false)
+		if err == nil {
+			a.pages[doc].trailFrom = req.FromPageID
+		}
+		return doc, err
+	}
+	if !errors.Is(err, whymark.ErrNoOutput) {
+		return nil, err
+	}
+	doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
+	if err == nil {
+		a.pages[doc].trailFrom = id
+	}
+	return doc, err
+}
+
+// A loadedTrail is the trail of a page opened from elsewhere: the pages
+// leading to it, oldest first, as they were written, and the requests they
+// answered.
+type loadedTrail struct {
+	page     *whymarkPage
+	outputs  [][]byte
+	requests []whymark.Request
+}
+
+// loadTrail starts loading, in the background, the trail of the current
+// page if it was opened from elsewhere and journal mode is on: the journal
+// shows how it got there. Update adds it to history when it's loaded.
+func (a *App) loadTrail() {
+	if a.stacked() == nil || a.Panel == nil {
+		return
+	}
+	p := a.pageOf(a.Panel.View().Document())
+	if p == nil || p.trailFrom == "" || p.trailLoading {
+		return
+	}
+	p.trailLoading = true
+	engine, from := a.engine, p.trailFrom
+	go func() {
+		trail := loadedTrail{page: p}
+		for id := from; id != ""; {
+			r, req, err := engine.Saved(context.Background(), id)
+			if err != nil {
+				log.Printf("loading the trail of a page: %v", err)
+				break
+			}
+			output, err := io.ReadAll(r)
+			if err != nil {
+				break
+			}
+			trail.outputs = append([][]byte{output}, trail.outputs...)
+			trail.requests = append([]whymark.Request{req}, trail.requests...)
+			id = req.FromPageID
+		}
+		a.trailsMu.Lock()
+		a.trails = append(a.trails, trail)
+		a.trailsMu.Unlock()
+		if a.OnDocumentChange != nil {
+			a.OnDocumentChange()
+		}
+	}()
+}
+
+// addTrails adds the trails loaded since it last ran to history, before
+// their pages, if they're still the current page.
+func (a *App) addTrails() {
+	a.trailsMu.Lock()
+	trails := a.trails
+	a.trails = nil
+	a.trailsMu.Unlock()
+	for _, t := range trails {
+		if a.overlaid != nil || a.pageOf(a.Panel.View().Document()) != t.page {
+			continue // moved on
+		}
+		var entries []historyEntry
+		for i, output := range t.outputs {
+			doc, err := a.pageFrom(io.NopCloser(bytes.NewReader(output)), t.requests[i], false)
+			if err != nil {
+				log.Printf("showing the trail of a page: %v", err)
+				continue
+			}
+			view := a.NewView(doc)
+			a.place(view)
+			entries = append(entries, historyEntry{
+				document: document{location: pageURL(a.pages[doc].header), view: view},
+			})
+		}
+		a.history = append(a.history, entries...)
+		a.restack()
+	}
 }

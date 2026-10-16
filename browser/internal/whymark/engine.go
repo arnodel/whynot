@@ -1,10 +1,12 @@
 package whymark
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -54,6 +56,9 @@ type snapshot struct {
 	parent  string
 	// time is when the page was made (turn.time).
 	time time.Time
+	// output is the page as its turn wrote it, header and all, so that
+	// it can be shown again (see Engine.Saved).
+	output bytes.Buffer
 }
 
 // compiled is a document compiled, cached by its content: its program,
@@ -168,8 +173,10 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	pr, pw := io.Pipe()
+	// What's written is also kept, for the page to be shown again.
+	out := io.MultiWriter(pw, &snap.output)
 	p := &page{
-		w:       pw,
+		w:       out,
 		header:  Header{Location: req.Location, PageID: id, Journal: c.settings.Journal, Resume: c.settings.Resume},
 		auto:    c.err != nil || len(c.program.Passages) > 0,
 		program: c.program,
@@ -207,7 +214,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 		if !p.sent {
 			p.send(passage, "")
 		}
-		fmt.Fprintf(pw, "\n\n---\n\n**The page stopped:**\n\n```text\n%s\n```\n", strings.TrimPrefix(err.Error(), "error: "))
+		fmt.Fprintf(out, "\n\n---\n\n**The page stopped:**\n\n```text\n%s\n```\n", strings.TrimPrefix(err.Error(), "error: "))
 	}()
 	return cancelOnClose{ReadCloser: pr, cancel: cancel}, nil
 }
@@ -367,6 +374,24 @@ func newPageID() string {
 	var b [10]byte
 	rand.Read(b[:])
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b[:]))
+}
+
+// ErrNoOutput is Saved's error for a page whose output wasn't kept, such
+// as one saved by an earlier version: it can still be continued from.
+var ErrNoOutput = errors.New("the page's output wasn't kept")
+
+// Saved returns the page id as its turn wrote it, header and all, as Turn
+// returns pages, and the request it answered: to show it again, rather
+// than make a new page from it. It waits for the page's turn to be over.
+func (e *Engine) Saved(ctx context.Context, id string) (io.ReadCloser, Request, error) {
+	snap, err := e.page(ctx, id)
+	if err != nil {
+		return nil, Request{}, err
+	}
+	if snap.output.Len() == 0 {
+		return nil, Request{}, ErrNoOutput
+	}
+	return io.NopCloser(bytes.NewReader(snap.output.Bytes())), snap.request, nil
 }
 
 // page returns the snapshot behind the page id, once its turn is over.

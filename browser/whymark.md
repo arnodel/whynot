@@ -351,10 +351,14 @@ and when the reader opens the document again, from elsewhere and without a query
 passage, carry on from it: a request with that page's `page-id` as `from-page-id`, and no
 input. A link to the document from one of its own pages still starts it afresh. For that, an
 engine keeps its pages beyond one run of the program; their `page-id`s stay valid as long as
-it keeps them.
+it keeps them. An engine that also keeps what each page's turn wrote lets the user agent show
+the page again as it was, with no new turn, so the reader carries on by following its links;
+and a user agent showing history, as a journal does, can show the pages that led to it too,
+going back through each page's `from-page-id`.
 
 **Page URLs:** a user agent may give each page a URL of its own: its `location`, with its
 `page-id` after its passage, separated by `@`, as in `cellar.md#hall@7f3a91`. Opening it
-carries on from that page, as resuming does, but from that page rather than the latest. The
+carries on from that page, or shows it again, as resuming does, but from that page rather
+than the latest. The
 fragment is the user agent's business, never sent to the engine, and a passage's id, a
 heading's anchor, never has an `@`. In a plain viewer, it opens the document.
