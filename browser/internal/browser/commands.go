@@ -39,6 +39,10 @@ type command struct {
 // macOS is whether shortcuts follow macOS's conventions.
 var macOS = runtime.GOOS == "darwin"
 
+// web is whether the browser runs in a web page, where Cmd/Ctrl with =, -
+// or 0 is left to the web browser's own zoom.
+var web = runtime.GOOS == "js"
+
 // commands are the browser's commands. They're set by init, since some
 // of them refer back to the list, through the actions page.
 var commands []command
@@ -51,9 +55,9 @@ func init() {
 		{name: "toc", keys: []Key{{Name: "T", Shortcut: true}}, run: (*App).ToggleTOC, closes: true},
 		{name: "journal", keys: []Key{{Name: "J", Shortcut: true}}, run: (*App).ToggleJournal, closes: true},
 		{name: "theme", keys: []Key{{Name: "L", Shortcut: true, Shift: true}}, run: func(a *App) { a.SetTheme(!a.darkTheme) }},
-		{name: "zoom-in", keys: []Key{{Name: "=", Shortcut: true, Repeats: true}}, run: (*App).ZoomIn},
-		{name: "zoom-out", keys: []Key{{Name: "-", Shortcut: true, Repeats: true}}, run: (*App).ZoomOut},
-		{name: "zoom-reset", keys: []Key{{Name: "0", Shortcut: true}}, run: func(a *App) { a.SetZoom(1) }},
+		{name: "zoom-in", keys: []Key{zoomKey("=", true)}, run: (*App).ZoomIn},
+		{name: "zoom-out", keys: []Key{zoomKey("-", true)}, run: (*App).ZoomOut},
+		{name: "zoom-reset", keys: []Key{zoomKey("0", false)}, run: func(a *App) { a.SetZoom(1) }},
 		{name: "paste", keys: []Key{{Name: "V", Shortcut: true}}, run: (*App).Paste, closes: true},
 		{name: "copy", keys: []Key{{Name: "C", Shortcut: true, Shift: true}}, run: (*App).CopyMarkdown},
 		{name: "copy-link", run: (*App).CopyLink},
@@ -69,6 +73,12 @@ func init() {
 		{name: "scroll-left", keys: []Key{{Name: "Left", Repeats: true}}, run: (*App).ScrollLeft},
 		{name: "scroll-right", keys: []Key{{Name: "Right", Repeats: true}}, run: (*App).ScrollRight},
 	}
+}
+
+// zoomKey is the key for a zoom command: Cmd/Ctrl with name, and Shift
+// too in a web page, where Cmd/Ctrl alone zooms the web page instead.
+func zoomKey(name string, repeats bool) Key {
+	return Key{Name: name, Shortcut: true, Shift: web, Repeats: repeats}
 }
 
 // backKeys and forwardKeys follow the platform's browsers: Cmd+[ and
