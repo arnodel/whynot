@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/arnodel/golua/lib"
 	"github.com/arnodel/golua/lib/base"
@@ -132,6 +133,8 @@ type turnInput struct {
 	pages    func(*snapshot) *snapshot
 	// seed seeds math.random (see seed).
 	seed int64
+	// time is when the page is made.
+	time time.Time
 	// engine is the turn's, for require, which reaches granted, the
 	// capabilities the turn gets, and the document's Lua modules; context
 	// is what their modules know of the turn.
@@ -260,6 +263,7 @@ func run(prog *compile.Program, p *page, in turnInput) (out turnOutput, err erro
 		turn.Set(rt.StringValue("input"), stringTable(r, in.input))
 		turn.Set(rt.StringValue("passage"), rt.StringValue(in.passage))
 		turn.Set(rt.StringValue("notes"), rt.TableValue(rt.NewTable()))
+		turn.Set(rt.StringValue("time"), timeTable(r, in.time))
 		if in.previous != nil {
 			turn.Set(rt.StringValue("previous"), pageTable(in.previous, in.pages))
 		}
@@ -329,6 +333,8 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 			if v.IsNil() {
 				v = rt.TableValue(newTable(t.Runtime))
 			}
+		case "time":
+			v = timeTable(t.Runtime, s.time)
 		case "passage":
 			v = rt.StringValue(s.passage)
 		case "query":
@@ -353,6 +359,27 @@ func pageTable(s *snapshot, pages func(*snapshot) *snapshot) rt.Value {
 	meta.Set(rt.StringValue("__index"), rt.FunctionValue(index))
 	entry.SetMetatable(meta)
 	return rt.TableValue(entry)
+}
+
+// timeTable makes the table of t that turn.time is, in r: the fields of
+// Lua's os.date("*t") (year, month, day, hour, min, sec, wday, Sunday
+// being 1, and yday), and iso, t in ISO 8601 with its UTC offset.
+func timeTable(r *rt.Runtime, t time.Time) rt.Value {
+	tbl := newTable(r)
+	for _, f := range []struct {
+		name  string
+		value int
+	}{
+		{"year", t.Year()}, {"month", int(t.Month())}, {"day", t.Day()},
+		{"hour", t.Hour()}, {"min", t.Minute()}, {"sec", t.Second()},
+		{"wday", int(t.Weekday()) + 1}, {"yday", t.YearDay()},
+	} {
+		set(r, tbl, rt.StringValue(f.name), rt.IntValue(int64(f.value)))
+	}
+	iso := t.Format(time.RFC3339)
+	r.RequireBytes(len(iso))
+	set(r, tbl, rt.StringValue("iso"), rt.StringValue(iso))
+	return rt.TableValue(tbl)
 }
 
 // goFunction sets t's field name to a Go function.

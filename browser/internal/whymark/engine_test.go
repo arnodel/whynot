@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	rt "github.com/arnodel/golua/runtime"
 
@@ -638,6 +639,25 @@ func TestLibDice(t *testing.T) {
 		t.Errorf("the next page's fixed rolls are the same as its parent's: %s", fixedNext)
 	}
 	wants(t, "a bad roll", take(t, e, Request{Location: file("bad.md")}), []string{"The page stopped", "not a roll: 2x6"}, nil)
+}
+
+// TestTurnTime checks turn.time: when the page was made, by the engine's
+// clock, with the fields of os.date("*t") and iso; and an earlier page's,
+// kept with it.
+func TestTurnTime(t *testing.T) {
+	zone := time.FixedZone("test", 3600)
+	now := time.Date(2026, 10, 16, 9, 12, 5, 0, zone) // a Friday
+	e, file := testEngine(t, map[string]string{
+		"time.md": "---\nwhymark:\n  version: 1\n---\n# (Time)\n\n" +
+			"`local t = turn.time`\n" +
+			"now `= t.year`-`= t.month`-`= t.day` `= t.hour`:`= t.min`:`= t.sec` wday `= t.wday` yday `= t.yday` iso `= t.iso`\n\n" +
+			"`if turn.previous then`\nbefore `= turn.previous.time.iso`\n`end`\n",
+	}, WithClock(func() time.Time { return now }))
+	first := take(t, e, Request{Location: file("time.md")})
+	wants(t, "the first page", first, []string{"now 2026-10-16 9:12:5 wday 6 yday 289 iso 2026-10-16T09:12:05+01:00"}, []string{"before", "The page stopped"})
+	now = now.Add(26 * time.Hour)
+	second := follow(t, e, first, "?")
+	wants(t, "a page a day later", second, []string{"now 2026-10-17 11:12:5 wday 7", "before 2026-10-16T09:12:05+01:00"}, nil)
 }
 
 // TestSnapshotParents checks that each page remembers the page it came
