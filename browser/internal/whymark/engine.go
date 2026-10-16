@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/arnodel/golua/code"
 	rt "github.com/arnodel/golua/runtime"
@@ -26,6 +27,7 @@ type Engine struct {
 	registry     *fetch.Registry
 	capabilities map[string]Capability
 	grant        func(document *url.URL, name string) bool
+	clock        func() time.Time
 
 	mu       sync.Mutex
 	pages    map[string]*snapshot
@@ -48,6 +50,8 @@ type snapshot struct {
 	// pages make a tree of what a reader did.
 	request Request
 	parent  string
+	// time is when the page was made (turn.time).
+	time time.Time
 }
 
 // compiled is a document compiled, cached by its content: its program,
@@ -68,7 +72,7 @@ type compiled struct {
 // NewEngine returns an Engine fetching documents, and their Lua modules,
 // from registry.
 func NewEngine(registry *fetch.Registry, options ...Option) *Engine {
-	e := &Engine{registry: registry, capabilities: map[string]Capability{}}
+	e := &Engine{registry: registry, capabilities: map[string]Capability{}, clock: time.Now}
 	for _, o := range options {
 		o(e)
 	}
@@ -90,6 +94,12 @@ func WithCapabilities(capabilities ...Capability) Option {
 			e.capabilities[name] = c
 		}
 	}
+}
+
+// WithClock makes the engine tell the time with clock, rather than
+// time.Now: for tests, or for an engine replaying pages.
+func WithClock(clock func() time.Time) Option {
+	return func(e *Engine) { e.clock = clock }
 }
 
 // WithGrant makes the engine ask grant whether the document at a URL may
@@ -168,7 +178,7 @@ func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
 			var out turnOutput
 			out, err = run(c.program, p, turnInput{
 				state: state, start: start, passage: passage, query: query, input: req.Input,
-				previous: previous, pages: e.parent, seed: seed(id),
+				previous: previous, pages: e.parent, seed: seed(id), time: snap.time,
 				engine: e, granted: granted,
 				context: &TurnContext{Context: ctx, Document: &document, PageID: id, Request: req},
 			})
@@ -286,7 +296,7 @@ func (e *Engine) newPage(document string) (string, *snapshot) {
 	defer e.mu.Unlock()
 	e.lastPage++
 	id := strconv.FormatInt(int64(e.lastPage), 36)
-	snap := &snapshot{done: make(chan struct{}), document: document}
+	snap := &snapshot{done: make(chan struct{}), document: document, time: e.clock()}
 	if e.pages == nil {
 		e.pages = map[string]*snapshot{}
 	}

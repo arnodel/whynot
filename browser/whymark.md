@@ -116,8 +116,9 @@ Lua code sees the current turn as `turn`, passed to it, never global:
 | `turn.query` | the request's query, as a table of strings |
 | `turn.input` | the fields typed in, by name, as a table of strings |
 | `turn.passage` | the id of the passage shown |
+| `turn.time` | when the page was made, where the engine runs: the fields of Lua's `os.date("*t")` (`year`, `month`, `day`, `hour`, `min`, `sec`, `wday` with Sunday 1, `yday`), and `iso`, the same in ISO 8601 with its UTC offset |
 | `turn.notes` | what this page records of itself, an empty table at the start of every turn; plain data only. Unlike `turn.state`, it isn't carried to the next page, but later pages see it (see below) |
-| `turn.previous` | the page the request came from, or `nil` on a turn starting the document. It has the `state` it left, its `notes`, its `passage`, its request's `query` and `input`, and its own `previous`, back to the start. Changing them changes nothing |
+| `turn.previous` | the page the request came from, or `nil` on a turn starting the document. It has the `state` it left, its `notes`, its `passage`, its `time`, its request's `query` and `input`, and its own `previous`, back to the start. Changing them changes nothing |
 | `turn.write(...)` | writes its arguments to the page |
 | `turn.write_headers{title = …}` | writes the page's header (see below) |
 | `turn.link(text, query)` | a Markdown link to `?query`, from a table, escaped |
@@ -153,6 +154,8 @@ the page has started is an error.
 **The sandbox:** the Lua standard libraries base (without `dofile` and `loadfile`), string,
 table, math, utf8 and coroutine, and nothing else: no files, apart from the document's
 modules (see `require` below), and no network. A turn's CPU and memory are limited.
+
+**Time belongs to the page,** as randomness does: `turn.time` is when the page was made, so a page made again keeps its time, and the sandbox has no clock of its own.
 
 **Randomness belongs to the page:** `math.random` is seeded from the page's own identity, so a
 new page, even for the same request, rolls anew, and a page made again rolls the same. A
