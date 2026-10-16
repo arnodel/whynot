@@ -60,10 +60,11 @@ that make a page at a time as you follow links. The viewer shows its pages, and 
 shows how you got to one. A page can ask for text: a strip below it opens a field (Enter
 sends). Try [the cellar](../../examples/cellar.md),
 [the clockmaker's shop](../../examples/clockmaker.md),
-[the notebook](../../examples/notebook.md) or [a chat with an AI](../../examples/chat.md);
-[whymark.md](../../whymark.md) is the format's specification. The clockmaker and the chat
-use modules from [examples/lib](../../examples/lib): dice, and AI answers that remember
-earlier pages.
+[the notebook](../../examples/notebook.md), [a chat with an AI](../../examples/chat.md) or
+[a to-do list you talk to](../../examples/todo.md);
+[whymark.md](../../whymark.md) is the format's specification. The clockmaker, the chat and
+the to-do list use modules from [examples/lib](../../examples/lib): dice, AI answers that
+remember earlier pages, and dates.
 
 A document can also ask an AI, if it declares so, when `ANTHROPIC_API_KEY` is set: it asks
 Claude, at your expense. Local documents can; ones from the web only if you start with

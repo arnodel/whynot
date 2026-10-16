@@ -660,6 +660,51 @@ func TestTurnTime(t *testing.T) {
 	wants(t, "a page a day later", second, []string{"now 2026-10-17 11:12:5 wday 7", "before 2026-10-16T09:12:05+01:00"}, nil)
 }
 
+// TestTodoExample plays the to-do example without an AI, with commands:
+// items and sublists, due dates relative to the page's time, sections by
+// when things are due, urgent ones first, and what couldn't be done.
+func TestTodoExample(t *testing.T) {
+	read := func(name string) string {
+		data, err := os.ReadFile("../../examples/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	now := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC) // a Friday
+	e, file := testEngine(t, map[string]string{"todo.md": read("todo.md"), "lib/dates.lua": read("lib/dates.lua")},
+		WithClock(func() time.Time { return now }))
+	page := take(t, e, Request{Location: file("todo.md")})
+	wants(t, "the empty list", page, []string{"Nothing to do yet.", "use commands"}, []string{"The page stopped"})
+	say := func(text string) {
+		t.Helper()
+		req, _ := Follow(page.Header, "?")
+		req.Input = map[string]string{"say": text}
+		page = take(t, e, req)
+	}
+	say("add Groceries; add Call the bank by tomorrow !; add Milk under 1; add Eggs under 1 by +3")
+	wants(t, "four items", page, []string{
+		"- Added Call the bank",
+		"## This week\n\n- [ ] Call the bank · due tomorrow · **urgent** · *#2* · [done](?act=done&id=2) · [remove](?act=remove&id=2)\n" +
+			"- [ ] Groceries · *#1* · [done](?act=done&id=1) · [remove](?act=remove&id=1)\n" +
+			"  - [ ] Eggs · due on Monday · *#4* ·",
+	}, []string{"Couldn't", "The page stopped"})
+	say("done 3; due 1 2026-10-10; add Taxes by +20; move 9 under 1; blah 2")
+	wants(t, "changes and problems", page, []string{
+		"- Done: Milk", "- Couldn't: there's no item 9", "- Couldn't: no operation \"blah\"",
+		"## Overdue\n\n- [ ] Groceries · **overdue**, due 6 days ago · *#1* ·",
+		"  - [x] Milk · *#3* · [undo](?act=undone&id=3) · [remove](?act=remove&id=3)\n",
+		"## Later\n\n- [ ] Taxes · due in 20 days · *#5*",
+	}, nil)
+	// An item's links act on it at once.
+	page = follow(t, e, page, "?act=done&id=2")
+	wants(t, "a done link", page, []string{"- Done: Call the bank\n", "## Done\n\n- [x] Call the bank"}, []string{"Couldn't"})
+	page = follow(t, e, page, "?act=remove&id=1")
+	wants(t, "a remove link", page, []string{"- Removed Groceries"}, []string{"] Eggs", "] Milk"})
+	page = follow(t, e, page, "?act=explode&id=5")
+	wants(t, "a made-up link", page, []string{"- Couldn't: no action \"explode\""}, []string{"The page stopped"})
+}
+
 // TestSnapshotParents checks that each page remembers the page it came
 // from, and the request it answered.
 func TestSnapshotParents(t *testing.T) {
