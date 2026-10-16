@@ -590,7 +590,7 @@ func TestExamples(t *testing.T) {
 
 	// The chat, here without an AI (see package ai's tests for one).
 	chat := take(t, e, Request{Location: file("chat.md")})
-	wants(t, "the chat", chat, []string{"Say something to start.", "needs an AI", "``ANTHROPIC_API_KEY``"}, []string{"The page stopped"})
+	wants(t, "the chat", chat, []string{"Say something to start.", "needs an AI", "give whynot an API key"}, []string{"The page stopped"})
 	req, _ := Follow(chat.Header, "?")
 	req.Input = map[string]string{"say": "Hello"}
 	wants(t, "the chat, saying something", take(t, e, req), []string{"needs an AI"}, []string{"The page stopped", "You:"})

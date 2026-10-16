@@ -35,7 +35,7 @@ func main() {
 
 	light := flag.Bool("light", false, "use whynot's light theme instead of the default dark one")
 	rootDir := flag.String("root", "", "only open local documents and images beneath this directory (default: anywhere on the document's drive)")
-	remoteAI := flag.Bool("remote-ai", false, "with ANTHROPIC_API_KEY set, let whymark documents from the web use the AI too, at your expense: by default, only local ones can")
+	remoteAI := flag.Bool("remote-ai", false, "with an API key for the AI (see the README), let whymark documents from the web use the AI too, at your expense: by default, only local ones can")
 	flag.Parse()
 
 	var root *os.Root
@@ -65,7 +65,10 @@ func main() {
 
 	win := new(app.Window)
 	browserApp := browser.NewApp(browser.NewDocumentFaceSelector(), styleSheet, !*light, registry)
-	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+	if key, from, err := browser.AnthropicAPIKey(); err != nil {
+		log.Printf("the AI's key: %v", err)
+	} else if key != "" {
+		log.Printf("the AI's key is from %s", from)
 		browserApp.EnableAI(anthropic.New(key), anthropic.Models, *remoteAI)
 	}
 	if dir, err := os.UserConfigDir(); err == nil {

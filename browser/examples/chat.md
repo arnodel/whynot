@@ -11,8 +11,8 @@ whymark:
 A chat with an AI. Each page holds one exchange: what you said, and the answer. The
 conversation so far is found again by walking back through the pages that led here (see
 [lib/story.lua](lib/story.lua)), so going back and saying something else starts a
-different conversation from there. Open it in whynot with `ANTHROPIC_API_KEY` set
-(`whynot browser/examples/chat.md`); [whymark.md](../whymark.md) describes the format.
+different conversation from there. Open it in whynot with an API key for the AI
+(`whynot browser/examples/chat.md`; see the viewer's README for the key); [whymark.md](../whymark.md) describes the format.
 
 ```lua
 local ai = require "ai"
@@ -41,7 +41,7 @@ turn.write("\n")
 `end`
 
 ```without ai
-*This chat needs an AI: start whynot with ``ANTHROPIC_API_KEY`` set.*
+*This chat needs an AI: give whynot an API key, as its README says.*
 ```
 
 ## (Controls)

@@ -73,9 +73,26 @@ from its own page, like "Start over", starts it afresh. Each page has a URL of i
 ending in `@` and its page id (copy it from the actions page): opening it, in any whynot on
 the machine, carries on from that page.
 
-A document can also ask an AI, if it declares so, when `ANTHROPIC_API_KEY` is set: it asks
+A document can also ask an AI, if it declares so, when whynot has an API key: it asks
 Claude, at your expense. Local documents can; ones from the web only if you start with
 `-remote-ai`. Without the AI, a document shows what it wrote for that case instead.
+
+The key comes from `ANTHROPIC_API_KEY`, if it's set, or else from `whynot/config.yaml` in
+your config directory (`~/Library/Application Support` on macOS, `~/.config` on Linux), which
+the app bundle reads too:
+
+```yaml
+anthropic-api-key: sk-ant-...
+```
+
+or, to keep the key in a password store, a command that prints it:
+
+```yaml
+anthropic-api-key-command: security find-generic-password -s whynot-claude-api-key -w
+```
+
+The file is only trusted with either if no one else can read or write it: `chmod 600` it.
+The log says where the key came from, or why it wasn't used.
 
 ## What it does with links and images
 
