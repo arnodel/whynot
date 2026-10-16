@@ -5,6 +5,7 @@ import (
 	"image"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -65,6 +66,11 @@ func main() {
 	app := browser.NewApp(faceSelector, styleSheet, !*light, registry)
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		app.EnableAI(anthropic.New(key), anthropic.Models, *remoteAI)
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		if err := app.EnablePersistence(filepath.Join(dir, "whynot", "whymark")); err != nil {
+			log.Printf("keeping whymark pages: %v", err)
+		}
 	}
 	doc, err := app.Load(location)
 	if err != nil {

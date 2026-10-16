@@ -19,6 +19,9 @@ type Settings struct {
 	Start string
 	// Journal is a hint that the document reads best as a trail.
 	Journal bool
+	// Resume is a hint that opening the document again should carry on
+	// from where its reader left it.
+	Resume bool
 	// Uses is the capabilities the document declares, by name.
 	Uses map[string]Need
 }
@@ -44,6 +47,7 @@ type frontMatter struct {
 		Version int               `yaml:"version"`
 		Start   string            `yaml:"start"`
 		Journal bool              `yaml:"journal"`
+		Resume  bool              `yaml:"resume"`
 		Uses    map[string]string `yaml:"uses"`
 	} `yaml:"whymark"`
 }
@@ -102,6 +106,7 @@ func ReadSettings(source []byte) (Settings, error) {
 		Version:     fm.Whymark.Version,
 		Start:       fm.Whymark.Start,
 		Journal:     fm.Whymark.Journal,
+		Resume:      fm.Whymark.Resume,
 		Uses:        uses,
 	}, nil
 }

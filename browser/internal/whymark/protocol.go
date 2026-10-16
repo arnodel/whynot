@@ -39,6 +39,9 @@ type Header struct {
 	Title string
 	// Journal is a hint that the document reads best as a trail.
 	Journal bool
+	// Resume is a hint that opening the document again should carry on
+	// from this page, its latest.
+	Resume bool
 }
 
 // header is a Header as written in a page's front matter.
@@ -47,11 +50,12 @@ type header struct {
 	PageID   string `yaml:"page-id"`
 	Title    string `yaml:"title,omitempty"`
 	Journal  bool   `yaml:"journal,omitempty"`
+	Resume   bool   `yaml:"resume,omitempty"`
 }
 
 // writeHeader writes h to w as a page's front matter.
 func writeHeader(w io.Writer, h Header) error {
-	data, err := yaml.Marshal(header{Location: h.Location.String(), PageID: h.PageID, Title: h.Title, Journal: h.Journal})
+	data, err := yaml.Marshal(header{Location: h.Location.String(), PageID: h.PageID, Title: h.Title, Journal: h.Journal, Resume: h.Resume})
 	if err != nil {
 		return err
 	}
@@ -85,7 +89,7 @@ func ReadHeader(r *bufio.Reader) (Header, error) {
 	if err != nil || raw.Location == "" {
 		return h, fmt.Errorf("a page's header: location %q", raw.Location)
 	}
-	return Header{Location: location, PageID: raw.PageID, Title: raw.Title, Journal: raw.Journal}, nil
+	return Header{Location: location, PageID: raw.PageID, Title: raw.Title, Journal: raw.Journal, Resume: raw.Resume}, nil
 }
 
 // Follow returns the request for a link, as written, on the page with

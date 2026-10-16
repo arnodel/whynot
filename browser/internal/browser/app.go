@@ -100,7 +100,13 @@ type App struct {
 	// engine takes the turns of whymark documents, and pages keeps, for
 	// each page of one, its header and the request it answered.
 	engine *whymark.Engine
-	pages  map[*whynot.Document]*whymarkPage
+	// engineOptions are what engine was made with (see engineWith).
+	engineOptions []whymark.Option
+	pages         map[*whynot.Document]*whymarkPage
+	// latest is the latest page of each whymark document that asks to be
+	// resumed, by its URL, kept in latestFile if set (see persist.go).
+	latest     map[string]string
+	latestFile string
 	// sources keeps the Markdown of the other documents loaded, as it
 	// arrives, for CopyMarkdown.
 	sources map[*whynot.Document]*pageSource
@@ -426,9 +432,23 @@ func (a *App) ResolveLink(dest string) (*url.URL, error) {
 // the Document is the page of a turn starting it, at location's passage
 // if it names one.
 func (a *App) Load(location *url.URL) (*whynot.Document, error) {
+	return a.load(location, false)
+}
+
+// load is Load. A whymark document that asks to be resumed carries on
+// from its latest page, unless fresh is set, as for a link from one of its
+// own pages, such as "Start over".
+func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 	source := &pageSource{}
 	doc, err := loadDocument(a.parser, a.registry, location, source)
 	if errors.Is(err, errWhymark) {
+		if id := a.latestPage(location); id != "" && !fresh {
+			doc, err := a.takeTurn(whymark.Request{Location: location, FromPageID: id})
+			if err == nil {
+				return doc, nil
+			}
+			log.Printf("resuming %s: %v", location, err)
+		}
 		return a.takeTurn(whymark.Request{Location: location})
 	}
 	if err != nil {
@@ -568,7 +588,9 @@ func (a *App) follow(resolved *url.URL) {
 		return
 	}
 
-	doc, err := a.Load(resolved)
+	// A link from a whymark page to its own document starts it afresh.
+	fresh := a.pageOf(a.Panel.View().Document()) != nil && sameDocument(a.location, resolved)
+	doc, err := a.load(resolved, fresh)
 	if err != nil {
 		if !openIfWebPage(err, resolved) {
 			log.Printf("loading %s: %v", resolved, err)

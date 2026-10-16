@@ -13,7 +13,7 @@ import (
 // pays for what they ask. Call it before the first document is opened.
 func (a *App) EnableAI(provider ai.Provider, models map[string]string, remote bool) {
 	capability := &ai.AI{Provider: provider, Models: models, Default: "balanced"}
-	a.engine = whymark.NewEngine(a.registry,
+	a.engineWith(
 		whymark.WithCapabilities(capability),
 		whymark.WithGrant(func(document *url.URL, name string) bool {
 			return remote || isLocal(document)
