@@ -272,14 +272,19 @@ func (a *App) branchFrom(i int, doc *whynot.Document, location *url.URL) {
 func (a *App) Draw(dst canvas.Canvas, now time.Duration) {
 	if j := a.stacked(); j != nil {
 		j.stack.Draw(dst, now)
-		return
+	} else {
+		a.Panel.Draw(dst, now)
 	}
-	a.Panel.Draw(dst, now)
+	a.drawWaiting(dst, now)
 }
 
 // Animating reports whether frames must keep coming even without input,
-// as for a fling or a scrollbar fading out.
+// as for a fling or a scrollbar fading out, or while the current page is
+// still arriving, for the waiting dots.
 func (a *App) Animating() bool {
+	if a.overlaid == nil && !a.Panel.View().Document().Complete() {
+		return true
+	}
 	if j := a.stacked(); j != nil {
 		return j.controller.Animating()
 	}
