@@ -39,7 +39,7 @@ Linux, **Ctrl** takes the place of **Cmd**.
 | Follow a link | click it |
 | Everything below, as links, with its keys | **Cmd+/** or **?**, or the toolbar's **⋮** |
 | Back / forward | **Cmd+[** / **Cmd+]** or **Cmd+←** / **Cmd+→** (**Alt+←** / **Alt+→** on Windows and Linux), **Backspace** / **Shift+Backspace**, or the toolbar |
-| Zoom | **Cmd+=** / **Cmd+-** / **Cmd+0**, or the actions page |
+| Zoom | **Cmd+=** / **Cmd+-** / **Cmd+0** (on the web, with Shift too, leaving Cmd alone to the web browser), or the actions page |
 | Table of contents | **Cmd+T**, or the toolbar; **Esc** closes it |
 | Journal mode: the pages visited, above the current one | **Cmd+J** |
 | Light / dark theme | **Cmd+Shift+L**, the actions page, or start with `-light` |

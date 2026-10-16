@@ -23,13 +23,20 @@
   // gives for a bad argument, logged to the console. No ?doc= at all
   // falls back to the built-in welcome page, same as no argument does
   // on desktop.
-  // The viewer zooms with Cmd/Ctrl and =, - or 0: the browser mustn't
-  // as well, wherever the keyboard focus is. Ebitengine's own listeners,
-  // on its canvas, still get the event.
-  const zoomKeys = new Set(["=", "+", "-", "_", "0"]);
+  // Cmd/Ctrl with =, - or 0 zooms the page, as the browser does it: the
+  // event is kept from Ebitengine's canvas, whose listeners would prevent
+  // that. With Shift too, it zooms the viewer instead: the browser's
+  // default, which some browsers also give Cmd+Shift+=, is prevented, and
+  // the event goes on to the canvas.
+  const zoomCodes = new Set(["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubtract", "Numpad0"]);
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && zoomKeys.has(e.key)) {
+    if (!(e.metaKey || e.ctrlKey) || !zoomCodes.has(e.code)) {
+      return;
+    }
+    if (e.shiftKey) {
       e.preventDefault();
+    } else {
+      e.stopPropagation();
     }
   }, { capture: true });
 

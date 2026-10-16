@@ -7,7 +7,9 @@ no-op with a console message instead of working, since neither maps onto a brows
 the way it does on desktop. A link to a webpage opens in a new tab rather than the system
 browser; so does any page the browser won't let this one fetch (most websites, via CORS),
 since from inside the page that's indistinguishable from a web page. Everything else (opening a Markdown document by `http(s)` URL, following links between
-documents, scrolling/resizing/zooming) works the same as the desktop app.
+documents, scrolling/resizing/zooming) works the same as the desktop app, except that the
+viewer zooms with Shift+Cmd/Ctrl and `=`, `-` or `0`: Cmd/Ctrl alone is left to the web
+browser's own zoom.
 
 ## Build
 
