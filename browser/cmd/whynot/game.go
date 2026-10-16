@@ -27,7 +27,11 @@ type game struct {
 	renderer            *ebitenbackend.Renderer
 	// field is the text field for the page's input block, and strip is
 	// set while the strip below the document, which opens it, shows.
-	field    *inputField
+	field *inputField
+	// submit is text sent from the field, to submit on the next update,
+	// once a frame has been drawn without the field: the next page can
+	// take a while to start.
+	submit   string
 	strip    bool
 	debugHit bool
 

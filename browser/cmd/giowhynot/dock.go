@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"time"
 	"unicode/utf8"
 
 	"gioui.org/font/gofont"
@@ -34,15 +35,30 @@ type dock struct {
 	version     int    // of the App's draft the field shows
 
 	// mic is the microphone button, at the field's right end, where
-	// dictation is available (see browser.CanDictate). It only starts
-	// dictation: in Gio, browser.StopDictation can't stop it, and the
-	// system's own microphone, at the caret, does. dictate is set when
-	// it's clicked: dictation starts once the field has the keyboard.
-	mic     widget.Clickable
-	dictate bool
+	// dictation is available (see browser.CanDictate): it starts it, and
+	// stops it. dictate is set when it's clicked: dictation starts once
+	// the field has the keyboard. dictating is whether it's on, as far as
+	// the dock knows: the system doesn't say.
+	mic                widget.Clickable
+	dictate, dictating bool
 	// send is the send button, before the microphone, while there's text
-	// to send.
-	send widget.Clickable
+	// to send. sendAt is when to send it, after the button stopped
+	// dictation: its last words arrive a moment after it stops.
+	send   widget.Clickable
+	sendAt time.Time
+}
+
+// dictationTail is how long dictation's last words take to arrive after
+// it's stopped.
+const dictationTail = 700 * time.Millisecond
+
+// stopDictation stops dictation, if it's on.
+func (d *dock) stopDictation() {
+	d.dictate = false
+	if d.dictating {
+		d.dictating = false
+		browser.StopDictation()
+	}
 }
 
 func newDock(renderer *giobackend.Renderer) *dock {
@@ -75,7 +91,7 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		d.shown = false
 	}
 	if !d.shown {
-		d.dictate = false
+		d.stopDictation()
 		d.height = 0
 		return
 	}
@@ -83,17 +99,28 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		d.blur = false
 		gtx.Execute(key.FocusCmd{})
 	}
-	if d.send.Clicked(gtx) {
+	sendClicked := d.send.Clicked(gtx) // read once: it takes the click
+	switch {
+	case sendClicked && d.dictating:
+		d.stopDictation()
+		d.sendAt = gtx.Now.Add(dictationTail)
+		gtx.Execute(op.InvalidateCmd{At: d.sendAt})
+	case sendClicked || !d.sendAt.IsZero() && !gtx.Now.Before(d.sendAt):
+		d.sendAt = time.Time{}
 		if text := d.editor.Text(); text != "" {
 			app.SubmitInput(text)
 		}
 	}
 	if d.mic.Clicked(gtx) {
-		gtx.Execute(key.FocusCmd{Tag: &d.editor})
-		d.dictate = true
+		if d.dictating {
+			d.stopDictation()
+		} else {
+			gtx.Execute(key.FocusCmd{Tag: &d.editor})
+			d.dictate = true
+		}
 	}
 	if d.dictate && gtx.Focused(&d.editor) {
-		d.dictate = false
+		d.dictate, d.dictating = false, true
 		browser.StartDictation()
 	}
 	// The page's draft, after navigating: empty for a new page, or what
@@ -113,6 +140,7 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		case widget.ChangeEvent:
 			app.SetInputDraft(d.editor.Text())
 		case widget.SubmitEvent:
+			d.stopDictation()
 			if e.Text != "" {
 				app.SubmitInput(e.Text)
 			}
@@ -196,6 +224,6 @@ func (d *dock) layout(gtx layout.Context) {
 		stack.Pop()
 		right -= pad
 	}
-	place(&d.mic, browser.MicIcon, mic, false)
+	place(&d.mic, browser.MicIcon, mic, d.dictating)
 	place(&d.send, browser.SendIcon, send, false)
 }

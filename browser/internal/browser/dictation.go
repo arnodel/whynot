@@ -18,10 +18,10 @@ func StartDictation() {
 
 // StopDictation stops the system's dictation, leaving what it wrote in the
 // text field, by taking the keyboard from the field and giving it back:
-// dictation ends when its field loses the keyboard. It works in the ebiten
-// viewer, not in Gio's, whose dictation goes on. The system doesn't say
-// whether it's dictating, so callers keep track. It can be called from any
-// goroutine. A no-op unless CanDictate.
+// dictation ends when its field loses the keyboard. The field has it back
+// a moment later. The system doesn't say whether it's dictating, so
+// callers keep track. It can be called from any goroutine. A no-op unless
+// CanDictate.
 func StopDictation() {
 	if canDictate {
 		refocus()

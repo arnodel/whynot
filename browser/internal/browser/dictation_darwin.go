@@ -5,6 +5,7 @@ package browser
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ebitengine/purego/objc"
 )
@@ -38,8 +39,9 @@ func startDictation() {
 	sharedApplication().Send(selPerformOnMain, selStartDictation, objc.ID(0), false)
 }
 
-// refocus makes the key window drop its first responder and take it back,
-// on the main thread.
+// refocus makes the key window drop its first responder and, a moment
+// later, take it back, on the main thread: dictation needs a turn of the
+// run loop without the keyboard to notice it's gone.
 func refocus() {
 	win := sharedApplication().Send(selKeyWindow)
 	if win == 0 {
@@ -47,5 +49,11 @@ func refocus() {
 	}
 	responder := win.Send(selFirstResponder)
 	win.Send(selPerformOnMain, selMakeFirstResponder, objc.ID(0), false)
-	win.Send(selPerformOnMain, selMakeFirstResponder, responder, false)
+	time.AfterFunc(refocusDelay, func() {
+		win.Send(selPerformOnMain, selMakeFirstResponder, responder, false)
+	})
 }
+
+// refocusDelay is how long refocus leaves the window without a first
+// responder.
+const refocusDelay = 150 * time.Millisecond

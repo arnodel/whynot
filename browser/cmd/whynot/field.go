@@ -43,7 +43,9 @@ type inputField struct {
 	// microphone button and the send button.
 	micHover, sendHover bool
 	// sendAt is when to send the text, after the send button stopped
-	// dictation: its last words arrive a moment after it stops.
+	// dictation: its last words arrive a moment after it stops. Until
+	// then, the field stays, saying it's sending: hidden, it no longer
+	// tells the input method where its caret is, and dictation goes on.
 	sendAt time.Time
 }
 
@@ -77,15 +79,23 @@ func newInputField() *inputField {
 // it's stopped.
 const dictationTail = 700 * time.Millisecond
 
-// submitField closes the field and sends its text, if it has some.
+// submitField closes the field and sends its text, if it has some, on
+// the next update (see game.submit).
 func (g *game) submitField() {
 	p := g.field
 	p.composer.Confirm()
 	p.open = false
 	p.stopDictation()
-	if p.text != "" {
-		g.app.SubmitInput(p.text)
-	}
+	g.submit = p.text
+}
+
+// closeField closes the field, keeping its text as the page's draft.
+func (g *game) closeField() {
+	p := g.field
+	p.composer.Cancel()
+	p.open = false
+	p.stopDictation()
+	g.app.SetInputDraft(p.text)
 }
 
 // stopDictation stops dictation, if it's on.
@@ -128,34 +138,46 @@ func (g *game) updateField() {
 		p.dictate, p.dictating = false, true
 		browser.StartDictation()
 	}
-	if !p.sendAt.IsZero() && time.Now().After(p.sendAt) {
-		p.sendAt = time.Time{}
-		g.submitField()
+	if !p.sendAt.IsZero() {
+		// Waiting for dictation's last words.
+		if time.Now().After(p.sendAt) {
+			p.sendAt = time.Time{}
+			g.submitField()
+		}
+		return
+	}
+	// Clicks first: while the input method has text in progress, as when
+	// dictating, the Composer handles every update, and the buttons must
+	// still work.
+	x, y, _, clicked := pointerState()
+	_, _, send, mic := g.fieldRects()
+	p.micHover, p.sendHover = image.Pt(x, y).In(mic), image.Pt(x, y).In(send)
+	if clicked {
+		switch {
+		case p.micHover && p.dictating:
+			p.stopDictation()
+		case p.micHover:
+			p.dictating = true
+			browser.StartDictation()
+		case p.sendHover && p.dictating:
+			p.stopDictation()
+			p.sendAt = time.Now().Add(dictationTail)
+		case p.sendHover:
+			g.submitField()
+		case !image.Pt(x, y).In(g.fieldBox()):
+			g.closeField()
+		}
 		return
 	}
 	if handled {
 		return
 	}
-	x, y, _, clicked := pointerState()
-	_, _, send, mic := g.fieldRects()
-	p.micHover, p.sendHover = image.Pt(x, y).In(mic), image.Pt(x, y).In(send)
 	shortcut := ebiten.IsKeyPressed(ebiten.KeyMeta) || ebiten.IsKeyPressed(ebiten.KeyControl)
 	switch {
-	case clicked && p.micHover && p.dictating:
-		p.stopDictation()
-	case clicked && p.micHover:
-		p.dictating = true
-		browser.StartDictation()
-	case clicked && p.sendHover && p.dictating:
-		p.stopDictation()
-		p.sendAt = time.Now().Add(dictationTail)
-	case inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter) || (clicked && p.sendHover):
+	case inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter):
 		g.submitField()
-	case inpututil.IsKeyJustPressed(ebiten.KeyEscape) || (clicked && !image.Pt(x, y).In(g.fieldBox())):
-		p.composer.Cancel()
-		p.open = false
-		p.stopDictation()
-		g.app.SetInputDraft(p.text)
+	case inpututil.IsKeyJustPressed(ebiten.KeyEscape):
+		g.closeField()
 	case shortcut && inpututil.IsKeyJustPressed(ebiten.KeyV):
 		p.composer.Confirm()
 		if text, err := browser.ClipboardText(); err == nil {
@@ -271,6 +293,9 @@ func (g *game) drawField(dst *ebiten.Image, cv canvas.Canvas) {
 	if placeholder, _ := g.app.Input(); placeholder != "" {
 		hint = placeholder + "  (Enter sends, Escape leaves it for later)"
 	}
+	if !g.field.sendAt.IsZero() {
+		hint = "Sending…"
+	}
 	cv.DrawText(hint, labelFace, label.Min.X, baselineIn(labelFace, label), color.RGBA{0xAA, 0xAA, 0xAA, 0xFF})
 
 	cv.DrawRect(field.Min.X, field.Min.Y, field.Dx(), field.Dy(), color.RGBA{0x14, 0x14, 0x14, 0xFF})
@@ -328,8 +353,7 @@ func (g *game) updateStrip(cursor image.Point, clicked bool) {
 		g.field.dictate = true
 		return
 	case clicked && g.field.sendHover:
-		draft, _ := g.app.InputDraft()
-		g.app.SubmitInput(draft)
+		g.submit, _ = g.app.InputDraft()
 		return
 	}
 	if (clicked && cursor.In(g.stripBox())) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
