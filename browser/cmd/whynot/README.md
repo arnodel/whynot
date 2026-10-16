@@ -17,6 +17,10 @@ or download a [release binary](https://github.com/arnodel/whynot/releases/latest
 go install github.com/arnodel/whynot/browser/cmd/whynot@latest
 ```
 
+On macOS, from a checkout, `make app` in [`browser`](../..) makes `build/WhyNot.app`: a
+proper app, with its name in the Dock and the menu bar, and macOS's dictation working in the
+prompt, which it doesn't for a bare binary.
+
 It also runs in a web browser: **[try it](https://arnodel.github.io/whynot/)**, and see
 [`web`](web) for how that's built and what differs.
 
