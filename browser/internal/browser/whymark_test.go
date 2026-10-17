@@ -121,6 +121,7 @@ func TestWhymarkJournalAtLaunch(t *testing.T) {
 		dir := t.TempDir()
 		location := writeTempMD(t, dir, "cellar.md", cellarDoc(hint))
 		app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
+		app.syncTurns = true
 		doc, err := app.Load(location)
 		if err != nil {
 			t.Fatal(err)

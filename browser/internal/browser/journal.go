@@ -228,12 +228,7 @@ func (a *App) followFrom(i int, dest string) {
 	page := a.journal.pages[i]
 	if req, ok := a.whymarkLink(a.journal.stack.views[i].Document(), dest); ok {
 		// A turn from that page of a whymark document.
-		doc, err := a.takeTurn(req)
-		if err != nil {
-			log.Printf("taking a turn of %s: %v", req.Location, err)
-			return
-		}
-		a.branchFrom(i, doc, req.Location)
+		a.branchFrom(i, a.startTurn(req, true), req.Location)
 		return
 	}
 	resolved, err := resolveAgainst(page.location, dest)

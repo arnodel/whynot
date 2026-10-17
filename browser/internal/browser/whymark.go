@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -120,6 +121,98 @@ func (a *App) pageFrom(r io.ReadCloser, req whymark.Request, latest bool) (*whyn
 	a.pages[doc] = page
 	a.watch(doc)
 	return doc, nil
+}
+
+// startTurn takes the turn req in the background, and returns its page at
+// once, empty: taking a turn fetches and compiles the document, and the
+// page's header comes with its first output, which can wait for an AI.
+// Until the header arrives, the page has only the request's location
+// (see addHeaders); a turn that fails says so on the page. latest is as
+// for pageFrom.
+func (a *App) startTurn(req whymark.Request, latest bool) *whynot.Document {
+	doc, w := a.parser.Stream(whynot.WithBaseURL(req.Location))
+	page := &whymarkPage{header: whymark.Header{Location: req.Location}, request: req}
+	filter := &inputFilter{w: w, source: &page.source, input: &page.input}
+	if a.pages == nil {
+		a.pages = map[*whynot.Document]*whymarkPage{}
+	}
+	a.pages[doc] = page
+	a.watch(doc)
+	notify := a.OnDocumentChange
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer w.Close()
+		defer filter.Close()
+		r, err := a.engine.Turn(context.Background(), req)
+		if err != nil {
+			log.Printf("taking a turn of %s: %v", req.Location, err)
+			fmt.Fprintf(filter, "The page couldn't be made: %v\n", err)
+			return
+		}
+		defer r.Close()
+		br := bufio.NewReader(r)
+		h, err := whymark.ReadHeader(br)
+		if err != nil {
+			log.Printf("taking a turn of %s: %v", req.Location, err)
+			fmt.Fprintf(filter, "The page couldn't be made: %v\n", err)
+			return
+		}
+		a.headersMu.Lock()
+		a.headers = append(a.headers, arrivedHeader{doc: doc, header: h, latest: latest})
+		a.headersMu.Unlock()
+		if notify != nil {
+			notify()
+		}
+		if _, err := io.Copy(filter, br); err != nil {
+			log.Printf("taking a turn of %s: %v", h.Location, err)
+		}
+	}()
+	if a.syncTurns {
+		<-done
+		a.addHeaders()
+	}
+	return doc
+}
+
+// An arrivedHeader is a page's header, arrived in the background (see
+// startTurn), for the next Update to apply.
+type arrivedHeader struct {
+	doc    *whynot.Document
+	header whymark.Header
+	latest bool
+}
+
+// addHeaders applies the headers that arrived since it last ran: the
+// page's location, its title and its journal hint, if it's current, and
+// its location in history, if it was left meanwhile.
+func (a *App) addHeaders() {
+	a.headersMu.Lock()
+	headers := a.headers
+	a.headers = nil
+	a.headersMu.Unlock()
+	for _, arrived := range headers {
+		p := a.pages[arrived.doc]
+		if p == nil {
+			continue
+		}
+		p.header = arrived.header
+		if arrived.latest {
+			a.noteLatest(p.header)
+		}
+		location := pageURL(p.header)
+		for i := range a.history {
+			if a.history[i].view.Document() == arrived.doc {
+				a.history[i].location = location
+			}
+		}
+		// No Panel yet at launch: Open then reads the header.
+		if a.Panel != nil && a.overlaid == nil && a.Panel.View().Document() == arrived.doc {
+			a.location = location
+			a.journalHint(arrived.doc)
+			a.restack() // the journal's pages, with their locations
+		}
+	}
 }
 
 // pageOf returns what the browser keeps of the whymark page doc is, or

@@ -54,6 +54,7 @@ func writeTempMD(t *testing.T, dir, name, content string) *url.URL {
 func newTestApp(t *testing.T, dir string, location *url.URL, source string) *App {
 	t.Helper()
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
+	app.syncTurns = true
 	view := app.NewView(app.parser.Parse([]byte(source), whynot.WithBaseURL(location)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -456,6 +457,7 @@ func TestAppOpenFiresOnTitleChange(t *testing.T) {
 	loc := writeTempMD(t, dir, "a.md", "# My Title")
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
+	app.syncTurns = true
 	view := app.NewView(app.parser.Parse([]byte("# My Title"), whynot.WithBaseURL(loc)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
@@ -630,6 +632,7 @@ func TestAppOpenFallsBackToUntitled(t *testing.T) {
 	loc := writeTempMD(t, dir, "a.md", "no heading here")
 
 	app := NewApp(fonts.NewGoSelector(), simpletheme.DarkStyleSheet, true, NewRegistry(nil))
+	app.syncTurns = true
 	view := app.NewView(app.parser.Parse([]byte("no heading here"), whynot.WithBaseURL(loc)))
 	app.Panel = whynot.NewPanel(view, image.Rectangle{})
 	app.Relayout(testWidth, testHeight, 1, 0)
