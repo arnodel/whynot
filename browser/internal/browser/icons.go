@@ -38,7 +38,7 @@ var (
 )
 
 // MicIcon and SendIcon are the buttons' beside the prompt: the microphone
-// starts dictation where it's available (see CanDictate), and send sends
+// listens where it can (see Listener), and send sends
 // the prompt's text, without reaching for Enter.
 var (
 	MicIcon  = decodeIcon("mic.png")

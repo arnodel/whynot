@@ -35,22 +35,18 @@ type inputField struct {
 	// caretBounds is where the caret was last drawn, in logical pixels,
 	// for the input method's window.
 	caretBounds image.Rectangle
-	// dictate is set when the field is opened by the microphone button:
-	// dictation starts once the field's input session has. dictating is
-	// whether it's on, as far as the field knows: the system doesn't say.
-	dictate, dictating bool
+	// listener turns speech into the field's text (see the microphone
+	// button). sendHeard is set when the send button is pressed while
+	// it's busy: the text is sent once its last words are in.
+	listener  *browser.Listener
+	sendHeard bool
 	// micHover and sendHover are whether the pointer is over the
 	// microphone button and the send button.
 	micHover, sendHover bool
-	// sendAt is when to send the text, after the send button stopped
-	// dictation: its last words arrive a moment after it stops. Until
-	// then, the field stays, saying it's sending: hidden, it no longer
-	// tells the input method where its caret is, and dictation goes on.
-	sendAt time.Time
 }
 
 func newInputField() *inputField {
-	p := &inputField{}
+	p := &inputField{listener: browser.NewListener(browser.DefaultRecognizer(), nil)}
 	p.composer.OnNewSession = func() *textinput.SessionOptions {
 		return &textinput.SessionOptions{
 			CaretBounds:     p.caretBounds,
@@ -75,17 +71,13 @@ func newInputField() *inputField {
 	return p
 }
 
-// dictationTail is how long dictation's last words take to arrive after
-// it's stopped.
-const dictationTail = 700 * time.Millisecond
-
 // submitField closes the field and sends its text, if it has some, on
 // the next update (see game.submit).
 func (g *game) submitField() {
 	p := g.field
 	p.composer.Confirm()
 	p.open = false
-	p.stopDictation()
+	p.listener.Cancel()
 	g.submit = p.text
 }
 
@@ -94,16 +86,18 @@ func (g *game) closeField() {
 	p := g.field
 	p.composer.Cancel()
 	p.open = false
-	p.stopDictation()
+	p.listener.Cancel()
 	g.app.SetInputDraft(p.text)
 }
 
-// stopDictation stops dictation, if it's on.
-func (p *inputField) stopDictation() {
-	if p.dictating {
-		p.dictating = false
-		browser.StopDictation()
+// listen starts the listener, or stops it if it's listening.
+func (p *inputField) listen() {
+	if p.listener.Listening() {
+		p.listener.Stop()
+		return
 	}
+	p.composer.Confirm()
+	p.listener.Start(p.text)
 }
 
 func (p *inputField) insert(s string) {
@@ -127,41 +121,37 @@ func (g *game) updateField() {
 	p := g.field
 	if _, ok := g.app.Input(); !ok {
 		p.open = false // the page changed under it
-		p.stopDictation()
+		p.listener.Cancel()
 		return
 	}
 	handled, err := p.composer.Update()
 	if err != nil {
 		log.Printf("text input: %v", err)
 	}
-	if p.dictate {
-		p.dictate, p.dictating = false, true
-		browser.StartDictation()
+	if text, ok := p.listener.Text(); ok {
+		// What's been said so far.
+		p.text, p.caret = text, len(text)
 	}
-	if !p.sendAt.IsZero() {
-		// Waiting for dictation's last words.
-		if time.Now().After(p.sendAt) {
-			p.sendAt = time.Time{}
+	if p.sendHeard {
+		// Waiting for the last words.
+		if !p.listener.Busy() {
+			p.sendHeard = false
 			g.submitField()
 		}
 		return
 	}
-	// Clicks first: while the input method has text in progress, as when
-	// dictating, the Composer handles every update, and the buttons must
-	// still work.
+	// Clicks first: while the input method has text in progress, the
+	// Composer handles every update, and the buttons must still work.
 	x, y, _, clicked := pointerState()
 	_, _, send, mic := g.fieldRects()
 	p.micHover, p.sendHover = image.Pt(x, y).In(mic), image.Pt(x, y).In(send)
 	if clicked {
 		switch {
-		case p.micHover && p.dictating:
-			p.stopDictation()
 		case p.micHover:
-			p.dictating = true
-			browser.StartDictation()
-		case p.sendHover && p.dictating:
-			p.stopDictation()
-			p.sendAt = time.Now().Add(dictationTail)
+			p.listen()
+		case p.sendHover && p.listener.Busy():
+			p.listener.Stop()
+			p.sendHeard = true
 		case p.sendHover:
 			g.submitField()
 		case !image.Pt(x, y).In(g.fieldBox()):
@@ -211,7 +201,7 @@ func (g *game) updateField() {
 // right end of box: squares inset from its edges, the microphone last.
 // Each is an empty rectangle when it isn't shown: send unless withSend,
 // as when there's text to send, and the microphone where dictation isn't
-// available (see browser.CanDictate).
+// available (see browser.Listener.Available).
 func (g *game) promptButtons(box image.Rectangle, inset int, withSend bool) (send, mic image.Rectangle) {
 	size := box.Dy() - 2*inset
 	right := box.Max.X - inset
@@ -220,7 +210,7 @@ func (g *game) promptButtons(box image.Rectangle, inset int, withSend bool) (sen
 		right -= size + inset
 		return r
 	}
-	if browser.CanDictate() {
+	if g.field.listener.Available() {
 		mic = next()
 	}
 	if withSend {
@@ -230,7 +220,7 @@ func (g *game) promptButtons(box image.Rectangle, inset int, withSend bool) (sen
 }
 
 // drawPromptButtons draws the send and microphone buttons, where they're
-// shown: the microphone pressed while dictation is on, so that it reads
+// shown: the microphone pressed while it listens, so that it reads
 // as the way to stop it.
 func (g *game) drawPromptButtons(dst *ebiten.Image, cv canvas.Canvas, send, mic image.Rectangle) {
 	p := g.field
@@ -238,7 +228,12 @@ func (g *game) drawPromptButtons(dst *ebiten.Image, cv canvas.Canvas, send, mic 
 		drawButton(dst, cv, sendIcon, send, true, buttonState{hover: p.sendHover})
 	}
 	if !mic.Empty() {
-		drawButton(dst, cv, micIcon, mic, true, buttonState{hover: p.micHover, pressed: p.dictating})
+		if fill, ok := p.listener.MicColor(time.Now()); ok {
+			cv.DrawRect(mic.Min.X, mic.Min.Y, mic.Dx(), mic.Dy(), fill)
+			drawIcon(dst, micIcon, mic, color.White)
+		} else {
+			drawButton(dst, cv, micIcon, mic, true, buttonState{hover: p.micHover})
+		}
 	}
 }
 
@@ -293,7 +288,7 @@ func (g *game) drawField(dst *ebiten.Image, cv canvas.Canvas) {
 	if placeholder, _ := g.app.Input(); placeholder != "" {
 		hint = placeholder + "  (Enter sends, Escape leaves it for later)"
 	}
-	if !g.field.sendAt.IsZero() {
+	if g.field.sendHeard {
 		hint = "Sending…"
 	}
 	cv.DrawText(hint, labelFace, label.Min.X, baselineIn(labelFace, label), color.RGBA{0xAA, 0xAA, 0xAA, 0xFF})
@@ -350,7 +345,7 @@ func (g *game) updateStrip(cursor image.Point, clicked bool) {
 	switch {
 	case clicked && g.field.micHover:
 		g.openField()
-		g.field.dictate = true
+		g.field.listen()
 		return
 	case clicked && g.field.sendHover:
 		g.submit, _ = g.app.InputDraft()

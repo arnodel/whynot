@@ -97,7 +97,7 @@ func main() {
 	browserApp.Open(location)
 
 	go func() {
-		if err := run(win, browserApp, doc, tb, newDock(renderer)); err != nil {
+		if err := run(win, browserApp, doc, tb, newDock(renderer, win.Invalidate)); err != nil {
 			log.Fatal(err)
 		}
 	}()

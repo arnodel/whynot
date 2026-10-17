@@ -5,8 +5,8 @@
 // makes build/WhyNot.app. The bundle is only files, so it can be made on
 // any system, as releases are; on macOS it's also signed ad hoc, with
 // codesign. Running as a bundle gives the app its name and icon in the
-// Dock and the menu bar, and lets macOS's dictation reach its text
-// fields, which it can't for a bare binary.
+// Dock and the menu bar, and the usage descriptions macOS needs before
+// letting it use the microphone and speech recognition.
 package main
 
 import (

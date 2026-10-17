@@ -34,7 +34,8 @@ func infoPlist(name, id, executable, version, iconFile string) []byte {
 	}
 	// Go 1.25's minimum.
 	key("LSMinimumSystemVersion", "12.0")
-	key("NSMicrophoneUsageDescription", "Dictation into the prompt.")
+	key("NSMicrophoneUsageDescription", "Speaking to the page, in the prompt.")
+	key("NSSpeechRecognitionUsageDescription", "Turning what you say into text, in the prompt.")
 	b.WriteString("\t<key>NSHighResolutionCapable</key>\n\t<true/>\n</dict>\n</plist>\n")
 	return b.Bytes()
 }

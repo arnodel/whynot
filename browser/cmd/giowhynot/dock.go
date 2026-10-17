@@ -3,13 +3,14 @@ package main
 import (
 	"image"
 	"image/color"
-	"time"
 	"unicode/utf8"
 
 	"gioui.org/font/gofont"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
@@ -35,34 +36,22 @@ type dock struct {
 	version     int    // of the App's draft the field shows
 
 	// mic is the microphone button, at the field's right end, where
-	// dictation is available (see browser.CanDictate): it starts it, and
-	// stops it. dictate is set when it's clicked: dictation starts once
-	// the field has the keyboard. dictating is whether it's on, as far as
-	// the dock knows: the system doesn't say.
-	mic                widget.Clickable
-	dictate, dictating bool
+	// speech recognition is available (see browser.Listener.Available): it starts
+	// the listener, which turns speech into the field's text, and stops
+	// it.
+	mic      widget.Clickable
+	listener *browser.Listener
 	// send is the send button, before the microphone, while there's text
-	// to send. sendAt is when to send it, after the button stopped
-	// dictation: its last words arrive a moment after it stops.
-	send   widget.Clickable
-	sendAt time.Time
+	// to send. sendHeard is set when it's pressed while the listener is
+	// busy: the text is sent once its last words are in.
+	send      widget.Clickable
+	sendHeard bool
 }
 
-// dictationTail is how long dictation's last words take to arrive after
-// it's stopped.
-const dictationTail = 700 * time.Millisecond
-
-// stopDictation stops dictation, if it's on.
-func (d *dock) stopDictation() {
-	d.dictate = false
-	if d.dictating {
-		d.dictating = false
-		browser.StopDictation()
-	}
-}
-
-func newDock(renderer *giobackend.Renderer) *dock {
-	d := &dock{theme: material.NewTheme(), renderer: renderer}
+// newDock returns the dock. wake asks for a frame: the listener calls it
+// as it hears more.
+func newDock(renderer *giobackend.Renderer, wake func()) *dock {
+	d := &dock{theme: material.NewTheme(), renderer: renderer, listener: browser.NewListener(browser.DefaultRecognizer(), wake)}
 	// As for the address bar: Gio's default shaper has no fonts in the
 	// browser.
 	d.theme.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
@@ -91,7 +80,8 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		d.shown = false
 	}
 	if !d.shown {
-		d.stopDictation()
+		d.listener.Cancel()
+		d.sendHeard = false
 		d.height = 0
 		return
 	}
@@ -99,29 +89,30 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		d.blur = false
 		gtx.Execute(key.FocusCmd{})
 	}
+	if text, ok := d.listener.Text(); ok {
+		// What's been said so far.
+		d.editor.SetText(text)
+		d.editor.SetCaret(utf8.RuneCountInString(text), utf8.RuneCountInString(text))
+		app.SetInputDraft(text)
+	}
 	sendClicked := d.send.Clicked(gtx) // read once: it takes the click
 	switch {
-	case sendClicked && d.dictating:
-		d.stopDictation()
-		d.sendAt = gtx.Now.Add(dictationTail)
-		gtx.Execute(op.InvalidateCmd{At: d.sendAt})
-	case sendClicked || !d.sendAt.IsZero() && !gtx.Now.Before(d.sendAt):
-		d.sendAt = time.Time{}
+	case sendClicked && d.listener.Busy():
+		d.listener.Stop()
+		d.sendHeard = true
+	case sendClicked || d.sendHeard && !d.listener.Busy():
+		d.sendHeard = false
 		if text := d.editor.Text(); text != "" {
 			app.SubmitInput(text)
 		}
 	}
 	if d.mic.Clicked(gtx) {
-		if d.dictating {
-			d.stopDictation()
+		if d.listener.Listening() {
+			d.listener.Stop()
 		} else {
 			gtx.Execute(key.FocusCmd{Tag: &d.editor})
-			d.dictate = true
+			d.listener.Start(d.editor.Text())
 		}
-	}
-	if d.dictate && gtx.Focused(&d.editor) {
-		d.dictate, d.dictating = false, true
-		browser.StartDictation()
 	}
 	// The page's draft, after navigating: empty for a new page, or what
 	// was typed or sent when coming back to one. Selected, so typing
@@ -140,7 +131,7 @@ func (d *dock) update(gtx layout.Context, app *browser.App) {
 		case widget.ChangeEvent:
 			app.SetInputDraft(d.editor.Text())
 		case widget.SubmitEvent:
-			d.stopDictation()
+			d.listener.Cancel()
 			if e.Text != "" {
 				app.SubmitInput(e.Text)
 			}
@@ -170,7 +161,7 @@ func (d *dock) layout(gtx layout.Context) {
 	// shown: the microphone last, send before it.
 	button := gtx.Dp(28)
 	mic, send := 0, 0
-	if browser.CanDictate() {
+	if d.listener.Available() {
 		mic = button
 	}
 	if d.editor.Len() > 0 {
@@ -214,16 +205,34 @@ func (d *dock) layout(gtx layout.Context) {
 
 	// The buttons, from the right end, centred on the field's height.
 	right := size.X - 2*pad
-	place := func(click *widget.Clickable, icon image.Image, width int, active bool) {
+	place := func(width int, button layout.Widget) {
 		if width == 0 {
 			return
 		}
 		right -= width
 		stack := op.Offset(image.Pt(right, top+(d.height-width)/2)).Push(gtx.Ops)
-		iconButton(click, icon, width, true, active)(gtx)
+		button(gtx)
 		stack.Pop()
 		right -= pad
 	}
-	place(&d.mic, browser.MicIcon, mic, d.dictating)
-	place(&d.send, browser.SendIcon, send, false)
+	if fill, ok := d.listener.MicColor(gtx.Now); ok {
+		place(mic, recordingButton(&d.mic, browser.MicIcon, mic, fill))
+		gtx.Execute(op.InvalidateCmd{}) // the pulse moves on
+	} else {
+		place(mic, iconButton(&d.mic, browser.MicIcon, mic, true, false))
+	}
+	place(send, iconButton(&d.send, browser.SendIcon, send, true, false))
+}
+
+// recordingButton is iconButton for the microphone while it's on: filled
+// with fill (see browser.Listener.MicColor), the icon white.
+func recordingButton(click *widget.Clickable, icon image.Image, size int, fill color.RGBA) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints = layout.Exact(image.Pt(size, size))
+		return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			paint.FillShape(gtx.Ops, toNRGBA(fill), clip.Rect(image.Rect(0, 0, size, size)).Op())
+			paintIcon(gtx, icon, size, color.White)
+			return layout.Dimensions{Size: image.Pt(size, size)}
+		})
+	}
 }
