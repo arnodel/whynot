@@ -21,6 +21,8 @@ On macOS, from a checkout, `make mac-app` in [`browser`](../..) makes `build/Why
 proper app, with its name and icon in the Dock and the menu bar, and macOS's dictation working
 in the prompt, which it doesn't for a bare binary. Started from Finder, it doesn't get the
 shell's environment: it reads the AI's key from the config file (see below).
+`make run-mac-app ARGS=examples/todo.md` builds it and runs it from the terminal, with its
+log there.
 
 It also runs in a web browser: **[try it](https://arnodel.github.io/whynot/)**, and see
 [`web`](web) for how that's built and what differs.
