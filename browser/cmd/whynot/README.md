@@ -18,8 +18,8 @@ go install github.com/arnodel/whynot/browser/cmd/whynot@latest
 ```
 
 On macOS, from a checkout, `make mac-app` in [`browser`](../..) makes `build/WhyNot.app`: a
-proper app, with its name and icon in the Dock and the menu bar, and macOS's dictation working
-in the prompt, which it doesn't for a bare binary. Started from Finder, it doesn't get the
+proper app, with its name and icon in the Dock and the menu bar, and a microphone beside the
+prompt, which needs the bundle for its permissions. Started from Finder, it doesn't get the
 shell's environment: it reads the AI's key from the config file (see below).
 `make run-mac-app ARGS=examples/todo.md` builds it and runs it from the terminal, with its
 log there.
@@ -53,6 +53,8 @@ Linux, **Ctrl** takes the place of **Cmd**.
 | Only open local files beneath a directory | start with `-root dir` |
 | Let documents from the web use the AI | start with `-remote-ai` |
 | Reload | **Cmd+R**, or the toolbar |
+| Speak into the prompt, on macOS, from the app bundle | the microphone beside the prompt, red while it listens; again to stop. The first time, macOS asks to let it use the microphone and speech recognition. |
+| Send the prompt's text | **Enter**, or the send button beside it |
 | Select text | drag (in journal mode, across pages too); double-click for a word, triple-click for a paragraph; Shift-click extends |
 | Copy the selection as Markdown | **Cmd+C**, or the actions page |
 | Select all of the page (in journal mode, again for the whole journal) | **Cmd+A**, or the actions page |
