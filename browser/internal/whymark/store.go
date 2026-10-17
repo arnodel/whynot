@@ -1,6 +1,7 @@
 package whymark
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,8 +36,39 @@ type SavedPage struct {
 	Parent   string            `json:"parent,omitempty"`
 	Input    map[string]string `json:"input,omitempty"`
 	Time     time.Time         `json:"time"`
+	// Title is the page's title, from its header.
+	Title string `json:"title,omitempty"`
 	// Output is the page as its turn wrote it (see Engine.Saved).
 	Output string `json:"output,omitempty"`
+}
+
+// A PageLister is a Store that can list a document's pages: what a view of
+// the tree of pages needs.
+type PageLister interface {
+	// Pages lists the pages of document, its URL with no query or
+	// fragment, by when they were made.
+	Pages(document string) ([]PageInfo, error)
+}
+
+// PageInfo is what a list of pages says of each: enough to place it in the
+// tree of pages, and label it.
+type PageInfo struct {
+	ID, Parent     string // Parent is "" for a document's start
+	Passage, Title string
+	Time           time.Time
+}
+
+// titleOf returns the title in the header of output, a page as its turn
+// wrote it, or "".
+func titleOf(output string) string {
+	if output == "" {
+		return ""
+	}
+	h, err := ReadHeader(bufio.NewReader(strings.NewReader(output)))
+	if err != nil {
+		return ""
+	}
+	return h.Title
 }
 
 // FileStore is a Store keeping each page in a file of its own, named by
@@ -103,6 +136,7 @@ func (snap *snapshot) saved() SavedPage {
 		Parent:   snap.parent,
 		Input:    snap.request.Input,
 		Time:     snap.time,
+		Title:    titleOf(snap.output.String()),
 		Output:   snap.output.String(),
 	}
 }
