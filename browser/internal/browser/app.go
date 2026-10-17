@@ -97,6 +97,13 @@ type App struct {
 	// arrivals is when each document last grew, for the waiting dots
 	// (see drawWaiting).
 	arrivals arrivals
+	// headers holds the pages' headers that arrived in the background, for
+	// Update to apply (see startTurn).
+	headersMu sync.Mutex
+	headers   []arrivedHeader
+	// syncTurns makes startTurn wait for the turn to end, for tests that
+	// look at a page as soon as they've followed a link.
+	syncTurns bool
 	// registry is what documents, and their images, can be fetched from.
 	registry *fetch.Registry
 	// parser parses every document, with the code-block plugins.
@@ -234,6 +241,7 @@ func (a *App) Open(location *url.URL) {
 // keeping its end in view for "#end", and its title. Call it once a
 // frame, before drawing.
 func (a *App) Update() {
+	a.addHeaders()
 	a.loadTrail()
 	a.addTrails()
 	if a.overlaid == nil {
@@ -458,7 +466,7 @@ func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 			} else {
 				log.Printf("opening page %s of %s: %v", id, location, err)
 			}
-			return a.takeTurn(whymark.Request{Location: location})
+			return a.startTurn(whymark.Request{Location: location}, true), nil
 		}
 		if id := a.latestPage(location); id != "" && !fresh {
 			if doc, err := a.openPage(location, id); err == nil {
@@ -467,7 +475,7 @@ func (a *App) load(location *url.URL, fresh bool) (*whynot.Document, error) {
 				log.Printf("resuming %s: %v", location, err)
 			}
 		}
-		return a.takeTurn(whymark.Request{Location: location})
+		return a.startTurn(whymark.Request{Location: location}, true), nil
 	}
 	if err != nil {
 		return nil, loadError(err, location)
@@ -551,12 +559,7 @@ func (a *App) Follow(dest string) {
 // followTurn takes the turn req, from the current page, and shows its
 // page, as Follow does.
 func (a *App) followTurn(req whymark.Request) {
-	doc, err := a.takeTurn(req)
-	if err != nil {
-		log.Printf("taking a turn of %s: %v", req.Location, err)
-		return
-	}
-	a.show(doc, req.Location)
+	a.show(a.startTurn(req, true), req.Location)
 }
 
 // FollowAnchor is Follow for a link within the current document to the
@@ -754,7 +757,7 @@ func (a *App) Reload() {
 	var err error
 	if p := a.pageOf(a.Panel.View().Document()); p != nil {
 		// The same request again.
-		doc, err = a.takeTurn(p.request)
+		doc = a.startTurn(p.request, true)
 	} else {
 		doc, err = a.Load(a.location)
 	}

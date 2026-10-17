@@ -98,6 +98,9 @@ func sameDocument(x, y *url.URL) bool {
 // pageURL returns the page URL of the page h.
 func pageURL(h whymark.Header) *url.URL {
 	u := *h.Location
+	if h.PageID == "" {
+		return &u // a page whose header hasn't arrived (see startTurn)
+	}
 	u.Fragment, u.RawFragment = u.Fragment+"@"+h.PageID, ""
 	return &u
 }
