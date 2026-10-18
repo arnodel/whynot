@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -126,8 +127,7 @@ func WithGrant(grant func(document *url.URL, name string) bool) Option {
 // An error means there's no page at all: the document can't be fetched,
 // isn't a whymark document, or req.FromPageID isn't one of its pages.
 func (e *Engine) Turn(ctx context.Context, req Request) (io.ReadCloser, error) {
-	document := *req.Location
-	document.RawQuery, document.ForceQuery, document.Fragment, document.RawFragment = "", false, "", ""
+	document := documentURL(req.Location)
 	source, err := e.fetch(ctx, &document)
 	if err != nil {
 		return nil, err
@@ -374,6 +374,52 @@ func newPageID() string {
 	var b [10]byte
 	rand.Read(b[:])
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b[:]))
+}
+
+// DocumentOf returns the name a document's pages are kept under (see
+// Engine.Pages): its location, with no query or fragment.
+func DocumentOf(location *url.URL) string {
+	u := documentURL(location)
+	return u.String()
+}
+
+func documentURL(location *url.URL) url.URL {
+	u := *location
+	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
+	return u
+}
+
+// Pages lists the pages of document (see DocumentOf), by
+// when they were made: those in the engine's Store, if it can list them
+// (see PageLister), and those this engine made that it hasn't saved, once
+// their turn is over.
+func (e *Engine) Pages(document string) ([]PageInfo, error) {
+	var pages []PageInfo
+	seen := map[string]bool{}
+	if lister, ok := e.store.(PageLister); ok {
+		stored, err := lister.Pages(document)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range stored {
+			seen[p.ID] = true
+		}
+		pages = stored
+	}
+	e.mu.Lock()
+	for id, snap := range e.pages {
+		select {
+		case <-snap.done:
+		default:
+			continue // its turn is still setting it
+		}
+		if snap.document == document && !seen[id] {
+			pages = append(pages, PageInfo{ID: id, Parent: snap.parent, Passage: snap.passage, Time: snap.time})
+		}
+	}
+	e.mu.Unlock()
+	sort.SliceStable(pages, func(i, j int) bool { return pages[i].Time.Before(pages[j].Time) })
+	return pages, nil
 }
 
 // ErrNoOutput is Saved's error for a page whose output wasn't kept, such

@@ -14,12 +14,21 @@ import (
 // types: integers and floats told apart, infinities, booleans, nested
 // tables, and keys that aren't strings.
 func TestSavedValues(t *testing.T) {
+	forEachStore(t, testSavedValues)
+}
+
+// forEachStore runs test with each kind of Store, empty.
+func forEachStore(t *testing.T, test func(*testing.T, Store)) {
+	t.Run("files", func(t *testing.T) { test(t, FileStore{Dir: t.TempDir()}) })
+	t.Run("sqlite", func(t *testing.T) { test(t, newSQLiteStore(t)) })
+}
+
+func testSavedValues(t *testing.T, store Store) {
 	inner := &table{keys: []any{int64(1), int64(2)}, values: []any{"a", math.Inf(1)}}
 	value := &table{
 		keys:   []any{"n", "x", true, int64(7), "list", 1.5},
 		values: []any{int64(3), 3.0, "yes", nil, inner, false},
 	}
-	store := FileStore{Dir: t.TempDir()}
 	snap := &snapshot{document: "doc", state: value, request: Request{Location: mustParse(t, "file:///doc.md?q=1#p")}}
 	if err := store.SavePage("abc", snap.saved()); err != nil {
 		t.Fatal(err)
@@ -47,9 +56,12 @@ func TestSavedValues(t *testing.T) {
 // their engine: a new one, as in the program's next run, continues from
 // them, with their state and their trail.
 func TestEngineResumesFromStore(t *testing.T) {
+	forEachStore(t, testEngineResumesFromStore)
+}
+
+func testEngineResumesFromStore(t *testing.T, store Store) {
 	files := map[string]string{"count.md": "---\nwhymark:\n  version: 1\n---\n```lua\nfunction init(turn) return {n = 0} end\n```\n# (Count)\n\n" +
 		"`turn.state.n = turn.state.n + 1`\ncount `= turn.state.n`, before `= turn.previous and turn.previous.state.n or \"none\"`\n"}
-	store := FileStore{Dir: t.TempDir()}
 	e, file := testEngine(t, files, WithStore(store))
 	page := take(t, e, Request{Location: file("count.md")})
 	page = follow(t, e, page, "?")

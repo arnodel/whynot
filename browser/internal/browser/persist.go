@@ -38,7 +38,11 @@ func (a *App) EnablePersistence(dir string) error {
 			return err
 		}
 	}
-	a.engineWith(whymark.WithStore(whymark.FileStore{Dir: filepath.Join(dir, "pages")}))
+	store, err := openPageStore(dir)
+	if err != nil {
+		return err
+	}
+	a.engineWith(whymark.WithStore(store))
 	return nil
 }
 
