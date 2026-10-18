@@ -6,8 +6,8 @@ require (
 	gioui.org v0.10.3
 	github.com/anthropics/anthropic-sdk-go v1.80.0
 	github.com/arnodel/golua v0.4.0
-	github.com/arnodel/whynot v1.0.0-rc.3
-	github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.2
+	github.com/arnodel/whynot v1.0.0-rc.5
+	github.com/arnodel/whynot/backends/giobackend v0.2.0-rc.4
 	github.com/ebitengine/purego v0.11.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	github.com/yuin/goldmark/v2 v2.1.6
