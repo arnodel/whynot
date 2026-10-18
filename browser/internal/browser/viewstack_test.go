@@ -56,6 +56,9 @@ func (c *recorder) DrawRect(x, y, w, h int, clr color.Color) {
 func (c *recorder) Clip(r image.Rectangle) canvas.Canvas {
 	return &recorder{Area: r.Intersect(c.Area), root: c.out()}
 }
+func (c *recorder) Transform(t canvas.Transform) canvas.Canvas {
+	panic("not used by these tests")
+}
 
 // separatorColor is the stacks' separator color in these tests, unlike
 // anything a View draws.

@@ -3,6 +3,7 @@ package ebitenbackend
 import (
 	"image"
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -40,7 +41,7 @@ func New() *Renderer {
 // the same font.Face, referenced by multiple Views only ever gets uploaded
 // as a texture or glyph-cached once.
 func (r *Renderer) NewCanvas(dst *ebiten.Image) *Canvas {
-	return &Canvas{dst: dst, renderer: r}
+	return &Canvas{dst: dst, bounds: dst.Bounds(), transform: canvas.Identity, renderer: r}
 }
 
 // ebitenImage converts img to an *ebiten.Image, memoized by img's own
@@ -68,15 +69,22 @@ func (r *Renderer) goXFace(face font.Face) *text.GoXFace {
 	return f
 }
 
+// Canvas draws onto dst, a sub-image of the destination that clips to
+// the Canvas's area in device pixels. bounds is that area in the
+// Canvas's own coordinates, which transform maps to device pixels, and
+// geoM is transform as ebiten applies it (the zero GeoM for Identity).
 type Canvas struct {
-	dst      *ebiten.Image
-	renderer *Renderer
+	dst       *ebiten.Image
+	bounds    image.Rectangle
+	transform canvas.Transform
+	geoM      ebiten.GeoM
+	renderer  *Renderer
 }
 
 var _ canvas.Canvas = (*Canvas)(nil)
 
 func (c *Canvas) Bounds() image.Rectangle {
-	return c.dst.Bounds()
+	return c.bounds
 }
 
 func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
@@ -100,18 +108,43 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 
 	opts := &text.DrawOptions{}
 	opts.GeoM.Translate(float64(x), float64(y)-ascent)
+	opts.GeoM.Concat(c.geoM)
 	opts.ColorScale.SetWithColor(clr)
 	text.Draw(c.dst, s, goXFace, opts)
 }
 
 // Clip draws through a sub-image, which ebiten clips to while keeping
-// the parent's coordinates.
+// the parent's coordinates. A sub-image is in whole device pixels, so a
+// transformed r is rounded to the nearest: clips side by side still
+// meet.
 func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
-	return &Canvas{dst: c.dst.SubImage(r.Intersect(c.Bounds())).(*ebiten.Image), renderer: c.renderer}
+	bounds := r.Intersect(c.bounds)
+	device := roundRect(c.transform, bounds).Intersect(c.dst.Bounds())
+	return &Canvas{dst: c.dst.SubImage(device).(*ebiten.Image), bounds: bounds, transform: c.transform, geoM: c.geoM, renderer: c.renderer}
 }
 
+func (c *Canvas) Transform(t canvas.Transform) canvas.Canvas {
+	transform := t.Then(c.transform)
+	var m ebiten.GeoM
+	m.Scale(transform.Scale, transform.Scale)
+	m.Translate(transform.X, transform.Y)
+	return &Canvas{dst: c.dst, bounds: t.Invert().ApplyRect(c.bounds), transform: transform, geoM: m, renderer: c.renderer}
+}
+
+// roundRect returns r mapped through t, with its edges rounded to the
+// nearest pixel.
+func roundRect(t canvas.Transform, r image.Rectangle) image.Rectangle {
+	x0, y0 := t.Apply(float64(r.Min.X), float64(r.Min.Y))
+	x1, y1 := t.Apply(float64(r.Max.X), float64(r.Max.Y))
+	return image.Rect(int(math.Round(x0)), int(math.Round(y0)), int(math.Round(x1)), int(math.Round(y1)))
+}
+
+// DrawRect antialiases a transformed rectangle, whose edges can fall
+// between pixels.
 func (c *Canvas) DrawRect(x, y, w, h int, clr color.Color) {
-	vector.DrawFilledRect(c.dst, float32(x), float32(y), float32(w), float32(h), clr, false)
+	x0, y0 := c.transform.Apply(float64(x), float64(y))
+	s := c.transform.Scale
+	vector.DrawFilledRect(c.dst, float32(x0), float32(y0), float32(float64(w)*s), float32(float64(h)*s), clr, c.transform != canvas.Identity)
 }
 
 // DrawImage scales the loaded image from its native pixel size to
@@ -132,5 +165,6 @@ func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
 	opts := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
 	opts.GeoM.Scale(sx, sy)
 	opts.GeoM.Translate(float64(x), float64(y))
+	opts.GeoM.Concat(c.geoM)
 	c.dst.DrawImage(ei, opts)
 }

@@ -3,6 +3,7 @@ package canvas
 import (
 	"image"
 	"image/color"
+	"math"
 
 	"golang.org/x/image/font"
 )
@@ -15,7 +16,7 @@ import (
 // Coordinates are integer device pixels, in the destination's own
 // coordinate space: the same space as Bounds, whose Min need not be
 // (0, 0). A View passes coordinates already scaled for its display
-// scale and zoom, so a Canvas never scales them itself.
+// scale and zoom, so a Canvas only scales them as Transform asks.
 //
 // Colors may be translucent: every method draws by compositing its
 // color or image over what is already there (Porter-Duff "source
@@ -70,4 +71,54 @@ type Canvas interface {
 	// visible. Clips nest: clipping the returned Canvas again intersects
 	// further. The original Canvas is unaffected and stays usable.
 	Clip(r image.Rectangle) Canvas
+
+	// Transform returns a Canvas that draws onto the same destination,
+	// with each point mapped through t, then as the original Canvas maps
+	// it. Its Bounds are the smallest rectangle containing the original's
+	// Bounds mapped back through t (see [Transform.ApplyRect]), and
+	// nothing it draws is visible outside the original's Bounds.
+	// Transforms nest, and the original Canvas is unaffected and stays
+	// usable.
+	//
+	// Clip on the returned Canvas takes r in its own coordinates. Where
+	// r's edges don't land on whole device pixels, an implementation may
+	// round them, so clipping before transforming is the exact way to
+	// cut off a transformed drawing.
+	//
+	// With a Scale above 1, an implementation may draw text and images
+	// by enlarging their pixels, which blurs them: drawing them at a
+	// larger size is laying them out again.
+	Transform(t Transform) Canvas
+}
+
+// A Transform maps the point (x, y) to (x*Scale + X, y*Scale + Y), as
+// Canvas.Transform applies it. Scale must be positive. Kinds of
+// transform added later will be fields that mean "none" when zero.
+type Transform struct {
+	Scale, X, Y float64
+}
+
+// Identity is the Transform that leaves every point where it is.
+var Identity = Transform{Scale: 1}
+
+// Then returns the transform that applies t, then u.
+func (t Transform) Then(u Transform) Transform {
+	return Transform{Scale: t.Scale * u.Scale, X: t.X*u.Scale + u.X, Y: t.Y*u.Scale + u.Y}
+}
+
+// Invert returns the transform that undoes t.
+func (t Transform) Invert() Transform {
+	return Transform{Scale: 1 / t.Scale, X: -t.X / t.Scale, Y: -t.Y / t.Scale}
+}
+
+// Apply returns where t maps (x, y).
+func (t Transform) Apply(x, y float64) (float64, float64) {
+	return x*t.Scale + t.X, y*t.Scale + t.Y
+}
+
+// ApplyRect returns the smallest rectangle containing r mapped through t.
+func (t Transform) ApplyRect(r image.Rectangle) image.Rectangle {
+	x0, y0 := t.Apply(float64(r.Min.X), float64(r.Min.Y))
+	x1, y1 := t.Apply(float64(r.Max.X), float64(r.Max.Y))
+	return image.Rect(int(math.Floor(x0)), int(math.Floor(y0)), int(math.Ceil(x1)), int(math.Ceil(y1)))
 }
