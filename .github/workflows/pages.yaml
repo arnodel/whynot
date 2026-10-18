@@ -26,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25
+          go-version: 1.26
 
       # Both apps are in the browser module, built from its directory.
       # cmd/whynot/web is the site root: index.html and wasm_exec.js

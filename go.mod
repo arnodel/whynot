@@ -1,6 +1,6 @@
 module github.com/arnodel/whynot
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/adrg/sysfont v0.1.2

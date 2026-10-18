@@ -5,7 +5,7 @@ Thank you for your interest in whynot! This page explains how the project is wor
 
 ## Building and testing
 
-whynot needs Go 1.25 or later. The repository holds three Go modules: the core, at the
+whynot needs Go 1.26 or later. The repository holds three Go modules: the core, at the
 root; the Gio backend, in [`backends/giobackend`](backends/giobackend); and the viewers,
 in [`browser`](browser). The `go.work` file at the root puts them in one workspace, so
 each builds against your local copy of the others.
