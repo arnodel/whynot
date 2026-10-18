@@ -5,6 +5,7 @@ package whymark
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newSQLiteStore(t *testing.T) *SQLiteStore {
@@ -57,5 +58,46 @@ func TestEnginePages(t *testing.T) {
 	}
 	if pages, _ := e.Pages("file:///elsewhere.md"); len(pages) != 0 {
 		t.Errorf("another document has pages: %+v", pages)
+	}
+}
+
+// TestVisits checks last_visited_at: a page's creation is its first visit,
+// Visit moves it on but never back, and saving the page again keeps it.
+func TestVisits(t *testing.T) {
+	store := newSQLiteStore(t)
+	made := time.Date(2026, 10, 18, 9, 15, 3, 120000000, time.FixedZone("CEST", 2*3600))
+	page := SavedPage{Document: "file:///d.md", Location: "file:///d.md", Time: made, Title: "D"}
+	if err := store.SavePage("p1", page); err != nil {
+		t.Fatal(err)
+	}
+	visited := func() time.Time {
+		t.Helper()
+		pages, err := store.Pages("file:///d.md")
+		if err != nil || len(pages) != 1 {
+			t.Fatalf("pages %+v, %v", pages, err)
+		}
+		if !pages[0].Time.Equal(made) {
+			t.Errorf("made at %v, want %v", pages[0].Time, made)
+		}
+		return pages[0].LastVisited
+	}
+	if v := visited(); !v.Equal(made) {
+		t.Errorf("a new page was last visited at %v, want when it was made, %v", v, made)
+	}
+	later := made.Add(time.Hour)
+	store.Visit("p1", later)
+	store.Visit("p1", made.Add(time.Minute)) // an earlier visit, reported late
+	if v := visited(); !v.Equal(later) {
+		t.Errorf("after visits, last visited at %v, want %v", v, later)
+	}
+	if err := store.SavePage("p1", page); err != nil {
+		t.Fatal(err)
+	}
+	if v := visited(); !v.Equal(later) {
+		t.Errorf("saving the page again moved its last visit to %v", v)
+	}
+	// Times sort as text: a whole second before a fraction of it.
+	if a, b := timeText(made.Truncate(time.Second)), timeText(made); a >= b {
+		t.Errorf("%q sorts after %q", a, b)
 	}
 }
