@@ -105,12 +105,13 @@ func (r *Renderer) glyphFor(face font.Face, ru rune, clr color.Color) (glyph, bo
 
 // Canvas records drawing operations into ops. bounds is its area in its
 // own coordinates, which transform maps to device pixels, and clip is
-// that area in device pixels.
+// that area in device pixels. affine is transform as Gio applies it.
 type Canvas struct {
 	ops       *op.Ops
 	bounds    image.Rectangle
 	clip      image.Rectangle
 	transform canvas.Transform
+	affine    f32.Affine2D
 	renderer  *Renderer
 }
 
@@ -120,11 +121,16 @@ type Canvas struct {
 func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
 	bounds := r.Intersect(c.bounds)
 	device := roundRect(c.transform, bounds).Intersect(c.clip)
-	return &Canvas{ops: c.ops, bounds: bounds, clip: device, transform: c.transform, renderer: c.renderer}
+	return &Canvas{ops: c.ops, bounds: bounds, clip: device, transform: c.transform, affine: c.affine, renderer: c.renderer}
 }
 
 func (c *Canvas) Transform(t canvas.Transform) canvas.Canvas {
-	return &Canvas{ops: c.ops, bounds: t.Invert().ApplyRect(c.bounds), clip: c.clip, transform: t.Then(c.transform), renderer: c.renderer}
+	transform := t.Then(c.transform)
+	s := float32(transform.Scale)
+	affine := f32.Affine2D{}.
+		Scale(f32.Pt(0, 0), f32.Pt(s, s)).
+		Offset(f32.Pt(float32(transform.X), float32(transform.Y)))
+	return &Canvas{ops: c.ops, bounds: t.Invert().ApplyRect(c.bounds), clip: c.clip, transform: transform, affine: affine, renderer: c.renderer}
 }
 
 // roundRect returns r mapped through t, with its edges rounded to the
@@ -143,11 +149,7 @@ func (c *Canvas) pushClip() func() {
 	if c.transform == canvas.Identity {
 		return clipped.Pop
 	}
-	s := float32(c.transform.Scale)
-	m := f32.Affine2D{}.
-		Scale(f32.Pt(0, 0), f32.Pt(s, s)).
-		Offset(f32.Pt(float32(c.transform.X), float32(c.transform.Y)))
-	transformed := op.Affine(m).Push(c.ops)
+	transformed := op.Affine(c.affine).Push(c.ops)
 	return func() {
 		transformed.Pop()
 		clipped.Pop()

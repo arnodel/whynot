@@ -71,11 +71,13 @@ func (r *Renderer) goXFace(face font.Face) *text.GoXFace {
 
 // Canvas draws onto dst, a sub-image of the destination that clips to
 // the Canvas's area in device pixels. bounds is that area in the
-// Canvas's own coordinates, which transform maps to device pixels.
+// Canvas's own coordinates, which transform maps to device pixels, and
+// geoM is transform as ebiten applies it (the zero GeoM for Identity).
 type Canvas struct {
 	dst       *ebiten.Image
 	bounds    image.Rectangle
 	transform canvas.Transform
+	geoM      ebiten.GeoM
 	renderer  *Renderer
 }
 
@@ -83,14 +85,6 @@ var _ canvas.Canvas = (*Canvas)(nil)
 
 func (c *Canvas) Bounds() image.Rectangle {
 	return c.bounds
-}
-
-// geoM returns c's transform as a GeoM.
-func (c *Canvas) geoM() ebiten.GeoM {
-	var m ebiten.GeoM
-	m.Scale(c.transform.Scale, c.transform.Scale)
-	m.Translate(c.transform.X, c.transform.Y)
-	return m
 }
 
 func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
@@ -114,7 +108,7 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 
 	opts := &text.DrawOptions{}
 	opts.GeoM.Translate(float64(x), float64(y)-ascent)
-	opts.GeoM.Concat(c.geoM())
+	opts.GeoM.Concat(c.geoM)
 	opts.ColorScale.SetWithColor(clr)
 	text.Draw(c.dst, s, goXFace, opts)
 }
@@ -126,11 +120,15 @@ func (c *Canvas) DrawText(s string, face font.Face, x, y int, clr color.Color) {
 func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
 	bounds := r.Intersect(c.bounds)
 	device := roundRect(c.transform, bounds).Intersect(c.dst.Bounds())
-	return &Canvas{dst: c.dst.SubImage(device).(*ebiten.Image), bounds: bounds, transform: c.transform, renderer: c.renderer}
+	return &Canvas{dst: c.dst.SubImage(device).(*ebiten.Image), bounds: bounds, transform: c.transform, geoM: c.geoM, renderer: c.renderer}
 }
 
 func (c *Canvas) Transform(t canvas.Transform) canvas.Canvas {
-	return &Canvas{dst: c.dst, bounds: t.Invert().ApplyRect(c.bounds), transform: t.Then(c.transform), renderer: c.renderer}
+	transform := t.Then(c.transform)
+	var m ebiten.GeoM
+	m.Scale(transform.Scale, transform.Scale)
+	m.Translate(transform.X, transform.Y)
+	return &Canvas{dst: c.dst, bounds: t.Invert().ApplyRect(c.bounds), transform: transform, geoM: m, renderer: c.renderer}
 }
 
 // roundRect returns r mapped through t, with its edges rounded to the
@@ -167,6 +165,6 @@ func (c *Canvas) DrawImage(img image.Image, x, y, width, height int) {
 	opts := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
 	opts.GeoM.Scale(sx, sy)
 	opts.GeoM.Translate(float64(x), float64(y))
-	opts.GeoM.Concat(c.geoM())
+	opts.GeoM.Concat(c.geoM)
 	c.dst.DrawImage(ei, opts)
 }
