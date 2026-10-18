@@ -27,7 +27,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25
+          go-version: 1.26
 
       # Native build dependencies for the tests GoReleaser's before.hooks
       # run (`go test ./...`, the core module only) - the same list as
