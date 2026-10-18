@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/arnodel/whynot/browser/internal/whymark"
 )
 
 // TestResume checks persistence across sessions: a document asking to be
@@ -166,5 +168,44 @@ func TestPageTrail(t *testing.T) {
 	}
 	if got := len(next.journal.pages); got != before+3 {
 		t.Errorf("the journal shows %d pages, want %d", got, before+3)
+	}
+}
+
+// TestVisits checks that going back to a whymark page records a visit to
+// it in the engine's store.
+func TestVisits(t *testing.T) {
+	dir, data := t.TempDir(), t.TempDir()
+	start := writeTempMD(t, dir, "start.md", "# Start\n\n[Count](count.md)\n")
+	writeTempMD(t, dir, "count.md", "---\nwhymark:\n  version: 1\n---\n# Count\n\n[Again](?)\n")
+	app := newTestApp(t, dir, start, "# Start\n\n[Count](count.md)\n")
+	if err := app.EnablePersistence(data); err != nil {
+		t.Fatal(err)
+	}
+	app.Follow("count.md")
+	app.Update()
+	first := app.Location()
+	app.Follow("?")
+	app.Update()
+	app.Back()
+	if app.Location().String() != first.String() {
+		t.Fatalf("back at %s, want %s", app.Location(), first)
+	}
+	app.Update() // reports the visit
+	_, id, _ := splitPageURL(first)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		pages, err := app.engine.Pages(whymark.DocumentOf(first))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range pages {
+			if p.ID == id && p.LastVisited.After(p.Time) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("going back to page %s didn't record a visit: %+v", id, pages)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

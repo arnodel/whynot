@@ -121,6 +121,26 @@ func splitPageURL(u *url.URL) (*url.URL, string, bool) {
 	return &location, id, true
 }
 
+// noteVisit tells the engine when the page shown becomes a whymark page
+// other than the one it was last told about, as visits are what tidying
+// its store goes by (see whymark.Engine.Visit).
+func (a *App) noteVisit() {
+	if a.Panel == nil || a.overlaid != nil {
+		return
+	}
+	p := a.pageOf(a.Panel.View().Document())
+	if p == nil || p.header.PageID == "" || p.header.PageID == a.visited {
+		return
+	}
+	a.visited = p.header.PageID
+	engine, id := a.engine, p.header.PageID
+	go func() { // it writes to the store
+		if err := engine.Visit(id); err != nil {
+			log.Printf("recording a visit to page %s: %v", id, err)
+		}
+	}()
+}
+
 // openPage shows the page id of the document at location, opened from
 // elsewhere: the page itself, as it was written, if its output was kept,
 // or else a new page carrying on from it. In journal mode, its trail is

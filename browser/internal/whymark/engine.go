@@ -376,6 +376,17 @@ func newPageID() string {
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b[:]))
 }
 
+// Visit records that the page id was visited now, as when a user agent
+// shows it: in the engine's Store, if it records visits (see
+// PageVisitor). A page's creation is its first visit. It can be slow, as
+// it writes to the Store.
+func (e *Engine) Visit(id string) error {
+	if v, ok := e.store.(PageVisitor); ok {
+		return v.Visit(id, e.clock())
+	}
+	return nil
+}
+
 // DocumentOf returns the name a document's pages are kept under (see
 // Engine.Pages): its location, with no query or fragment.
 func DocumentOf(location *url.URL) string {

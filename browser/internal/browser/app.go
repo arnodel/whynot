@@ -101,6 +101,9 @@ type App struct {
 	// Update to apply (see startTurn).
 	headersMu sync.Mutex
 	headers   []arrivedHeader
+	// visited is the page-id of the whymark page last reported visited
+	// (see noteVisit).
+	visited string
 	// syncTurns makes startTurn wait for the turn to end, for tests that
 	// look at a page as soon as they've followed a link.
 	syncTurns bool
@@ -242,6 +245,7 @@ func (a *App) Open(location *url.URL) {
 // frame, before drawing.
 func (a *App) Update() {
 	a.addHeaders()
+	a.noteVisit()
 	a.loadTrail()
 	a.addTrails()
 	if a.overlaid == nil {

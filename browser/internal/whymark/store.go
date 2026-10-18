@@ -50,12 +50,21 @@ type PageLister interface {
 	Pages(document string) ([]PageInfo, error)
 }
 
+// A PageVisitor is a Store that records when pages are visited (see
+// Engine.Visit): what tidying it, to reclaim space, goes by.
+type PageVisitor interface {
+	Visit(id string, t time.Time) error
+}
+
 // PageInfo is what a list of pages says of each: enough to place it in the
 // tree of pages, and label it.
 type PageInfo struct {
 	ID, Parent     string // Parent is "" for a document's start
 	Passage, Title string
-	Time           time.Time
+	Time           time.Time // when it was made
+	// LastVisited is when it was last visited, if the Store records it
+	// (see PageVisitor).
+	LastVisited time.Time
 }
 
 // titleOf returns the title in the header of output, a page as its turn
