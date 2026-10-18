@@ -4,8 +4,8 @@
 // each provide one. A program can also draw its own things on a Canvas,
 // such as a toolbar around a document.
 //
-// A Canvas only has to draw rectangles, text and images, and to clip
-// them. The [Canvas] documentation is the specification for implementing
+// A Canvas only has to draw rectangles, text and images, to clip them,
+// and to scale and move them (see [Transform]). The [Canvas] documentation is the specification for implementing
 // one: the requirements that need the most care are placing text exactly
 // as golang.org/x/image/font places it, and keeping the coordinates when
 // clipping. backends/README.md in whynot's repository describes the rest

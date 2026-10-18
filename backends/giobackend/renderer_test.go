@@ -7,6 +7,7 @@ import (
 
 	"gioui.org/op"
 
+	"github.com/arnodel/whynot/canvas"
 	"github.com/arnodel/whynot/fonts"
 )
 
@@ -89,4 +90,23 @@ func TestCanvasClipBounds(t *testing.T) {
 	if again := clipped.Clip(image.Rect(0, 0, 60, 60)).Bounds(); again != image.Rect(50, 0, 60, 40) {
 		t.Errorf("nested Clip bounds = %v, want %v", again, image.Rect(50, 0, 60, 40))
 	}
+}
+
+func TestCanvasTransform(t *testing.T) {
+	var ops op.Ops
+	c := New().NewCanvas(&ops, image.Rect(0, 0, 100, 100))
+	thumb := c.Clip(image.Rect(20, 20, 70, 70)).Transform(canvas.Transform{Scale: 0.5, X: 20, Y: 20})
+	if want := image.Rect(0, 0, 100, 100); thumb.Bounds() != want {
+		t.Errorf("Transform bounds = %v, want %v (the clip, mapped back)", thumb.Bounds(), want)
+	}
+	left := thumb.Clip(image.Rect(0, 0, 51, 100)).(*Canvas)
+	if want := image.Rect(0, 0, 51, 100); left.Bounds() != want {
+		t.Errorf("Clip bounds = %v, want %v (exact, in its own coordinates)", left.Bounds(), want)
+	}
+	if want := image.Rect(20, 20, 46, 70); left.clip != want {
+		t.Errorf("Clip device bounds = %v, want %v (rounded to the nearest pixel)", left.clip, want)
+	}
+	// Drawing through it records without panicking, its clip and
+	// transform pushed and popped around each draw.
+	left.DrawRect(0, 0, 10, 10, color.White)
 }

@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 
 	"gioui.org/f32"
 	"gioui.org/op"
@@ -54,7 +55,7 @@ func New() *Renderer {
 // unlike ebitenbackend's ebiten.Image.SubImage. Shares this Renderer's
 // caches with every other Canvas it creates.
 func (r *Renderer) NewCanvas(ops *op.Ops, bounds image.Rectangle) *Canvas {
-	return &Canvas{ops: ops, bounds: bounds, renderer: r}
+	return &Canvas{ops: ops, bounds: bounds, clip: bounds, transform: canvas.Identity, renderer: r}
 }
 
 // imageOp converts img to a paint.ImageOp, memoized by img's own
@@ -102,21 +103,55 @@ func (r *Renderer) glyphFor(face font.Face, ru rune, clr color.Color) (glyph, bo
 	return g, true
 }
 
+// Canvas records drawing operations into ops. bounds is its area in its
+// own coordinates, which transform maps to device pixels, and clip is
+// that area in device pixels.
 type Canvas struct {
-	ops      *op.Ops
-	bounds   image.Rectangle
-	renderer *Renderer
+	ops       *op.Ops
+	bounds    image.Rectangle
+	clip      image.Rectangle
+	transform canvas.Transform
+	renderer  *Renderer
 }
 
 // Clip returns a Canvas whose draws are clipped to r within c's bounds.
+// Gio clips to whole pixels here, so a transformed r is rounded to the
+// nearest: clips side by side still meet.
 func (c *Canvas) Clip(r image.Rectangle) canvas.Canvas {
-	return &Canvas{ops: c.ops, bounds: r.Intersect(c.bounds), renderer: c.renderer}
+	bounds := r.Intersect(c.bounds)
+	device := roundRect(c.transform, bounds).Intersect(c.clip)
+	return &Canvas{ops: c.ops, bounds: bounds, clip: device, transform: c.transform, renderer: c.renderer}
 }
 
-// pushClip clips to c's bounds until the returned func is called: Gio
-// has no sub-image to draw into instead, so every draw is wrapped in one.
+func (c *Canvas) Transform(t canvas.Transform) canvas.Canvas {
+	return &Canvas{ops: c.ops, bounds: t.Invert().ApplyRect(c.bounds), clip: c.clip, transform: t.Then(c.transform), renderer: c.renderer}
+}
+
+// roundRect returns r mapped through t, with its edges rounded to the
+// nearest pixel.
+func roundRect(t canvas.Transform, r image.Rectangle) image.Rectangle {
+	x0, y0 := t.Apply(float64(r.Min.X), float64(r.Min.Y))
+	x1, y1 := t.Apply(float64(r.Max.X), float64(r.Max.Y))
+	return image.Rect(int(math.Round(x0)), int(math.Round(y0)), int(math.Round(x1)), int(math.Round(y1)))
+}
+
+// pushClip clips to c's area and applies c's transform until the
+// returned func is called: Gio has no sub-image to draw into instead, so
+// every draw is wrapped in one.
 func (c *Canvas) pushClip() func() {
-	return clip.Rect(c.bounds).Push(c.ops).Pop
+	clipped := clip.Rect(c.clip).Push(c.ops)
+	if c.transform == canvas.Identity {
+		return clipped.Pop
+	}
+	s := float32(c.transform.Scale)
+	m := f32.Affine2D{}.
+		Scale(f32.Pt(0, 0), f32.Pt(s, s)).
+		Offset(f32.Pt(float32(c.transform.X), float32(c.transform.Y)))
+	transformed := op.Affine(m).Push(c.ops)
+	return func() {
+		transformed.Pop()
+		clipped.Pop()
+	}
 }
 
 var _ canvas.Canvas = (*Canvas)(nil)
