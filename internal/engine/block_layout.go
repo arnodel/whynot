@@ -37,7 +37,10 @@ type BlockLayout interface {
 	// (Context.Time) - unused by most implementations, read
 	// only by whatever ends up drawing an animated image (see
 	// ImageBox.DrawInline via InlineLayout).
-	drawContents(dst canvas.Canvas, x, y int, now time.Duration)
+	// drawContents draws the box with its top-left corner at (x, y), at
+	// now, and returns how long after now what it drew next changes by
+	// itself, if anything does: an animated GIF's next frame.
+	drawContents(dst canvas.Canvas, x, y int, now time.Duration) (next time.Duration, ok bool)
 	HitTest(p image.Point) (hit Hit, offset image.Point)
 	// PendingImages returns the resolved image srcs this box - or
 	// anything nested inside it - is still waiting to settle (still
@@ -55,11 +58,23 @@ type BlockLayout interface {
 // DrawBlockLayout is the sole entry point for drawing a BlockLayout: it skips drawContents
 // entirely when box's bounds don't overlap dst, so every BlockLayout gets that for
 // free regardless of who's calling it or where it sits in the tree.
-func DrawBlockLayout(box BlockLayout, dst canvas.Canvas, x, y int, now time.Duration) {
+func DrawBlockLayout(box BlockLayout, dst canvas.Canvas, x, y int, now time.Duration) (next time.Duration, ok bool) {
 	if !box.Bounds().Add(image.Pt(x, y)).Overlaps(dst.Bounds()) {
-		return
+		return 0, false
 	}
-	box.drawContents(dst, x, y, now)
+	return box.drawContents(dst, x, y, now)
+}
+
+// sooner returns the sooner of two next changes, either of which may be
+// none.
+func sooner(a time.Duration, aok bool, b time.Duration, bok bool) (time.Duration, bool) {
+	switch {
+	case !aok:
+		return b, bok
+	case !bok || a <= b:
+		return a, true
+	}
+	return b, true
 }
 
 // StackSlot is a StackBox child that's either already resolved (box set -
@@ -296,17 +311,18 @@ func (b *StackBox) MoveCursor(c StackCursor, dy float64) StackCursor {
 	return b.NormalizeCursor(StackCursor{Index: c.Index, Offset: c.Offset + dy})
 }
 
-func (b *StackBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
-	b.DrawFrom(dst, StackCursor{}, x, y, now)
+func (b *StackBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return b.DrawFrom(dst, StackCursor{}, x, y, now)
 }
 
 // DrawFrom draws starting at c, so that c's position lands at (x, y) on
 // dst - unlike DrawBlockLayout, it never calls Bounds() on the whole tree first,
 // and never resolves or draws slots before c.index. Intended for View to
-// call at the scroll cursor.
-func (b *StackBox) DrawFrom(dst canvas.Canvas, c StackCursor, x, y int, now time.Duration) {
+// call at the scroll cursor. It returns how long after now what it drew
+// next changes by itself, if anything does (see BlockLayout).
+func (b *StackBox) DrawFrom(dst canvas.Canvas, c StackCursor, x, y int, now time.Duration) (next time.Duration, ok bool) {
 	if c.Index < 0 || c.Index >= len(b.Slots) {
-		return
+		return 0, false
 	}
 	viewport := dst.Bounds()
 	y -= int(c.Offset)
@@ -318,9 +334,11 @@ func (b *StackBox) DrawFrom(dst canvas.Canvas, c StackCursor, x, y int, now time
 			// viewport: nothing further down can be visible.
 			break
 		}
-		DrawBlockLayout(box, dst, x, y, now)
+		n, has := DrawBlockLayout(box, dst, x, y, now)
+		next, ok = sooner(next, ok, n, has)
 		y += childBounds.Max.Y
 	}
+	return next, ok
 }
 
 type EmptyBox struct {
@@ -347,7 +365,8 @@ func (b *EmptyBox) HitTest(p image.Point) (Hit, image.Point) {
 	return nil, image.Point{}
 }
 
-func (b *EmptyBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *EmptyBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return 0, false
 }
 
 func (b *EmptyBox) PendingImages() []string {
@@ -395,8 +414,8 @@ func (b *containerBox) HitTest(p image.Point) (Hit, image.Point) {
 	return hit, offset.Add(b.innerPos)
 }
 
-func (b *containerBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
-	DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y, now)
+func (b *containerBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return DrawBlockLayout(b.inner, dst, x+b.innerPos.X, y+b.innerPos.Y, now)
 }
 
 func (b *containerBox) PendingImages() []string {
@@ -427,9 +446,9 @@ func (b *BlockquoteBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.width, b.Inner.Bounds().Dy())
 }
 
-func (b *BlockquoteBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *BlockquoteBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	dst.DrawRect(x, y, b.barWidth, b.Inner.Bounds().Dy(), b.barColor)
-	DrawBlockLayout(b.Inner, dst, x+b.Indent, y, now)
+	return DrawBlockLayout(b.Inner, dst, x+b.Indent, y, now)
 }
 
 func (b *BlockquoteBox) PendingImages() []string {
@@ -486,7 +505,7 @@ func (b *tableBox) Bounds() image.Rectangle {
 	)
 }
 
-func (b *tableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *tableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (next time.Duration, ok bool) {
 	width := b.columnOffsets[len(b.columnOffsets)-1]
 	height := b.rowOffsets[len(b.rowOffsets)-1]
 
@@ -513,9 +532,11 @@ func (b *tableBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) 
 
 	for row := range b.cells {
 		for col := range b.cells[row] {
-			DrawBlockLayout(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row], now)
+			n, has := DrawBlockLayout(b.cells[row][col], dst, x+b.columnOffsets[col], y+b.rowOffsets[row], now)
+			next, ok = sooner(next, ok, n, has)
 		}
 	}
+	return next, ok
 }
 
 // HitTest finds which cell (row, col) p falls in via columnOffsets/
@@ -581,8 +602,9 @@ func (b *RuleBox) Bounds() image.Rectangle {
 	return image.Rect(0, 0, b.width, b.thickness)
 }
 
-func (b *RuleBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *RuleBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	dst.DrawRect(x, y, b.width, b.thickness, b.color)
+	return 0, false
 }
 
 func (b *RuleBox) HitTest(p image.Point) (Hit, image.Point) {

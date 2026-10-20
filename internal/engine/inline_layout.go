@@ -31,7 +31,10 @@ type InlineLayout interface {
 	// checkboxBox) - never queried there.
 	Glued() bool
 	// DrawInline's now - see BlockLayout.drawContents's identical parameter.
-	DrawInline(dst canvas.Canvas, x, y int, now time.Duration)
+	// DrawInline draws the part with its pen at (x, y), at now, and
+	// returns how long after now what it drew next changes by itself, if
+	// anything does: an animated GIF's next frame.
+	DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (next time.Duration, ok bool)
 	HitTest(p image.Point, x, y int) (hit Hit, offset image.Point)
 	// PendingImages - see BlockLayout's identical method.
 	PendingImages() []string
@@ -147,7 +150,7 @@ func (b *TextBox) SpaceWidth() int {
 	return b.spaceWidth
 }
 
-func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	_, advance := b.BoundsAndAdvance()
 	dst.DrawText(b.Text, b.Face, x, y, b.Color)
 	if b.StrikeThickness > 0 {
@@ -159,6 +162,7 @@ func (b *TextBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 		xHeight := b.Face.Metrics().XHeight.Ceil()
 		dst.DrawRect(x, y-xHeight/2-b.StrikeThickness/2, advance, b.StrikeThickness, b.Color)
 	}
+	return 0, false
 }
 
 // OffsetAt returns the byte offset in the box's text of the character
@@ -250,8 +254,8 @@ func (b *listItemMarkerBox) Glued() bool {
 	return false
 }
 
-func (b *listItemMarkerBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
-	b.Marker.DrawInline(dst, b.markerX(x), y, now)
+func (b *listItemMarkerBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return b.Marker.DrawInline(dst, b.markerX(x), y, now)
 }
 
 // HitTest checks the marker where DrawInline draws it, hanging to the left
@@ -346,7 +350,7 @@ func (b *checkboxBox) Glued() bool {
 	return false
 }
 
-func (b *checkboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *checkboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	top := y - b.size
 	t := b.thickness
 	dst.DrawRect(x, top, b.size, t, b.color)          // top edge
@@ -359,6 +363,7 @@ func (b *checkboxBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration)
 			dst.DrawRect(x+pad, top+pad, inner, inner, b.color)
 		}
 	}
+	return 0, false
 }
 
 func (b *checkboxBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
@@ -417,15 +422,17 @@ func (b *ImageBox) Glued() bool {
 	return b.glued
 }
 
-func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	switch {
 	case b.Animation != nil:
 		dst.DrawImage(b.Animation.CurrentFrame(now), x, y, b.Rect.Dx(), b.Rect.Dy())
+		return b.Animation.NextChange(now), true
 	case b.Image != nil:
 		dst.DrawImage(b.Image, x, y, b.Rect.Dx(), b.Rect.Dy())
 	default:
 		dst.DrawRect(x, y, b.Rect.Dx(), b.Rect.Dy(), b.placeholderColor)
 	}
+	return 0, false
 }
 
 func (b *ImageBox) HitTest(p image.Point, x, y int) (Hit, image.Point) {
@@ -442,14 +449,16 @@ type lineBreakBox struct {
 	source Inline
 }
 
-func (b *lineBreakBox) Source() Source                                            { return b.source }
-func (b *lineBreakBox) BoundsAndAdvance() (image.Rectangle, int)                  { return image.Rectangle{}, 0 }
-func (b *lineBreakBox) Bounds() image.Rectangle                                   { return image.Rectangle{} }
-func (b *lineBreakBox) SpaceWidth() int                                           { return 0 }
-func (b *lineBreakBox) Glued() bool                                               { return false }
-func (b *lineBreakBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {}
-func (b *lineBreakBox) HitTest(p image.Point, x, y int) (Hit, image.Point)        { return nil, image.Point{} }
-func (b *lineBreakBox) PendingImages() []string                                   { return nil }
+func (b *lineBreakBox) Source() Source                           { return b.source }
+func (b *lineBreakBox) BoundsAndAdvance() (image.Rectangle, int) { return image.Rectangle{}, 0 }
+func (b *lineBreakBox) Bounds() image.Rectangle                  { return image.Rectangle{} }
+func (b *lineBreakBox) SpaceWidth() int                          { return 0 }
+func (b *lineBreakBox) Glued() bool                              { return false }
+func (b *lineBreakBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return 0, false
+}
+func (b *lineBreakBox) HitTest(p image.Point, x, y int) (Hit, image.Point) { return nil, image.Point{} }
+func (b *lineBreakBox) PendingImages() []string                            { return nil }
 
 // hitIfInside is the HitTest of a leaf InlineLayout: a hit on the box
 // itself if p falls within its bounds at pen position (x, y).

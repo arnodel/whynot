@@ -82,11 +82,15 @@ func run() error {
 					log.Printf("clicked: %s", e.Destination)
 				}
 			}
-			// Gio only produces frames when something happens.
+			panel.Draw(renderer.NewCanvas(gtx.Ops, bounds), now)
+			// Gio only produces frames when something happens: a fling
+			// needs one every frame, an animated GIF one when its frame
+			// changes.
 			if panel.Animating() {
 				gtx.Execute(op.InvalidateCmd{})
+			} else if next, ok := panel.NextFrame(); ok {
+				gtx.Execute(op.InvalidateCmd{At: start.Add(now + next)})
 			}
-			panel.Draw(renderer.NewCanvas(gtx.Ops, bounds), now)
 			e.Frame(gtx.Ops)
 		}
 	}
