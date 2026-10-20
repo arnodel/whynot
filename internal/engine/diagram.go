@@ -94,8 +94,8 @@ func (b *diagramBox) Source() Source {
 	return b.inner.Source()
 }
 
-func (b *diagramBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
-	b.inner.drawContents(dst, x, y, now)
+func (b *diagramBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
+	return b.inner.drawContents(dst, x, y, now)
 }
 
 func (b *diagramBox) HitTest(p image.Point) (Hit, image.Point) {
@@ -153,7 +153,7 @@ func (b *imageLayout) Source() Source {
 	return b.source
 }
 
-func (b *imageLayout) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *imageLayout) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	w, h := b.bounds.Dx(), b.bounds.Dy()
 	dst.DrawRect(x, y, w, h, color.White)
 	imgX, imgY := x+b.inset, y+b.inset
@@ -168,6 +168,7 @@ func (b *imageLayout) drawContents(dst canvas.Canvas, x, y int, now time.Duratio
 	dst.DrawRect(x, y+h-t, w, t, b.frameColor) // bottom
 	dst.DrawRect(x, y, t, h, b.frameColor)     // left
 	dst.DrawRect(x+w-t, y, t, h, b.frameColor) // right
+	return 0, false
 }
 
 func (b *imageLayout) HitTest(p image.Point) (Hit, image.Point) {

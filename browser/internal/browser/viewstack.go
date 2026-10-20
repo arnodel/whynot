@@ -70,6 +70,21 @@ func (s *ViewStack) Regions() []image.Rectangle { return s.regions }
 
 // SetBounds sets where the stack is drawn on the canvas. Its children are
 // laid out at its width.
+// NextFrame returns the soonest of the NextFrames of the pages the last
+// Draw showed (see whynot.View.NextFrame), if any.
+func (s *ViewStack) NextFrame() (time.Duration, bool) {
+	soonest, ok := time.Duration(0), false
+	for i, v := range s.views {
+		if i < len(s.regions) && s.regions[i].Empty() {
+			continue
+		}
+		if d, has := v.NextFrame(); has && (!ok || d < soonest) {
+			soonest, ok = d, true
+		}
+	}
+	return soonest, ok
+}
+
 func (s *ViewStack) SetBounds(r image.Rectangle) {
 	s.bounds = r
 	for _, v := range s.views {

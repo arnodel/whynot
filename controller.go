@@ -530,6 +530,12 @@ func (c *Controller) Animating() bool {
 	return c.moving() || s != nil && s.animating(c.view.ctx.Time) || c.view.scrollbarAnimating(c.view.ctx.Time) || c.selectionScrolling()
 }
 
+// NextFrame is the View's (see View.NextFrame): when the next frame is
+// needed without input, if nothing is Animating.
+func (c *Controller) NextFrame() (time.Duration, bool) {
+	return c.view.NextFrame()
+}
+
 func fastEnough(v float64) bool {
 	return math.Abs(v) >= controllerMomentumMinVelocity
 }

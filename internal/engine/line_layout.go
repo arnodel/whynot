@@ -161,12 +161,14 @@ type selectable interface {
 	selectedSpan() (x0, x1 int, c color.Color, ok bool)
 }
 
-func (b *LineBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *LineBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (next time.Duration, ok bool) {
 	b.drawSelection(dst, x, y)
 	y -= b.bounds.Min.Y
 	for i, part := range b.parts {
-		part.DrawInline(dst, x+b.xs[i], y, now)
+		n, has := part.DrawInline(dst, x+b.xs[i], y, now)
+		next, ok = sooner(next, ok, n, has)
 	}
+	return next, ok
 }
 
 // drawSelection fills the background of the line's selected parts, the

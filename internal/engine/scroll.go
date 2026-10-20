@@ -91,11 +91,11 @@ func (b *ScrollBox) HitTest(p image.Point) (Hit, image.Point) {
 	return hit, offset.Sub(shift)
 }
 
-func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) {
+func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration) (time.Duration, bool) {
 	box := image.Rect(x, y, x+b.width, y+b.inner.Bounds().Dy())
 	offset := b.offset()
 	clipped := dst.Clip(box)
-	DrawBlockLayout(b.inner, clipped, x-offset, y, now)
+	next, ok := DrawBlockLayout(b.inner, clipped, x-offset, y, now)
 	b.drawFades(clipped, box, offset)
 
 	if b.scrollbar != nil {
@@ -108,6 +108,7 @@ func (b *ScrollBox) drawContents(dst canvas.Canvas, x, y int, now time.Duration)
 			Offset:      offset,
 		}, now)
 	}
+	return next, ok
 }
 
 // drawFades fades each edge of box that has content hidden past it into

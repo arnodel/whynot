@@ -42,11 +42,14 @@ func (d *document) layout(gtx layout.Context) {
 	area := clip.Rect(bounds).Push(gtx.Ops)
 	pointer.Cursor(gioCursors[d.app.Cursor()]).Add(gtx.Ops)
 	area.Pop()
-	// Gio only produces frames when something happens.
+	d.app.Draw(d.renderer.NewCanvas(gtx.Ops, bounds), now)
+	// Gio only produces frames when something happens: a fling needs one
+	// every frame, an animated GIF one when its frame changes.
 	if d.app.Animating() {
 		gtx.Execute(op.InvalidateCmd{})
+	} else if next, ok := d.app.NextFrame(); ok {
+		gtx.Execute(op.InvalidateCmd{At: d.start.Add(now + next)})
 	}
-	d.app.Draw(d.renderer.NewCanvas(gtx.Ops, bounds), now)
 	if stack := d.app.JournalStack(); stack != nil {
 		d.scrollbar.Layout(gtx, stack)
 	} else {
