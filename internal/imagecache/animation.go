@@ -62,6 +62,26 @@ func (a *Animation) CurrentFrame(now time.Duration) image.Image {
 	return a.frames[len(a.frames)-1]
 }
 
+// NextChange returns how long after now the frame shown changes: for a
+// backend that draws only when asked to ask for a frame then, rather than
+// every frame. It's a.total for an animation that never changes.
+func (a *Animation) NextChange(now time.Duration) time.Duration {
+	if len(a.frames) <= 1 || a.total <= 0 {
+		return a.total
+	}
+	if now < 0 {
+		now = 0
+	}
+	elapsed := now % a.total
+	for _, d := range a.delays {
+		if elapsed < d {
+			return d - elapsed
+		}
+		elapsed -= d
+	}
+	return a.total - elapsed
+}
+
 // minGIFFrameDelay is what a per-frame delay under 2 hundredths of a
 // second is treated as instead, matching the convention most
 // browsers/viewers use. Some GIFs specify 0 for every frame, leaving

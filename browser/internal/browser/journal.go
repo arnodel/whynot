@@ -286,6 +286,16 @@ func (a *App) Animating() bool {
 	return a.Panel.Animating()
 }
 
+// NextFrame reports when the next frame is needed without input, if
+// nothing is Animating: when an animated GIF on the current page changes
+// frame (see whynot.View.NextFrame).
+func (a *App) NextFrame() (time.Duration, bool) {
+	if j := a.stacked(); j != nil {
+		return j.stack.NextFrame()
+	}
+	return a.Panel.NextFrame()
+}
+
 // ViewAt returns the View shown at (x, y): the current page's, or in
 // journal mode, the page's there, if any.
 func (a *App) ViewAt(x, y int) (*whynot.View, bool) {

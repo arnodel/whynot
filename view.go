@@ -47,6 +47,9 @@ type View struct {
 	overText     bool
 	unselectable bool // its Controller\'s mouse doesn\'t select
 	soleImages   map[engine.Block]fetch.Source
+	// nextFrame is how long after the last Draw's time what it drew next
+	// changes by itself, or -1 for nothing (see NextFrame).
+	nextFrame time.Duration
 
 	// hscroll is the sideways scrolling state of the View's code blocks
 	// and tables, and draws their scrollbars: ctx's ScrollOffset and
@@ -139,6 +142,12 @@ func NewView(doc *Document, opts ...ViewOption) *View {
 	}
 	v.ctx.ScrollOffset = v.hscroll.scrollOffset
 	v.ctx.Selected = v.selectedRange
+	v.nextFrame = -1
+	v.ctx.ChangesIn = func(d time.Duration) {
+		if v.nextFrame < 0 || d < v.nextFrame {
+			v.nextFrame = d
+		}
+	}
 	v.ctx.Scrollbar = func(dst canvas.Canvas, r engine.ScrollRegion, now time.Duration) {
 		v.hscroll.drawScrollbar(dst, r, now, v.ctx.Scale, v.ctx.Styles)
 	}
@@ -256,6 +265,15 @@ func (v *View) ScrollToEnd() {
 		v.moves++
 		v.revealScrollbar()
 	}
+}
+
+// NextFrame returns how long after the last Draw's time the View next
+// needs drawing without anything else happening: when an animated GIF it
+// showed changes frame. It's false if nothing it showed changes by
+// itself. A backend whose frames are event-driven, like Gio's, asks for
+// a frame then, rather than every frame while an animation shows.
+func (v *View) NextFrame() (time.Duration, bool) {
+	return v.nextFrame, v.nextFrame >= 0
 }
 
 // HighlightColor is the color the View's StyleSheet shows a hovered link
@@ -399,6 +417,7 @@ func (v *View) relayout() {
 // position is.
 func (v *View) Draw(dst canvas.Canvas, now time.Duration) {
 	v.ctx.Time = now
+	v.nextFrame = -1
 	dst = dst.Clip(v.bounds)
 	area := dst.Bounds()
 	dst.DrawRect(area.Min.X, area.Min.Y, area.Dx(), area.Dy(), v.ctx.Styles.BackgroundColor())
