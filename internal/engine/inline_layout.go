@@ -383,6 +383,9 @@ type ImageBox struct {
 	Animation        *imagecache.Animation
 	Rect             image.Rectangle
 	placeholderColor color.Color
+	// changesIn is the Context's ChangesIn, for DrawInline to tell when
+	// an animation's frame next changes.
+	changesIn func(time.Duration)
 
 	// Pending is the one resolved src this box is still waiting on,
 	// while img == nil - see PendingImages.
@@ -421,6 +424,9 @@ func (b *ImageBox) DrawInline(dst canvas.Canvas, x, y int, now time.Duration) {
 	switch {
 	case b.Animation != nil:
 		dst.DrawImage(b.Animation.CurrentFrame(now), x, y, b.Rect.Dx(), b.Rect.Dy())
+		if b.changesIn != nil {
+			b.changesIn(b.Animation.NextChange(now))
+		}
 	case b.Image != nil:
 		dst.DrawImage(b.Image, x, y, b.Rect.Dx(), b.Rect.Dy())
 	default:

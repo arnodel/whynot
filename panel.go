@@ -166,6 +166,12 @@ func (p *Panel) Animating() bool {
 	return p.controller.Animating()
 }
 
+// NextFrame is the View's (see View.NextFrame): when the next frame is
+// needed without input, if nothing is Animating.
+func (p *Panel) NextFrame() (time.Duration, bool) {
+	return p.controller.NextFrame()
+}
+
 // ScrollDown scrolls a step towards the end, as for an arrow key.
 func (p *Panel) ScrollDown() { p.controller.ScrollDown() }
 

@@ -52,6 +52,11 @@ type Context struct {
 	// time.Now() call so frame selection stays a pure, deterministic
 	// function of its inputs, easy to test without any real waiting.
 	Time time.Duration
+
+	// ChangesIn, if set, is told by whatever is drawn that changes by
+	// itself, such as an animated GIF, how long after Time it next does:
+	// for a View to know when it next needs drawing (see View.NextFrame).
+	ChangesIn func(time.Duration)
 }
 
 // The methods below read c.Styles (or, for ScaledMargins, a marginer -

@@ -1763,3 +1763,52 @@ func TestViewHeightChangeIsCheap(t *testing.T) {
 		t.Error("a change of width didn't lay the document out again")
 	}
 }
+
+// TestViewNextFrameWithGIF checks that a View says when its next frame is
+// needed while an animated GIF is on screen, which is when the GIF's
+// frame changes, and not once it's scrolled out of view.
+func TestViewNextFrameWithGIF(t *testing.T) {
+	doc := "![loop](testdata/animated.gif)\n\n" + strings.Repeat("Filler text below the animation.\n\n", 40)
+	root, err := os.OpenRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	v := NewView(Parse([]byte(doc), WithImageRegistry(fetch.NewRegistry(fetch.FileResolver{Root: root}))), WithStyleSheet(stylingtest.Basic()))
+	layoutView(v, 300, 200, 1, 0)
+	dst := &canvastest.Recorder{Area: image.Rect(0, 0, 300, 200)}
+	// The GIF loads in the background: draw until it has.
+	deadline := time.Now().Add(2 * time.Second)
+	var next time.Duration
+	for {
+		v.Draw(dst, 0)
+		if d, ok := v.NextFrame(); ok {
+			next = d
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the View never needed a frame with the GIF on screen")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	// testdata/animated.gif's frames are 400ms apart: the next frame is
+	// due then, from time 0, and 330ms later from 70ms in.
+	if next != 400*time.Millisecond {
+		t.Errorf("the next frame is due in %v at time 0, want 400ms", next)
+	}
+	v.Draw(dst, 70*time.Millisecond)
+	if d, _ := v.NextFrame(); d != 330*time.Millisecond {
+		t.Errorf("the next frame is due in %v at 70ms, want 330ms", d)
+	}
+	if _, ok := NewController(v).NextFrame(); !ok {
+		t.Error("the Controller doesn't report the View's next frame")
+	}
+	if NewController(v).Animating() {
+		t.Error("a GIF makes the Controller animate every frame")
+	}
+	v.ScrollToEnd()
+	v.Draw(dst, 0)
+	if _, ok := v.NextFrame(); ok {
+		t.Error("the View needs a frame with the GIF scrolled off screen")
+	}
+}

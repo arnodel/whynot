@@ -187,6 +187,7 @@ func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
 	switch result.Status {
 	case imagecache.Ready:
 		return &ImageBox{
+			changesIn: ctx.ChangesIn,
 			Image:     result.Image,
 			Animation: result.Animation,
 			Rect:      fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
@@ -196,6 +197,7 @@ func (i *InlineImage) GetInlineLayout(ctx Context, width int) InlineLayout {
 	case imagecache.Pending:
 		if result.Bounds != (image.Rectangle{}) {
 			return &ImageBox{
+				changesIn:        ctx.ChangesIn,
 				Rect:             fitWidth(scaleRect(result.Bounds, ctx.Scale), width),
 				placeholderColor: ctx.Styles.BorderColor(i.ASTNode),
 				Pending:          []string{key},

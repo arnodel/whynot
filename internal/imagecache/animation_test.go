@@ -233,3 +233,24 @@ func TestAnimatedImageCurrentFrame(t *testing.T) {
 		}
 	}
 }
+
+func TestAnimationNextChange(t *testing.T) {
+	frame := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	a := NewAnimation([]image.Image{frame, frame, frame}, []time.Duration{100 * time.Millisecond, 50 * time.Millisecond, 150 * time.Millisecond})
+	for _, c := range []struct{ now, want time.Duration }{
+		{0, 100 * time.Millisecond},
+		{70 * time.Millisecond, 30 * time.Millisecond},
+		{100 * time.Millisecond, 50 * time.Millisecond},
+		{299 * time.Millisecond, time.Millisecond},
+		{300 * time.Millisecond, 100 * time.Millisecond}, // looped
+		{-5 * time.Millisecond, 100 * time.Millisecond},
+	} {
+		if got := a.NextChange(c.now); got != c.want {
+			t.Errorf("NextChange(%v) = %v, want %v", c.now, got, c.want)
+		}
+	}
+	still := NewAnimation([]image.Image{frame}, []time.Duration{100 * time.Millisecond})
+	if got := still.NextChange(0); got != 100*time.Millisecond {
+		t.Errorf("a one-frame animation's NextChange = %v, want its total", got)
+	}
+}
